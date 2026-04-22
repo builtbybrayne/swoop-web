@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# JetBrains IDE
+.idea/
+
+# oh-my-claudecode
+.omc/
+
+# Symlink to sibling repo
+chatgpt_poc
