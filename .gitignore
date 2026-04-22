@@ -4,8 +4,43 @@
 # JetBrains IDE
 .idea/
 
+# VS Code — allow shared extensions, ignore per-user settings
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+# (allow .vscode/extensions.json)
+!.vscode/extensions.json
+
 # oh-my-claudecode
 .omc/
 
 # Symlink to sibling repo
 chatgpt_poc
+
+# Node / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artefacts
+dist/
+build/
+.turbo/
+.next/
+.vercel/
+*.tsbuildinfo
+
+# Env files — never commit secrets; commit .env.example per package
+.env
+.env.local
+.env.*.local
+
+# Logs & coverage
+logs/
+*.log
+coverage/
+.nyc_output/
+
+# OS / misc
+Thumbs.db

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+coverage/
+
+# Docs: prose has its own rhythms; don't let Prettier reflow markdown.
+*.md
+
+# Content-as-data: the CMS tree is authored content, not source.
+cms/
+
+# Lockfiles
+package-lock.json
