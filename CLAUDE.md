@@ -19,6 +19,17 @@ Releases are named after Patagonian / Antarctic animals. No version numbers — 
 
 ---
 
+## Session-start orientation
+
+New session? Read these four files before touching anything — they're the durable memory across sessions:
+
+- **[progress.md](progress.md)** — state of M1, planning tiers, implementation per chunk.
+- **[discoveries.md](discoveries.md)** — non-obvious architectural truths (two-layer agent, AI SDK transport, genai-to-Anthropic schema translation, etc.).
+- **[gotchas.md](gotchas.md)** — environmental / tooling traps that cost real time (dotenv override, model IDs, stuck Vite modules, etc.).
+- **[next-steps.md](next-steps.md)** — prioritised resume guide with specific files.
+
+These live at the project root. Keep them current — add entries as new discoveries / gotchas / progress land. Future sessions depend on them.
+
 ## Inbox & questions
 
 Two append-only capture files live at the repo root. Both get periodically triaged.

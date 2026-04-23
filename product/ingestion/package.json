@@ -1,0 +1,11 @@
+{
+  "name": "@swoop/ingestion",
+  "private": true,
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@swoop/common": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

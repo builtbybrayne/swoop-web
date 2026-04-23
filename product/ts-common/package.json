@@ -1,0 +1,23 @@
+{
+  "name": "@swoop/common",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared Zod schemas, TS types, and fixtures for every cross-chunk contract in the Puma discovery tool. See planning/03-exec-foundations-t2.md.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fixtures": "./src/fixtures/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}

@@ -6,6 +6,20 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-04-22 — `<fyi>` as a tool call (post-M1 refactor candidate)
+
+Al's observation: the `<fyi>` side-notification mechanism currently implemented as a state-machine parser (B.t4) + custom `data-fyi` AI SDK part (chunk D) could more cleanly be a **tool call**. The orchestrator would register a thin `fyi` / `announce_status` tool; model emits `tool-call` parts which assistant-ui's tool-call registry renders as ephemeral status affordances via the same `makeAssistantToolUI` path as every other widget.
+
+**Pros**: native across ADK + AI SDK + assistant-ui; no custom parser; no custom part type; models are more reliable at tool-call structured output than at tag-parsed free text.
+
+**Cons**: small semantic stretch — "tools *do* things" — but solvable with a better name (`announce_status`, `signal_progress`).
+
+**Swap cost post-M1**: small. Retire `block-parser.ts` (~200 lines), retire `data-fyi` part type, add a tool + one assistant-ui renderer registration. Parser is test-covered so behaviour check on retirement is cheap.
+
+Where it lands: post-M1 cleanup pass, or whenever we're next doing a round of prompt engineering with real conversation data.
+
+---
+
 ## 2026-04-22 — Scraping vs API trade-off: URL generation for in-page deep links
 
 If we scrape the website, we get real page URLs for each product / region / story as a side-benefit. The chat agent could then offer "go see this page" links that drop the visitor directly onto the relevant Swoop page.

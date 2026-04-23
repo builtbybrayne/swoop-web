@@ -1,0 +1,23 @@
+/* product/ui/src/styles/index.css
+ *
+ * Tailwind entry + minimal baseline. Clean, unbranded — decision D.7
+ * (planning/02-impl-chat-surface.md §5). Swoop's in-house team adds brand
+ * identity on top of the extension surface documented later in D.t8.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-white text-slate-900 antialiased;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}

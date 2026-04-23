@@ -1,0 +1,33 @@
+{
+  "name": "@swoop/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Puma conversational orchestrator. ADK LlmAgent + file-backed system prompt (B.t1) + MCP-over-HTTP connector adapter (B.t3). Session + SSE land in B.t2/t5.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "dev:stub-connector": "tsx watch test-fixtures/stub-connector.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "@google/adk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@swoop/common": "*",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^20.14.0",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0"
+  }
+}

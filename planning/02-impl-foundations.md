@@ -181,10 +181,10 @@ No deployed service, no live data, no running agent, no real widgets. This chunk
 
 When Tier 3 execution plans are produced for this chunk, the natural split is:
 
-- **A.t1 — Repo scaffold**: `.nvmrc`, `.gitignore`, `.editorconfig` at repo root; `product/package.json` + workspaces, `product/tsconfig.base.json`, `product/.eslintrc`, `product/.prettierrc`, `product/scripts/dev.sh`, `product/CLAUDE.md`.
-- **A.t2 — `ts-common` package**: package skeleton, evolved structure, stub schemas for the contracts in §6, fixtures, exports. Lives at `product/ts-common/`.
-- **A.t3 — CI skeleton**: GitHub Actions workflow(s) at `.github/workflows/`, scoped to `product/` paths, caching, PR check.
-- **A.t4 — Empty package scaffolds**: one placeholder directory per downstream chunk under `product/` (orchestrator, connector, chat-ui, scraper-or-api, cms) with minimal `package.json` + `tsconfig.json` so the workspace resolves. No source.
-- **A.t5 — Decision log + handover note**: `planning/decisions.md` with A.1–A.8; a short "how to pick up this repo" note for downstream agents.
+- [x] **A.t1 — Repo scaffold**: `.nvmrc`, `.gitignore`, `.editorconfig` at repo root; `product/package.json` + workspaces, `product/tsconfig.base.json`, `product/.eslintrc`, `product/.prettierrc`, `product/scripts/dev.sh`, `product/CLAUDE.md`.
+- [x] **A.t2 — `ts-common` package**: package skeleton, evolved structure, stub schemas for the contracts in §6, fixtures, exports. Lives at `product/ts-common/`.
+- [x] **A.t3 — CI skeleton**: GitHub Actions workflow(s) at `.github/workflows/`, scoped to `product/` paths, caching, PR check.
+- [x] **A.t4 — Empty package scaffolds**: one placeholder directory per downstream chunk under `product/` (orchestrator, connector, chat-ui, scraper-or-api, cms) with minimal `package.json` + `tsconfig.json` so the workspace resolves. No source.
+- [x] **A.t5 — Decision log + handover note**: `planning/decisions.md` with A.1–A.8 (+A.9 scope normalisation); a short "how to pick up this repo" note for downstream agents.
 
-A.t1–A.t5 are sequential (each builds on the previous). Estimated: 0.5–1 day of focused work for a single agent.
+A.t1–A.t5 are sequential (each builds on the previous). Estimated: 0.5–1 day of focused work for a single agent. **Chunk A closed 2026-04-22.**

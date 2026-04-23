@@ -19,7 +19,7 @@ script="${1:?usage: run-workspaces.sh <script-name>}"
 
 # Count packages that actually have a package.json.
 pkg_count=0
-for d in ts-common orchestrator connector ui cms ingestion; do
+for d in ts-common orchestrator connector ui ingestion; do
   [ -f "$d/package.json" ] && pkg_count=$((pkg_count + 1))
 done
 
