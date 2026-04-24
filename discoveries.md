@@ -6,6 +6,18 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-04-24 — Connector returns `{ok, value}` envelopes — widgets must unwrap
+
+The MCP connector adapter (`product/orchestrator/src/connector/tools.ts`) returns `invokeTool` results as `{ok: true, value: <validated data>}` so structured errors can flow alongside successful payloads through the same channel.
+
+That envelope passes through ADK's `functionResponse.response` and the translator's `tool-call` part `output` field unchanged. Widgets receive `props.result === {ok, value}` and parsing it against `SearchOutputSchema` etc. fails — the schema expects `{hits, totalMatches}`, not the wrapper.
+
+Fix lives in `product/ui/src/widgets/widget-shell.tsx`: the shared `safeParse()` helper auto-detects and unwraps the `{ok: true, value}` envelope before passing to the Zod parser. Backwards-compatible — non-enveloped values pass through.
+
+If you ever change the connector's envelope shape, update `unwrapEnvelope` in `widget-shell.tsx` to match. Or migrate widgets to use the AI SDK envelope conventions if they emerge.
+
+---
+
 ## 2026-04-23 — Anthropic tool schemas need JSON Schema draft 2020-12, genai emits draft-04-style
 
 When the orchestrator (`claude-llm.ts`) translates ADK `FunctionDeclaration`s into Anthropic's `tools` array, three divergences must be normalised:

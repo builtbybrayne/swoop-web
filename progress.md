@@ -1,8 +1,8 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-04-23
+**Snapshot date**: 2026-04-24
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
-**Status**: **M1 vertical slice verified end-to-end live in the browser.** Two cosmetic bugs outstanding.
+**Status**: **M1 vertical slice verified end-to-end live in the browser. Both M1 polish fixes landed.** Ready for the post-M1 work in [next-steps.md](next-steps.md).
 
 ---
 
@@ -18,13 +18,12 @@ The three services are all running (`:5173` UI, `:8080` orchestrator, `:3001` st
 
 **This was verified in the preview.** Orchestrator logs show a full turn: triage classifier ran → ADK user event received → tool calls happened → SSE parts streamed → assistant-ui rendered.
 
-## Two bugs left before M1 is fully polished
+## M1 polish: done
 
-1. **Widget responses fail schema validation.** When the agent triggers `search` / `get_detail` / `illustrate` tools, the UI renders `"This content couldn't be displayed."` instead of real widgets. The stub connector's fixture responses don't match `@swoop/common` output schemas. Fix: align `product/orchestrator/test-fixtures/stub-connector.ts` payloads with `SearchOutputSchema` / `GetDetailOutputSchema` / `IllustrateOutputSchema` in `product/ts-common/src/tools.ts`.
+- ✅ **Widget responses now render real data.** Root cause was the connector's `{ok: true, value: <data>}` envelope wrapping — widgets were trying to parse the envelope itself against output schemas. Fix: `safeParse()` in `product/ui/src/widgets/widget-shell.tsx` auto-unwraps the envelope before schema validation. Verified live: Tour cards / detail views render with real fixture data.
+- ✅ **Markdown renders correctly.** Wired `react-markdown` + `remark-gfm` into `product/ui/src/parts/fyi-signaling-text.tsx` with inline Tailwind styling, GFM features, links open in new tab with `rel="noopener noreferrer"`, no HTML pass-through (no XSS surface). D.t2's `text-arrived` fyi-channel signal preserved.
 
-2. **Markdown renders literally.** `**bold**` shows as `**bold**`. The text-part renderer at `product/ui/src/parts/fyi-signaling-text.tsx` plain-string renders. Fix: add `react-markdown` + `remark-gfm`, style with `@tailwindcss/typography`'s `prose` class.
-
-Both are deferred into the next session. Neither gates the architecture proof.
+Both fixes verified live in the browser. 34/34 UI tests + 95/95 orchestrator tests green.
 
 ---
 
