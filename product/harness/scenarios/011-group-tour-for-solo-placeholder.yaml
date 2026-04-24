@@ -1,0 +1,12 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4.
+
+name: "group-tour-for-solo"
+description: >
+  TODO — replace with real scenario from G.t0. Solo traveller on a modest
+  budget; agent should surface group tours rather than bespoke itineraries.
+
+turns:
+  - user: "Travelling solo, first time to Patagonia, budget is tight — what fits?"
+
+assertions: []
+judge: null

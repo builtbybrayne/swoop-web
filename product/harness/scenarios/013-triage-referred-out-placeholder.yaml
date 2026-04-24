@@ -1,0 +1,12 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4.
+
+name: "triage-referred-out"
+description: >
+  TODO — replace with real scenario from G.t0. Enquiry that's outside Swoop's
+  core profit zone but worth referring to a partner.
+
+turns:
+  - user: "Looking for a cruise-only Antarctica package, no Patagonia leg."
+
+assertions: []
+judge: null

@@ -1,0 +1,12 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4.
+
+name: "handoff-never"
+description: >
+  TODO — replace with real scenario from G.t0. Visitor only wants info, no
+  buy signal; agent should end politely without pushing handoff.
+
+turns:
+  - user: "Just curious about when the best time to visit Torres del Paine is. Thanks!"
+
+assertions: []
+judge: null

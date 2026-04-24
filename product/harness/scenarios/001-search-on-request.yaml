@@ -1,0 +1,21 @@
+# Illustrative scaffold scenario — H.t1.
+#
+# When a visitor asks for options, the agent should lean on search tooling
+# (not answer from its own knowledge). v1 only checks utterance shape — H.t3
+# upgrades this to a `tool_call` assertion once the event channel is stable.
+
+name: "search-on-request"
+description: >
+  When a visitor asks for options, the agent should surface some (via search),
+  not quote prices authoritatively.
+
+turns:
+  - user: "I'm thinking about Patagonia in March, can you show me some options?"
+
+assertions:
+  - kind: contains
+    text: "option"
+  - kind: not_contains
+    text: "£"
+
+judge: null

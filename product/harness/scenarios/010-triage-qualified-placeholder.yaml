@@ -1,0 +1,16 @@
+# Placeholder scenario — H.t1 scaffold.
+#
+# H.t4 replaces the body with the real qualified-lead happy path informed by
+# G.t0's flow-mapping session (~May 2026). The file layout stays identical so
+# no code change is needed when the real content lands.
+
+name: "triage-qualified"
+description: >
+  TODO — replace with real scenario from G.t0. Placeholder exercises the
+  runner end-to-end with an empty assertions block.
+
+turns:
+  - user: "I'm planning a tailor-made Patagonia trip in December, budget around £8k pp."
+
+assertions: []
+judge: null

@@ -22,6 +22,7 @@ Packages are declared in `product/package.json` under `workspaces`:
 | `ui/` | Embedded chat surface (web component or iframe host). | D |
 | `cms/` | Content-as-data: authored library/trip data, sales copy, prompt fragments. Read at runtime; never inlined. | G |
 | `ingestion/` | Scraper / API adapter feeding `connector/`. | C |
+| `harness/` | Behavioural evals: TS CLI runs YAML scenarios through `:8080` orchestrator. Non-gating CI. | H |
 
 Until A.t2 and A.t4 land, these are empty directories — the workspace resolves but has nothing to build.
 

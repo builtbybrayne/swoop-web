@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   SESSION_STORAGE_KEY,
   getOrchestratorUrl,
+  emitAdapterError,
 } from "../runtime/orchestrator-adapter";
 
 /** Tab-scoped flag indicating the visitor already granted tier-1 consent. */
@@ -60,6 +61,24 @@ export interface UseConsentResult {
    * listen and unmount if they wish.
    */
   declineConsent: () => void;
+  /**
+   * Tear-down handler for D.t5: clears the stored session id + consent flags
+   * and flips status back to "pending" so the OpeningScreen re-appears.
+   * Used as the nuclear fallback when the orchestrator is truly unreachable
+   * and we want to force a cold restart.
+   */
+  reset: () => void;
+  /**
+   * Soft-restart handler for the "Fresh chat" button: bootstraps a new
+   * server-side session and re-records consent against the stored copy
+   * version, writing the new session id over the old one in sessionStorage.
+   * Does NOT return to the OpeningScreen — the visitor has already
+   * consented this tab, so we keep them in-surface.
+   *
+   * Throws on network failure; callers can rely on the banner surfacing via
+   * the shared adapter emitter.
+   */
+  refreshSession: () => Promise<void>;
 }
 
 function readStoredConsent(): {
@@ -211,6 +230,48 @@ export function useConsent(): UseConsentResult {
     }
   }, []);
 
+  const refreshSession = useCallback(async (): Promise<void> => {
+    // Preserve the already-accepted copy version so the new audit trail
+    // entry is consistent with what the visitor actually saw. Fall through
+    // to whatever the orchestrator returns if we're somehow not in a
+    // granted state.
+    const priorCopyVersion =
+      status.state === "granted" ? status.copyVersion : undefined;
+    try {
+      const baseUrl = getOrchestratorUrl();
+      const { sessionId, disclosureCopyVersion } = await postSession(baseUrl);
+      const copyVersion = priorCopyVersion ?? disclosureCopyVersion;
+      await patchConsent(baseUrl, sessionId, copyVersion);
+      writeStoredConsent(sessionId, copyVersion);
+      setStatus({ state: "granted", sessionId, copyVersion });
+    } catch (err) {
+      // Route through D.t5's shared error channel so the banner picks it up
+      // without the caller having to marshal the failure itself. Then
+      // re-throw so promise-chain callers can also react.
+      emitAdapterError(err);
+      throw err;
+    }
+  }, [status]);
+
+  const reset = useCallback((): void => {
+    // Tear down local evidence of the expired conversation so the next render
+    // runs the OpeningScreen afresh. We intentionally do NOT call a server
+    // endpoint here — the orchestrator has already forgotten the session
+    // (that's why we're resetting), and E.t*'s deletion runbook owns the
+    // proactive privacy-erase flow separately.
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        window.sessionStorage.removeItem(CONSENT_STORAGE_KEY);
+        window.sessionStorage.removeItem(CONSENT_COPY_VERSION_KEY);
+      } catch {
+        // Storage locked down — local state is still what drives the UI so
+        // the reset still takes effect for this render lifetime.
+      }
+    }
+    setStatus({ state: "pending" });
+  }, []);
+
   return {
     status,
     hasConsented: status.state === "granted",
@@ -218,5 +279,7 @@ export function useConsent(): UseConsentResult {
     hasDeclined: status.state === "declined",
     grantConsent,
     declineConsent,
+    reset,
+    refreshSession,
   };
 }

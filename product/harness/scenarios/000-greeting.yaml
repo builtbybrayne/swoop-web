@@ -1,0 +1,20 @@
+# Illustrative scaffold scenario — H.t1.
+#
+# On a plain opener, the agent should greet warmly and NOT demand contact
+# details yet. Warmth is judge-rated later (H.t5); v1 checks a keyword floor.
+
+name: "greeting"
+description: >
+  On a plain opener, the agent says hello warmly and does not immediately
+  demand the visitor's email address.
+
+turns:
+  - user: "hi"
+
+assertions:
+  - kind: contains
+    text: "hi"
+  - kind: not_contains
+    text: "email address"
+
+judge: null

@@ -1,0 +1,13 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4.
+
+name: "refusal-itinerary"
+description: >
+  TODO — replace with real scenario from G.t0. Visitor asks for a
+  fully-built multi-day itinerary with dates; agent should decline and route
+  to a specialist handoff.
+
+turns:
+  - user: "Plan me a 10-day Patagonia itinerary with exact dates and hotels."
+
+assertions: []
+judge: null

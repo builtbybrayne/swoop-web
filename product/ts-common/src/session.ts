@@ -147,3 +147,29 @@ export const SessionStateSchema = z.object({
   metadata: SessionMetadataSchema,
 });
 export type SessionState = z.infer<typeof SessionStateSchema>;
+
+// -----------------------------------------------------------------------------
+// SessionPingResponse — the `GET /session/:id/ping` preflight probe (D.t6).
+//
+// Shape reserved here ahead of D.t6 landing (see
+// planning/03-exec-chat-surface-t6.md §Shared contracts). Kept in ts-common so
+// both the UI client-side helper and the orchestrator handler typecheck
+// against the same contract.
+//
+// Contract:
+//   - The endpoint always returns HTTP 200 — the `ok` / `expired` fields
+//     carry the verdict. Avoiding 404 for a routine probe dodges browser /
+//     CORS edge cases.
+//   - `ok: true, expired: false` → session is usable.
+//   - `ok: false, expired: true` → session is unknown or archived; UI
+//     classifies as `session_not_found` via the adapter error emitter.
+//   - `serverTime` is ISO-8601; the UI ignores it today but it's a cheap
+//     hook for future clock-skew diagnostics.
+// -----------------------------------------------------------------------------
+
+export const SessionPingResponseSchema = z.object({
+  ok: z.boolean(),
+  expired: z.boolean(),
+  serverTime: z.string().datetime(),
+});
+export type SessionPingResponse = z.infer<typeof SessionPingResponseSchema>;

@@ -50,7 +50,33 @@ Structure (draft — refine during Tier 3):
 - **Refusals**: no itinerary construction (Julie's explicit 20 Apr concern), no authoritative pricing, no availability guarantees, no medical/legal/safety promises.
 - **Triage posture**: Patagonia-specific. Polite redirection for backpacker-tier or <$1k-profit fits. Never rude, never exclusionary. Group tours are strategic — surface them proactively; solo travellers are strong group candidates (Luke, 20 Apr).
 - **Handoff intent**: end the conversation with a warm handoff when the visitor is ready — persona + wishlist + motivation captured in the handoff payload.
-- **What the agent talks like**: a couple of illustrative paragraphs, not a style guide. Show, don't tell.
+- **What the agent talks like**: a couple of illustrative paragraphs as the positive-example anchor (show, don't tell for what *good* looks like) **paired with an explicit anti-pattern list for what good does not look like** (see §2.1a). Both are load-bearing — the positive paragraphs carry voice; the anti-pattern list suppresses the AI-assistant defaults that would otherwise bleed through every turn.
+
+### 2.1a Style control: anti-patterns and signature-phrase suppression
+
+Default LLM output carries tells the instant the visitor reads it: em-dash-heavy prose, corporate hedging, openers like "Let me help you with that!" or "I'd be happy to…", "it's worth noting that", "delve into", "dive into", "unpack", "navigate the complexities", unnecessary parentheticals, em-dash+comma sandwiches, and friendly-but-empty affirmations ("Great question!"). None of this reads like "knowledgeable friend who's been to Patagonia". All of it reads like a chatbot. Swoop's production bar (Julie's 26 Mar reset) rules it out.
+
+The WHY prompt alone is not enough to suppress it — Claude honours stylistic instructions but regresses toward defaults under load (long conversation, complex tool orchestration, strong lean on the visitor's own phrasing). Puma's approach is two-layer:
+
+1. **A positive-example block** inside `cms/prompts/why.md` — two or three paragraphs of the agent speaking as we want it to, including punctuation and rhythm. Show, don't tell. Drafted by Al; iterated.
+2. **An explicit avoidance block** at `cms/prompts/style-avoid.md` (new file, referenced from `why.md`). Enumerates the specific patterns to avoid, with short rationale so Claude isn't just pattern-matching. Living document — new tells surface in real conversations and get added.
+
+Starter avoidance list (Al refines during G.t1):
+- **Em-dashes** used as mid-sentence pause — use commas, semicolons, or a full stop instead. Em-dash-as-parenthetical allowed sparingly; em-dash-as-rhythm-crutch banned.
+- **Openers** like "Let me help you with that", "I'd be happy to", "Sure!" — open with substance, not warmth-performance.
+- **Corporate hedging**: "it's worth noting", "that said", "generally speaking", "in many cases" when not actually modulating claim confidence.
+- **AI-signature verbs**: "delve", "dive into", "unpack", "navigate" (metaphorical), "journey" (verb).
+- **Empty affirmations** before the real answer ("Great question!", "That's a really interesting point").
+- **Trailing offers**: "Let me know if you'd like to explore…" appended to every response.
+- **Excessive enumeration**: bullet lists where a sentence would do; numbered sub-points where context is conversational.
+- **Parenthetical-heavy sentences** where the parenthetical adds nothing substantive.
+
+Reference inputs Al can draw from:
+- Alastair's own `alastair-writing-style` skill (his personal voice conventions — informs the human tell-me-how-to-write-this layer).
+- Swoop's `chatgpt_poc/sales docs/extracted/tone-of-voicedecember-2025-for-presenting.md` — brand voice.
+- Real LLM outputs from the running Puma chat — as soon as real conversations exist, grep for offenders + add.
+
+Production loop: post-launch, conversations accumulate in chunk F's event log. Tells that slip through get logged as style-regression patterns and roll into the next `style-avoid.md` revision. This is the single most likely piece of `cms/` content to iterate frequently.
 
 ### 2.2 Handoff email template
 
@@ -77,7 +103,8 @@ This is throwaway — chunk C replaces it with scraped or API-sourced real conte
 ```
 product/cms/
 ├── prompts/
-│   └── why.md
+│   ├── why.md
+│   └── style-avoid.md        # G.10 — explicit anti-pattern list; referenced from why.md
 ├── skills/
 │   ├── tailor-made-prospect.md     # example seed — name TBD in G.t0
 │   └── group-tour-for-solo.md      # example seed — name TBD in G.t0
@@ -187,6 +214,7 @@ Added in this revision:
 |---|---|---|---|
 | G.8 | Conversational flow mapping | **Dedicated HITL working session with Al required** before G.t1 (prompt drafting) and G.t3 (seed skills) close. Output is a Patagonia conversational-architecture spec under `planning/`. | Taste-driven and Patagonia-specific. Only Al (reading 20 Apr meeting + Luke's strategy doc + Luke/Lane's sales-thinking doc) can steer the inflections correctly. Claude Code drafts from source material; Al edits. |
 | G.9 | Skill schema / loader contract | **Coordinated with chunk B (B.t9)** during Tier 3. Default: markdown files with frontmatter (trigger metadata) + body (guidance content), loaded via a tool call from the orchestrator. | The mechanism (B) and the content (G) have to agree on the file shape. B.t9 and G.t3 cross-coordinate through `ts-common` skill metadata schema. |
+| G.10 | Style control authoring | **Two-layer: positive-example paragraphs inside `cms/prompts/why.md` + explicit avoidance list at `cms/prompts/style-avoid.md`.** Referenced from the WHY prompt. Living doc — updated as real-conversation telltales surface. | Prompt-only voice guidance regresses toward Claude's defaults under load. Positive examples anchor the "good" direction; explicit anti-patterns suppress the specific AI-slop tells (em-dash cringe, "Let me help", "delve into", empty affirmations) that bleed through otherwise. Separating the two files keeps the positive voice pass (taste-driven, Al-authored once) decoupled from the avoidance list (pattern-driven, updates whenever real output reveals a new offender). See §2.1a. |
 
 ---
 

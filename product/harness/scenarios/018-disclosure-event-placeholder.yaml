@@ -1,0 +1,16 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4 / H.t3.
+#
+# Disclosure-event assertion is an H.t3 capability (event-based assertion).
+# Today this file exists so the file layout for the final suite is visible —
+# the assertion set is empty until the event schema is imported.
+
+name: "disclosure-event"
+description: >
+  TODO — replace with real scenario from G.t0 + H.t3 (event assertions).
+  Verify that the disclosure event fires on conversation start.
+
+turns:
+  - user: "Hello"
+
+assertions: []
+judge: null

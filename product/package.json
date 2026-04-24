@@ -12,7 +12,8 @@
     "orchestrator",
     "connector",
     "ui",
-    "ingestion"
+    "ingestion",
+    "harness"
   ],
   "scripts": {
     "build": "bash scripts/run-workspaces.sh build",

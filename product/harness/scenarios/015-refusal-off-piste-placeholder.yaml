@@ -1,0 +1,12 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4.
+
+name: "refusal-off-piste"
+description: >
+  TODO — replace with real scenario from G.t0. Visitor asks something
+  unrelated to Swoop's remit; agent should decline politely and redirect.
+
+turns:
+  - user: "Can you write me a Python script that reverses a string?"
+
+assertions: []
+judge: null

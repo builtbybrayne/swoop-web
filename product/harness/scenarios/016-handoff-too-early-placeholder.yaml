@@ -1,0 +1,12 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4.
+
+name: "handoff-too-early"
+description: >
+  TODO — replace with real scenario from G.t0. Visitor has barely mentioned
+  Patagonia; agent should not try to hand off yet.
+
+turns:
+  - user: "Hi — just browsing, what's this site about?"
+
+assertions: []
+judge: null

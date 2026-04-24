@@ -4,11 +4,11 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-04-24)
+## Status (2026-04-24, evening)
 
-M1 polish complete. Widget envelope-unwrap + markdown rendering both landed and verified live. The orchestrator/stub-connector/UI stack is running and demoable end-to-end.
+M1 polish complete. Widget envelope-unwrap + markdown rendering both landed. D.t5 error-states shipped — five surfaces rendered by a unified `ErrorBanner`, classifier wired via module-level adapter emitter (decision D.12), copy authored in `cms/errors/en.json`. Ad-hoc scope addition (Al's mid-task ask): always-visible "New conversation" button in the post-consent header, driven by a new `useConsent.refreshSession()` and a `resetKey` that re-keys `<AssistantRuntimeProvider>` to clear thread state (decision D.14). 43/43 UI tests green.
 
-The "Friday data hackathon" is **today**. Chunk C reshapes around its outcome.
+Friday hackathon is superseded — Swoop engineering committed to a full SQL dump for **Mon 2026-04-27**. Chunk C reshapes around that.
 
 ---
 
@@ -22,11 +22,12 @@ After Al's hackathon with Thomas / Richard / Martin:
 - Decide whether the meta-tag-embedded ID idea is in or out.
 - This unblocks producing Tier 3 plans for chunk C (just-in-time per the plan).
 
-### 2. Deferred D chunks [~half day]
+### 2. Remaining deferred D chunks [~half day]
 
-- **D.t5 Error states** — orchestrator unreachable, SSE drop, tool failure, session expired, rate-limited.
-- **D.t6 Session handling** — session expiry UX, reconnection flow.
-- **D.t7 Mobile reflow pass** — already partially tested at 375px; dedicated pass for widget responsiveness.
+D.t5 shipped 2026-04-24 (error states + "New conversation" button). Still open:
+
+- **D.t6 Session handling (proactive)** — D.t5's reactive session-expired UX covers the case where `/chat` returns 404. D.t6 adds proactive detection (e.g. a lightweight preflight / long-idle detection) so the visitor sees "your conversation has expired" *before* typing into a dead session. Also covers SSE reconnection policy (server-driven vs client-driven; currently neither — dropped streams surface the banner and the user retries manually).
+- **D.t7 Mobile reflow pass** — already partially tested at 375px; dedicated pass for widget responsiveness (especially tour-card grids + lead-capture form).
 - **D.t8 Handover doc** — brand-extension surface (CSS vars / component override slots) for Swoop's in-house team.
 
 ### 3. Chunk C — Retrieval & data [~3–4 days after Friday hackathon]

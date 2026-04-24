@@ -29,6 +29,7 @@ import {
   createSessionDeleteHandler,
 } from './consent.js';
 import { createChatHandler } from './chat.js';
+import { createSessionPingHandler } from './session-ping.js';
 import { DISCLOSURE_COPY_VERSION } from './errors.js';
 import type { TriageClassifier } from '../functional-agents/triage-classifier.js';
 
@@ -91,6 +92,8 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
 
   app.patch('/session/:id/consent', createConsentHandler(sharedDeps));
   app.delete('/session/:id', createSessionDeleteHandler(sharedDeps));
+  // D.t6 proactive-preflight probe. Always 200 — verdict in body.
+  app.get('/session/:id/ping', createSessionPingHandler(sharedDeps));
 
   app.post(
     '/chat',

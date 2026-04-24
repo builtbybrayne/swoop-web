@@ -42,6 +42,10 @@ logs/
 coverage/
 .nyc_output/
 
+# Harness runs — per-run report folders (H.t1). `.gitkeep` preserved.
+product/harness/runs/*
+!product/harness/runs/.gitkeep
+
 # OS / misc
 Thumbs.db
 

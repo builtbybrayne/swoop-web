@@ -1,16 +1,25 @@
 // -----------------------------------------------------------------------------
 // Handoff payload.
 //
-// Per planning/02-impl-handoff-and-compliance.md §2.1. Consumed by chunk E
-// (durable store + email delivery), chunk F (logs it), chunk G (email template
-// renders against it), chunk H (evals assert on it).
+// Per planning/02-impl-handoff-and-compliance.md §2.1 and
+// planning/03-exec-handoff-t1.md (E.t1). Consumed by chunk E (durable store +
+// email delivery), chunk F (logs it), chunk G (email template renders against
+// it), chunk H (evals assert on it).
 //
 // Shape decisions:
 //   - Verdict is the discriminator on the payload-level union. `contact` is
 //     required on qualified / referred_out and absent on disqualified — modelled
 //     by splitting into three per-verdict variants.
-//   - Reason is a { code, text } pair: structured code for analytics / evals,
-//     freeform text for sales-specialist context.
+//   - Reason is a { code, text } pair per verdict: the code is a
+//     variant-specific `z.enum` (see below) so analytics / evals get
+//     exhaustive-match coverage; the text stays freeform for sales-specialist
+//     context.
+//   - Codes are deliberately distinct per verdict — no code appears on two
+//     verdicts. That means downstream `switch (verdict)` blocks exhaustively
+//     cover `reason.code` without projecting on `(verdict, code)` pairs.
+//   - The taxonomy is a **starter set**. G.t0 (HITL flow mapping) will refine —
+//     rename / reweight / add. The wire shape survives either case because the
+//     per-verdict enum is the only surface that would need to change.
 //   - Consent flags mirror SessionState.consent but snapshot-at-submission
 //     (the durable record must preserve what was true at the moment of submit,
 //     even if session consent later changes).
@@ -19,13 +28,84 @@
 import { z } from "zod";
 
 // -----------------------------------------------------------------------------
-// Reason — structured code + freeform text.
+// Verdict — the top-level discriminator.
 // -----------------------------------------------------------------------------
 
-export const HandoffReasonSchema = z.object({
-  code: z.string(),
-  text: z.string(),
+export const HandoffVerdictSchema = z.enum([
+  "qualified",
+  "referred_out",
+  "disqualified",
+]);
+export type HandoffVerdict = z.infer<typeof HandoffVerdictSchema>;
+
+// -----------------------------------------------------------------------------
+// Reason codes — per-verdict enums. See planning/03-exec-handoff-t1.md for the
+// trigger / sales treatment / expected text per code.
+// -----------------------------------------------------------------------------
+
+/** Qualified = warm lead ready for a specialist. */
+export const QualifiedReasonCodeSchema = z.enum([
+  "ready_booking_named_trip",
+  "ready_comparing_shortlist",
+  "budget_and_timeline_confirmed",
+  "group_tour_intent",
+  "bespoke_request",
+  "qualified_other",
+]);
+export type QualifiedReasonCode = z.infer<typeof QualifiedReasonCodeSchema>;
+
+/** Referred out = outside direct Swoop scope but still deserves a next step. */
+export const ReferredOutReasonCodeSchema = z.enum([
+  "below_profit_floor",
+  "out_of_region",
+  "timing_outside_window",
+  "referred_other",
+]);
+export type ReferredOutReasonCode = z.infer<typeof ReferredOutReasonCodeSchema>;
+
+/** Disqualified = not a lead. Durable record for analytics; no email. */
+export const DisqualifiedReasonCodeSchema = z.enum([
+  "backpacker_no_budget",
+  "off_brand_query",
+  "proxy_to_claude",
+  "disqualified_other",
+]);
+export type DisqualifiedReasonCode = z.infer<typeof DisqualifiedReasonCodeSchema>;
+
+// -----------------------------------------------------------------------------
+// Per-verdict reason object: { code, text }.
+//
+// The `text` field is freeform for sales-specialist context — a narrative
+// summary of the qualifying signals. `min(1)` enforces non-empty.
+// -----------------------------------------------------------------------------
+
+export const QualifiedReasonSchema = z.object({
+  code: QualifiedReasonCodeSchema,
+  text: z.string().min(1),
 });
+export type QualifiedReason = z.infer<typeof QualifiedReasonSchema>;
+
+export const ReferredOutReasonSchema = z.object({
+  code: ReferredOutReasonCodeSchema,
+  text: z.string().min(1),
+});
+export type ReferredOutReason = z.infer<typeof ReferredOutReasonSchema>;
+
+export const DisqualifiedReasonSchema = z.object({
+  code: DisqualifiedReasonCodeSchema,
+  text: z.string().min(1),
+});
+export type DisqualifiedReason = z.infer<typeof DisqualifiedReasonSchema>;
+
+/**
+ * Union of all three variant-specific reasons. Use when a consumer wants to
+ * accept any reason shape without discriminating on verdict.
+ */
+export const HandoffReasonSchema = z.union([
+  QualifiedReasonSchema,
+  ReferredOutReasonSchema,
+  DisqualifiedReasonSchema,
+]);
 export type HandoffReason = z.infer<typeof HandoffReasonSchema>;
 
 // -----------------------------------------------------------------------------
@@ -99,11 +179,14 @@ export type HandoffSessionMetadata = z.infer<typeof HandoffSessionMetadataSchema
 
 // -----------------------------------------------------------------------------
 // Per-verdict payload variants.
+//
+// Each variant `.strict()`s to reject unknown fields — belt-and-braces against
+// accidental leakage (e.g. a `contact` block sneaking onto a disqualified
+// record).
 // -----------------------------------------------------------------------------
 
 const HandoffPayloadCommon = {
   handoffId: z.string(),
-  reason: HandoffReasonSchema,
   visitorProfile: VisitorProfileSchema,
   wishlist: z.array(HandoffWishlistEntrySchema),
   motivationAnchor: z.string(),
@@ -111,23 +194,36 @@ const HandoffPayloadCommon = {
   session: HandoffSessionMetadataSchema,
 };
 
-export const HandoffPayloadQualifiedSchema = z.object({
-  verdict: z.literal("qualified"),
-  contact: HandoffContactSchema,
-  ...HandoffPayloadCommon,
-});
+export const HandoffPayloadQualifiedSchema = z
+  .object({
+    verdict: z.literal("qualified"),
+    contact: HandoffContactSchema,
+    reason: QualifiedReasonSchema,
+    ...HandoffPayloadCommon,
+  })
+  .strict();
+export type HandoffPayloadQualified = z.infer<typeof HandoffPayloadQualifiedSchema>;
 
-export const HandoffPayloadReferredOutSchema = z.object({
-  verdict: z.literal("referred_out"),
-  contact: HandoffContactSchema,
-  ...HandoffPayloadCommon,
-});
+export const HandoffPayloadReferredOutSchema = z
+  .object({
+    verdict: z.literal("referred_out"),
+    contact: HandoffContactSchema,
+    reason: ReferredOutReasonSchema,
+    ...HandoffPayloadCommon,
+  })
+  .strict();
+export type HandoffPayloadReferredOut = z.infer<typeof HandoffPayloadReferredOutSchema>;
 
-export const HandoffPayloadDisqualifiedSchema = z.object({
-  verdict: z.literal("disqualified"),
-  // No contact field on disqualified — we never ask for it.
-  ...HandoffPayloadCommon,
-});
+export const HandoffPayloadDisqualifiedSchema = z
+  .object({
+    verdict: z.literal("disqualified"),
+    // No contact field on disqualified — we never ask for it. `.strict()`
+    // means a caller that leaks `contact` onto this variant fails parsing.
+    reason: DisqualifiedReasonSchema,
+    ...HandoffPayloadCommon,
+  })
+  .strict();
+export type HandoffPayloadDisqualified = z.infer<typeof HandoffPayloadDisqualifiedSchema>;
 
 export const HandoffPayloadSchema = z.discriminatedUnion("verdict", [
   HandoffPayloadQualifiedSchema,
@@ -135,3 +231,16 @@ export const HandoffPayloadSchema = z.discriminatedUnion("verdict", [
   HandoffPayloadDisqualifiedSchema,
 ]);
 export type HandoffPayload = z.infer<typeof HandoffPayloadSchema>;
+
+// -----------------------------------------------------------------------------
+// Backstop-contract helper type.
+//
+// Contract: E.t2's connector-side guard rejects a `handoff_submit` payload
+// unless BOTH consent flags are true. This type surfaces the shape of the
+// input to that guard. Runtime check lives in E.t2.
+// -----------------------------------------------------------------------------
+
+export type HandoffSubmitConsentGate = Pick<
+  HandoffPayload["consent"],
+  "conversationGranted" | "handoffGranted"
+>;

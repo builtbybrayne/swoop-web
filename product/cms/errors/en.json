@@ -1,0 +1,35 @@
+{
+  "$schema-notes": "Error surface copy for the chat UI (chunk D.t5). Keys map to RuntimeError['surface'] in ui/src/errors/classify.ts; change-detect there if you rename. Actions: kind ∈ ['retry','restart','dismiss'].",
+  "unreachable": {
+    "title": "Having trouble connecting",
+    "body": "We couldn't reach our systems just now. Please try again in a moment.",
+    "primary": { "label": "Try again", "kind": "retry" },
+    "secondary": { "label": "Start over", "kind": "restart" }
+  },
+  "stream_drop": {
+    "title": "Connection dropped",
+    "body": "Your reply was interrupted mid-stream. We can try that again.",
+    "primary": { "label": "Try again", "kind": "retry" },
+    "secondary": { "label": "Start over", "kind": "restart" }
+  },
+  "session_expired": {
+    "title": "This conversation has expired",
+    "body": "We'll need to start a fresh one — your previous answers won't carry over.",
+    "primary": { "label": "Start a new conversation", "kind": "restart" }
+  },
+  "rate_limited": {
+    "title": "Busy right now",
+    "body": "We're getting a lot of requests. Please try again in a moment.",
+    "secondary": { "label": "Start over", "kind": "restart" }
+  },
+  "unknown": {
+    "title": "Something went wrong",
+    "body": "An unexpected error came up on our side. Please try again, or start a fresh conversation.",
+    "primary": { "label": "Try again", "kind": "retry" },
+    "secondary": { "label": "Start over", "kind": "restart" }
+  },
+  "tool_error": {
+    "title": "Couldn't load that",
+    "body": "I couldn't show that piece — we can still keep talking, or try asking a different way."
+  }
+}

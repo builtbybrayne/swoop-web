@@ -29,3 +29,16 @@ Implication: if the visitor clicks through, the chat disappears (new page load).
 Alternative: if we get data via API (Friday hackathon), we may still be able to reconstruct URLs given known type + id patterns — worth confirming in the hackathon.
 
 Where this lands: Puma's chat-surface implementation plan (Tier 2 chunk D) needs to either commit to cross-page persistence or explicitly defer it. Handle in Tier 2 when chunk D is planned.
+
+---
+
+## 2026-04-24 — Disclosure + consent + assistant-info copy needs a pass
+
+The current opening-screen copy ("Before we start… This is an AI assistant. It helps you explore trip ideas by chatting with you and suggesting options from our library…") is serviceable placeholder but not Patagonia-voiced and not calibrated against what legal actually needs for EU AI Act Art. 50 + GDPR. Same goes for the persistent chrome badge wording, the privacy-info modal, and wherever the agent introduces itself in-conversation.
+
+Where this lands:
+- Content pass: chunk G (content) — belongs in the HITL conversational-flow mapping session with Al + Luke + Lane's sales doc (~May 4).
+- Legal copy: chunk E (handoff & compliance) — `product/cms/legal/*` authoring + counsel review before M5.
+- Files to touch when we do this: `product/cms/legal/` (doesn't exist yet) + the disclosure components in `product/ui/src/disclosure/`.
+
+Noticed while building the mock-host harness and seeing the consent screen through "new eyes" as a visitor.

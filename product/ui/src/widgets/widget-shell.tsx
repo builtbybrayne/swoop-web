@@ -17,6 +17,7 @@
 
 import type { ReactNode } from "react";
 import type { ZodType } from "zod";
+import { getToolErrorCopy } from "../errors";
 
 /**
  * Narrow view of the assistant-ui `ToolCallMessagePartProps` fields we care
@@ -83,16 +84,21 @@ export function WidgetLoadingPlaceholder({ label = "Loading…" }: { label?: str
   );
 }
 
-/** The render-boundary "couldn't be displayed" card. D.t5 will replace this
- *  with the full error-state UX. */
+/** The render-boundary "couldn't be displayed" card. Copy lives in
+ *  cms/errors/en.json under `tool_error` so D.t5 and this share one source.
+ *  Visual pattern kept inline (amber card) — tool-call failures don't
+ *  warrant the full ErrorBanner because the rest of the conversation is
+ *  still useful; just this piece failed. */
 export function WidgetMalformedPlaceholder() {
+  const copy = getToolErrorCopy();
   return (
     <div
       role="alert"
       data-testid="widget-malformed"
       className="my-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
     >
-      This content couldn&apos;t be displayed.
+      <div className="font-medium">{copy.title}</div>
+      <div className="text-[13px] leading-5 opacity-90">{copy.body}</div>
     </div>
   );
 }

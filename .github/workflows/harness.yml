@@ -1,0 +1,166 @@
+# Swoop Web Discovery — Behavioural harness (chunk H.t1)
+#
+# Runs the @swoop/harness CLI against a live local orchestrator on every PR
+# that touches the packages whose behaviour the harness covers. Attaches the
+# markdown report as a PR comment (update-in-place via a marker comment).
+#
+# NON-GATING by design (Tier 2 H.4 / Tier 3 H.13): the job's `continue-on-error`
+# means failures never block merge during Puma pre-launch. Flipped once the
+# judge is calibrated (H.t6).
+#
+# COST GATE: every scenario today calls real Sonnet + Haiku. A 13-scenario
+# suite runs £1–£3 per PR. We do NOT run this on every PR by default — Al
+# hasn't approved unrestricted eval spend yet. Gate: PR label `eval` OR
+# manual `workflow_dispatch`. Add the label to a PR to opt in.
+#
+# Secrets required (add after merge):
+#   - ANTHROPIC_API_KEY_EVAL  — dedicated key so billing attribution is clear.
+#
+# If the secret is absent the workflow skips the eval step with a neutral
+# notice (still exit 0).
+
+name: Harness (behavioural evals)
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'product/orchestrator/**'
+      - 'product/cms/**'
+      - 'product/harness/**'
+      - 'product/ts-common/**'
+      - '.github/workflows/harness.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  harness:
+    name: Run behavioural scenarios
+    # Label gate: only run when the PR carries the `eval` label (or when
+    # triggered manually via workflow_dispatch). Keeps spend predictable
+    # until Al approves running on every PR.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'eval')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: product
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (from .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: 'product/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Anthropic secret
+        id: secret
+        env:
+          ANTHROPIC_API_KEY_EVAL: ${{ secrets.ANTHROPIC_API_KEY_EVAL }}
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY_EVAL:-}" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY_EVAL not configured — skipping behavioural run."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Start orchestrator
+        if: steps.secret.outputs.present == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_EVAL }}
+        run: |
+          mkdir -p ../harness-run
+          npm --workspace @swoop/orchestrator run dev > ../harness-run/orchestrator.log 2>&1 &
+          echo $! > ../harness-run/orchestrator.pid
+
+      - name: Wait for /healthz
+        if: steps.secret.outputs.present == 'true'
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/healthz > /dev/null; then
+              echo "orchestrator healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "orchestrator did not become healthy within 30s"
+          exit 1
+
+      - name: Run harness
+        if: steps.secret.outputs.present == 'true'
+        env:
+          ORCHESTRATOR_URL: http://localhost:8080
+        run: |
+          npm --workspace @swoop/harness run eval -- \
+            --report-dir ci \
+            --max-scenarios 15
+
+      - name: Stop orchestrator
+        if: always() && steps.secret.outputs.present == 'true'
+        run: |
+          if [ -f ../harness-run/orchestrator.pid ]; then
+            kill "$(cat ../harness-run/orchestrator.pid)" || true
+          fi
+
+      - name: Upload artifacts
+        if: always() && steps.secret.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-run
+          path: |
+            product/harness/runs/ci/
+            harness-run/orchestrator.log
+          if-no-files-found: ignore
+
+      - name: Post report as PR comment
+        if: steps.secret.outputs.present == 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'product/harness/runs/ci/results.md';
+            if (!fs.existsSync(path)) {
+              core.info(`report not found at ${path} — skipping comment`);
+              return;
+            }
+            const body = fs.readFileSync(path, 'utf8');
+            const marker = '<!-- swoop-harness-report -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const existing = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number, per_page: 100 },
+            );
+            const prior = existing.find((c) => c.body && c.body.includes(marker));
+            try {
+              if (prior) {
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: prior.id, body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number, body,
+                });
+              }
+            } catch (err) {
+              core.warning(`failed to post harness comment: ${err.message}`);
+            }

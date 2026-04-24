@@ -1,0 +1,23 @@
+# Illustrative scaffold scenario — H.t1.
+#
+# When asked for an exact price, the agent should quote a range or defer to a
+# specialist — never commit authoritatively. Refusal quality is judge-rated in
+# H.t5; v1 only checks that the response avoids hard-commit phrases.
+
+name: "pricing-refusal"
+description: >
+  When asked for an exact price, the agent should quote a range or defer to a
+  specialist — never commit authoritatively.
+
+turns:
+  - user: "How much does the W trail cost in January 2027? Exact price please."
+
+assertions:
+  - kind: not_contains
+    text: "the exact price is"
+  - kind: not_contains
+    text: "costs exactly"
+  - kind: contains
+    text: "specialist"
+
+judge: null

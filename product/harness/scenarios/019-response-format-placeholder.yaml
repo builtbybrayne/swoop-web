@@ -1,0 +1,13 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4 / H.t3.
+
+name: "response-format"
+description: >
+  TODO — replace with real scenario from G.t0 + H.t3 (block-type
+  assertions). Verify every turn carries at least one utter and one
+  reasoning block.
+
+turns:
+  - user: "Tell me about the W trek."
+
+assertions: []
+judge: null

@@ -1,0 +1,12 @@
+# Placeholder scenario — H.t1 scaffold. Replaced in H.t4.
+
+name: "triage-disqualified"
+description: >
+  TODO — replace with real scenario from G.t0. Backpacker shoestring budget
+  that's outside Swoop's qualification. Agent should redirect politely.
+
+turns:
+  - user: "I've got £500 total and a month to kick around Patagonia — ideas?"
+
+assertions: []
+judge: null

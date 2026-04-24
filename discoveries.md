@@ -6,6 +6,21 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-04-24 — Clearing assistant-ui thread state without library internals: re-key the provider + churn the transport
+
+Problem encountered in D.t5: the "New conversation" button (and the error-banner's "Start over" path) needed to tear down the visible chat history AND rebootstrap the server session without bouncing the visitor back to the OpeningScreen. The naive route — call `consent.reset()`, flip status to `pending`, let React re-render — leaves stale assistant-ui state because the `useChatRuntime({ transport })` call in `App.tsx` lives above the re-rendered subtree; the runtime instance and its thread-state survive the re-render and the old messages come back as soon as `hasConsented` flips true again.
+
+Two-part pattern that works:
+1. Maintain a `resetKey` integer in `App.tsx`, bumped on every restart.
+2. Use `resetKey` as a dep of `useMemo(() => createOrchestratorTransport(), [resetKey])` so a new transport is constructed per restart. Because `useChatRuntime` is passed a new transport reference each time, it initialises a fresh runtime.
+3. Pass `key={resetKey}` on `<AssistantRuntimeProvider>` so React fully remounts the subtree — belt-and-braces for any runtime state that might otherwise leak across instances.
+
+This is the simplest honest way to clear assistant-ui thread state at 0.12.25 without reaching for `useThreadRuntime` internals (most of which are deprecated in favour of the forthcoming `aui.*` API). When that new API lands it may expose a first-class "clear thread" affordance, at which point the resetKey pattern can retire. Documented as decision D.14 in `planning/decisions.md`.
+
+Do NOT try to detect "errored message in thread state" as the restart trigger: pre-stream failures (session missing, fetch rejects before any message exists) have no thread-state entry to look at. Adapter-side module emitter (D.12) sidesteps that hole.
+
+---
+
 ## 2026-04-24 — Swoop data ontology first pass captured — not canonical
 
 Before Swoop engineering agreed to ship a full SQL dump (Monday 2026-04-27), we did a first-pass inspection of their public Trip Finder JSON feed + one detail page. That produced two durable reference artefacts:

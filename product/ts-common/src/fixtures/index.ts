@@ -11,5 +11,28 @@ export { SampleRegion } from "./region.sample.js";
 export { SampleStory } from "./story.sample.js";
 export { SampleImage } from "./image.sample.js";
 export { SampleSession } from "./session.sample.js";
-export { SampleHandoff } from "./handoff.sample.js";
-export { SampleEvent } from "./event.sample.js";
+
+// Handoff fixtures — one per verdict + back-compat alias. See E.t1.
+export {
+  SampleHandoff,
+  SampleHandoffQualified,
+  SampleHandoffReferredOut,
+  SampleHandoffDisqualified,
+} from "./handoff.sample.js";
+
+// Event fixtures — one per event kind + back-compat alias. See F-a.
+export {
+  SampleEvent,
+  SampleEventHandoffSubmitted,
+  SampleEventConsentGranted,
+  SampleEventConsentDeclined,
+  SampleEventToolFailed,
+  SampleEventHandoffTriggered,
+  SampleEventSkillLoaded,
+  SampleEventUiWidgetRendered,
+  SampleEventUiConversationOpened,
+  SampleEventUiConversationClosed,
+  SampleEventSessionExpired,
+  SampleEventWarmPoolHit,
+  SampleEventWarmPoolMiss,
+} from "./event.sample.js";

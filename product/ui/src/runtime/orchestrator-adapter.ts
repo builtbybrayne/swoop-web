@@ -45,6 +45,47 @@ export const SESSION_STORAGE_KEY = "swoop.session.id";
 /** Header name the orchestrator expects for the session id (see chunk B). */
 export const SESSION_HEADER = "x-swoop-session-id";
 
+// ---------------------------------------------------------------------------
+// Error emitter (D.t5)
+// ---------------------------------------------------------------------------
+// assistant-ui's thread state surfaces errored messages, but the specifics of
+// detecting "did the most recent turn fail" through its pre-1.0 API is
+// brittle. A module-scoped emitter — the adapter reports errors at the exact
+// moment they happen — gives `useRuntimeErrors` a reliable signal without
+// poking at assistant-ui internals.
+//
+// One emitter per module instance is fine; the adapter is a singleton in
+// practice (App memoises it). No cleanup needed on unmount — subscribers are
+// responsible for detaching their own listeners.
+
+type AdapterErrorListener = (err: unknown) => void;
+const adapterErrorListeners = new Set<AdapterErrorListener>();
+
+/** Subscribe to runtime errors emitted by the orchestrator transport. Returns
+ *  an unsubscribe fn. D.t5's `useRuntimeErrors` is the primary consumer. */
+export function subscribeAdapterErrors(listener: AdapterErrorListener): () => void {
+  adapterErrorListeners.add(listener);
+  return () => {
+    adapterErrorListeners.delete(listener);
+  };
+}
+
+/** Broadcast an error to all adapter-error listeners. Exposed so that sibling
+ *  runtime code (consent bootstrap / refresh flows) can route failures
+ *  through the same channel the transport uses — keeps D.t5's banner the
+ *  single UI surface for anything that might go wrong with orchestrator
+ *  comms, irrespective of which code path triggered it. */
+export function emitAdapterError(err: unknown): void {
+  for (const listener of adapterErrorListeners) {
+    try {
+      listener(err);
+    } catch (inner) {
+      // eslint-disable-next-line no-console
+      console.error("[orchestrator-adapter] error listener threw:", inner);
+    }
+  }
+}
+
 /**
  * Resolve the orchestrator base URL from Vite env. Falls back to localhost for
  * local dev so the UI still boots if `.env.local` is missing.
@@ -382,18 +423,22 @@ export function createOrchestratorTransport<
       if (!sessionId) {
         // Should be impossible on a consented surface — the UI gates the
         // Thread behind `hasConsented`, which is only true once the session
-        // id is written. Guard defensively; D.t5 will surface a clean
-        // failure mode.
-        throw new Error(
-          "No session id available — consent handshake must run before /chat.",
+        // id is written. Guard defensively; D.t5 surfaces a clean failure
+        // mode via the [session_not_found] marker.
+        const err = new Error(
+          "Orchestrator /chat failed [session_not_found]: no session id in storage.",
         );
+        emitAdapterError(err);
+        throw err;
       }
 
       const latestUserMessage = extractLatestUserMessage(messages);
       if (latestUserMessage === null) {
-        throw new Error(
+        const err = new Error(
           "No user-text to send — transport was invoked without a non-empty user message.",
         );
+        emitAdapterError(err);
+        throw err;
       }
 
       // Intentionally do NOT attach `SESSION_HEADER` to `/chat`. The
@@ -429,25 +474,47 @@ export function createOrchestratorTransport<
         message: latestUserMessage,
       });
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers,
-        body,
-        signal: abortSignal,
-      });
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers,
+          body,
+          signal: abortSignal,
+        });
+      } catch (err) {
+        // fetch rejects on DNS failure, connection refused, network down, etc.
+        // Leave AbortError alone — that's user-initiated cancellation, not
+        // something D.t5 should surface.
+        if (err instanceof Error && err.name === "AbortError") throw err;
+        emitAdapterError(err);
+        throw err;
+      }
 
       if (!response.ok || response.body === null) {
         // Surface the orchestrator's JSON error envelope
         // (`{error:{code,message}}` — see errors.ts `sendError`) in the
-        // thrown message so AI SDK's onError sees something useful.
+        // thrown message so AI SDK's onError sees something useful. Embed
+        // a `[<code>]` marker D.t5's `classifyError` can detect without
+        // parsing — `rate_limited` is inferred from status 429 when the body
+        // omits a canonical code.
         let detail = `${response.status} ${response.statusText}`;
+        let code: string | undefined;
         try {
-          const errJson = await response.json();
+          const errJson = (await response.json()) as
+            | { error?: { code?: string; message?: string } }
+            | undefined;
+          if (errJson?.error?.code) code = errJson.error.code;
           if (errJson?.error?.message) detail = `${detail}: ${errJson.error.message}`;
         } catch {
           // No JSON body — fall through with the status line.
         }
-        throw new Error(`Orchestrator /chat failed: ${detail}`);
+        if (!code && response.status === 429) code = "rate_limited";
+        if (!code && response.status === 404) code = "session_not_found";
+        const marker = code ? ` [${code}]` : "";
+        const err = new Error(`Orchestrator /chat failed${marker}: ${detail}`);
+        emitAdapterError(err);
+        throw err;
       }
 
       // Build a ReadableStream<UIMessageChunk> lazily. We emit a `start`
@@ -482,21 +549,29 @@ export function createOrchestratorTransport<
                 //   {message: string, code: string}
                 // (see orchestrator/src/server/errors.ts `writeSseError`).
                 let errText = "Orchestrator stream error.";
+                let code: string | undefined;
                 try {
                   const parsed = JSON.parse(evt.data) as {
                     message?: string;
                     code?: string;
                   };
                   if (parsed.message) errText = parsed.message;
-                  if (parsed.code) errText = `${parsed.code}: ${errText}`;
+                  if (parsed.code) code = parsed.code;
                 } catch {
                   // Fall through with generic message.
                 }
+                // Prefix with `[stream]` so `classifyError` routes this to
+                // `stream_drop`; keep any upstream `[<code>]` marker too so
+                // a canonical code wins (e.g. session_not_found mid-stream
+                // still routes to `session_expired`).
+                const marker = code ? `[${code}] ` : "";
+                errText = `[stream] ${marker}${errText}`;
                 closeTextRun();
                 controller.enqueue({ type: "error", errorText: errText });
                 controller.enqueue({ type: "finish-step" });
                 controller.enqueue({ type: "finish", finishReason: "error" });
                 controller.close();
+                emitAdapterError(new Error(errText));
                 return;
               }
               // Default event type: a MessagePart.
@@ -530,8 +605,12 @@ export function createOrchestratorTransport<
               return;
             }
             closeTextRun();
-            const msg = err instanceof Error ? err.message : String(err);
+            // Reader/parse failures mid-stream — e.g. connection drop,
+            // malformed frames — are `stream_drop` from the user's POV.
+            const base = err instanceof Error ? err.message : String(err);
+            const msg = base.startsWith("[stream]") ? base : `[stream] ${base}`;
             controller.enqueue({ type: "error", errorText: msg });
+            emitAdapterError(new Error(msg));
             controller.error(err);
           }
         },

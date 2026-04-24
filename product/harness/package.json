@@ -1,0 +1,27 @@
+{
+  "name": "@swoop/harness",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Puma behavioural evaluation harness — YAML scenarios driven through the live orchestrator HTTP surface. See planning/02-impl-validation.md + planning/03-exec-validation-scaffold.md.",
+  "type": "module",
+  "main": "./src/cli.ts",
+  "engines": {
+    "node": ">=20.0.0 <21.0.0"
+  },
+  "scripts": {
+    "eval": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@swoop/common": "*",
+    "yaml": "^2.6.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -219,7 +219,7 @@ export function LeadCaptureWidget(
             onChange={(ev) => setName(ev.target.value)}
             aria-invalid={Boolean(errors.name)}
             aria-describedby={errors.name ? "lc-name-err" : undefined}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
           />
           {errors.name ? (
             <span id="lc-name-err" className="text-xs text-red-600">{errors.name}</span>
@@ -237,7 +237,7 @@ export function LeadCaptureWidget(
             onChange={(ev) => setEmail(ev.target.value)}
             aria-invalid={Boolean(errors.email)}
             aria-describedby={errors.email ? "lc-email-err" : undefined}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
           />
           {errors.email ? (
             <span id="lc-email-err" className="text-xs text-red-600">{errors.email}</span>
@@ -253,7 +253,7 @@ export function LeadCaptureWidget(
             type="tel"
             value={phone}
             onChange={(ev) => setPhone(ev.target.value)}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
           />
         </div>
 

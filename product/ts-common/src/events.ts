@@ -1,7 +1,8 @@
 // -----------------------------------------------------------------------------
 // Observability event envelope + per-type payloads.
 //
-// Per planning/02-impl-observability.md §2.1 + §2.2.
+// Per planning/02-impl-observability.md §2.1 + §2.2 and
+// planning/03-exec-observability-a.md (F-a).
 //
 // Shape decisions:
 //   - Event is a discriminated union on `eventType` carrying a typed `payload`.
@@ -9,8 +10,11 @@
 //   - Envelope fields are flat-ish so BigQuery export (§2.4) unnests cleanly.
 //   - No PII by default. User message content is represented as
 //     { length, sha256 } — actual text never lands in logs.
-//   - Chunk F is the author-of-record for this module; A.t2 only stubs the
-//     minimum set from §2.2 and chunk F's agent extends.
+//   - `eventVersion` starts at 1; schema changes per kind bump that kind's
+//     version; we do NOT renumber the whole set on each addition.
+//   - Existing (A.t2) payloads must not change shape — only new kinds get
+//     added. A.t2's fixture round-trip test commits to the stub; breaking
+//     the original nine would be an unforced version bump.
 // -----------------------------------------------------------------------------
 
 import { z } from "zod";
@@ -35,8 +39,11 @@ const EventEnvelopeBase = {
   actor: EventActorSchema,
 };
 
+// Shared verdict enum, reused by several event payloads.
+const VerdictEnum = z.enum(["qualified", "referred_out", "disqualified"]);
+
 // -----------------------------------------------------------------------------
-// Per-event-type schemas.
+// Per-event-type schemas — A.t2 stubs (keep unchanged).
 // -----------------------------------------------------------------------------
 
 export const ConversationStartedEventSchema = z.object({
@@ -96,7 +103,7 @@ export const TriageDecidedEventSchema = z.object({
   eventType: z.literal("triage.decided"),
   ...EventEnvelopeBase,
   payload: z.object({
-    verdict: z.enum(["qualified", "referred_out", "disqualified"]),
+    verdict: VerdictEnum,
     reasonCode: z.string(),
     reasonText: z.string(),
   }),
@@ -107,7 +114,7 @@ export const HandoffSubmittedEventSchema = z.object({
   ...EventEnvelopeBase,
   payload: z.object({
     handoffId: z.string(),
-    verdict: z.enum(["qualified", "referred_out", "disqualified"]),
+    verdict: VerdictEnum,
     consentConversationGranted: z.boolean(),
     consentHandoffGranted: z.boolean(),
     consentMarketingGranted: z.boolean().optional(),
@@ -137,10 +144,129 @@ export const ErrorRaisedEventSchema = z.object({
 });
 
 // -----------------------------------------------------------------------------
+// Per-event-type schemas — F-a additions (new kinds from §2.2 of chunk F
+// Tier 2 + the F-a execution plan).
+// -----------------------------------------------------------------------------
+
+const ConsentTierEnum = z.enum(["conversation", "handoff", "marketing"]);
+
+export const ConsentGrantedEventSchema = z.object({
+  eventType: z.literal("consent.granted"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    tier: ConsentTierEnum,
+    copyVersion: z.string().optional(),
+  }),
+});
+
+export const ConsentDeclinedEventSchema = z.object({
+  eventType: z.literal("consent.declined"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    tier: ConsentTierEnum,
+    copyVersion: z.string().optional(),
+  }),
+});
+
+/**
+ * Distinct from `tool.returned{outcome: "error"}`: carries the richer error
+ * category surface for spot-checks without parsing text. `tool.returned` is
+ * still the cardinal "every call lands here" signal; `tool.failed` is the
+ * opt-in richer event for failing calls.
+ */
+export const ToolFailedEventSchema = z.object({
+  eventType: z.literal("tool.failed"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    toolName: z.string(),
+    toolCallId: z.string(),
+    errorCategory: z.enum(["validation", "upstream", "timeout", "unknown"]),
+    latencyMs: z.number().int().nonnegative(),
+  }),
+});
+
+export const HandoffTriggeredEventSchema = z.object({
+  eventType: z.literal("handoff.triggered"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    verdict: VerdictEnum,
+    widgetToken: z.string(),
+  }),
+});
+
+/**
+ * Emitted when the ADK skill primitive loads a skill file. B.t9 territory —
+ * deferred — but the schema slot lands now so G's skill authors can write
+ * assertions against it.
+ */
+export const SkillLoadedEventSchema = z.object({
+  eventType: z.literal("skill.loaded"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    skillName: z.string(),
+    triggerContext: z.string(),
+  }),
+});
+
+export const UiWidgetRenderedEventSchema = z.object({
+  eventType: z.literal("ui.widget_rendered"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    widgetType: z.string(),
+    toolName: z.string(),
+    turnIndex: z.number().int().nonnegative(),
+  }),
+});
+
+export const UiConversationOpenedEventSchema = z.object({
+  eventType: z.literal("ui.conversation_opened"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    source: z.string(),
+    uaCategory: z.enum(["desktop", "mobile", "tablet", "unknown"]).optional(),
+  }),
+});
+
+export const UiConversationClosedEventSchema = z.object({
+  eventType: z.literal("ui.conversation_closed"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    closeReason: z.enum(["explicit_close", "tab_close", "navigation", "restart"]),
+    finalState: z.string().optional(),
+  }),
+});
+
+export const SessionExpiredEventSchema = z.object({
+  eventType: z.literal("session.expired"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    cause: z.enum(["idle_timeout", "archive_to_delete"]),
+  }),
+});
+
+export const WarmPoolHitEventSchema = z.object({
+  eventType: z.literal("warm_pool.hit"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    poolSizeAtClaim: z.number().int().nonnegative(),
+    waitTimeMs: z.number().int().nonnegative(),
+  }),
+});
+
+export const WarmPoolMissEventSchema = z.object({
+  eventType: z.literal("warm_pool.miss"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    poolSizeAtClaim: z.number().int().nonnegative(),
+  }),
+});
+
+// -----------------------------------------------------------------------------
 // Event — discriminated union on eventType.
 // -----------------------------------------------------------------------------
 
 export const EventSchema = z.discriminatedUnion("eventType", [
+  // A.t2 stubs
   ConversationStartedEventSchema,
   TurnReceivedEventSchema,
   TurnCompletedEventSchema,
@@ -150,6 +276,18 @@ export const EventSchema = z.discriminatedUnion("eventType", [
   HandoffSubmittedEventSchema,
   SessionEndedEventSchema,
   ErrorRaisedEventSchema,
+  // F-a additions
+  ConsentGrantedEventSchema,
+  ConsentDeclinedEventSchema,
+  ToolFailedEventSchema,
+  HandoffTriggeredEventSchema,
+  SkillLoadedEventSchema,
+  UiWidgetRenderedEventSchema,
+  UiConversationOpenedEventSchema,
+  UiConversationClosedEventSchema,
+  SessionExpiredEventSchema,
+  WarmPoolHitEventSchema,
+  WarmPoolMissEventSchema,
 ]);
 export type Event = z.infer<typeof EventSchema>;
 
@@ -163,3 +301,14 @@ export type TriageDecidedEvent = z.infer<typeof TriageDecidedEventSchema>;
 export type HandoffSubmittedEvent = z.infer<typeof HandoffSubmittedEventSchema>;
 export type SessionEndedEvent = z.infer<typeof SessionEndedEventSchema>;
 export type ErrorRaisedEvent = z.infer<typeof ErrorRaisedEventSchema>;
+export type ConsentGrantedEvent = z.infer<typeof ConsentGrantedEventSchema>;
+export type ConsentDeclinedEvent = z.infer<typeof ConsentDeclinedEventSchema>;
+export type ToolFailedEvent = z.infer<typeof ToolFailedEventSchema>;
+export type HandoffTriggeredEvent = z.infer<typeof HandoffTriggeredEventSchema>;
+export type SkillLoadedEvent = z.infer<typeof SkillLoadedEventSchema>;
+export type UiWidgetRenderedEvent = z.infer<typeof UiWidgetRenderedEventSchema>;
+export type UiConversationOpenedEvent = z.infer<typeof UiConversationOpenedEventSchema>;
+export type UiConversationClosedEvent = z.infer<typeof UiConversationClosedEventSchema>;
+export type SessionExpiredEvent = z.infer<typeof SessionExpiredEventSchema>;
+export type WarmPoolHitEvent = z.infer<typeof WarmPoolHitEventSchema>;
+export type WarmPoolMissEvent = z.infer<typeof WarmPoolMissEventSchema>;
