@@ -10,6 +10,39 @@ Mark `✅ Answered: ...` inline once resolved, then move to the closed section a
 
 ## Open
 
+### Data pipeline — Thomas / Richard / Martin (batch, pending Monday 2026-04-27 SQL dump)
+
+On 2026-04-24 Swoop engineering agreed to ship a full SQL database export on Monday. That reshapes chunk C §2.1 — API-vs-scrape is superseded by "ingest the dump, map against our ontology, then decide steady state". The questions below came out of the first-pass web-surface inspection ([data-ontology.md](data-ontology.md), [planning/02-impl-retrieval-and-data-source-exploration.md](planning/02-impl-retrieval-and-data-source-exploration.md)) and should be worked through as the dump is explored.
+
+Why it matters: the answers here define the shape of the derived datasource (chunk C §2.2), the retrieval tool set (chunk C §2.3), and whether the dump is a bootstrap or an operating model.
+
+Where it lands: Tier 2 chunk C.
+
+**Schema questions — answerable by inspecting the dump:**
+
+1. What tables exist? Which map to our ontology entities (Trip, Tour, Location, Accommodation, Vessel, Cabin, Departure, Itinerary-Day, Page, Tag, Image, Review, Swooper)?
+2. What are the actual FKs between tables — especially Tour↔Trip, Trip↔Departure, Trip↔Itinerary-Day, Itinerary-Day↔Accommodation, Location hierarchy, Vessel↔Cabin?
+3. Is there a canonical Media/Image table, or are image URLs embedded on owner records?
+4. Is there a canonical FAQ / CMS-block / "Page" content table? The detail page's Includes / Excludes / Additional Notes panels live somewhere.
+5. How are tags stored — one polymorphic table keyed by `type`, or per-type tables?
+
+**Semantic questions — need Swoop input regardless of dump:**
+
+6. Currency-id mapping: 1 / 2 / 4 → ?
+7. `difficulty` 1–5 and `wilderness` 0–5 — user-facing definitions of each level?
+8. `base_price` vs `raw_price` — why they diverge (W-Trek: raw 2,900 → base 4,119), what formula produces base?
+9. `window_price` — promotional? seasonal? time-windowed? Only populated on ~18% of records.
+10. Departures model — fixed-date group vs. demand-driven bespoke? How's "Flexible Dates" vs "Fixed Dates" represented on the detail page stored underneath?
+11. Swooper (specialist) assignment — manual per trip, rule-based per region, or CRM-driven?
+12. Reviews — Trustpilot aggregate vs. Swoop-owned per-trip store. Is the detail page's "4.6 / 338" derivable from our dump or does it need an external pull?
+
+**Operational questions:**
+
+13. Is Monday's dump a one-off, or can it become a scheduled feed? I.e. is steady state `/weekly-dump`, or do we switch to API / CDC later?
+14. Licensing / PII / what to redact before storing or querying the dump.
+15. Expected dump size and format — raw `.sql`, CSV per table, parquet, `pg_dump` binary?
+16. Authoritative vs. denormalised — is the dump the upstream source of truth, or is some of it itself derived from a CMS? (Matters for "derived datasource" framing in chunk C §2.2.)
+
 ### Analytics platform preference — Julie / Thomas
 
 Where would Swoop want ad-hoc analysis of chat event logs to land? The default GCP path is BigQuery (simple sink from Cloud Logging, cheap, queryable), but they may already have a preferred BI / warehouse / analytics tool — Looker, Metabase, something else — that we should integrate with instead. Also: do they want the event schema to match conventions their analysts already use?

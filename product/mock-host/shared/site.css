@@ -1,0 +1,310 @@
+/* Mock host — dev-only test harness for Puma chat iframe.
+   See ../README.md. Not a production stylesheet. */
+
+:root {
+  --bg: #fbf9f6;
+  --ink: #1f2b2c;
+  --ink-muted: #5c6a6b;
+  --line: #d9d0c2;
+  --accent: #2f5e4c;
+  --accent-ink: #f4f0e7;
+  --warn: #b25a1c;
+  --warn-bg: #fff1dc;
+  --card: #ffffff;
+  --radius: 4px;
+  --maxw: 1080px;
+  --nav-h: 56px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+a:hover { color: var(--ink); }
+
+h1, h2, h3 {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0 0 0.5em;
+}
+h1 { font-size: 2.4rem; }
+h2 { font-size: 1.6rem; margin-top: 1.5em; }
+h3 { font-size: 1.1rem; margin-top: 1em; }
+
+.banner {
+  background: var(--warn-bg);
+  color: var(--warn);
+  text-align: center;
+  padding: 6px 12px;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e7cfa8;
+}
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.nav-inner {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 20px;
+  height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+.brand {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 1.1rem;
+}
+.brand span { color: var(--accent); }
+.nav-links {
+  display: flex;
+  gap: 18px;
+  flex: 1;
+  font-size: 0.95rem;
+}
+.nav-links a {
+  color: var(--ink-muted);
+  text-decoration: none;
+}
+.nav-links a:hover { color: var(--ink); }
+.nav-links a.active { color: var(--ink); border-bottom: 2px solid var(--accent); padding-bottom: 2px; }
+
+.chat-trigger {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+.chat-trigger:hover { background: #264a3c; }
+
+main {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+.hero {
+  padding: 40px 0 32px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 40px;
+}
+.hero p {
+  max-width: 640px;
+  color: var(--ink-muted);
+  font-size: 1.15rem;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.card img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+.card-body {
+  padding: 16px 18px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.card h3 { margin-top: 0; }
+.card p {
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+  flex: 1;
+}
+.card a {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.9rem;
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.itinerary {
+  list-style: none;
+  padding: 0;
+  margin: 1em 0 2em;
+}
+.itinerary li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.itinerary li strong {
+  display: inline-block;
+  width: 80px;
+  color: var(--accent);
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cta-box {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  padding: 20px 24px;
+  margin: 32px 0;
+  border-radius: var(--radius);
+}
+.cta-box p { margin: 0 0 12px; }
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 24px 0;
+}
+.gallery img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+  border-radius: var(--radius);
+}
+
+.contact-row {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+}
+.contact-row strong {
+  min-width: 90px;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+footer {
+  max-width: var(--maxw);
+  margin: 40px auto 0;
+  padding: 24px 20px 40px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Chat iframe sidebar (injected by chat-trigger.js).
+   Docked right, full viewport height. Width is controlled by the
+   --mock-chat-width custom property, set on :root by chat-trigger.js
+   (default 420px, min 320px, max 70vw, persisted in sessionStorage).
+   On desktop the page content reflows via body.mock-chat-open
+   padding-right; on mobile the sidebar overlays full-width. */
+:root {
+  --mock-chat-width: 420px;
+}
+.chat-iframe-wrap {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(var(--mock-chat-width), 100vw);
+  background: var(--card);
+  border-left: 1px solid var(--line);
+  box-shadow: -6px 0 28px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+.chat-iframe-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 1;
+  touch-action: none;
+}
+.chat-iframe-resize-handle:hover,
+.chat-iframe-resize-handle.dragging {
+  background: rgba(47, 94, 76, 0.25);
+}
+.chat-iframe-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+.chat-iframe-close {
+  background: transparent;
+  border: none;
+  color: var(--accent-ink);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.chat-iframe-close:hover { opacity: 0.8; }
+.chat-iframe-wrap iframe {
+  flex: 1;
+  border: none;
+  width: 100%;
+}
+
+/* When chat is open, reflow page content on desktop.
+   On mobile the sidebar takes the full viewport width so
+   no reflow is needed — or meaningful. */
+@media (min-width: 721px) {
+  body.mock-chat-open {
+    padding-right: var(--mock-chat-width);
+  }
+}
+
+@media (max-width: 720px) {
+  .nav-inner { gap: 12px; padding: 0 12px; }
+  .nav-links { gap: 10px; font-size: 0.85rem; overflow-x: auto; }
+  h1 { font-size: 1.8rem; }
+  main { padding: 20px 16px 60px; }
+}

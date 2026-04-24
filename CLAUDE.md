@@ -81,6 +81,7 @@ Four tiers at different altitudes. See `planning/01-top-level.md` for full detai
 | 30 Mar quote (the commercial fence) | `planning/archive/project_proposal.md` |
 | Meeting capture (20/21 Apr) | `planning/archive/meetings/` |
 | Research pack (UI, eval harness, agent architecture) | `planning/archive/research/` |
+| Swoop data ontology (first-pass, transient) | `data-ontology.md` + `planning/02-impl-retrieval-and-data-source-exploration.md`. Retires when Monday 2026-04-27 SQL dump is modelled. |
 
 ---
 
@@ -108,5 +109,5 @@ Four tiers at different altitudes. See `planning/01-top-level.md` for full detai
 
 - Planning reset performed 2026-04-22. New Tier 1 top-level plan at `planning/01-top-level.md`. Prior docs archived.
 - Next step: produce Tier 2 implementation plans per roadmap chunk (A–H in the Tier 1 plan). Start with A (foundations) because it roots the dependency graph. Content chunk G can run in parallel.
-- Friday 24 Apr: data-access hackathon with Swoop engineering — testing whether API access replaces the scraping strategy. Outcome reshapes Tier 2 chunk C.
+- Friday 24 Apr data-access hackathon superseded: Swoop engineering committed to a full SQL dump on Monday 2026-04-27. That reshapes Tier 2 chunk C §2.1 — ingest the dump, map against the first-pass ontology, then decide steady-state extraction. See `data-ontology.md` and `planning/02-impl-retrieval-and-data-source-exploration.md`.
 - Awaiting from Swoop: GCP "AI Pat Chat" IAM, Patagonia sales-thinking doc from Luke + Lane, Claude account clarification, sales inbox + SMTP, legal review.

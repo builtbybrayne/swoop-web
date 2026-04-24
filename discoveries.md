@@ -6,6 +6,17 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-04-24 — Swoop data ontology first pass captured — not canonical
+
+Before Swoop engineering agreed to ship a full SQL dump (Monday 2026-04-27), we did a first-pass inspection of their public Trip Finder JSON feed + one detail page. That produced two durable reference artefacts:
+
+- [data-ontology.md](data-ontology.md) — entity-by-entity inventory: which records are observed vs. implied, which fields are declared-but-empty, controlled tag vocabularies fully enumerated, a prioritised "what to ask Swoop for" table.
+- [planning/02-impl-retrieval-and-data-source-exploration.md](planning/02-impl-retrieval-and-data-source-exploration.md) — wrapper context: sources inspected, call confirmations (activities = tags only, Accommodation + Location ARE records, "Pages" is a new entity), Monday pickup checklist.
+
+**Treat both as first-pass references, not canonical.** The SQL dump supersedes them. Once the dump is modelled, the ontology file gets updated with a new `S-SQLDUMP-2026-04-27` source tag and the exploration doc retires to `planning/archive/` (or folds into the parent chunk C doc). Outstanding questions parked under "Data pipeline" in [questions.md](questions.md).
+
+---
+
 ## 2026-04-24 — Connector returns `{ok, value}` envelopes — widgets must unwrap
 
 The MCP connector adapter (`product/orchestrator/src/connector/tools.ts`) returns `invokeTool` results as `{ok: true, value: <validated data>}` so structured errors can flow alongside successful payloads through the same channel.
