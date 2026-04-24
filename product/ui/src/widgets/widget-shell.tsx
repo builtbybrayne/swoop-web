@@ -15,9 +15,11 @@
 //   3. The error-state UX proper lands in D.t5; this shell's fallback is the
 //      minimum bar so schema drift can't blow up the surface.
 
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 import type { ZodType } from "zod";
 import { getToolErrorCopy } from "../errors";
+import { emitUiEvent } from "../runtime/emit-ui-event";
 
 /**
  * Narrow view of the assistant-ui `ToolCallMessagePartProps` fields we care
@@ -51,9 +53,11 @@ function unwrapEnvelope(value: unknown): unknown {
   return value;
 }
 
-/** Extract the parsed payload or null. Logs the validation error to console
- *  in dev so schema drift is visible without swallowing. Unwraps the
- *  connector's `{ok, value}` envelope transparently. */
+/** Extract the parsed payload or null. Emits a structured `error.raised`
+ *  event on drift (visible in the events stream alongside the widget
+ *  lifecycle) and still logs to console in dev so the first-pass look at
+ *  browser devtools sees the issues verbatim. Unwraps the connector's
+ *  `{ok, value}` envelope transparently. */
 export function safeParse<T>(
   schema: ZodType<T>,
   value: unknown,
@@ -62,9 +66,50 @@ export function safeParse<T>(
   const result = schema.safeParse(candidate);
   if (result.success) return { ok: true, data: result.data };
   if (typeof console !== "undefined") {
+    // Diagnostic tail: keeps the raw Zod issues readable in devtools for
+    // the dev who's looking at the widget right now. The structured signal
+    // for Cloud Logging / BigQuery is the event below.
     console.warn("[swoop.ui] widget schema validation failed", result.error.issues);
   }
   return { ok: false };
+}
+
+/**
+ * Hook: fire `ui.widget_rendered` once per widget instance when the widget
+ * actually renders its happy-path body. Widgets call this from their render
+ * path AFTER the lifecycle gate passes and schema validation succeeds — so
+ * the event accurately tracks widgets the visitor actually sees, not
+ * loading / malformed placeholders.
+ *
+ * One emit per mount per (toolName, toolCallId). assistant-ui's
+ * tool-call-part rendering is stable (same component lifetime for a given
+ * tool call), so `useEffect(..., [])` does the right thing here.
+ */
+export function useWidgetRenderedEvent(params: {
+  readonly widgetType: string;
+  readonly toolName: string;
+  /**
+   * Turn index the tool call lands on. Widgets don't always have this in
+   * scope — assistant-ui doesn't thread it into ToolCallMessagePartProps
+   * by default — so we accept an optional hint and fall back to 0. The
+   * authoritative turn-index signal lives in orchestrator `tool.called` /
+   * `tool.returned`; this UI event is the render-boundary correlator.
+   */
+  readonly turnIndex?: number;
+}): void {
+  const { widgetType, toolName, turnIndex } = params;
+  useEffect(() => {
+    emitUiEvent({
+      eventType: "ui.widget_rendered",
+      payload: {
+        widgetType,
+        toolName,
+        turnIndex: turnIndex ?? 0,
+      },
+    });
+    // Intentionally empty deps: fire once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 }
 
 export function WidgetLoadingPlaceholder({ label = "Loading…" }: { label?: string }) {
@@ -136,4 +181,25 @@ export function renderLifecycleGate(
   }
   // "running" or anything we don't recognise → loading.
   return <WidgetLoadingPlaceholder label={loadingLabel} />;
+}
+
+/**
+ * Shared component that wraps a widget's happy-path render and emits
+ * `ui.widget_rendered` exactly once per mount. Widgets that want per-render
+ * observability can also use `useWidgetRenderedEvent` directly; this wrapper
+ * covers the common case where a widget's render body is a React element
+ * tree returned by the top-level widget component.
+ */
+export function WidgetRenderTracker(props: {
+  readonly widgetType: string;
+  readonly toolName: string;
+  readonly turnIndex?: number;
+  readonly children: ReactNode;
+}): ReactNode {
+  useWidgetRenderedEvent({
+    widgetType: props.widgetType,
+    toolName: props.toolName,
+    turnIndex: props.turnIndex,
+  });
+  return props.children;
 }

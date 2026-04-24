@@ -30,8 +30,9 @@ import {
   ThreadPrimitive,
 } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createOrchestratorTransport } from "./runtime/orchestrator-adapter";
+import { emitUiEvent } from "./runtime/emit-ui-event";
 // Registers the `data-fyi` renderer + reasoning-guard (D.t2). Importing here
 // is what gives assistant-ui the component map below; the module itself has
 // no top-level side effects, but its named export encodes the full registry.
@@ -82,6 +83,19 @@ function Composer() {
       </ComposerPrimitive.Send>
     </ComposerPrimitive.Root>
   );
+}
+
+/**
+ * Cheap UA classification for `ui.conversation_opened`. Kept local — not
+ * worth a dep for three buckets. "unknown" on SSR / missing UA.
+ */
+function detectUaCategory(): "desktop" | "mobile" | "tablet" | "unknown" {
+  if (typeof navigator === "undefined") return "unknown";
+  const ua = navigator.userAgent ?? "";
+  if (!ua) return "unknown";
+  if (/iPad|Tablet|Nexus 7|Nexus 10/i.test(ua)) return "tablet";
+  if (/Mobi|Android|iPhone|iPod/i.test(ua)) return "mobile";
+  return "desktop";
 }
 
 function EmptyState() {
@@ -160,6 +174,38 @@ export default function App() {
   // remounts clean (no stale messages from the previous conversation).
   const [resetKey, setResetKey] = useState(0);
 
+  // Fire `ui.conversation_opened` once per mount. Pre-consent this still
+  // emits with a `"unknown"` sessionId — that's the signal that a visitor
+  // reached the surface but hasn't committed yet. Post-consent reloads
+  // read the stored id and the event carries it.
+  useEffect(() => {
+    emitUiEvent({
+      eventType: "ui.conversation_opened",
+      payload: {
+        source: "mount",
+        uaCategory: detectUaCategory(),
+      },
+    });
+    // No cleanup emit here — `ui.conversation_closed` is fired explicitly on
+    // "Fresh chat" (below) and on tab-close via `beforeunload`.
+  }, []);
+
+  // Best-effort `ui.conversation_closed` on tab/navigation close. Modern
+  // browsers ignore async work in `beforeunload` but `emitEvent` → default
+  // sink → `console.log` is synchronous JSON-line write, which the Cloud
+  // Run stdout pipe captures. If the pipe loses it (rare), the server-side
+  // `session.ended` from DELETE / idle-sweep is the compensating signal.
+  useEffect(() => {
+    const onBeforeUnload = (): void => {
+      emitUiEvent({
+        eventType: "ui.conversation_closed",
+        payload: { closeReason: "tab_close" },
+      });
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
   // `useMemo` on `resetKey` churns the transport each time we restart; the
   // runtime below then re-initialises against the new transport. Keeping
   // both keyed avoids any subtle state carry-over.
@@ -192,6 +238,13 @@ export default function App() {
   // shared adapter channel so the error banner surfaces them; we swallow
   // here so the callback stays sync-friendly.
   const handleFreshChat = useCallback(() => {
+    // Emit the close for the outgoing session before the new one lands.
+    // `closeReason: "restart"` is the discriminator downstream analysis
+    // uses to tell a deliberate fresh-chat from a tab-close or navigation.
+    emitUiEvent({
+      eventType: "ui.conversation_closed",
+      payload: { closeReason: "restart" },
+    });
     void consent.refreshSession().then(
       () => setResetKey((k) => k + 1),
       () => {

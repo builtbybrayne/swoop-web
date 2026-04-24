@@ -274,6 +274,14 @@ function warnOnMismatch(discovered: readonly string[]): void {
   const known = new Set(TOOL_SPECS.map((s) => s.name));
   const discoveredSet = new Set(discovered);
 
+  // These two warnings fire once at startup and describe schema drift
+  // between the connector and the orchestrator. No event kind covers
+  // startup-time capability negotiation (F-a's set is per-turn / per-tool-
+  // call granularity), and a session id isn't in scope here. Keep as
+  // diagnostic console lines rather than synthesise an event with a bogus
+  // envelope — cleaner to spot in `npm run dev` output, and there's no
+  // value in routing one-shot boot banners through Cloud Logging as
+  // structured events.
   for (const name of discovered) {
     if (!known.has(name as ToolName)) {
       console.warn(
