@@ -22,7 +22,7 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import type { Runner } from '@google/adk';
 
-import type { SessionStore } from '../session/index.js';
+import type { SessionAllocator, SessionStore } from '../session/index.js';
 import { createSessionBootstrapHandler } from './session-bootstrap.js';
 import {
   createConsentHandler,
@@ -56,6 +56,14 @@ export interface BuildServerDeps {
    * /chat handler skips the pre-turn classification step entirely.
    */
   readonly triageClassifier?: TriageClassifier;
+  /**
+   * Session allocator (B.t10). When supplied, `POST /session` routes claims
+   * through it so warm-pool hits / misses are accounted for. When omitted,
+   * the handler falls through to `sessionStore.create` + `onSessionCreated`
+   * — used by tests and by the zero-pool path when `startWarmPool` returned
+   * a `DirectAllocator` that the caller chose not to thread in.
+   */
+  readonly allocator?: SessionAllocator;
 }
 
 export function buildServer(deps: BuildServerDeps): Express {
@@ -87,6 +95,7 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
       sessionStore: deps.sessionStore,
       disclosureCopyVersion: deps.disclosureCopyVersion ?? DISCLOSURE_COPY_VERSION,
       onSessionCreated: deps.onSessionCreated,
+      allocator: deps.allocator,
     }),
   );
 
