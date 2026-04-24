@@ -87,6 +87,9 @@ export function LeadCaptureWidget(
       return (
         <div
           data-testid="lead-capture-confirmation"
+          data-swoop-part="widget"
+          data-swoop-widget="lead-capture"
+          data-swoop-widget-state="confirmation"
           role="status"
           className="my-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700"
         >
@@ -104,6 +107,9 @@ export function LeadCaptureWidget(
     return (
       <div
         data-testid="lead-capture-pending"
+        data-swoop-part="widget"
+        data-swoop-widget="lead-capture"
+        data-swoop-widget-state="pending"
         role="status"
         aria-live="polite"
         className="my-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600"
@@ -119,6 +125,9 @@ export function LeadCaptureWidget(
         data-testid="lead-capture"
         data-step="summary"
         data-verdict={args.verdict}
+        data-swoop-part="widget"
+        data-swoop-widget="lead-capture"
+        data-swoop-widget-state="summary"
         aria-label="Handoff summary"
         className="my-2 w-full rounded-lg border border-slate-200 bg-white p-4"
       >
@@ -204,6 +213,9 @@ export function LeadCaptureWidget(
       data-testid="lead-capture"
       data-step="form"
       data-verdict={args.verdict}
+      data-swoop-part="widget"
+      data-swoop-widget="lead-capture"
+      data-swoop-widget-state="form"
       aria-label="Contact form"
       className="my-2 w-full rounded-lg border border-slate-200 bg-white p-4"
     >
@@ -304,13 +316,19 @@ export function LeadCaptureWidget(
         </label>
 
         <div className="mt-2 flex gap-2">
-          <CtaButton
-            type="submit"
-            disabled={!canSubmit}
-            ariaLabel="Submit handoff details"
-          >
-            Send my details
-          </CtaButton>
+          {/* The submit wrapper carries `data-swoop-part="lead-capture-submit"`
+              so Swoop's brand extension can target the primary handoff action
+              without reaching into CtaButton's generic surface. The wrapper is
+              inline-flex so layout stays identical to the unwrapped button. */}
+          <span data-swoop-part="lead-capture-submit" className="inline-flex">
+            <CtaButton
+              type="submit"
+              disabled={!canSubmit}
+              ariaLabel="Submit handoff details"
+            >
+              Send my details
+            </CtaButton>
+          </span>
           <CtaButton
             type="button"
             onClick={() => setStep("summary")}

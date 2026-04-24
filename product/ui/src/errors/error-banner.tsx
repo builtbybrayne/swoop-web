@@ -119,6 +119,7 @@ export function ErrorBanner({
       aria-live="polite"
       data-testid="error-banner"
       data-error-surface={error.surface}
+      data-swoop-part="error-banner"
       className={`mx-auto mb-2 mt-2 w-full max-w-2xl rounded-md border px-3 py-2 text-sm shadow-sm ${classesForSurface(error.surface)}`}
     >
       <div className="flex flex-col gap-1">

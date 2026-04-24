@@ -65,13 +65,17 @@ function MessageView() {
  */
 function Composer() {
   return (
-    <ComposerPrimitive.Root className="flex w-full max-w-2xl items-end gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm focus-within:border-slate-400">
+    <ComposerPrimitive.Root
+      data-swoop-part="composer"
+      className="flex w-full max-w-2xl items-end gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm focus-within:border-slate-400"
+    >
       <ComposerPrimitive.Input
         className="flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400"
         placeholder="Ask anything about an adventure…"
         rows={1}
       />
       <ComposerPrimitive.Send
+        data-swoop-part="composer-send"
         className="inline-flex h-9 shrink-0 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
       >
         Send
@@ -110,7 +114,10 @@ function ThreadSurface({
   const { current, retry, restart, dismiss } = useRuntimeErrors({ onRestart });
   return (
     <ThreadPrimitive.Root className="flex h-full w-full flex-col bg-slate-50">
-      <div className="flex w-full items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
+      <div
+        data-swoop-part="thread-header"
+        className="flex w-full items-center justify-between border-b border-slate-200 bg-white px-4 py-2"
+      >
         <ChromeBadge />
         <div className="flex items-center gap-3">
           <button

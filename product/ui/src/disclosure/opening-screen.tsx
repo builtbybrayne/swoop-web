@@ -99,6 +99,7 @@ export function OpeningScreen({
       aria-labelledby="swoop-disclosure-heading"
       aria-describedby="swoop-disclosure-body"
       data-testid="opening-screen"
+      data-swoop-part="opening-dialog"
       className="flex h-full w-full items-center justify-center bg-slate-50 p-4 transition-opacity duration-200"
     >
       <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -146,6 +147,7 @@ export function OpeningScreen({
             className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isGranting}
             data-testid="opening-screen-decline"
+            data-swoop-part="opening-decline"
           >
             {/* TODO(E.t5): replace with cms/legal/disclosure-opening.md decline label */}
             {COPY.declineLabel}
@@ -159,6 +161,7 @@ export function OpeningScreen({
             className="inline-flex items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isGranting}
             data-testid="opening-screen-continue"
+            data-swoop-part="opening-continue"
             aria-busy={isGranting || undefined}
           >
             {/* TODO(E.t5): replace with cms/legal/disclosure-opening.md continue label */}
