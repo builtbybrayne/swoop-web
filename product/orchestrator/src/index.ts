@@ -36,7 +36,7 @@ import { loadConfig } from './config/index.js';
 import { createPromptLoader } from './agent/prompt-loader.js';
 import { buildOrchestratorAgent } from './agent/factory.js';
 import { setupConnector } from './connector/index.js';
-import { createSessionStore } from './session/index.js';
+import { createSessionStore, startWarmPool } from './session/index.js';
 import { buildServer } from './server/index.js';
 import { buildTriageClassifier } from './functional-agents/triage-classifier.js';
 
@@ -90,6 +90,29 @@ async function main(): Promise<void> {
 
   const version = readPackageVersion(config.packageRoot);
 
+  // ADK-side provisioning hook — used both by the warm pool (every pre-warm)
+  // and by `POST /session`'s direct-create fallthrough path. Seeds the
+  // matching ADK session so `/chat`'s `runner.runAsync` finds it keyed on
+  // (appName, userId, sessionId).
+  const onSessionCreated = async (sessionId: string): Promise<void> => {
+    await runner.sessionService.createSession({
+      appName: ORCHESTRATOR_APP_NAME,
+      userId: ANONYMOUS_USER_ID,
+      sessionId,
+      state: {},
+    });
+  };
+
+  // Warm pool (B.t10). With `WARM_POOL_SIZE=0` (default), this returns a
+  // `DirectAllocator` — the `POST /session` path is unchanged in behaviour.
+  // With size > 0, pre-warms to target before the server starts listening
+  // so the first visitor sees a hit.
+  const allocator = await startWarmPool({
+    config,
+    sessionStore,
+    onSessionCreated,
+  });
+
   const app = buildServer({
     sessionStore,
     runner,
@@ -97,14 +120,8 @@ async function main(): Promise<void> {
     version,
     userId: ANONYMOUS_USER_ID,
     triageClassifier,
-    onSessionCreated: async (sessionId) => {
-      await runner.sessionService.createSession({
-        appName: ORCHESTRATOR_APP_NAME,
-        userId: ANONYMOUS_USER_ID,
-        sessionId,
-        state: {},
-      });
-    },
+    allocator,
+    onSessionCreated,
   });
 
   const server = app.listen(config.PORT, () => {
@@ -119,12 +136,22 @@ async function main(): Promise<void> {
     );
     console.log(`[orchestrator] agent: ${agent.name} (tools: ${agent.tools.length})`);
     console.log(`[orchestrator] session backend: ${config.SESSION_BACKEND}`);
+    console.log(
+      `[orchestrator] warm pool size: ${config.WARM_POOL_SIZE} (ttl ${config.WARM_POOL_TTL_MINUTES}min) — ` +
+        `${config.WARM_POOL_SIZE === 0 ? 'disabled (direct allocator)' : 'pre-warmed'}`,
+    );
     console.log(`[orchestrator] cors allowed origins: [${config.CORS_ALLOWED_ORIGINS.join(', ')}]`);
     console.log(`[orchestrator] env: ${config.NODE_ENV} (prompt hot-reload: ${config.isProduction ? 'off' : 'on'})`);
   });
 
   const shutdown = (signal: string) => {
     console.log(`[orchestrator] ${signal} received, shutting down.`);
+    // Drop warm-pool entries first — they own session records in the store,
+    // and we want those deleted before the process exits so nothing leaks
+    // into a long-lived backend (when one eventually replaces in-memory).
+    allocator.stop().catch((err) => {
+      console.warn('[orchestrator] warm pool stop failed during shutdown:', err);
+    });
     connector.client.close().catch((err) => {
       console.warn('[orchestrator] connector close failed during shutdown:', err);
     });

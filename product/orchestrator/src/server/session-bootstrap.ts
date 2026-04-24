@@ -19,7 +19,7 @@
  */
 
 import type { Request, Response } from 'express';
-import type { SessionStore } from '../session/index.js';
+import type { SessionStore, SessionAllocator } from '../session/index.js';
 import { DISCLOSURE_COPY_VERSION, sendError } from './errors.js';
 
 export interface SessionBootstrapDeps {
@@ -33,8 +33,24 @@ export interface SessionBootstrapDeps {
    * Called after the ADK-side hook has finished provisioning any ephemeral
    * state tied to this session id. B.t7's vertical slice wires this to the
    * ADK `SessionService` so Runner turns find a matching ADK session.
+   *
+   * Ignored when `allocator` is supplied — the allocator owns the hook in
+   * that path (B.t10). Retained on the signature so existing tests that
+   * exercise the bootstrap handler without an allocator keep working.
    */
   readonly onSessionCreated?: (sessionId: string) => Promise<void> | void;
+  /**
+   * Warm-pool allocator (B.t10). When present, `/session` claims via the
+   * allocator instead of calling `sessionStore.create` directly. The
+   * allocator internally dispatches between a hot pool entry (hit) and a
+   * fresh create (miss) and emits the corresponding `warm_pool.*` event.
+   *
+   * When omitted (the default, WARM_POOL_SIZE=0 path via `DirectAllocator`
+   * can also be used — both work), the handler falls through to the legacy
+   * `sessionStore.create` + `onSessionCreated` sequence. Tests rely on this
+   * fallthrough so the HTTP surface can be driven without wiring the pool.
+   */
+  readonly allocator?: SessionAllocator;
 }
 
 export function createSessionBootstrapHandler(
@@ -49,21 +65,29 @@ export function createSessionBootstrapHandler(
           ? req.body.regionInterestHint
           : undefined;
 
-      const state = await deps.sessionStore.create({
+      const initial = {
         metadata: {
           ...(entryUrl ? { entryUrl } : {}),
           ...(regionInterestHint ? { regionInterestHint } : {}),
         },
-      });
+      };
 
-      if (deps.onSessionCreated) {
-        try {
-          await deps.onSessionCreated(state.sessionId);
-        } catch (err) {
-          // If downstream session provisioning fails, unwind so the caller
-          // isn't handed an id pointing at a half-built session.
-          await deps.sessionStore.delete(state.sessionId).catch(() => {});
-          throw err;
+      let state;
+      if (deps.allocator) {
+        // Allocator path (B.t10). Emits warm_pool.hit or warm_pool.miss and
+        // runs its own onSessionCreated hook.
+        state = await deps.allocator.claim(initial);
+      } else {
+        state = await deps.sessionStore.create(initial);
+        if (deps.onSessionCreated) {
+          try {
+            await deps.onSessionCreated(state.sessionId);
+          } catch (err) {
+            // If downstream session provisioning fails, unwind so the caller
+            // isn't handed an id pointing at a half-built session.
+            await deps.sessionStore.delete(state.sessionId).catch(() => {});
+            throw err;
+          }
         }
       }
 

@@ -29,6 +29,13 @@ export {
 } from './adk-native.js';
 export { VertexAiSessionStore } from './vertex-ai.js';
 export { FirestoreSessionStore } from './firestore.js';
+export {
+  DirectAllocator,
+  WarmSessionPool,
+  type SessionAllocator,
+  type WarmSessionPoolOptions,
+} from './warm-pool.js';
+export { startWarmPool, type StartWarmPoolDeps } from './warm-pool-bootstrap.js';
 
 import type { SessionStore } from './interface.js';
 import { InMemorySessionStore } from './in-memory.js';

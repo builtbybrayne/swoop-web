@@ -132,12 +132,26 @@ export const configSchema = z
     NODE_ENV: z.string().trim().min(1).default('development'),
     CORS_ALLOWED_ORIGINS: csvOrigins,
 
-    // --- Warm pool (reserved for B.t10) ---------------------------------
-    // Default 0 = disabled. B.t10 flips the default (or ops sets it) when
-    // the pool is wired.
+    // --- Warm pool (B.t10) ----------------------------------------------
+    // Default 0 = disabled. Plan is explicit: ship the pool disabled so the
+    // code path exists for post-M4 when a network-backed session backend
+    // makes pre-warming load-bearing. With the in-memory store the pool is
+    // latent architectural prep, not a perf win.
     WARM_POOL_SIZE: z.coerce.number().int().nonnegative().default(0),
     WARM_POOL_TTL_MINUTES: z.coerce.number().int().positive().default(30),
-  });
+  })
+  // Warm-pool TTL must be strictly shorter than the idle-session TTL.
+  // A warm entry outliving the session sweeper is a footgun: the pool could
+  // hand out an id the sweeper archived between ticks. Fail-fast at config
+  // parse so the operator sees the bug before the first request lands.
+  .refine(
+    (cfg) => cfg.WARM_POOL_TTL_MINUTES * 60 < cfg.SESSION_TTL_IDLE_HOURS * 3600,
+    {
+      path: ['WARM_POOL_TTL_MINUTES'],
+      message:
+        'WARM_POOL_TTL_MINUTES (in seconds) must be strictly less than SESSION_TTL_IDLE_HOURS (in seconds) so warm entries do not outlive the session sweeper window.',
+    },
+  );
 // Note: Zod's default `.strip()` mode silently drops extra keys from the
 // output (PATH, HOME, etc). That's what we want — we never want to widen the
 // typed Config with arbitrary env vars. Don't switch to `.passthrough()`:
