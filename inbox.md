@@ -6,6 +6,16 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-04-24 — Writing-style control for the agent (Al-raised)
+
+Observation during D.t5 live testing: real chat output regressed into classic AI-slop style — em-dash-heavy rhythm, corporate hedges ("it's worth noting"), AI-signature verbs ("delve", "unpack", "dive into"), empty affirmations ("Great question!"), trailing offers ("Let me know if you'd like to explore…"). The "a couple of illustrative paragraphs, not a style guide" stance in chunk G §2.1 is necessary but insufficient — Claude honours positive examples but regresses under load (long conversations, tool orchestration, strong lean on visitor phrasing).
+
+Landed in `planning/02-impl-content.md`: new §2.1a (explicit anti-pattern list) + decision G.10 (two-layer voice: positive examples in `why.md` + explicit avoidance block in `cms/prompts/style-avoid.md`, referenced from WHY prompt). Avoidance list is a living doc — new tells surface in real conversations and get added. F's event log is the long-term source for regression-pattern capture.
+
+Where it lands next: G.t1 execution now has two content deliverables (`why.md` + `style-avoid.md`). Style-avoid.md can start solo from Al's own `alastair-writing-style` skill + observed offenders — doesn't need to wait for G.t0 HITL session to bootstrap.
+
+---
+
 ## 2026-04-22 — `<fyi>` as a tool call (post-M1 refactor candidate)
 
 Al's observation: the `<fyi>` side-notification mechanism currently implemented as a state-machine parser (B.t4) + custom `data-fyi` AI SDK part (chunk D) could more cleanly be a **tool call**. The orchestrator would register a thin `fyi` / `announce_status` tool; model emits `tool-call` parts which assistant-ui's tool-call registry renders as ephemeral status affordances via the same `makeAssistantToolUI` path as every other widget.

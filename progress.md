@@ -1,8 +1,8 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-04-24 (evening)
+**Snapshot date**: 2026-04-24 (late)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
-**Status**: **M1 vertical slice verified end-to-end live in the browser. Both M1 polish fixes landed. D.t5 error-states shipped alongside an always-visible "New conversation" button.** Ready for the post-M1 work in [next-steps.md](next-steps.md).
+**Status**: **M1 live. D.t5 error-states + "New conversation" button shipped earlier today. Wave-1 parallel swarm landed: D.t6 proactive preflight, D.t7 mobile reflow, E.t1 handoff schema, F-a event schema + `emitEvent` helper, H validation harness scaffold. 221/221 tests green across 4 workspaces. Ready for next wave per [next-steps.md](next-steps.md).**
 
 ---
 
@@ -58,12 +58,12 @@ Archive of superseded docs: [planning/archive/](planning/archive/) — includes 
 | **B — agent runtime** | ADK orchestrator, session, connector adapter, translator, SSE, config, two-layer proof | ✅ Core complete (t1–t7) | ADK 1.0 + Claude shim + stub connector + translator + SSE + triage classifier all wired. |
 | **B — deferred** | Response-format parser, modular-guidance loader, warm pool | ⏸ Post-M1 (t8–t10) | Conditional: parser not needed (natives cover most); loader gated on ADK skill primitive; warm pool is latency polish. |
 | **C — retrieval & data** | MCP connector + Vertex Search + scraper/API + annotation pipeline | ⏸ Gated on Friday hackathon | Data-access strategy pending. Stub connector in orchestrator's `test-fixtures/` carries for now. |
-| **D — chat surface** | Vite + assistant-ui + parts + widgets + disclosure/consent + error states | ✅ Core + D.t5 complete (t1–t5) | Custom `ChatTransport` bridges orchestrator SSE ↔ AI SDK v6. Error banner, classifier + adapter `[<code>]` markers, `consent.refreshSession()`, always-visible "New conversation" button all live. |
-| **D — deferred** | Session expiry UX (proactive), mobile pass, handover doc | ⏸ Post-M1 (t6–t8) | D.t5's reactive session-expired UX is live; D.t6 adds the proactive preflight. |
-| **E — handoff & compliance** | Triage-aware handoff + persistence + email + legal | ❌ Not started | Depends on real connector (C) + sales inbox (Julie). |
-| **F — observability** | Structured event logging + schema | ❌ Not started | Event schema stub lives in `@swoop/common/events.ts`. |
-| **G — content** | System prompt, skills library, HITL flow mapping | ❌ Not started | Placeholder prompt at `product/cms/prompts/why.md`. Real content blocks on HITL session with Al + Luke + Lane's sales doc (~May 4). |
-| **H — validation** | Lightweight eval harness | ❌ Not started | TS harness chosen over Python sidecar. |
+| **D — chat surface** | Vite + assistant-ui + parts + widgets + disclosure/consent + error states + proactive preflight + mobile reflow | ✅ t1–t7 complete | Error banner, classifier, adapter `[<code>]` markers, `consent.refreshSession()`, "New conversation" button, `GET /session/:id/ping` probe with mount/focus/idle triggers, header reflow at `sm:`, lead-capture `w-full` inputs. |
+| **D — deferred** | Handover doc (Swoop brand extension surface) | ⏸ Post-M1 (t8) | Last chunk-D item; blocks on having a stable extension surface to document (CSS vars + override slots). |
+| **E — handoff & compliance** | Triage-aware handoff + persistence + email + legal | Partial (E.t1 done) | E.t1 handoff payload schema shipped — per-verdict reason enums (14 codes), `.strict()` validation, `HandoffSubmitConsentGate` type for E.t2's connector backstop. E.t2–E.t9 still blocked on real connector + sales inbox + legal. |
+| **F — observability** | Structured event logging + schema | Partial (F-a done) | F-a shipped: 20 event kinds in `@swoop/common/events`, `emitEvent()` helper with pluggable module-level sink, validation-failure `error.raised` fallback. F-b (retrofit every producer to emitEvent) still open. |
+| **H — validation** | Lightweight eval harness | Partial (H.t1 done) | H.t1 scaffold shipped: new `@swoop/harness` workspace, bespoke Node CLI runs YAML scenarios against `:8080`, 13 seed scenarios (3 filled + 10 stubs), non-gating label-gated CI. H.t3 assertions + H.t4 real scenarios + H.t5 judge calibration still open. |
+| **G — content** | System prompt, skills library, HITL flow mapping, **style-control** | ❌ Not started | Placeholder prompt at `product/cms/prompts/why.md`. Real content blocks on HITL session + Luke/Lane's sales doc (~May 4). **NEW**: G.10 decision + §2.1a added today — two-layer voice (positive examples in `why.md` + explicit anti-pattern list at `cms/prompts/style-avoid.md`) to suppress AI-slop defaults (em-dash cringe, corporate hedges, "delve"/"unpack", empty affirmations). |
 
 ---
 
@@ -81,13 +81,27 @@ Archive of superseded docs: [planning/archive/](planning/archive/) — includes 
 - [product/orchestrator/src/server/chat.ts](product/orchestrator/src/server/chat.ts) — SSE endpoint + consent gate.
 
 ### UI core
-- [product/ui/src/App.tsx](product/ui/src/App.tsx) — top-level gate (consent → thread). Owns the `resetKey` that keys `<AssistantRuntimeProvider>` for the "New conversation" restart path.
-- [product/ui/src/runtime/orchestrator-adapter.ts](product/ui/src/runtime/orchestrator-adapter.ts) — custom AI SDK `ChatTransport` bridging orchestrator SSE. Exports `emitAdapterError` + `subscribeAdapterErrors` (D.t5 error channel).
-- [product/ui/src/disclosure/](product/ui/src/disclosure/) — opening screen, chrome badge, privacy modal, `useConsent()` hook (now with `reset()` + `refreshSession()`).
-- [product/ui/src/errors/](product/ui/src/errors/) — D.t5 error UX: `classify.ts` (pure classifier + unit tests), `use-runtime-errors.ts` hook, `error-banner.tsx` component.
+- [product/ui/src/App.tsx](product/ui/src/App.tsx) — top-level gate (consent → thread). Owns the `resetKey` that keys `<AssistantRuntimeProvider>` for the "New conversation" restart path. Mounts `usePreflight` (D.t6).
+- [product/ui/src/runtime/orchestrator-adapter.ts](product/ui/src/runtime/orchestrator-adapter.ts) — custom AI SDK `ChatTransport` bridging orchestrator SSE. Exports `emitAdapterError` + `subscribeAdapterErrors` (D.t5 error channel; D.t6 + `refreshSession` also route through it).
+- [product/ui/src/disclosure/](product/ui/src/disclosure/) — opening screen, chrome badge, privacy modal, `useConsent()` hook (with `reset()` + `refreshSession()`).
+- [product/ui/src/errors/](product/ui/src/errors/) — D.t5 error UX: `classify.ts`, `use-runtime-errors.ts`, `error-banner.tsx`.
+- [product/ui/src/session/](product/ui/src/session/) — D.t6 preflight: `preflight.ts` (pure probe + constants), `use-preflight.ts` (triggers + debounce + in-flight guard), index barrel.
 - [product/cms/errors/en.json](product/cms/errors/en.json) — authored copy for the five error surfaces + tool-error placeholder.
 - [product/ui/src/parts/](product/ui/src/parts/) — message-part renderers (`data-fyi`, reasoning-guard).
 - [product/ui/src/widgets/](product/ui/src/widgets/) — four tool-call widgets + shared primitives.
+
+### Shared types (@swoop/common)
+- [product/ts-common/src/handoff.ts](product/ts-common/src/handoff.ts) — E.t1 per-verdict reason taxonomy, strict-validated Zod schemas, `HandoffSubmitConsentGate`.
+- [product/ts-common/src/events.ts](product/ts-common/src/events.ts) — F-a: 20 event kinds in a discriminated union.
+- [product/ts-common/src/emit-event.ts](product/ts-common/src/emit-event.ts) — F-a: `emitEvent()` helper + pluggable sink.
+- [product/ts-common/src/session.ts](product/ts-common/src/session.ts) — `SessionState` + `SessionPingResponse` (canonical for D.t6).
+
+### Orchestrator surfaces added
+- [product/orchestrator/src/server/session-ping.ts](product/orchestrator/src/server/session-ping.ts) — `GET /session/:id/ping` (D.t6; always 200, verdict in body, no `updatedAt` bump).
+
+### Harness (new workspace)
+- [product/harness/](product/harness/) — `@swoop/harness`: bespoke Node CLI, YAML scenarios, 13 seeds (3 filled + 10 stubs), stub judge, markdown + JSON reporter.
+- [.github/workflows/harness.yml](.github/workflows/harness.yml) — non-gating, label-gated CI.
 
 ### Stub connector (fixtures)
 - [product/orchestrator/test-fixtures/stub-connector.ts](product/orchestrator/test-fixtures/stub-connector.ts) — returns `@swoop/common/fixtures`-backed responses over MCP-HTTP. **Currently schema-misaligned — see "Two bugs left" above.**

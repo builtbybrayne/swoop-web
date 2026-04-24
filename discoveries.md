@@ -6,6 +6,16 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-04-24 — LLM voice regresses under load; positive examples are necessary but not sufficient
+
+Observed during D.t5 live testing: Claude Sonnet's default register bleeds through any "voice guide" approach that uses only positive examples. Specific tells surfacing under load (long conversations, tool orchestration, strong lean on visitor phrasing): em-dash-heavy rhythm; corporate hedges ("it's worth noting", "that said"); AI-signature verbs ("delve", "unpack", "dive into", "navigate the complexities"); empty-affirmation openers ("Great question!", "I'd be happy to…"); trailing offers ("Let me know if you'd like to explore…"); bullet-heavy responses where a sentence would do.
+
+Chunk G's original §2.1 stance was "a couple of illustrative paragraphs, not a style guide — show, don't tell". That stance is correct for anchoring positive voice but insufficient for suppression. Remedy (landed as G.10 / §2.1a of `planning/02-impl-content.md`): **two-layer voice control**. (a) Positive-example paragraphs in `cms/prompts/why.md` (anchor good). (b) Explicit avoidance block at `cms/prompts/style-avoid.md`, referenced from the WHY prompt (suppress specific defaults). Separating the files means the taste-driven positive pass (Al authors once) stays decoupled from the pattern-driven avoidance list (updates whenever a new tell surfaces).
+
+Living-doc posture: this is the single most likely `cms/` file to iterate post-launch. Chunk F's event log is the long-term source for regression-pattern capture — tells that slip through get logged, clustered, and rolled into the next `style-avoid.md` revision.
+
+---
+
 ## 2026-04-24 — Clearing assistant-ui thread state without library internals: re-key the provider + churn the transport
 
 Problem encountered in D.t5: the "New conversation" button (and the error-banner's "Start over" path) needed to tear down the visible chat history AND rebootstrap the server session without bouncing the visitor back to the OpeningScreen. The naive route — call `consent.reset()`, flip status to `pending`, let React re-render — leaves stale assistant-ui state because the `useChatRuntime({ transport })` call in `App.tsx` lives above the re-rendered subtree; the runtime instance and its thread-state survive the re-render and the old messages come back as soon as `hasConsented` flips true again.

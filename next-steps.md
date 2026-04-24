@@ -4,9 +4,19 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-04-24, evening)
+## Status (2026-04-24, late)
 
-M1 polish complete. Widget envelope-unwrap + markdown rendering both landed. D.t5 error-states shipped — five surfaces rendered by a unified `ErrorBanner`, classifier wired via module-level adapter emitter (decision D.12), copy authored in `cms/errors/en.json`. Ad-hoc scope addition (Al's mid-task ask): always-visible "New conversation" button in the post-consent header, driven by a new `useConsent.refreshSession()` and a `resetKey` that re-keys `<AssistantRuntimeProvider>` to clear thread state (decision D.14). 43/43 UI tests green.
+M1 live. D.t5 error-states shipped earlier today (five surfaces, adapter emitter pattern, `cms/errors/en.json`, "New conversation" button, decisions D.12–D.14). Wave-1 parallel swarm then landed:
+
+- **D.t6** — proactive session preflight. New `GET /session/:id/ping`; mount/focus/idle triggers with 2s debounce + in-flight guard; expiry routes through D.t5's adapter emitter. Decisions D.15–D.20.
+- **D.t7** — mobile reflow. Header label `sm:hidden`; lead-capture inputs `w-full`. Tailwind defaults unchanged.
+- **E.t1** — handoff payload schema. Per-verdict enums (14 codes, disjoint), `.strict()` validation, `HandoffSubmitConsentGate` backstop type.
+- **F-a** — 20-kind event schema + `emitEvent` helper (pluggable sink, validation-failure fallback, never throws).
+- **H.t1** — `@swoop/harness` workspace. Bespoke Node CLI, YAML scenarios, 13 seeds (3 filled + 10 stubs), non-gating label-gated CI. Decisions H.9–H.13.
+
+Also added today (plan-level, not code): **G.10 — two-layer voice control** (§2.1a in content Tier 2). Positive examples in `why.md` + explicit anti-pattern list at `cms/prompts/style-avoid.md`. Triggered by real AI-slop output observed during D.t5 live testing (em-dashes, "delve", empty affirmations).
+
+**Tests**: 221/221 green across `@swoop/common` (43), `@swoop/orchestrator` (101), `@swoop/ui` (58), `@swoop/harness` (19). Full workspace typecheck clean.
 
 Friday hackathon is superseded — Swoop engineering committed to a full SQL dump for **Mon 2026-04-27**. Chunk C reshapes around that.
 
@@ -14,59 +24,58 @@ Friday hackathon is superseded — Swoop engineering committed to a full SQL dum
 
 ## Next up
 
-### 1. Friday 24 Apr data hackathon synthesis [~1–2 hours]
+### 1. Monday 2026-04-27 SQL-dump ingest + chunk C unblocking [~half day]
 
-After Al's hackathon with Thomas / Richard / Martin:
-- Distil API-direct vs scrape decision into [planning/02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md).
-- Update [questions.md](questions.md) — close the URL-reconstruction question, the media-library question.
-- Decide whether the meta-tag-embedded ID idea is in or out.
-- This unblocks producing Tier 3 plans for chunk C (just-in-time per the plan).
+Swoop engineering ship a full SQL dump Monday. Session to: inspect schema, map against `data-ontology.md` first-pass, decide one-off vs. scheduled feed, close the "is this the upstream source of truth?" question. Outputs: updated `data-ontology.md`, closed questions in `questions.md` (schema section), ready-to-author Tier 3 plans for C.t1–t8.
 
-### 2. Remaining deferred D chunks [~half day]
+### 2. D.t8 — handover doc [~half day]
 
-D.t5 shipped 2026-04-24 (error states + "New conversation" button). Still open:
+Last remaining chunk-D task. Brand-extension surface for Swoop's in-house team: CSS custom-properties surface (colour/spacing/radius tokens), component override slots, iframe embed recipe + origin/CSP guidance. Documents what Swoop's team CAN and CANNOT change without forking Puma. Unblocks M5 iframe embed on Swoop's site.
 
-- **D.t6 Session handling (proactive)** — D.t5's reactive session-expired UX covers the case where `/chat` returns 404. D.t6 adds proactive detection (e.g. a lightweight preflight / long-idle detection) so the visitor sees "your conversation has expired" *before* typing into a dead session. Also covers SSE reconnection policy (server-driven vs client-driven; currently neither — dropped streams surface the banner and the user retries manually).
-- **D.t7 Mobile reflow pass** — already partially tested at 375px; dedicated pass for widget responsiveness (especially tour-card grids + lead-capture form).
-- **D.t8 Handover doc** — brand-extension surface (CSS vars / component override slots) for Swoop's in-house team.
+### 3. G.10 — style-avoid authoring (can start solo) [~half day]
 
-### 3. Chunk C — Retrieval & data [~3–4 days after Friday hackathon]
+Doesn't need the G.t0 HITL session. Al authors `product/cms/prompts/style-avoid.md` from his own `alastair-writing-style` skill + offenders observed during D.t5 testing. Starter list is in `planning/02-impl-content.md` §2.1a; refine + add new tells. Independent of G.t0; compounds with it later.
 
-- **C.t0** Friday 24 Apr data hackathon synthesis — API-direct vs scrape decision, media library access path, URL-reconstruction feasibility. Update `planning/02-impl-retrieval-and-data.md` + `questions.md` post-hackathon.
+### 4. Chunk C — Retrieval & data [~3–4 days after Monday]
+
+- **C.t0** — SQL dump synthesis (#1 above).
 - Produce Tier 3 plans for C.t1–t8 just-in-time.
-- Replace the stub connector with the real `@swoop/connector` package running against Vertex AI Search.
-- Image annotation pipeline (parallelisable — can start as soon as media library access lands).
+- Replace stub connector with real `@swoop/connector` against whatever storage layer the Monday session settles on.
+- Image annotation pipeline (parallelisable — can start as soon as media access path is clear).
 
-### 4. Chunk G — Content [~3–4 days incl. HITL]
+### 5. Chunk G — Content (bulk) [~3–4 days incl. HITL]
 
-- **G.t0** — HITL conversational flow mapping session with Al. Covers Patagonia triage inflections, user-type differentiation, motivation anchoring, handoff triggers. Output: narrative spec at `planning/patagonia-conversational-architecture.md` (or similar).
-- **G.t1** — WHY system prompt first pass (Patagonia-voiced).
-- **G.t3** — At least two seed skills in `product/cms/skills/`.
+- **G.t0** — HITL conversational flow mapping with Al (Patagonia triage inflections, user-type differentiation, motivation anchoring, handoff triggers). Output: `planning/patagonia-conversational-architecture.md`.
+- **G.t1** — WHY system prompt first pass; references `style-avoid.md` from #3.
+- **G.t3** — ≥2 seed skills in `product/cms/skills/`.
 - **G.t5** — Refinement pass when Luke + Lane's sales-thinking doc lands (~May 4).
 
-### 5. Chunk E — Handoff & compliance [~2–3 days]
+### 6. Remaining chunk E — Handoff & compliance [~2–3 days]
 
-- **E.t1** — Finalise handoff payload schema (verdict + reason taxonomy).
-- **E.t2–t4** — Durable handoff store (Firestore), verdict-aware email delivery, end-to-end consent flow.
+E.t1 shipped in wave 1. Still open:
+- **E.t2–t4** — Durable handoff store (Firestore), verdict-aware email delivery, end-to-end consent flow + connector-side backstop using `HandoffSubmitConsentGate`.
 - **E.t5** — Draft real legal copy (`product/cms/legal/*`).
 - **E.t6–t8** — Retention enforcement, data-deletion runbook, compliance bundle.
 - **E.t9** — Swoop's legal counsel review (external; gates M5).
 
-### 6. Chunk F — Observability [~1–1.5 days]
+### 7. F-b — Observability retrofit [~1 day]
 
-- Authoring `emitEvent` helper and full event schema into `@swoop/common/events.ts`.
-- Retrofitting existing B/C/D/E code to use the helper instead of `console.log`.
+F-a shipped in wave 1 (schema + `emitEvent` helper). F-b retrofits every producer:
+- Orchestrator: replace `console.log` sites in `server/chat.ts`, `session/*`, `functional-agents/*`, `server/session-ping.ts` with `emitEvent` calls.
+- Connector: tool invocation / tool error.
+- UI: conversation open/close, widget render, handoff triggered.
 - Spot-check runbook.
-- BigQuery export readiness (schema-only; enable actual export only if Swoop asks).
+- BigQuery export readiness (schema-only; enable only if Swoop asks).
 
-### 7. Chunk H — Validation harness [~2–3 days]
+### 8. Remaining chunk H — Validation harness [~2 days]
 
-- TypeScript harness scaffold.
-- 10–15 starter scenarios drawn from G.t0's HITL output.
-- Claude Opus judge + rubric calibration.
-- CI integration (non-gating at launch).
+H.t1 (scaffold) shipped. Still open:
+- **H.t3** — assertion catalogue (tool-call, triage-verdict, handoff-event, disclosure, refusal). Imports from `@swoop/common/events` once F-b stabilises.
+- **H.t4** — real evalset from G.t0's HITL output (replaces the 10 stubs).
+- **H.t5** — Claude Opus judge + Cohen's κ calibration.
+- **H.t7** — living-evalset runbook (real conversations feed new scenarios).
 
-### 8. Chunk B — Deferred [~1–1.5 days]
+### 9. Chunk B — Deferred [~1–1.5 days]
 
 - **B.t8** — Response-format parser (conditional; only if post-M1 real conversations surface the need).
 - **B.t9** — Modular-guidance loader via ADK-native skill primitive (pairs with chunk G).
