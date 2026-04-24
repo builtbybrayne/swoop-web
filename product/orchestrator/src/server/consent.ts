@@ -22,6 +22,7 @@
 
 import type { Request, Response } from 'express';
 import type { SessionStore } from '../session/index.js';
+import { emitEvent } from '@swoop/common';
 import type { ConsentState, SessionState } from '@swoop/common';
 import { sendError } from './errors.js';
 
@@ -70,6 +71,18 @@ export function createConsentHandler(
       // Active refusal — drop the record. Keeps Puma's "no state without
       // tier-1 consent" invariant crisp (chunk B §2.6 + chunk E §2.3).
       await deps.sessionStore.delete(sessionId);
+      emitEvent({
+        eventType: 'consent.declined',
+        eventVersion: 1,
+        timestamp: now().toISOString(),
+        sessionId,
+        turnIndex: null,
+        actor: 'user',
+        payload: {
+          tier: 'conversation',
+          copyVersion,
+        },
+      });
       res.status(200).json({ deleted: true });
       return;
     }
@@ -89,6 +102,19 @@ export function createConsentHandler(
       consent,
     }));
 
+    emitEvent({
+      eventType: 'consent.granted',
+      eventVersion: 1,
+      timestamp: nowIso,
+      sessionId,
+      turnIndex: null,
+      actor: 'user',
+      payload: {
+        tier: 'conversation',
+        copyVersion,
+      },
+    });
+
     res.status(200).json({ consent: next.consent });
   };
 }
@@ -96,13 +122,42 @@ export function createConsentHandler(
 export function createSessionDeleteHandler(
   deps: ConsentDeps,
 ): (req: Request, res: Response) => Promise<void> {
+  const now = deps.now ?? (() => new Date());
   return async function handleDelete(req, res) {
     const sessionId = req.params.id;
     if (typeof sessionId !== 'string' || sessionId.length === 0) {
       sendError(res, 400, 'invalid_request', 'session id is required.');
       return;
     }
+    // Capture the state pre-delete so session.ended carries real duration /
+    // turn count. Idempotent: if the session is already gone, skip the emit.
+    const existing = await deps.sessionStore.get(sessionId);
     await deps.sessionStore.delete(sessionId);
+    if (existing) {
+      const nowMs = now().getTime();
+      const createdMs = Date.parse(existing.createdAt);
+      const durationMs = Number.isFinite(createdMs)
+        ? Math.max(0, nowMs - createdMs)
+        : 0;
+      const userTurnCount = existing.conversationHistory.filter(
+        (e) => e.role === 'user',
+      ).length;
+      const finalTriageVerdict = existing.triage.verdict;
+      emitEvent({
+        eventType: 'session.ended',
+        eventVersion: 1,
+        timestamp: new Date(nowMs).toISOString(),
+        sessionId,
+        turnIndex: null,
+        actor: 'user',
+        payload: {
+          durationMs,
+          turnCount: userTurnCount,
+          finalTriageVerdict,
+          terminationReason: 'user_closed',
+        },
+      });
+    }
     res.status(204).end();
   };
 }

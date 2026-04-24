@@ -24,6 +24,7 @@ import {
   getOrchestratorUrl,
   emitAdapterError,
 } from "../runtime/orchestrator-adapter";
+import { emitUiEvent } from "../runtime/emit-ui-event";
 
 /** Tab-scoped flag indicating the visitor already granted tier-1 consent. */
 export const CONSENT_STORAGE_KEY = "swoop.consent.tier1";
@@ -211,6 +212,18 @@ export function useConsent(): UseConsentResult {
         sessionId,
         copyVersion: disclosureCopyVersion,
       });
+      // Mirrors the server-side `consent.granted` emitted from PATCH
+      // /session/:id/consent. The paired emit is deliberate — both sides of
+      // the handshake carry value for spot-checks: server sees the write,
+      // UI sees the visitor's click. The correlation id is the sessionId.
+      emitUiEvent({
+        eventType: "consent.granted",
+        sessionId,
+        payload: {
+          tier: "conversation",
+          copyVersion: disclosureCopyVersion,
+        },
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setStatus({ state: "error", message });
@@ -219,6 +232,17 @@ export function useConsent(): UseConsentResult {
 
   const declineConsent = useCallback((): void => {
     // No network. No sessionStorage writes. No analytics. "No" means no.
+    // The single observability event here is deliberately minimal: tier +
+    // "v1" copy version fallback (the visitor never saw a bootstrapped
+    // session id, so we emit with the literal "unknown" the wrapper fills
+    // in). GDPR-wise this carries no PII — it's the decline signal itself.
+    emitUiEvent({
+      eventType: "consent.declined",
+      payload: {
+        tier: "conversation",
+        copyVersion: "v1",
+      },
+    });
     setStatus({ state: "declined" });
     if (typeof window !== "undefined") {
       try {

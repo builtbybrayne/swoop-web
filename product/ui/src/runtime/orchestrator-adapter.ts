@@ -38,6 +38,7 @@
 //   - planning/03-exec-chat-surface-t4.md §"Continue triggers bootstrap"
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
+import { emitEvent } from "@swoop/common";
 
 /** Key used to persist the session id in tab-scoped storage. */
 export const SESSION_STORAGE_KEY = "swoop.session.id";
@@ -74,12 +75,36 @@ export function subscribeAdapterErrors(listener: AdapterErrorListener): () => vo
  *  runtime code (consent bootstrap / refresh flows) can route failures
  *  through the same channel the transport uses — keeps D.t5's banner the
  *  single UI surface for anything that might go wrong with orchestrator
- *  comms, irrespective of which code path triggered it. */
+ *  comms, irrespective of which code path triggered it.
+ *
+ *  Side-effect: also emits a structured `error.raised` event so the
+ *  observability stream captures UI-side failures alongside server-side
+ *  events correlated by session id. Session-id fallback is "unknown" for
+ *  the pre-bootstrap edge case where the transport failed before any
+ *  session id landed in storage. */
 export function emitAdapterError(err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  const sessionId = readStoredSessionId() ?? "unknown";
+  emitEvent({
+    eventType: "error.raised",
+    eventVersion: 1,
+    timestamp: new Date().toISOString(),
+    sessionId,
+    turnIndex: null,
+    actor: "ui",
+    payload: {
+      errorType: "adapter_error",
+      chunk: "D",
+      sanitisedContext: message.slice(0, 500),
+    },
+  });
   for (const listener of adapterErrorListeners) {
     try {
       listener(err);
     } catch (inner) {
+      // Diagnostic — a listener throwing is a bug in a subscriber, not
+      // something to re-emit into the event stream (would loop). Dev
+      // console.error is the right surface.
       // eslint-disable-next-line no-console
       console.error("[orchestrator-adapter] error listener threw:", inner);
     }

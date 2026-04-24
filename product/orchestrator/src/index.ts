@@ -31,6 +31,7 @@ loadDotenv({ override: true });
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { InMemoryRunner } from '@google/adk';
+import { emitEvent } from '@swoop/common';
 
 import { loadConfig } from './config/index.js';
 import { createPromptLoader } from './agent/prompt-loader.js';
@@ -124,9 +125,25 @@ async function main(): Promise<void> {
   });
 
   const shutdown = (signal: string) => {
+    // Human-facing: operator sees the signal in local dev / Cloud Run logs.
+    // Not an event — the process is on its way out and per-signal shutdown
+    // notifications would only clutter the structured stream.
     console.log(`[orchestrator] ${signal} received, shutting down.`);
     connector.client.close().catch((err) => {
-      console.warn('[orchestrator] connector close failed during shutdown:', err);
+      emitEvent({
+        eventType: 'error.raised',
+        eventVersion: 1,
+        timestamp: new Date().toISOString(),
+        sessionId: 'unknown',
+        turnIndex: null,
+        actor: 'system',
+        payload: {
+          errorType: 'connector_close_failed',
+          chunk: 'B',
+          sanitisedContext:
+            (err instanceof Error ? err.message : String(err)).slice(0, 500),
+        },
+      });
     });
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5_000).unref();
@@ -136,6 +153,21 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
+  emitEvent({
+    eventType: 'error.raised',
+    eventVersion: 1,
+    timestamp: new Date().toISOString(),
+    sessionId: 'unknown',
+    turnIndex: null,
+    actor: 'system',
+    payload: {
+      errorType: 'orchestrator_startup_failed',
+      chunk: 'B',
+      sanitisedContext:
+        (err instanceof Error ? err.stack ?? err.message : String(err)).slice(0, 500),
+    },
+  });
+  // Also stderr so the operator sees the full trace at process exit.
   console.error('[orchestrator] fatal startup error:', err);
   process.exit(1);
 });

@@ -23,6 +23,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { emitEvent } from '@swoop/common';
 import type { SessionState } from '@swoop/common';
 import type { SessionStore } from './interface.js';
 
@@ -166,12 +167,34 @@ export class InMemorySessionStore implements SessionStore {
         if (now - updatedMs >= this.idleTtlMs) {
           entry.archivedAt = new Date(now).toISOString();
           archived += 1;
+          // Signals an idle-triggered archival. Distinct from
+          // `session.ended{terminationReason:'idle_timeout'}` which B.t2's
+          // dedicated sweeper hook will emit once it lands — that carries
+          // duration / turn counts, whereas this is a pure lifecycle tick.
+          emitEvent({
+            eventType: 'session.expired',
+            eventVersion: 1,
+            timestamp: new Date(now).toISOString(),
+            sessionId: id,
+            turnIndex: null,
+            actor: 'system',
+            payload: { cause: 'idle_timeout' },
+          });
         }
       } else {
         const archivedMs = Date.parse(entry.archivedAt);
         if (now - archivedMs >= this.archiveTtlMs) {
           this.sessions.delete(id);
           deleted += 1;
+          emitEvent({
+            eventType: 'session.expired',
+            eventVersion: 1,
+            timestamp: new Date(now).toISOString(),
+            sessionId: id,
+            turnIndex: null,
+            actor: 'system',
+            payload: { cause: 'archive_to_delete' },
+          });
         }
       }
     }

@@ -19,6 +19,7 @@
  */
 
 import type { Request, Response } from 'express';
+import { emitEvent } from '@swoop/common';
 import type { SessionStore } from '../session/index.js';
 import { DISCLOSURE_COPY_VERSION, sendError } from './errors.js';
 
@@ -67,12 +68,39 @@ export function createSessionBootstrapHandler(
         }
       }
 
+      emitEvent({
+        eventType: 'conversation.started',
+        eventVersion: 1,
+        timestamp: new Date().toISOString(),
+        sessionId: state.sessionId,
+        turnIndex: null,
+        actor: 'system',
+        payload: {
+          ...(entryUrl ? { entryUrl } : {}),
+          // variantId + warmPoolHit remain unset until B.t10 lands the
+          // warm-pool path; the schema allows either to be absent.
+        },
+      });
+
       res.status(201).json({
         sessionId: state.sessionId,
         disclosureCopyVersion: copyVersion,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'session bootstrap failed';
+      emitEvent({
+        eventType: 'error.raised',
+        eventVersion: 1,
+        timestamp: new Date().toISOString(),
+        sessionId: 'unknown',
+        turnIndex: null,
+        actor: 'system',
+        payload: {
+          errorType: 'session_bootstrap_failed',
+          chunk: 'B',
+          sanitisedContext: message.slice(0, 500),
+        },
+      });
       sendError(res, 500, 'internal_error', message);
     }
   };

@@ -42,9 +42,11 @@
  *     overhead. The BaseLlm interface is the ADK contract; using it directly
  *     is still ADK execution, not a side channel.
  *
- * Observability: `console.log` for the model name on every classify() call,
- * so the two-layer split is visible in logs. When chunk F lands, this
- * switches to `emitEvent`.
+ * Observability: classifier failures emit `error.raised` via `@swoop/common`'s
+ * `emitEvent`; the per-call model-name line stays as a diagnostic
+ * `console.debug` so local dev sees the two-layer split without polluting the
+ * structured event stream (the authoritative signal is `triage.decided`
+ * emitted by `chat.ts` once the verdict lands on session state).
  */
 
 import type { Content } from '@google/genai';
@@ -54,6 +56,7 @@ import { LlmAgent } from '@google/adk';
 import type { Config } from '../config/index.js';
 import { getModelFor, type ModelConfig } from '../config/index.js';
 import { ClaudeLlm } from '../agent/claude-llm.js';
+import { emitEvent } from '@swoop/common';
 import type { SessionState, TriageState } from '@swoop/common';
 
 // ---------------------------------------------------------------------------
@@ -244,15 +247,30 @@ async function runClassification(params: {
       }
     }
     if (resp.errorCode) {
-      // Classifier failure is not fatal — log and fall through to unclear.
-      console.warn(
-        `[orchestrator] triage classifier error (${resp.errorCode}): ${resp.errorMessage ?? '(no message)'}`,
-      );
+      // Classifier failure is not fatal — emit an error event and fall
+      // through to the unclear fallback so the orchestrator turn proceeds.
+      emitEvent({
+        eventType: 'error.raised',
+        eventVersion: 1,
+        timestamp: new Date().toISOString(),
+        sessionId: session.sessionId,
+        turnIndex: null,
+        actor: 'system',
+        payload: {
+          errorType: 'triage_classifier_llm_error',
+          chunk: 'B',
+          sanitisedContext:
+            `${resp.errorCode}: ${resp.errorMessage ?? '(no message)'}`.slice(0, 500),
+        },
+      });
       return fallback('classifier_error', modelConfig.model);
     }
     if (resp.turnComplete) break;
   }
 
+  // Diagnostic: shows the two-layer split live in local dev. Not an event —
+  // the authoritative structured signal is `triage.decided`, emitted by
+  // `chat.ts` after the verdict lands on session state.
   console.log(
     `[orchestrator] ${agentName} classified turn (model=${modelConfig.model}, bytes=${collectedText.length})`,
   );

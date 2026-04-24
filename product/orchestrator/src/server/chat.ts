@@ -21,8 +21,10 @@
  */
 
 import type { Request, Response } from 'express';
+import { createHash } from 'node:crypto';
 import type { Content } from '@google/genai';
 import type { Runner, Event as AdkEvent } from '@google/adk';
+import { emitEvent } from '@swoop/common';
 import type {
   MessagePart,
   ReasoningPart,
@@ -105,6 +107,27 @@ export function createChatHandler(
     // what the visitor said just because the model errored.
     await appendUserMessage(deps.sessionStore, sessionId, message, now());
 
+    // Turn index the user message landed at. Used for every per-turn event
+    // below so spot-checks can trace a turn's event sequence by (sessionId,
+    // turnIndex).
+    const userTurnIndex =
+      ((await deps.sessionStore.get(sessionId))?.conversationHistory.length ?? 1) - 1;
+
+    emitEvent({
+      eventType: 'turn.received',
+      eventVersion: 1,
+      timestamp: now().toISOString(),
+      sessionId,
+      turnIndex: userTurnIndex,
+      actor: 'user',
+      payload: {
+        userMessageLength: message.length,
+        userMessageSha256: createHash('sha256').update(message).digest('hex'),
+      },
+    });
+
+    const turnStartedAt = now().getTime();
+
     // Pre-turn triage classification (B.t7). A layer-2 ADK agent running on
     // a different model from the orchestrator (Haiku vs Sonnet) tags the
     // visitor posture into `session.triage`. Advisory only — the
@@ -119,12 +142,40 @@ export function createChatHandler(
             message,
             sessionAfterUser,
           );
-          await deps.sessionStore.update(sessionId, (s) =>
+          const updated = await deps.sessionStore.update(sessionId, (s) =>
             applyTriageVerdict({ session: s, result: classifyResult, now: now() }),
           );
+          if (updated.triage.verdict !== 'none') {
+            emitEvent({
+              eventType: 'triage.decided',
+              eventVersion: 1,
+              timestamp: now().toISOString(),
+              sessionId,
+              turnIndex: userTurnIndex,
+              actor: 'agent',
+              payload: {
+                verdict: updated.triage.verdict,
+                reasonCode: updated.triage.reasonCode,
+                reasonText: updated.triage.reasonText,
+              },
+            });
+          }
         }
       } catch (err) {
-        console.warn('[orchestrator] triage classifier failed (advisory, non-fatal):', err);
+        emitEvent({
+          eventType: 'error.raised',
+          eventVersion: 1,
+          timestamp: now().toISOString(),
+          sessionId,
+          turnIndex: userTurnIndex,
+          actor: 'system',
+          payload: {
+            errorType: 'triage_classifier_failed',
+            chunk: 'B',
+            sanitisedContext:
+              (err instanceof Error ? err.message : String(err)).slice(0, 500),
+          },
+        });
       }
     }
 
@@ -168,6 +219,25 @@ export function createChatHandler(
       });
     };
 
+    // Per-turn counters feeding turn.completed — block counts and cumulative
+    // utter length let spot-checks tell "chatty turn" from "silent tool
+    // orchestration" without parsing history.
+    let utterLength = 0;
+    let fyiCount = 0;
+    let reasoningCount = 0;
+    let adjunctCount = 0;
+
+    // Track tool-call lifecycle so we can emit tool.called exactly once on
+    // input-available and tool.returned exactly once on output-available,
+    // with a per-call latency measurement.
+    const toolCallStartedAt = new Map<string, number>();
+
+    // Wrap onFiltered to tally reasoning parts for the turn.completed count.
+    const onFilteredTallying = (part: MessagePart): void => {
+      if (part.type === 'reasoning') reasoningCount += 1;
+      onFiltered(part);
+    };
+
     try {
       const adkStream = runAgentTurn({
         runner: deps.runner,
@@ -177,30 +247,113 @@ export function createChatHandler(
         abortSignal: abortController.signal,
       });
 
-      for await (const part of translateAdkStream(adkStream, { onFiltered, now })) {
+      for await (const part of translateAdkStream(adkStream, {
+        onFiltered: onFilteredTallying,
+        now,
+      })) {
         if (closed) break;
         writeSsePart(res, part);
         // Persist visible parts to history as they stream; errors are best-
         // effort, the SSE wire remains the source of truth for the client.
         void persistPart(deps.sessionStore, sessionId, part, turnIndex++, now());
+
+        // Per-kind bookkeeping + per-tool-call events.
+        if (part.type === 'text') {
+          utterLength += part.text.length;
+        } else if (part.type === 'data-fyi') {
+          fyiCount += 1;
+        } else if (part.type === 'tool-call') {
+          if (part.state === 'input-available') {
+            adjunctCount += 1;
+            toolCallStartedAt.set(part.toolCallId, now().getTime());
+            emitEvent({
+              eventType: 'tool.called',
+              eventVersion: 1,
+              timestamp: now().toISOString(),
+              sessionId,
+              turnIndex: userTurnIndex,
+              actor: 'agent',
+              payload: {
+                toolName: part.toolName,
+                toolCallId: part.toolCallId,
+                inputSha256: createHash('sha256')
+                  .update(safeStringify(part.input))
+                  .digest('hex'),
+              },
+            });
+          } else if (part.state === 'output-available') {
+            const startedAt = toolCallStartedAt.get(part.toolCallId);
+            const latencyMs =
+              startedAt !== undefined
+                ? Math.max(0, now().getTime() - startedAt)
+                : 0;
+            toolCallStartedAt.delete(part.toolCallId);
+            const outputSize = safeStringify(part.output).length;
+            emitEvent({
+              eventType: 'tool.returned',
+              eventVersion: 1,
+              timestamp: now().toISOString(),
+              sessionId,
+              turnIndex: userTurnIndex,
+              actor: 'connector',
+              payload: {
+                toolName: part.toolName,
+                toolCallId: part.toolCallId,
+                outcome: part.isError === true ? 'error' : 'ok',
+                latencyMs,
+                outputSize,
+              },
+            });
+          }
+        }
       }
 
       if (!closed) {
         res.write('event: done\n');
         res.write('data: {}\n\n');
+        emitEvent({
+          eventType: 'turn.completed',
+          eventVersion: 1,
+          timestamp: now().toISOString(),
+          sessionId,
+          turnIndex: userTurnIndex,
+          actor: 'agent',
+          payload: {
+            utterLength,
+            fyiCount,
+            reasoningCount,
+            adjunctCount,
+            latencyMs: Math.max(0, now().getTime() - turnStartedAt),
+          },
+        });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (!closed) {
         writeSseError(res, 'internal_error', message);
       }
-      console.error('[orchestrator] /chat turn failed:', err);
+      emitEvent({
+        eventType: 'error.raised',
+        eventVersion: 1,
+        timestamp: now().toISOString(),
+        sessionId,
+        turnIndex: userTurnIndex,
+        actor: 'system',
+        payload: {
+          errorType: 'chat_turn_failed',
+          chunk: 'B',
+          sanitisedContext: message.slice(0, 500),
+        },
+      });
     } finally {
       stopHeartbeat();
       req.off('close', onClientClose);
       if (!res.writableEnded) {
         res.end();
       }
+      // Diagnostic-only: cancelled turns are infrequent and noisy to log at
+      // event level. Kept as a plain console line so local dev sees the
+      // abort path without polluting the structured event stream.
       if (abortController.signal.aborted) {
         console.log(`[orchestrator] /chat turn cancelled (session=${sessionId}).`);
       }
@@ -211,6 +364,21 @@ export function createChatHandler(
 // ---------------------------------------------------------------------------
 // SSE formatting — one `data:` line per part, JSON-encoded.
 // ---------------------------------------------------------------------------
+
+/**
+ * JSON-stringify something that might contain circular references or bigints
+ * without throwing. Used for deriving stable hashes + size counts for the
+ * tool.called / tool.returned event payloads — a hash / length that falls
+ * back to `""` on pathological input is fine; we never want observability to
+ * bring down the turn loop.
+ */
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return '';
+  }
+}
 
 function writeSsePart(res: Response, part: MessagePart): void {
   const payload = JSON.stringify(part);
