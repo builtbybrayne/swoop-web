@@ -61,6 +61,9 @@ export function SearchResultsWidget(
     return (
       <div
         data-testid="search-results-empty"
+        data-swoop-part="widget"
+        data-swoop-widget="search-results"
+        data-swoop-widget-state="empty"
         className="my-2 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600"
       >
         No matches in the catalogue for that.
@@ -71,6 +74,8 @@ export function SearchResultsWidget(
   return (
     <section
       data-testid="search-results"
+      data-swoop-part="widget"
+      data-swoop-widget="search-results"
       aria-label="Search results"
       className="my-2 w-full"
     >

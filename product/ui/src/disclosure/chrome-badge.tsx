@@ -28,6 +28,7 @@ export function ChromeBadge() {
         aria-haspopup="dialog"
         aria-expanded={open}
         data-testid="chrome-badge"
+        data-swoop-part="chrome-badge"
         className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
       >
         <span

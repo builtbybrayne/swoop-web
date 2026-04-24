@@ -73,6 +73,8 @@ export function WidgetLoadingPlaceholder({ label = "Loading…" }: { label?: str
       role="status"
       aria-live="polite"
       data-testid="widget-loading"
+      data-swoop-part="widget"
+      data-swoop-widget-state="loading"
       className="my-2 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500"
     >
       <span
@@ -95,6 +97,8 @@ export function WidgetMalformedPlaceholder() {
     <div
       role="alert"
       data-testid="widget-malformed"
+      data-swoop-part="widget"
+      data-swoop-widget-state="malformed"
       className="my-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
     >
       <div className="font-medium">{copy.title}</div>

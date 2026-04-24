@@ -126,6 +126,8 @@ export function ItemDetailWidget(
     <article
       data-testid="item-detail"
       data-entity-type={entityType}
+      data-swoop-part="widget"
+      data-swoop-widget="item-detail"
       aria-label={detail.title}
       className="my-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white"
     >

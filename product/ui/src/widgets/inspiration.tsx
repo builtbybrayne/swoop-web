@@ -70,6 +70,9 @@ export function InspirationWidget(
     return (
       <div
         data-testid="inspiration-empty"
+        data-swoop-part="widget"
+        data-swoop-widget="inspiration"
+        data-swoop-widget-state="empty"
         className="my-2 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600"
       >
         No imagery to surface right now.
@@ -84,6 +87,8 @@ export function InspirationWidget(
   return (
     <section
       data-testid="inspiration"
+      data-swoop-part="widget"
+      data-swoop-widget="inspiration"
       aria-label="Inspiration imagery"
       className="my-2 w-full"
     >
