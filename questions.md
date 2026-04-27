@@ -10,6 +10,54 @@ Mark `✅ Answered: ...` inline once resolved, then move to the closed section a
 
 ## Open
 
+### Julie call — 2026-04-27 (today)
+
+Topics for Julie. Some are stance-confirmation (we have a working hypothesis, want her sign-off); some are unblockers; some refresh existing open items.
+
+**Sales-funnel "golden thread" — stance confirmation**
+
+We're proposing the bot's job is to move users Awareness → Interest → Strong Consideration. Stoking imagination + supporting consideration. Specialist call closes the loop. The bot does NOT try to build itineraries or simulate booking — that's sales-team territory and risks a "shadow itinerary" that misrepresents what's actually bookable. The bot CAN engage with specifics (including price ranges) when a user pushes, as long as it's not crossing into shadow-itinerary territory.
+
+Confirm Julie agrees this is the right framing.
+
+**Pricing exposure — where's the line?**
+
+We want to talk pricing because users will ask. Default proposal:
+- Headline "from £X per person" on every trip.
+- Calculated band ("£2,200–£3,800 for this trip across season + tier") when relevant.
+- Calculated regional/category bands ("Patagonia treks typically £1,500–£4,500").
+- On a user push: tier-by-tier or season-by-season ranges if derivable from the data.
+- Off-limits by default: specific dated departures with prices, single-supplement specifics, occupancy-specific quotes — those route to specialist.
+
+Where's Swoop's line? In particular: are they comfortable with the bot quoting calculated ranges, or do they want a tighter "from £X — let's talk for the rest" stance?
+
+**Departures stance — confirm we don't surface dates**
+
+Patagonia is largely demand-driven; the SQL dump has no `departure` table. We're proposing the bot answers "departures run throughout the season — let's talk to a specialist about your preferred dates" rather than ever quoting bookable dates. Confirm.
+
+**Specialist handoff persona — generic vs named**
+
+The dump has no `swooper` / specialist table. We're proposing the bot hands off to a generic "Patagonia specialist" rather than assigning a named advisor pre-call. Confirm — and if there's a CRM-side mapping she wants us to surface eventually, capture how.
+
+**Data refresh cadence**
+
+Weekly manual ingest of a SQL dump while we iterate — OK with her? What's Swoop's preferred steady-state? (Scheduled dump, API, CDC, hybrid?) Affects chunk C §2.1 final shape.
+
+**Derived data store posture**
+
+We're proposing to ingest the dump into our own derived store (DuckDB-leaning — embedded, AI-side, optically distinct from her MariaDB) rather than ever querying Swoop's MariaDB directly. Confirm she's comfortable with that (separation, security, operational independence).
+
+**`ntag` system purpose** — 79 entries plus 157K lookups. Is this the live tagging system superseding the legacy `tag` table (2,374 entries), or a different domain? Julie may know; if not, route to Thomas/Richard.
+
+**Refresh of existing open items** — also worth raising while we have her:
+- Patagonia sales-thinking doc status (Luke + Lane, target ~May 4) — see "Patagonia sales-thinking doc status" below.
+- Sales inbox + SMTP — see below.
+- Legal counsel engagement model — see below.
+- Claude account Enterprise tier — see below.
+- Analytics platform preference — see below.
+
+---
+
 ### Data pipeline — Thomas / Richard / Martin (batch, pending Monday 2026-04-27 SQL dump)
 
 On 2026-04-24 Swoop engineering agreed to ship a full SQL database export on Monday. That reshapes chunk C §2.1 — API-vs-scrape is superseded by "ingest the dump, map against our ontology, then decide steady state". The questions below came out of the first-pass web-surface inspection ([data-ontology.md](data-ontology.md), [planning/02-impl-retrieval-and-data-source-exploration.md](planning/02-impl-retrieval-and-data-source-exploration.md)) and should be worked through as the dump is explored.
@@ -18,29 +66,31 @@ Why it matters: the answers here define the shape of the derived datasource (chu
 
 Where it lands: Tier 2 chunk C.
 
+**Status after dump inspection (2026-04-27):** schema questions 1, 3, 4, 5 closed by inspection. Semantic 11 + 12 closed (no swooper, no review tables). Semantic 7 + 10 partly closed. Operational 15 closed. Remaining open items still need Swoop input. See Closed section for the batch entry; inline ✅ markers below.
+
 **Schema questions — answerable by inspecting the dump:**
 
-1. What tables exist? Which map to our ontology entities (Trip, Tour, Location, Accommodation, Vessel, Cabin, Departure, Itinerary-Day, Page, Tag, Image, Review, Swooper)?
-2. What are the actual FKs between tables — especially Tour↔Trip, Trip↔Departure, Trip↔Itinerary-Day, Itinerary-Day↔Accommodation, Location hierarchy, Vessel↔Cabin?
-3. Is there a canonical Media/Image table, or are image URLs embedded on owner records?
-4. Is there a canonical FAQ / CMS-block / "Page" content table? The detail page's Includes / Excludes / Additional Notes panels live somewhere.
-5. How are tags stored — one polymorphic table keyed by `type`, or per-type tables?
+1. ✅ **Answered** (2026-04-27, dump inspection): 129 tables enumerated. Mapping written to [data-ontology.md](data-ontology.md). Trip / Tour (via `tours`+`tour_items`) / Location / Accommodation (`hotel`) / Vessel / Cabin / Itinerary-Day (`daybyday`) / Page / Tag / Image present and first-class. **Departure: no table.** **Swooper: no table.** **Review: no per-trip table** (curated review excerpts exist as `contentblock_customerreview`, 2,390 rows). Notable additions not anticipated: full hotel pricing matrix, partner ops layer (PII), CMS chunk family, parallel `ntag` system.
+2. ✅ **Answered** (2026-04-27, dump inspection): FKs are extensive — 19 declared FK constraints on `trip` alone. Confirmed expected edges: Tour↔Trip via `tour_items`, Trip↔Itinerary via `daybyday.trip_id`, Vessel↔Cabin via `cabintype_vessel`, Location hierarchy via `country`/`area`/`location`/`location_map`. Trip↔Departure does not exist (no Departure table); see Q10 below.
+3. ✅ **Answered** (2026-04-27, dump inspection): Canonical `image` table (13,261 rows) plus polymorphic join tables: `image_trip`, `image_page`, `image_location`, `image_tag`, `image_month` (empty). Imgix CDN URLs are stored on the `image` record itself.
+4. ✅ **Answered** (2026-04-27, dump inspection): `page` (684) + `pagetype` (20) + `pagelayout` (3) + `page_banner` (688) + `contentblock` (10,110) + 14 `contentblock_*` sub-tables + `chunk` (46) family + `faqitem` (928). Includes / Excludes are columns on `trip` (`includes`, `excludes` text fields). Additional Notes likely live in linked `contentblock`s.
+5. ✅ **Answered** (2026-04-27, dump inspection): Polymorphic — single master `tag` table (2,374 rows) plus per-target join tables (`tag_trip`, `tag_video`, `image_tag`, `page_tag`, `partner_tag`). NOTE: parallel `ntag` (79) + `ntags_lookup` (157,537) system also exists; purpose unclear, asked Julie.
 
 **Semantic questions — need Swoop input regardless of dump:**
 
-6. Currency-id mapping: 1 / 2 / 4 → ?
-7. `difficulty` 1–5 and `wilderness` 0–5 — user-facing definitions of each level?
+6. Currency-id mapping: 1 / 2 / 4 → ? (`currency` table has 11 rows — a quick `SELECT *` once the dump is loaded should resolve this without needing Swoop input. Promote to closed once confirmed.)
+7. `difficulty` 1–5 and `wilderness` 0–5 — user-facing definitions of each level? **Likely answerable by inspection** — `adventurousness` table (11 rows) almost certainly carries the legend (5 difficulty + 6 wilderness levels ≈ 11). Promote to closed once confirmed via SELECT.
 8. `base_price` vs `raw_price` — why they diverge (W-Trek: raw 2,900 → base 4,119), what formula produces base?
 9. `window_price` — promotional? seasonal? time-windowed? Only populated on ~18% of records.
-10. Departures model — fixed-date group vs. demand-driven bespoke? How's "Flexible Dates" vs "Fixed Dates" represented on the detail page stored underneath?
-11. Swooper (specialist) assignment — manual per trip, rule-based per region, or CRM-driven?
-12. Reviews — Trustpilot aggregate vs. Swoop-owned per-trip store. Is the detail page's "4.6 / 338" derivable from our dump or does it need an external pull?
+10. ✅ **Partly answered** (2026-04-27, dump inspection): No first-class `departure` table. Closest candidates: `tripvariant` (584), `season` (12), `trip_operators_itineraries` (885), `start_location` (11), `partnerbooking` (37,767 — but operational, not catalogue). Confirms the demand-driven hypothesis for Patagonia. Per Julie call (2026-04-27), we won't surface dated departures anyway. Still need Swoop's semantic walkthrough of which of `tripvariant` / `season` / `trip_operators_itineraries` carry which meaning.
+11. ✅ **Answered** (2026-04-27, dump inspection + Julie call): No `swooper`/specialist table in this DB. Specialists live in another system (CRM, likely). Per Julie call, the bot will hand off to a generic "Patagonia specialist" — no named-advisor pre-call assignment needed.
+12. ✅ **Answered** (2026-04-27, dump inspection): No per-trip review store in the dump — Trustpilot aggregate is external. Useful side-finding: `contentblock_customerreview` (2,390) and `contentblock_customertip` (119) are sales-curated excerpts/tips authored for marketing use. Perfect surface for our sales-funnel content layer.
 
 **Operational questions:**
 
 13. Is Monday's dump a one-off, or can it become a scheduled feed? I.e. is steady state `/weekly-dump`, or do we switch to API / CDC later?
-14. Licensing / PII / what to redact before storing or querying the dump.
-15. Expected dump size and format — raw `.sql`, CSV per table, parquet, `pg_dump` binary?
+14. ✅ **Partly answered** (2026-04-27, dump inspection): PII-heavy tables identified — `partnerbooking` (37,767 customer bookings), `partnerbookingfile` (20,767 attachments), `inspection` (210 partner inspections), `partnertask` (294), `partnercomment`, `partnerrelationship`. These must be excluded from the LLM-accessible derived store. Still need Swoop sign-off on what level of redaction they want before we even hold the data locally / on GCS.
+15. ✅ **Answered** (2026-04-27, dump received): Raw `.sql` Sequel Ace export, MariaDB 5.5.64-flavoured. ~210 MB plain SQL plus a 38 MB zip alongside. Also confirms source DB version.
 16. Authoritative vs. denormalised — is the dump the upstream source of truth, or is some of it itself derived from a CMS? (Matters for "derived datasource" framing in chunk C §2.2.)
 
 ### Analytics platform preference — Julie / Thomas
@@ -115,4 +165,19 @@ Where it lands: Tier 2 chunk E.
 
 ## Closed
 
-(Move resolved questions here with date + who answered + the resolution. Empty for now.)
+### 2026-04-27 — Data pipeline batch (closed by SQL-dump inspection)
+
+The 2026-04-27 SQL dump arrived from Swoop engineering and resolved a chunk of the Data pipeline questions through inspection rather than needing dedicated Swoop input. Inline `✅ Answered` markers under "Data pipeline" above carry the per-question detail. Headline closures:
+
+- **Schema 1** — 129 tables enumerated; entity coverage mapped (Trip, Tour, Location, Hotel, Vessel, Cabin, Itinerary-Day, Page, Tag, Image all first-class). Confirmed absences: no `departure` table, no `swooper` table, no per-trip `review` table.
+- **Schema 2** — FKs are extensive and largely as expected; 19 FK constraints on `trip` alone.
+- **Schema 3** — Canonical `image` table with polymorphic join tables.
+- **Schema 4** — Page / contentblock / chunk / faqitem CMS layer fully present.
+- **Schema 5** — Polymorphic master `tag` table + per-target join tables.
+- **Semantic 10 (partial)** — Confirmed no `departure` table; demand-driven hypothesis holds. Semantic walkthrough of `tripvariant`/`season`/`trip_operators_itineraries` still needed from Swoop.
+- **Semantic 11** — No specialist table; aligns with Julie call confirming generic-handoff stance.
+- **Semantic 12** — No per-trip review table; reviews are external. Useful side-find: `contentblock_customerreview` (2,390) carries sales-curated excerpts.
+- **Operational 14 (partial)** — PII-heavy tables identified for exclusion (`partnerbooking`, `partnerbookingfile`, `inspection`, `partnertask`).
+- **Operational 15** — Format confirmed (Sequel Ace `.sql`, ~210 MB, MariaDB 5.5.64).
+
+**Still open** in the Data pipeline section: 6 (currency mapping — likely closeable by SELECT), 7 (difficulty/wilderness legend — likely closeable by SELECT against `adventurousness`), 8 (base/raw price formula), 9 (`window_price` meaning), 13 (one-off vs feed), 14 (full PII redaction sign-off), 16 (authoritative vs derived).

@@ -1,8 +1,8 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-04-24 (late — wave 2 landed)
+**Snapshot date**: 2026-04-27 (EOD — chunk C reshape in flight)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
-**Status**: **M1 live. D.t5 + wave-1 + wave-2 all landed. Chunk D closed (t1–t8). Wave-2: D.t8 brand-extension surface (12 CSS tokens + 10 `data-swoop-part` hooks + `product/ui/HANDOVER.md`), F-b observability retrofit (27 producer sites now route through `emitEvent`), B.t10 warm session pool (shipped disabled; code path ready for network-backed session backend post-M4). G.10 style-avoid draft also landed at `product/cms/prompts/style-avoid.md`. 242/242 tests green across 4 workspaces. Ready for next wave per [next-steps.md](next-steps.md).**
+**Status**: **M1 live. D.t5 + wave-1 + wave-2 all landed. Chunk D closed (t1–t8). 242/242 tests green across 4 workspaces. Today (2026-04-27): SQL dump arrived; first-pass schema inspection done; Julie call closed multiple blockers (no departures, no swoopers, headline pricing only, ntag live not tag, adventurousness deprecated, dump canonical, URL construction rules); storage decision re-opened (Postgres now acceptable to Swoop); blog ingest planned at [planning/03-exec-blog-ingest.md](planning/03-exec-blog-ingest.md). Mid-task: dump not yet loaded into local MariaDB. Resume pointer at [next-steps.md](next-steps.md) "▶ Resume here (2026-04-28)".**
 
 ---
 

@@ -4,6 +4,53 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## ▶ Resume here (2026-04-28)
+
+EOD 2026-04-27 stopped mid-flow on chunk C reshape — dump arrived, was inspected, Julie call closed several blockers, blog ingest planned, storage decision re-opened. **Dump not yet loaded into local MariaDB** — that's the next concrete action.
+
+### Step-by-step pickup
+
+1. **Finish the local MariaDB setup + load** (we'd debugged auth; ready to grant + load):
+
+   ```bash
+   sudo mariadb -u root <<'SQL'
+   GRANT ALL PRIVILEGES ON *.* TO 'al'@'localhost' WITH GRANT OPTION;
+   FLUSH PRIVILEGES;
+   SQL
+
+   mariadb -e "CREATE DATABASE swoop_patagonia CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+   mariadb swoop_patagonia < /Users/al/Studio/projects/swoop_web/data/content-data-swoop-patagonia_prod.sql
+   mariadb swoop_patagonia -e "SHOW TABLES;" | wc -l   # expect ~130
+   ```
+
+   If zero-date errors surface, see "Likely gotchas" guidance — relax `sql_mode` and re-run.
+
+2. **Run three clarifying SELECTs** to remove ambiguity from the entity model:
+   - `tripvariant` (584 rows) — what variants exist? Tiers? Durations? Affects whether we surface variant differentiation at all.
+   - `season` (12 rows) — date windows or named periods?
+   - `daybyday` (88,369 rows) — how do we identify the canonical published version per trip? Soft-delete flag? `revision_id`? Latest by date?
+   - Plus quick pass at `currency` (11 rows) and `contentblock_*` subtypes for triage.
+
+3. **Lock the storage decision: DuckDB vs Postgres+pgvector.** Both viable; my recommendation is DuckDB (single-file embedded, mysql_scanner reads MariaDB directly, vss + fts extensions for hybrid retrieval, no service to run). Rationale captured in [inbox.md](inbox.md) 2026-04-27 entry. Trade-off summary in the "session-end recap" message in the previous chat.
+
+4. **Draft entity model + agent tool surface together** as one Tier 3 plan (`planning/03-exec-derived-store-schema.md` or similar). They co-define each other. Tool surface sketched: `find_trips`, `get_trip`, `compare_trips`, `find_locations`, `search_content` (incl. blog scope), `price_band`, `find_wildlife`, `search_blog`. Entity model needs to support these queries.
+
+5. **Then implementation**: `export.sql` (declarative whitelist + flatten), populate derived store, replace orchestrator stub connector with real reads.
+
+### Independent track
+
+**Blog ingest** ([planning/03-exec-blog-ingest.md](planning/03-exec-blog-ingest.md)) is fully planned and independent of the trip ontology work above. ~108 posts in 5y window, ~2–5 MB. Can be implemented any time without blocking on the storage decision.
+
+### Today's outcomes (2026-04-27)
+
+- **Julie call**: golden-thread principle confirmed; pricing = headline only (no calculated ranges); no departures; no swoopers (customer PII); `tag` dead → `ntag` live; `adventurousness` deprecated; dump canonical; URL construction (`override_url || alias` + imgix prefix); page-as-hub pattern. Full capture in [inbox.md](inbox.md) "Swoop-side answers from Julie call".
+- **Blog ingest plan**: 5y fetch-time filter (Al-confirmed; out-of-date content not retrieved at all).
+- **Storage decision re-opened**: Swoop OK with Postgres; the optical-similarity-to-MariaDB objection is gone. Both Postgres and DuckDB viable; entity model is unaffected.
+- **questions.md**: schema 1–5, semantic 11+12, operational 15 closed by inspection. Semantic 7+10+14, operational closed partially. Closed-section batch entry written.
+- **Outstanding admin updates** (deferred, listed in inbox.md 2026-04-27 entry's plans-to-update section): `data-ontology.md` rewrite, `discoveries.md` graduations, `CLAUDE.md` golden-thread, `decisions.md` C-series, chunk C Tier 2 rewrite. Non-blocking for implementation.
+
+---
+
 ## Status (2026-04-24, late — waves 1 + 2 landed)
 
 M1 live. Today's work: D.t5 error-states, wave-1 swarm (D.t6 + D.t7 + E.t1 + F-a + H.t1), wave-2 swarm (D.t8 + F-b + B.t10). Chunk D is **closed end-to-end**. Style-avoid first pass lives at `product/cms/prompts/style-avoid.md` (G.10).
