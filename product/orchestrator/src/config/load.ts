@@ -74,7 +74,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   // Derived fields. Absolute paths so file I/O elsewhere doesn't have to
   // know about the orchestrator's working directory.
-  const systemPromptAbsolutePath = path.resolve(PACKAGE_ROOT, data.SYSTEM_PROMPT_PATH);
+  const systemPromptDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.SYSTEM_PROMPT_DIR);
   const skillsDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.SKILLS_DIR);
 
   // Strip PRIMARY_MODEL from the raw surface and replace it with a
@@ -86,7 +86,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...rest,
     PRIMARY_MODEL: data.ORCHESTRATOR_MODEL,
     packageRoot: PACKAGE_ROOT,
-    systemPromptAbsolutePath,
+    systemPromptDirAbsolutePath,
     skillsDirAbsolutePath,
     isProduction: data.NODE_ENV === 'production',
   });

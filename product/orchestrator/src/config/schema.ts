@@ -106,8 +106,11 @@ export const configSchema = z
     PRIMARY_MODEL: z.string().trim().min(1).optional(),
 
     // --- Content paths ---------------------------------------------------
-    SYSTEM_PROMPT_PATH: z.string().trim().min(1).default('../cms/prompts/why.md'),
-    SKILLS_DIR: z.string().trim().min(1).default('../cms/skills'),
+    // Per G.11: system prompt is the concatenation of files matching
+    // `^\d{2}_[a-z0-9-]+\.md$` inside SYSTEM_PROMPT_DIR. SKILLS_DIR is the
+    // base path passed to ADK's `loadAllSkillsInDir`.
+    SYSTEM_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/system'),
+    SKILLS_DIR: z.string().trim().min(1).default('../cms/prompts/skills'),
 
     // --- Session ---------------------------------------------------------
     SESSION_BACKEND: SessionBackend.default('in-memory'),
@@ -167,7 +170,7 @@ export type RawConfig = z.infer<typeof configSchema>;
  *
  * Derived fields (computed in load.ts):
  *   - packageRoot: absolute fs path to this package's root.
- *   - systemPromptAbsolutePath: SYSTEM_PROMPT_PATH resolved against packageRoot.
+ *   - systemPromptDirAbsolutePath: SYSTEM_PROMPT_DIR resolved against packageRoot.
  *   - skillsDirAbsolutePath: SKILLS_DIR resolved against packageRoot.
  *   - isProduction: NODE_ENV === 'production'.
  *
@@ -182,9 +185,9 @@ export type Config = Readonly<
     readonly PRIMARY_MODEL: string;
     /** Absolute path to this package's root directory. */
     readonly packageRoot: string;
-    /** Absolute path to the WHY system prompt, resolved against packageRoot. */
-    readonly systemPromptAbsolutePath: string;
-    /** Absolute path to the skills directory, resolved against packageRoot. */
+    /** Absolute path to the system-prompt directory (the concatenation source per G.11). */
+    readonly systemPromptDirAbsolutePath: string;
+    /** Absolute path to the skills directory (ADK loadAllSkillsInDir base path). */
     readonly skillsDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. Controls prompt-loader caching, CORS strictness, etc. */
     readonly isProduction: boolean;

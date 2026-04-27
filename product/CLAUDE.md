@@ -46,7 +46,7 @@ Node version is pinned to 20 LTS via `.nvmrc` at the repo root.
 
 - **TypeScript everywhere.** Shared compiler options live in `tsconfig.base.json`; each package extends it with its own `module`, `moduleResolution`, and output paths. Node-side packages use `module: Node16`; the UI package uses `module: ESNext` + `moduleResolution: bundler` + `jsx: react-jsx`.
 - **ESLint owns correctness; Prettier owns style.** They do not overlap. `eslint-config-prettier` disables any stylistic ESLint rules that would fight Prettier.
-- **Content is data, not code.** Authored content (library entries, sales copy, prompt fragments, brand text) lives in `cms/` and is loaded at runtime. Never inline CMS content inside TypeScript. If you find yourself pasting paragraphs of prose into `.ts`, stop and put it in `cms/`.
+- **Content is data, not code.** Authored content (library entries, sales copy, prompt fragments, brand text) lives in `cms/` and is loaded at runtime. Never inline CMS content inside TypeScript. If you find yourself pasting paragraphs of prose into `.ts`, stop and put it in `cms/`. **Read `cms/README.md` before adding or editing any content file** — it spells out the folder structure (system prompt vs skills vs tool fragments), naming conventions (two-digit numeric prefix for system-prompt files, ADK directory format for skills, per-tool subfolders for tool-scoped fragments), and the load contract for each subdirectory. Decision G.11 in `../planning/decisions.md` carries the rationale.
 - **Cross-package imports** use npm workspaces' native resolution — import from the package name (e.g. `@swoop/common`) once packages are populated. No `tsconfig` project references in this scaffold; we'll add them if incremental builds become painful.
 
 ## Planning docs

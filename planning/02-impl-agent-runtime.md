@@ -54,9 +54,11 @@ ADK's A2A decorator at the orchestrator layer remains available to add later if 
 
 ### 2.2 System prompt loader
 
-At startup (or first request — TBD at Tier 3), read the system prompt file from `product/cms/`. This is the only prompt surface in Puma by default. No HOW-fragment composition, no stance classifier, no per-turn assembly. The "WHY/HOW/WHAT" framing is a loose mental model, not architecture (see top-level theme 3).
+At startup (or first request — TBD at Tier 3), read the system-prompt content from `product/cms/prompts/system/`. The directory holds one or more numerically-prefixed `.md` files; the loader concatenates every file matching `^\d{2}_[a-z0-9-]+\.md$` in lexicographic order, separated by `\n\n---\n\n`, and the joined string becomes the agent's `instruction`. This is the only prompt surface in Puma by default. No per-turn HOW-fragment composition, no stance classifier, no per-turn assembly. The "WHY/HOW/WHAT" framing is a loose mental model, not architecture (see top-level theme 3).
 
-If real conversations show that a static prompt is insufficient — e.g. triage posture bleeds into discovery mode inappropriately, or group-tour bias is too pushy — the escape hatch is to introduce per-turn fragments as a second Tier 2 B iteration. Don't build the mechanism preemptively.
+The multi-file structure is a CMS authoring convenience — it lets the WHY prompt and the always-on companion files (e.g. `style-avoid.md`) iterate independently. The runtime concatenation contract is settled in **decision G.11**; the loader extension lives in **B.t1a** (an addendum to B.t1).
+
+If real conversations show that a static-but-multi-file prompt is insufficient — e.g. triage posture bleeds into discovery mode inappropriately, or group-tour bias is too pushy — the escape hatch is to introduce per-turn fragments as a second Tier 2 B iteration. Don't build the mechanism preemptively.
 
 ### 2.3 Tool connector adapter
 
@@ -135,7 +137,7 @@ Post-M1 optimisation — wire after the vertical slice proves the conversational
 Externalised via env vars + a small config file loaded at startup. Surfaces:
 - Model (Claude Sonnet default; Gemini Flash or alternative behind the ADK provider abstraction)
 - Temperature, max output tokens
-- System prompt file path (defaults to `../cms/prompts/why.md` relative to the orchestrator package)
+- System prompt directory (defaults to `../cms/prompts/system` relative to the orchestrator package; loader concatenates the matching files within — see §2.2 + G.11)
 - Connector URL (chunk C's service)
 - Session TTL
 - SSE heartbeat interval
@@ -250,6 +252,7 @@ Chunk B is done when:
 Natural split into task slices:
 
 - **B.t1 — Orchestrator skeleton + prompt loader**: ADK `LlmAgent` wiring, Claude Sonnet provider config for the orchestrator, system prompt loaded from file at startup, readiness probe.
+- **B.t1a — Multi-file system-prompt loader** (extends B.t1, post-G.11): change the prompt loader from single-file to directory-driven concatenation per the §2.2 contract. Renames `SYSTEM_PROMPT_PATH` → `SYSTEM_PROMPT_DIR` (default `../cms/prompts/system`); reads all files matching `^\d{2}_[a-z0-9-]+\.md$`, sorts lexicographically, joins with `\n\n---\n\n`. Preserves dev hot-reload + prod caching semantics. Updates `SKILLS_DIR` default to `../cms/prompts/skills` to match the G.11 layout.
 - **B.t2 — Session interface + ADK in-memory adapter**: thin `ts-common` interface over ADK's `SessionService`; in-memory implementation for Phase 1; stubs / signatures for the candidate production backends (Vertex AI Session Service, DB-backed).
 - **B.t3 — Tool connector adapter**: MCP-over-HTTP client pointing at chunk C's service (stubbed or real), tool-schema validation against `ts-common`, basic retry policy.
 - **B.t4 — Streaming event translator**: ADK event → `message.parts` mapping, test fixtures, unit tests for the happy path and tool-call lifecycle states.
@@ -257,7 +260,7 @@ Natural split into task slices:
 - **B.t6 — Config externalisation**: env / config file shape, defaults, validation at startup. Includes per-agent model selection config.
 - **B.t7 — Vertical-slice integration**: wire the above together for M1 with stubbed content, stubbed connector, and a single minimal functional agent behind one tool (to prove the two-layer model works). First end-to-end text exchange.
 - **B.t8 — Response-format parser** (conditional on Phase 1 spike): state-machine parser for `<fyi>` / `<reasoning>` / `<adjunct>` / `<utter>`. Fuzz-tested. Integrates into the translator (B.t4). **Skip entirely** if the spike finds ADK + assistant-ui natives cover the functional need.
-- **B.t9 — Modular-guidance loader via ADK-native skills** (coordinated with chunk G §2.6 and chunk C §C.11): confirm ADK's current skill-primitive API; wire skills from `product/cms/skills/` through it. Fall back to a custom loader tool only if the native primitive turns out to be a poor fit.
+- **B.t9 — Modular-guidance loader via ADK-native skills** (coordinated with chunk G §2.6 and chunk C §C.11): wire ADK's `loadAllSkillsInDir` against `product/cms/prompts/skills/` (per G.11). Each skill is a directory containing `SKILL.md` (frontmatter `name` + `description` + body) plus optional ADK resource subdirs.
 - **B.t10 — Warm session pool** (post-M1): pool manager, refill policy, TTL-based staleness recycling, content-change flush in dev.
 
 Parallelism: B.t1, B.t2, B.t6 proceed in parallel within a single agent's session. B.t3 waits on chunk C's connector existing (stubbed is fine). B.t4 + B.t5 are adjacent — one agent does both, or two agents split cleanly. B.t7 is the integration — single-agent. B.t8 is conditional. B.t9 pairs with G.t3. B.t10 is a deliberate post-M1 task.

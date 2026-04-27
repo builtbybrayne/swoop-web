@@ -1,9 +1,9 @@
 # 02 — Implementation: G. Content
 
-**Status**: Tier 2 implementation plan. Draft, 2026-04-22.
+**Status**: Tier 2 implementation plan. Draft, 2026-04-22 (revised 2026-04-27 for G.11).
 **Implements**: Puma top-level plan §4G + theme 2 (content-as-data) + theme 3 (prompt architecture empirical).
 **Depends on**: A (foundations — `ts-common` content schema stubs, `product/cms/` location agreed). Not on B/C/D — content drafting runs parallel from day 1.
-**Coordinates with**: B (agent runtime loads the system prompt), E (handoff uses the email template).
+**Coordinates with**: B (agent runtime loads the system prompt — see B.t1a for the multi-file concatenation loader), E (handoff uses the email template).
 
 ---
 
@@ -22,12 +22,13 @@ Al authors. Claude Code agents can draft from source material and iterate agains
 When this chunk is done:
 
 - **A worked-through Patagonia conversational flow exists**, mapped out collaboratively with Al in a HITL session (see §2.5). Output is a narrative spec under `planning/` that names the triage inflections, user-type differentiation, psych-profile signals, budget-reading cues, motivation anchors, and handoff triggers Puma's agent needs to be aware of. This spec informs everything else in G.
-- A single WHY system prompt exists at `product/cms/prompts/why.md`, Patagonia-voiced, covering brand voice, refusals, triage posture, group-tour bias, handoff intent. Loaded verbatim by chunk B's orchestrator.
-- **Modular guidance ("skills") scaffolded** at `product/cms/skills/` — at least two seeded entries drawn from the HITL flow-mapping session, covering known-important inflection points (candidates in §2.6). Loader mechanism lives in chunk B (B.t9); chunk G authors the content.
+- A WHY system prompt exists at `product/cms/prompts/system/00_why.md`, Patagonia-voiced, covering brand voice, refusals, triage posture, group-tour bias, handoff intent. Loaded by chunk B's orchestrator alongside any sibling files in `system/` (concatenation contract per G.11 / B.t1a).
+- **Modular guidance ("skills") scaffolded** at `product/cms/prompts/skills/` — at least two seeded entries drawn from the HITL flow-mapping session, each as a directory containing a `SKILL.md` (ADK 1.0 `loadAllSkillsInDir` contract per G.11). Loader mechanism lives in chunk B (B.t9); chunk G authors the content.
 - A handoff email template exists at `product/cms/templates/handoff-email.md`, triage-aware (different tone per verdict).
+- Tool-scoped prompt fragments live under `product/cms/prompts/tools/<tool-name>/` for any MCP tool needing authored copy (descriptions, structured-content templates, post-handoff guidance).
 - Placeholder content exists for the M1 vertical slice: 2–3 trips, 1–2 tours (group-tour-focused, per Luke's strategic bias), a handful of regions, maybe one or two "inspiration" stories. Schema-valid against `ts-common`. Invented detail is fine at M1 — real content lands in chunk C.
 - All content authored lives under `product/cms/` in markdown or JSON. Zero content inlined in TypeScript.
-- The system prompt is short enough to be read in one sitting, long enough to carry the brand. Length target: 1500–3000 words.
+- The system prompt is short enough to be read in one sitting, long enough to carry the brand. Length target: 1500–3000 words across all files in `system/`.
 
 **Not outcomes of this chunk**:
 - A full skills library covering every possible inflection. Puma ships with ~2 seeded skills; the library grows post-launch informed by real conversations.
@@ -58,8 +59,10 @@ Default LLM output carries tells the instant the visitor reads it: em-dash-heavy
 
 The WHY prompt alone is not enough to suppress it — Claude honours stylistic instructions but regresses toward defaults under load (long conversation, complex tool orchestration, strong lean on the visitor's own phrasing). Puma's approach is two-layer:
 
-1. **A positive-example block** inside `cms/prompts/why.md` — two or three paragraphs of the agent speaking as we want it to, including punctuation and rhythm. Show, don't tell. Drafted by Al; iterated.
-2. **An explicit avoidance block** at `cms/prompts/style-avoid.md` (new file, referenced from `why.md`). Enumerates the specific patterns to avoid, with short rationale so Claude isn't just pattern-matching. Living document — new tells surface in real conversations and get added.
+1. **A positive-example block** inside `cms/prompts/system/00_why.md` — two or three paragraphs of the agent speaking as we want it to, including punctuation and rhythm. Show, don't tell. Drafted by Al; iterated.
+2. **An explicit avoidance block** at `cms/prompts/system/10_style-avoid.md` — a separate file in the same directory. Enumerates the specific patterns to avoid. Living document — new tells surface in real conversations and get added.
+
+Both files are auto-loaded and concatenated into the system prompt by the loader (G.11 / B.t1a). The two-file split decouples the taste-driven positive pass (Al-authored once) from the pattern-driven avoidance list (updates whenever a new tell surfaces).
 
 Starter avoidance list (Al refines during G.t1):
 - **Em-dashes** used as mid-sentence pause — use commas, semicolons, or a full stop instead. Em-dash-as-parenthetical allowed sparingly; em-dash-as-rhythm-crutch banned.
@@ -99,15 +102,24 @@ This is throwaway — chunk C replaces it with scraped or API-sourced real conte
 
 ### 2.4 Content location
 
-`product/cms/` — carrying forward the PoC's content-as-data convention. Proposed layout (Tier 3 finalises):
+`product/cms/` — carrying forward the PoC's content-as-data convention, with the structure formalised in **decision G.11**:
+
 ```
 product/cms/
 ├── prompts/
-│   ├── why.md
-│   └── style-avoid.md        # G.10 — explicit anti-pattern list; referenced from why.md
-├── skills/
-│   ├── tailor-made-prospect.md     # example seed — name TBD in G.t0
-│   └── group-tour-for-solo.md      # example seed — name TBD in G.t0
+│   ├── system/                            # → concatenated into the system prompt
+│   │   ├── 00_why.md                       # WHY prompt: identity, role, refusals, triage, voice positive examples
+│   │   └── 10_style-avoid.md              # G.10 — explicit anti-pattern list (avoidance rules)
+│   ├── skills/                             # → ADK loadAllSkillsInDir; one folder per skill
+│   │   ├── tailor-made-prospect/
+│   │   │   └── SKILL.md                    # frontmatter (name + description) + body
+│   │   └── group-tour-for-solo/
+│   │       └── SKILL.md                    # name TBD in G.t0
+│   └── tools/                              # → tool-scoped fragments, read explicitly by tool code
+│       ├── handoff/
+│       │   └── *.md                        # description, structured-content, post-handoff guidance
+│       └── illustrate/
+│           └── *.md
 ├── templates/
 │   └── handoff-email.md
 └── fixtures/
@@ -116,6 +128,12 @@ product/cms/
     ├── regions/
     └── stories/
 ```
+
+**System-prompt loading contract** (G.11): every file in `prompts/system/` matching `^\d{2}_[a-z0-9-]+\.md$` is concatenated in lexicographic filename order, separated by `\n\n---\n\n`, and the joined string becomes the agent's `instruction`. Two-digit numeric prefixes guarantee deterministic ordering past 9; sparse numbering (00, 10, 20, …) leaves gaps for inserts without renumbering. Files outside the pattern (drafts, `README.md`, `.notes.md`) are ignored. The loader extension lives in B.t1a.
+
+**Skills loading contract** (G.11 + B.t9): `prompts/skills/` is the base path passed to ADK's `loadAllSkillsInDir`. Each skill is a directory; ADK reads `SKILL.md` (YAML frontmatter `name` + `description` + body) and optional `references/`, `assets/`, `scripts/` subdirs. Skill names are snake_case or kebab-case per ADK's `SNAKE_OR_KEBAB_NAME_PATTERN`.
+
+**Tools fragments**: each MCP tool that needs prompt content gets its own subfolder under `prompts/tools/`. The tool's code reads its own folder explicitly (no auto-loading). Used for tool descriptions, structured-content templates, post-handoff guidance — anything tool-scoped that authoring should keep close to the tool but out of TypeScript.
 
 ### 2.5 Conversational flow mapping (HITL with Al)
 
@@ -136,7 +154,7 @@ Before the WHY system prompt can be drafted with confidence — and before the s
 
 The WHY system prompt is load-bearing but not infinitely expandable. Some guidance only makes sense when applied in specific contexts — e.g. once the agent has identified a visitor as a high-budget tailor-made prospect, the posture shifts in ways not worth pre-loading for every conversation. Same for psych-profile signals (status-seeking vs bucket-listing), triage states, and season-specific constraints (December lodge shortage).
 
-Modular guidance — "skills" in loose terms — is how Puma accommodates this. A library of small guidance snippets that the agent can load when specific triggers fire. Whether "skills" here means Claude Agent SDK's `SKILL.md` convention, ADK's skill primitive (if it has one), or a bespoke tool that fetches relevant snippets is a chunk B mechanism decision (B.t9) — this chunk authors the content regardless of loading mechanism.
+Modular guidance — "skills" — uses ADK 1.0's native skill primitive (decision G.11): one folder per skill under `cms/prompts/skills/`, each containing a `SKILL.md` (YAML frontmatter `name` + `description` + body) plus optional `references/`, `assets/`, `scripts/` subdirs. The orchestrator surfaces them via ADK's `loadAllSkillsInDir`; the model loads a specific skill on demand when triggers fire. Mechanism wired by chunk B (B.t9); content authored here.
 
 **Puma launch scope**:
 - Library scaffolded (directory exists, loader wired via chunk B).
@@ -144,7 +162,7 @@ Modular guidance — "skills" in loose terms — is how Puma accommodates this. 
   - Tailor-made prospect posture (once visitor signals high budget + independence)
   - Group-tour surfacing for solo travellers (Luke's strategic priority)
   - Triage-to-referral polite redirect (for low-fit or low-profit cases)
-- Skills live under `product/cms/skills/` as markdown. Content-as-data. Authorable by non-engineers.
+- Skills live under `product/cms/prompts/skills/`, one folder per skill (each containing a `SKILL.md`). Content-as-data. Authorable by non-engineers.
 
 **Not in scope for Puma**:
 - A full library covering every known inflection — the library grows post-launch.
@@ -153,10 +171,10 @@ Modular guidance — "skills" in loose terms — is how Puma accommodates this. 
 This chunk **commits to**:
 1. Mapping out which inflections are load-bearing (§2.5 output).
 2. Authoring the seed skills.
-3. Structuring skills so chunk B's loader can read them cleanly (schema agreed with B during Tier 3).
+3. Structuring skills per ADK's directory contract (G.11) so chunk B's loader (B.t9) can read them with no glue code.
 
 This chunk **does not decide**:
-- The loading mechanism (chunk B, B.t9).
+- The loading mechanism (chunk B, B.t9) — but G.11 has settled the file-system contract both sides agree to.
 - Which specific two skills seed Puma — falls out of the HITL mapping session.
 
 ---
@@ -168,6 +186,7 @@ This chunk **does not decide**:
 - **Prompt architecture empirical, but we plant flags early** (theme 3, refined in Tier 2): the WHY system prompt is the default mechanism; modular guidance (§2.6) is **additive from day one** for known inflection points (triage, user-type, psych-profile) rather than deferred to "once real conversations prove need". Refusing to pre-build any inflection mechanism would leave the agent blunt at launch. Start minimal (WHY + ~2 seeded skills), iterate from real data.
 - **Triage-aware** (theme 10): the system prompt carries the triage posture; specific triage skills refine it per user-type; the handoff template encodes the three verdicts.
 - **HITL authorship** (new): the conversational flow mapping and the final voice pass on the system prompt are Al-authored, not Claude-authored. Claude Code agents draft from source material and iterate against critique; Al is the editor.
+- **File system as content management** (G.11): no metadata layer, no manifest, no interpolation. Filename pattern + directory layout are the load contract. Anyone can `cat` / `ls` and see what's wired.
 
 ---
 
@@ -213,8 +232,9 @@ Added in this revision:
 | # | Decision | Recommendation | Rationale |
 |---|---|---|---|
 | G.8 | Conversational flow mapping | **Dedicated HITL working session with Al required** before G.t1 (prompt drafting) and G.t3 (seed skills) close. Output is a Patagonia conversational-architecture spec under `planning/`. | Taste-driven and Patagonia-specific. Only Al (reading 20 Apr meeting + Luke's strategy doc + Luke/Lane's sales-thinking doc) can steer the inflections correctly. Claude Code drafts from source material; Al edits. |
-| G.9 | Skill schema / loader contract | **Coordinated with chunk B (B.t9)** during Tier 3. Default: markdown files with frontmatter (trigger metadata) + body (guidance content), loaded via a tool call from the orchestrator. | The mechanism (B) and the content (G) have to agree on the file shape. B.t9 and G.t3 cross-coordinate through `ts-common` skill metadata schema. |
-| G.10 | Style control authoring | **Two-layer: positive-example paragraphs inside `cms/prompts/why.md` + explicit avoidance list at `cms/prompts/style-avoid.md`.** Referenced from the WHY prompt. Living doc — updated as real-conversation telltales surface. | Prompt-only voice guidance regresses toward Claude's defaults under load. Positive examples anchor the "good" direction; explicit anti-patterns suppress the specific AI-slop tells (em-dash cringe, "Let me help", "delve into", empty affirmations) that bleed through otherwise. Separating the two files keeps the positive voice pass (taste-driven, Al-authored once) decoupled from the avoidance list (pattern-driven, updates whenever real output reveals a new offender). See §2.1a. |
+| G.9 | Skill schema / loader contract | **ADK 1.0 native skill primitive.** Each skill is a directory under `cms/prompts/skills/` containing a `SKILL.md` (YAML frontmatter `name` + `description` + body) plus optional `references/`, `assets/`, `scripts/`. Loaded via ADK's `loadAllSkillsInDir`. | Confirmed during 2026-04-27 G.11 review — ADK ships a complete skills system. No bespoke loader, no custom frontmatter. Frees chunk G to focus on content. |
+| G.10 | Style control authoring | **Two-layer: positive-example paragraphs in `cms/prompts/system/00_why.md` + explicit avoidance list at `cms/prompts/system/10_style-avoid.md`.** Both auto-loaded and concatenated by the system-prompt loader (G.11). Living doc — updated as real-conversation telltales surface. | Prompt-only voice guidance regresses toward Claude's defaults under load. Positive examples anchor "good"; explicit anti-patterns suppress the specific AI-slop tells (em-dash cringe, "Let me help", "delve into", empty affirmations) that bleed through otherwise. Separating the two files keeps the positive voice pass (taste-driven, Al-authored once) decoupled from the avoidance list (pattern-driven, updates whenever real output reveals a new offender). See §2.1a. |
+| G.11 | CMS folder structure + system-prompt assembly mechanism | **`cms/prompts/{system,skills,tools}/`. System prompt is the deterministic concatenation of `^\d{2}_[a-z0-9-]+\.md$` files in `system/`. Skills are ADK directories under `skills/`. Tool-scoped prompts under `tools/<tool-name>/`.** | G.10 settled the *content* split between positive voice and avoidance list but left the wiring undefined; the agent never saw the avoidance file. G.11 closes that gap with a deterministic file-system-as-load-contract: filename pattern decides what goes in the prompt, sub-folder decides which mechanism reads it. Forward-compatible with future static companions (tone primer, refusal block) — they plug in by being dropped into `system/` with the right prefix. See decisions.md for the full rationale + swap-cost table. |
 
 ---
 
@@ -231,6 +251,7 @@ This chunk **does not** author new contracts — it only produces content that r
 ## 7. Open sub-questions for Tier 3
 
 - Exact WHY prompt section order and headings (to be refined via live testing in Phase 1).
+- Whether to break `00_why.md` into multiple `system/` files (e.g. `00_identity.md`, `02_refusals.md`, `04_triage.md`, `06_voice.md`) for finer-grained authoring — defer until G.t1 finds a natural seam.
 - Whether the handoff email template supports one-shot rendering (Markdown → email HTML at send time) or pre-rendered variants.
 - Whether placeholder "stories" are loaded by a tool (`illustrate` equivalent) or embedded in regions.
 - Localisation-ready content structure (out of scope in behaviour but possibly in structure — stretch only if trivial).
@@ -248,13 +269,14 @@ This chunk **does not** author new contracts — it only produces content that r
   - Cleaned customer / inquiry data from Julie (personas). Informs the audiences the prompt speaks to.
 
 - **Inbound (wiring dependencies)**:
-  - Chunk A's `product/cms/` directory scaffolded and loadable (with `skills/` subdir).
-  - Chunk B's system-prompt loader wiring (the prompt file exists before B loads it — this chunk delivers the file).
-  - Chunk B's modular-guidance loader (B.t9) and the skill schema agreed between B and G during Tier 3.
+  - Chunk A's `product/cms/` directory scaffolded and loadable (with `prompts/system/`, `prompts/skills/`, `prompts/tools/` subdirs per G.11).
+  - Chunk B's system-prompt concatenation loader (B.t1a) and modular-guidance loader (B.t9) — both wired against the structure decided in G.11.
   - Chunk E's handoff payload finalised (the email template depends on its shape).
 
 - **Outbound**:
-  - B consumes `cms/prompts/why.md` at startup.
+  - B's prompt loader (B.t1a) consumes every file in `cms/prompts/system/` matching the load pattern, on each request in dev and at startup in prod.
+  - B's skill loader (B.t9) consumes `cms/prompts/skills/` via `loadAllSkillsInDir`.
+  - Tool code consumes its own subfolder under `cms/prompts/tools/<tool-name>/` explicitly.
   - E consumes `cms/templates/handoff-email.md` when producing handoff emails.
   - C's M1 stub can load placeholder trip/tour/region content from `cms/fixtures/`.
 
@@ -270,8 +292,8 @@ This chunk **does not** author new contracts — it only produces content that r
 
 Chunk G is done when:
 
-1. `product/cms/prompts/why.md` exists and reads cleanly end-to-end. A non-Swoop reader can understand what the agent is for, and what it refuses to do, after one read.
-2. Chunk B's orchestrator loads `why.md` at startup and agent behaviour reflects its contents (e.g. refuses itinerary requests; surfaces group tours proactively for solo traveller scenarios).
+1. `product/cms/prompts/system/00_why.md` exists and reads cleanly end-to-end. A non-Swoop reader can understand what the agent is for, and what it refuses to do, after one read.
+2. Chunk B's orchestrator loads everything in `prompts/system/` at startup (concatenated per G.11) and agent behaviour reflects the contents (e.g. refuses itinerary requests; surfaces group tours proactively for solo traveller scenarios; doesn't emit em-dashes / "delve" / empty affirmations).
 3. `product/cms/templates/handoff-email.md` exists, renders cleanly against a sample handoff payload, and produces something the sales team would actually want to receive.
 4. Placeholder trip / tour / region / story content validates against `ts-common` schemas (Zod round-trip clean).
 5. Chunk H's behavioural eval harness can run its M1 cases against the prompt + placeholder content and produce meaningful pass/fail.
@@ -284,9 +306,9 @@ Chunk G is done when:
 Natural split:
 
 - **G.t0 — HITL conversational flow mapping session with Al**: worked-through Patagonia conversational architecture — triage inflections, user-type differentiation, psych-profile signals, motivation anchors, handoff triggers, season/inventory constraints. Output: Patagonia conversational-architecture spec at `planning/patagonia-conversational-architecture.md` (name TBD). Directly informs G.t1, G.t3, and chunk H's eval scenarios.
-- **G.t1 — WHY prompt first pass**: Al-directed, Claude-drafted from PoC source material + G.t0 spec. Antarctica-voiced placeholder for specifics Luke/Lane's doc will refine. Length target, structure, refusals, triage posture, group-tour bias, handoff intent all land in this pass.
+- **G.t1 — WHY prompt first pass**: Al-directed, Claude-drafted from PoC source material + G.t0 spec. Antarctica-voiced placeholder for specifics Luke/Lane's doc will refine. Length target, structure, refusals, triage posture, group-tour bias, handoff intent all land in the `system/` files.
 - **G.t2 — Handoff email template**: drafted from the PoC's mailer samples; verdict-branching via handoff payload fields.
-- **G.t3 — Seed skills**: ≥2 modular-guidance files drawn from G.t0 inflections. Schema agreed with chunk B's B.t9 (skill loader). Content is Al-edited, Claude-drafted.
+- **G.t3 — Seed skills**: ≥2 modular-guidance directories under `cms/prompts/skills/` (each with `SKILL.md`) drawn from G.t0 inflections. Per ADK directory contract (G.11). Content is Al-edited, Claude-drafted.
 - **G.t4 — Placeholder Patagonia content**: 2–3 trips, 1–2 tours, 3–5 regions, 2–3 stories. Schema-valid. Invented where real detail isn't available.
 - **G.t5 — Post-sales-doc refinement pass**: when Luke + Lane's doc lands, rework Patagonia-specific sections of the WHY prompt; iterate seed skills; refresh placeholder content if clearly wrong; re-run behavioural evals.
 - **G.t6 — Ongoing tuning (post-launch)**: iterate WHY prompt + expand skill library based on real conversation logs. Not strictly a G task — more "how G evolves once real data arrives".

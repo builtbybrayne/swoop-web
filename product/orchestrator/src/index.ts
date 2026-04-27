@@ -58,7 +58,7 @@ function readPackageVersion(packageRoot: string): string {
 async function main(): Promise<void> {
   const config = loadConfig();
 
-  const promptLoader = createPromptLoader(config.systemPromptAbsolutePath, config.isProduction);
+  const promptLoader = createPromptLoader(config.systemPromptDirAbsolutePath, config.isProduction);
   // Touch the loader once now so a missing/unreadable file fails at startup,
   // not on the first user turn.
   const initialPrompt = promptLoader.load();

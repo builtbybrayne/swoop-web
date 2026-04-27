@@ -8,6 +8,22 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## G.11 — CMS folder structure: `cms/prompts/{system,skills,tools}/`; system prompt is concatenation of `system/`
+
+**Decided**: 2026-04-27
+**Owner**: G chunk + B.t1a follow-up (raised by Al during a planning session after observing the G.10 wiring gap in live testing)
+**Rationale**: G.10 (2026-04-24) split style guidance into `why.md` + `style-avoid.md` but left the wiring undefined — "referenced from the WHY prompt" with no mechanism. Live testing on 2026-04-27 surfaced the gap: `style-avoid.md` existed on disk but no code loaded it. The agent never saw the rules. Resolved by giving `cms/prompts/` a deliberate sub-structure with one well-defined load contract per concern:
+
+- `cms/prompts/system/` — system-prompt fragments. Files matching `^\d{2}_[a-z0-9-]+\.md$` are concatenated in lexicographic order at load time, separated by `\n\n---\n\n`. The agent's `instruction` is the joined string. Files not matching the pattern (drafts, `README.md`, `.notes.md`) are ignored. Two-digit numeric prefixes guarantee deterministic ordering past 9; sparse numbering (00, 10, 20…) leaves gaps for inserts without renumbering.
+- `cms/prompts/skills/` — ADK-loaded modular guidance, on-demand per the model's skill triggers. **One folder per skill**, matching ADK 1.0's `loadAllSkillsInDir` contract: each skill is a directory containing `SKILL.md` (YAML frontmatter `name` + `description` + body) plus optional `references/`, `assets/`, `scripts/` subdirs. Skill names are snake_case or kebab-case per ADK's `SNAKE_OR_KEBAB_NAME_PATTERN`. (B.t9 wires the loader; G.t3 authors content.)
+- `cms/prompts/tools/` — fragments consumed by individual MCP tools, organised one sub-folder per tool name (`tools/handoff/`, `tools/illustrate/`, etc.). Tool code reads from its own folder explicitly; no auto-loading. Used for tool descriptions, structured-content templates, post-handoff guidance, and similar tool-scoped copy.
+
+The system-prompt concatenation contract is the simplest viable composition mechanism: deterministic, debuggable (you can `cat cms/prompts/system/*.md` and see what the agent sees), no metadata, no interpolation, no per-turn assembly. It's the file system as content management. Per-turn dynamic fragment composition stays explicitly out of scope per `02-impl-agent-runtime.md` §2.5a — the always-on companion-content case is a different problem.
+
+The structure also resolves the G.10 coupling: positive-voice authoring (Al, taste-driven) and avoidance-list authoring (pattern-driven, living doc) iterate independently because they're separate files in `system/`, both loaded automatically, neither needing to reference the other.
+
+**Swap cost**: Low. (a) If concatenation order needs to be explicit (e.g. config-driven manifest rather than filename-driven), the loader takes a manifest argument; existing files keep working. (b) If the system prompt grows large enough that concat-on-every-load becomes expensive, prod already caches; dev can grow file-mtime invalidation. (c) ADK's skill loader already expects directories, so the structure is forward-compatible without rewrite. (d) If we move to a real CMS post-Puma, the directory structure maps to a CMS taxonomy with no semantic loss.
+
 ## D.25 — HANDOVER.md is not versioned; next release supersedes or appends
 
 **Decided**: 2026-04-24
