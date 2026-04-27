@@ -1,8 +1,8 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-04-24 (late)
+**Snapshot date**: 2026-04-24 (late — wave 2 landed)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
-**Status**: **M1 live. D.t5 error-states + "New conversation" button shipped earlier today. Wave-1 parallel swarm landed: D.t6 proactive preflight, D.t7 mobile reflow, E.t1 handoff schema, F-a event schema + `emitEvent` helper, H validation harness scaffold. 221/221 tests green across 4 workspaces. Ready for next wave per [next-steps.md](next-steps.md).**
+**Status**: **M1 live. D.t5 + wave-1 + wave-2 all landed. Chunk D closed (t1–t8). Wave-2: D.t8 brand-extension surface (12 CSS tokens + 10 `data-swoop-part` hooks + `product/ui/HANDOVER.md`), F-b observability retrofit (27 producer sites now route through `emitEvent`), B.t10 warm session pool (shipped disabled; code path ready for network-backed session backend post-M4). G.10 style-avoid draft also landed at `product/cms/prompts/style-avoid.md`. 242/242 tests green across 4 workspaces. Ready for next wave per [next-steps.md](next-steps.md).**
 
 ---
 
@@ -56,12 +56,11 @@ Archive of superseded docs: [planning/archive/](planning/archive/) — includes 
 |---|---|---|---|
 | **A — foundations** | Repo, workspace, ts-common, CI, decision log | ✅ Complete (t1–t5) | All 95+ orchestrator tests green. `@swoop/*` scope locked. npm workspaces at `product/` root. |
 | **B — agent runtime** | ADK orchestrator, session, connector adapter, translator, SSE, config, two-layer proof | ✅ Core complete (t1–t7) | ADK 1.0 + Claude shim + stub connector + translator + SSE + triage classifier all wired. |
-| **B — deferred** | Response-format parser, modular-guidance loader, warm pool | ⏸ Post-M1 (t8–t10) | Conditional: parser not needed (natives cover most); loader gated on ADK skill primitive; warm pool is latency polish. |
+| **B — deferred** | Response-format parser (t8), modular-guidance loader (t9), warm pool (t10) | Partial (B.t10 done, disabled) | B.t10 warm session pool shipped with `WARM_POOL_SIZE=0` default — LIFO stack, eager startup pre-warm, two event kinds (`warm_pool.hit` / `warm_pool.miss`) emitted inline, sweep interval capped at 5 min. Latent architectural prep for a network-backed session backend; marginal win at today's in-memory latency. B.t8 parser not needed (natives cover most). B.t9 skill loader gated on ADK skill primitive (pairs with G.t3). |
 | **C — retrieval & data** | MCP connector + Vertex Search + scraper/API + annotation pipeline | ⏸ Gated on Friday hackathon | Data-access strategy pending. Stub connector in orchestrator's `test-fixtures/` carries for now. |
-| **D — chat surface** | Vite + assistant-ui + parts + widgets + disclosure/consent + error states + proactive preflight + mobile reflow | ✅ t1–t7 complete | Error banner, classifier, adapter `[<code>]` markers, `consent.refreshSession()`, "New conversation" button, `GET /session/:id/ping` probe with mount/focus/idle triggers, header reflow at `sm:`, lead-capture `w-full` inputs. |
-| **D — deferred** | Handover doc (Swoop brand extension surface) | ⏸ Post-M1 (t8) | Last chunk-D item; blocks on having a stable extension surface to document (CSS vars + override slots). |
+| **D — chat surface** | Full chunk shipped (t1–t8) | ✅ **Closed** | ErrorBanner + preflight + mobile reflow + brand extension surface (12 CSS tokens + 10 `data-swoop-part` hooks + HANDOVER.md for Swoop's in-house team). |
 | **E — handoff & compliance** | Triage-aware handoff + persistence + email + legal | Partial (E.t1 done) | E.t1 handoff payload schema shipped — per-verdict reason enums (14 codes), `.strict()` validation, `HandoffSubmitConsentGate` type for E.t2's connector backstop. E.t2–E.t9 still blocked on real connector + sales inbox + legal. |
-| **F — observability** | Structured event logging + schema | Partial (F-a done) | F-a shipped: 20 event kinds in `@swoop/common/events`, `emitEvent()` helper with pluggable module-level sink, validation-failure `error.raised` fallback. F-b (retrofit every producer to emitEvent) still open. |
+| **F — observability** | Structured event logging + schema + producer retrofit | Partial (F-a + F-b done) | F-a schema (20 event kinds + `emitEvent` helper with pluggable module-level sink) + F-b retrofit (27 producer sites routed through `emitEvent`; 8 diagnostic console-logs kept with rationale comments; UI got a thin `emit-ui-event.ts` wrapper). Remaining: chunk-specific emits that live with their owning features (B.t9 `skill.loaded`, E.t2 `handoff.submitted/triggered`, B.t2 sweeper's `session.ended{idle_timeout}`). |
 | **H — validation** | Lightweight eval harness | Partial (H.t1 done) | H.t1 scaffold shipped: new `@swoop/harness` workspace, bespoke Node CLI runs YAML scenarios against `:8080`, 13 seed scenarios (3 filled + 10 stubs), non-gating label-gated CI. H.t3 assertions + H.t4 real scenarios + H.t5 judge calibration still open. |
 | **G — content** | System prompt, skills library, HITL flow mapping, **style-control** | ❌ Not started | Placeholder prompt at `product/cms/prompts/why.md`. Real content blocks on HITL session + Luke/Lane's sales doc (~May 4). **NEW**: G.10 decision + §2.1a added today — two-layer voice (positive examples in `why.md` + explicit anti-pattern list at `cms/prompts/style-avoid.md`) to suppress AI-slop defaults (em-dash cringe, corporate hedges, "delve"/"unpack", empty affirmations). |
 
@@ -102,6 +101,17 @@ Archive of superseded docs: [planning/archive/](planning/archive/) — includes 
 ### Harness (new workspace)
 - [product/harness/](product/harness/) — `@swoop/harness`: bespoke Node CLI, YAML scenarios, 13 seeds (3 filled + 10 stubs), stub judge, markdown + JSON reporter.
 - [.github/workflows/harness.yml](.github/workflows/harness.yml) — non-gating, label-gated CI.
+
+### Brand extension surface (D.t8)
+- [product/ui/HANDOVER.md](product/ui/HANDOVER.md) — Swoop's in-house team reads this first. 12 theme tokens + `data-swoop-part` selector table + iframe embed recipe + CORS/CSP contract.
+- [product/ui/src/styles/index.css](product/ui/src/styles/index.css) — 12 `--swoop-*` CSS custom-properties scoped to `[data-swoop-root]`.
+
+### Observability (F-b)
+- [product/ui/src/runtime/emit-ui-event.ts](product/ui/src/runtime/emit-ui-event.ts) — UI-side wrapper hiding `sessionStorage` + envelope boilerplate at every emit call site.
+
+### Warm pool (B.t10)
+- [product/orchestrator/src/session/warm-pool.ts](product/orchestrator/src/session/warm-pool.ts) — LIFO pool implementation (disabled by default via `WARM_POOL_SIZE=0`).
+- [product/orchestrator/src/session/warm-pool-bootstrap.ts](product/orchestrator/src/session/warm-pool-bootstrap.ts) — eager startup pre-warm.
 
 ### Stub connector (fixtures)
 - [product/orchestrator/test-fixtures/stub-connector.ts](product/orchestrator/test-fixtures/stub-connector.ts) — returns `@swoop/common/fixtures`-backed responses over MCP-HTTP. **Currently schema-misaligned — see "Two bugs left" above.**

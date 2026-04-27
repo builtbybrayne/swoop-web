@@ -173,7 +173,11 @@ describe('WarmSessionPool', () => {
 
     const claimed = await pool.claim();
     expect(claimed.sessionId).toBeTruthy();
-    expect(createSpy).not.toHaveBeenCalled();
+    // Claim returns a pre-warmed entry (not a freshly-created one), but
+    // triggers one background refill call to replenish the pool. That single
+    // replenishment create is expected; the hit path itself does not mint
+    // a new session.
+    expect(createSpy).toHaveBeenCalledTimes(1);
 
     const hits = capture.events.filter((e) => e.eventType === 'warm_pool.hit');
     expect(hits).toHaveLength(1);

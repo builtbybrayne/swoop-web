@@ -8,6 +8,96 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## D.25 — HANDOVER.md is not versioned; next release supersedes or appends
+
+**Decided**: 2026-04-24
+**Owner**: D.t8 executing agent
+**Rationale**: Handover doc describes a live extension surface. Version numbers on a single-surface doc invite drift. Next material surface change lands as an appended v2 section or a replacement file; Puma ships one HANDOVER per release. If multi-version support becomes necessary (unlikely pre-V2), split at that point.
+
+**Swap cost**: Zero. Start versioning when needed.
+
+## D.24 — HANDOVER.md lives at `product/ui/HANDOVER.md`
+
+**Decided**: 2026-04-24
+**Owner**: D.t8 executing agent
+**Rationale**: Co-located with the package being handed over. Not in `docs/` or repo root — Swoop's team opens the `ui/` folder on day one; the doc should be at eye-level there. No separate docs site needed for one file.
+
+**Swap cost**: Low. File move + link update.
+
+## D.23 — Iframe trigger design is Swoop's call; Puma documents minimum dimensions + CSP + CORS
+
+**Decided**: 2026-04-24
+**Owner**: D.t8 executing agent
+**Rationale**: Swoop's in-house team owns the trigger button (placement, copy, animation, badge-vs-panel). Puma documents the technical contract the iframe needs: minimum 320×520, required `frame-ancestors` CSP directive, CORS allow-list for `/chat` + `/session` + `/session/:id/ping`. Mock-host sidebar pattern is reference, not contract — Swoop may diverge. Avoids us committing to a UX we don't own.
+
+**Swap cost**: Low. The contract items (dimensions, CSP, CORS) are technical minimums. If Swoop's integration testing surfaces new requirements, document them.
+
+## D.22 — `data-swoop-part="<name>"` attribute hooks on 10 component points; rejected React slot props / render-prop overrides / theme-context injection
+
+**Decided**: 2026-04-24
+**Owner**: D.t8 executing agent
+**Rationale**: Ten additive `data-swoop-part="<name>"` attributes across seven primitive files cover ThreadSurface header, ChromeBadge, Composer root + send, ErrorBanner, OpeningScreen dialog + primary/secondary buttons, widget shell with per-widget discriminator, lead-capture summary + submit-wrapper. Rejected three alternatives: (a) React slot props — Swoop consumes Puma as a running iframe, not as a library, so slot props add surface we can't exercise; (b) render-prop overrides — same reason; (c) theme-context injection — crosses the iframe boundary awkwardly, and CSS custom-properties already cover the theming axis. Attributes are inspectable in DevTools by Swoop's team and survive Tailwind-class refactors on our side because they're not coupled to class names. `data-swoop-part` is the override-selector convention; `data-swoop-widget` discriminates widget-type; `data-swoop-widget-state` discriminates lifecycle state.
+
+**Swap cost**: Low-ish. If we ever expose a React-component API (e.g. Swoop wants to embed Puma's components directly rather than via iframe), `data-swoop-part` attributes remain valid — they just become the thing Swoop styles alongside React slot props. If we remove an attribute, Swoop's CSS targeting it breaks; add deprecation notice one release ahead.
+
+## D.21 — 12-token CSS custom-properties surface across colour / radius / type / density, scoped to `[data-swoop-root]`
+
+**Decided**: 2026-04-24
+**Owner**: D.t8 executing agent
+**Rationale**: Twelve tokens on four axes: colour (6), radius (2), type (2), density (2). Consumed via Tailwind `theme.extend` plus a density-scaled padding utility set. Rejected: fewer tokens (Swoop forks because they can't hit their brand); more tokens (public API we can't break without reshipping); `:root` scope (leaks into ChatGPT apps embedding Puma's artefacts later); shadow and hover tokens (derived from colour tokens plus Tailwind's own shadow scale, not worth promoting). Tokens scoped to `[data-swoop-root]` means Swoop sets them on the chat-root element only; Puma's own dev surfaces stay on defaults.
+
+**Swap cost**: Medium. The token set becomes a public API the moment HANDOVER.md ships to Swoop. Adding tokens is safe; removing or renaming is a break. Deprecate via comment in CSS + HANDOVER.md ahead of any shrink.
+
+## B.21 — Warm-pool sweep interval capped at 5 minutes regardless of TTL
+
+**Decided**: 2026-04-24
+**Owner**: B.t10 executing agent
+**Rationale**: Sweep interval default is `ttlMs / 4` clamped to `[1s, 30s]` originally, but a 5-min cap in all cases ensures stale entries don't linger when TTL is configured high. Prevents a pathological case where `WARM_POOL_TTL_MINUTES=60` makes sweeping fire every 15 min — long enough for a cluster restart to be invisible and for pool entries to survive longer than their TTL. Explicit 5-min cap is a ceiling; shorter intervals still honoured for shorter TTLs.
+
+**Swap cost**: Low. One constant.
+
+## B.20 — Warm-pool pre-warm is eager async at startup, not lazy on first request
+
+**Decided**: 2026-04-24
+**Owner**: B.t10 executing agent
+**Rationale**: Eager pre-warm fires at orchestrator startup — while the process is settling, the pool fills in the background. First `POST /session` arrives to a ready pool on the happy path. If pre-warm is still in flight, first request falls through to cold cleanly (no queueing). Lazy (on-first-request) pre-warm would defeat the point — the first visitor pays the full cold-path cost. Eager has a memory cost that's well-understood (`targetSize` sessions at most); lazy has a latency cost that's the whole thing we're trying to remove.
+
+**Swap cost**: Low. Flip the `preWarmOnStart` bool if eager ever causes startup problems.
+
+## B.19 — Two warm-pool event kinds only: `warm_pool.hit` and `warm_pool.miss`; no `prewarm` or `evict`
+
+**Decided**: 2026-04-24
+**Owner**: B.t10 executing agent
+**Rationale**: F-a reserved two event-kind slots for warm-pool observability. B.t10 declines to add more. Pre-warm activity is already observable via the `poolSizeAtClaim` field on every hit/miss plus a startup log line; `prewarm.completed` or `prewarm.failed` events would duplicate information already carried by `error.raised` for failures and by the size field for successes. Eviction is the same story — deriving eviction rate from `(miss count) × (rate of claims)` is cheaper than emitting a dedicated event. Keeps the event stream lean; F-a's schema stays at 20 kinds not 22.
+
+**Swap cost**: Low. If operational experience shows derivable signals aren't visible enough in the analytics backend, add the kinds in a future minor — they're additive to the discriminated union.
+
+## B.18 — Warm-pool events emitted inline by B.t10, not via F-b retrofit
+
+**Decided**: 2026-04-24
+**Owner**: B.t10 executing agent (with planner-fb's agreement)
+**Rationale**: The pool's emission points live inside B.t10-owned files (`warm-pool.ts`, `warm-pool-bootstrap.ts`). F-b's retrofit pass deals with legacy `console.log` sites; warm-pool had no legacy to retrofit. B.t10 imports `emitEvent` from `@swoop/common` and calls it directly at hit/miss points. F-b gets a reviewer spot-check role only — no code-path ownership of warm-pool observability.
+
+**Swap cost**: Zero. Pattern matches D.12 (adapter error emitter) and F-a's module-level sink convention. If emission shape changes, both call sites + the schema update together in the same patch.
+
+## B.17 — Warm pool pre-allocates both Puma `SessionState` and ADK `sessionService.createSession`, not just Puma side
+
+**Decided**: 2026-04-24
+**Owner**: B.t10 executing agent
+**Rationale**: The two-session-store coordination rule from B.14 (one Puma session + one ADK session per sessionId) means pre-allocating only Puma's side leaves the ADK session creation on the critical path — and post-M4 that becomes a network call to Vertex AI Session Service, which is the latency we're actually trying to remove. Pool pre-allocates both; claim hands back a sessionId for which both halves are ready. Cost is double the memory per pool entry, which is still small (state blob + an empty ADK session log) and capped by `WARM_POOL_SIZE`.
+
+**Swap cost**: Low. Pool internals; pool interface doesn't change whether one or both halves are pre-allocated. If the two-store coordination changes (e.g. ADK sessions become implicit), drop the second allocation.
+
+## B.16 — Warm pool is a LIFO stack, not a FIFO queue
+
+**Decided**: 2026-04-24
+**Owner**: B.t10 executing agent
+**Rationale**: Freshest-first serving. Entries at the top of the stack are the most recently pre-warmed, so their TTL is further from expiry — fewer stale-entry rejections at claim time. FIFO would hand out the oldest entry first, which has the least remaining TTL and the highest chance of being invalidated by the sweep before handoff completes. LIFO is cheap to implement (`Array.push` + `Array.pop`) and makes the TTL story simpler: the sweep deletes from the bottom, the claim takes from the top, both sides of the stack converge cleanly.
+
+**Swap cost**: Low. `push`/`pop` → `push`/`shift` is two lines. If ordering ever matters for observability (e.g. "oldest entries fill up first"), revisit.
+
+---
+
 ## G.10 — Style control authoring: paired positive-example paragraphs + explicit avoidance list
 
 **Decided**: 2026-04-24
