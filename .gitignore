@@ -50,3 +50,5 @@ product/harness/runs/*
 Thumbs.db
 
 .claude
+/data/content-data-swoop-patagonia_prod.sgl.zip
+/data/content-data-swoop-patagonia_prod.sql
