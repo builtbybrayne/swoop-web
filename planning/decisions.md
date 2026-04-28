@@ -8,6 +8,38 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## H.20 — Living-evalset ritual ownership documented as a role, not a name
+
+**Decided**: 2026-04-29
+**Owner**: H.t7 living-evalset runbook
+**Rationale**: The runbook needs to name an owner so the weekly ritual doesn't become orphaned. Two shapes considered: (a) name a person ("Al" or "Thomas"), (b) name a role ("the harness owner — currently Thomas / Richard at handover; until then, Al"). Picked (b). Names rot — the moment the named person changes role, the runbook either misleads or gets edited under pressure; either way the ritual loses time. A role-with-current-incumbent stays accurate as long as the parenthetical is updated on handover sign-off, and the operator reading the doc knows to update it because they ARE the new incumbent.
+
+**Swap cost**: Trivial. One sentence in `product/cms/ops/evalset-growth.md` § "Cadence + ownership" gets updated whenever ownership changes.
+
+## H.19 — Transcript source for evalset growth: handoff records + Cloud Logging by session id, transcript-text logging deferred
+
+**Decided**: 2026-04-29
+**Owner**: H.t7 living-evalset runbook
+**Rationale**: The weekly ritual needs the operator to read what visitors actually said, then re-author the messages into a scenario. Today, two stable sources cover most cases: (a) handoff records under `var/handoffs/<id>.json` carry verdict + visitor profile + wishlist + reason text — enough context for any conversation that ended in a handoff (the dominant case worth testing, by definition); (b) Cloud Logging events by session id carry the **shape** of the conversation (turn count, tool calls, latency) but not the message text — events log lengths + SHA256 hashes, per chunk F's privacy posture. The gap: "no-handoff" conversations in production have no recoverable transcript. Three options considered: (i) widen event logging to include `<utter>` text behind a privacy gate, (ii) build a separate transcript-write path on session end, (iii) accept the gap and prescribe operator workarounds. Picked (iii) for Puma launch. Rationale: (i)/(ii) both want a deliberate privacy + retention review and a schema change that ripples through F; deferring keeps Puma's launch surface honest and small. The ritual still works for the conversation classes that matter most (those that produced a handoff). Operators flag interesting "no-handoff" sessions during dev and capture transcripts from stdout at the time. The runbook records this as an open item for Al.
+
+**Swap cost**: Medium. If launch experience shows the no-handoff blind-spot is hurting evalset growth, the fix is a schema-change to log final `<utter>` text (with PII redaction policy) — touches `ts-common/src/events.ts`, the orchestrator turn-end emit site, and the runbook's Step 1b. The runbook structure (sections + sanitisation procedure) doesn't change; only the source-of-truth pointer in Step 1 does.
+
+## H.18 — PII sanitisation: manual checklist + committed `grep` smoke test, no scripted sanitiser at launch
+
+**Decided**: 2026-04-29
+**Owner**: H.t7 living-evalset runbook
+**Rationale**: When converting real conversations into scenarios, visitor PII (names, emails, phones, freeform `reason.text`) must not commit to the scenario file. Two mechanisms considered: (a) a scripted sanitiser that takes a transcript + emits a redacted seed, (b) a manual rewrite procedure backed by a `grep`-based smoke test the operator runs before staging. Picked (b). Rationale: at Puma's expected scenario growth rate (5–10/week), manual rewrite is ~5 minutes per scenario and forces the operator to actually read what they're committing — the meta-control of being responsible for every line shipped is exactly what PII review needs. A scripted sanitiser at this volume would either over-redact (replacing every `[A-Z][a-z]+` token, mangling place names) or under-redact (missing context like "I work at Acme Corp"). The grep smoke test catches the most common leaks (email-shaped strings, phone-shaped strings, identity-disclosure phrases) without claiming completeness. Verified: all three patterns return clean against the H.t1 scaffold scenarios (000–019).
+
+**Swap cost**: Low–Medium. If the suite passes ~50 scenarios or a leak slips through, build a scripted sanitiser as a Tier 3 task. The runbook structure stays the same; "Step 4" gets a scripted alternative path. The grep smoke test stays as a defence-in-depth check either way.
+
+## H.17 — Living-evalset cadence: weekly, Friday afternoon by default, movable
+
+**Decided**: 2026-04-29
+**Owner**: H.t7 living-evalset runbook
+**Rationale**: Tier 2 §2.7 commits to a weekly ritual; H.t7 fixes the slot so the ritual has a default landing place on the operator's calendar. Friday afternoon is a low-stakes slot — most engineering activity for the week has settled, so Saturday-Sunday won't pull a half-finished PR into review. The runbook documents the slot as movable: the cadence (weekly) is load-bearing, the day is not. Skipping a week is the failure mode to prevent; a weekly ritual that drifts to "every other Wednesday" is fine.
+
+**Swap cost**: Trivial. One paragraph in the runbook updates when the operator's preferred slot changes.
+
 ## H.16 — `triage_verdict` derives final state from captured `triage.decided` events; future `/session/:id` endpoint will tighten
 
 **Decided**: 2026-04-28
