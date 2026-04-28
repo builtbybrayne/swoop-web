@@ -6,6 +6,125 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-04-29 — `customerreview` + `customertip` source tables MISSING from SQL dump
+
+The 2026-04-27 SQL export contains junction tables `contentblock_customerreview` (2,390 rows) and `contentblock_customertip` (119 rows) — both carry FK constraints to source tables `customerreview.id` and `customertip.id`, but **those source tables don't exist in the dump**. The 2,390 + 119 junction rows are dangling.
+
+This was supposed to be the agent's primary corpus of curated customer-prose for `recall_someone_who` and `build_confidence`. It isn't there. Either Sequel Ace's export filtered it (PII?) or the schema migrated and the FKs are stale.
+
+**Implication**: until Thomas/Richard clarify (question raised in `questions.md`), the customer-story surface for the agent leans entirely on the parallel WordPress blog stream (~108 in-window posts via `03-exec-blog-ingest.md`). C.t3 should not gate on resolving this — blog corpus is a sufficient first-pass.
+
+---
+
+## 2026-04-29 — `daybyday` is way sparser than its 88K row count suggests
+
+`daybyday` has 88,367 rows but most are dead weight:
+
+- **Only 13 trips** have an `active` `tripvariant`.
+- 50,685 rows have `trip_id IS NULL` (orphan drafts).
+- Rows split by type: 75,810 `postsale` (booking-confirmation documents) vs 12,497 `presale` (sales-page itineraries) vs 60 NULL.
+- Of 12,497 `presale` rows, 12,415 have `tripvariant_id=NULL`, 72 are draft, 10 retired, **0 active**.
+
+The canonical filter for agent-relevant day-by-day data is `WHERE type='presale' AND trip_id IS NOT NULL AND deleted IS NULL`, joined directly on `trip.id` (not via `tripvariant`). That yields ~12,415 candidate rows for 852 trips — many trips will have no data.
+
+`tripvariant` is operational draft-management, not visitor-facing variants. `season` is fiscal-year scoping, not marketing seasonality. Both excluded from agent surface.
+
+Captured as decision-pending question for Swoop ops to confirm the website renders presale rows. Don't block C.t3 on it.
+
+---
+
+## 2026-04-29 — Image filenames live on `file`, not `image` — two-table model
+
+`image` (13,261 rows) holds metadata (title, caption, description, copyright, credit, width, height, quality_rating). It carries **no filename column**. The actual filename comes via `image.image_id → file.id` (FK constraint) and `file.name`.
+
+`file` (135,807 rows) is the master physical-file table — includes PDFs, docx, images. Filter to images by `file.extension IN ('jpg', 'png', 'jpeg', 'heic')` or `file.type LIKE 'image/%'`.
+
+`file.path` carries the legacy CDN domain (`http://images.swoop-patagonia.com`). The imgix transformation (`https://swoop-patagonia.imgix.net/<file.name>?<render-params>`) is a website-runtime concern; we apply it ourselves in the data primitive `resolve_image_set`. Don't read `file.path` for agent-facing URLs.
+
+**Image text-field population** (useful for C.t6 image annotation pipeline):
+- `image.title` is 99.7% populated.
+- `image.description` is 47.5% populated — where present, prefer over running Claude Vision.
+- `image.caption` is 35.2% populated — secondary fallback.
+
+Cuts the C.t6 cost estimate substantially: ~6.3K of the 13.3K images already have a description; only the rest need vision.
+
+---
+
+## 2026-04-29 — `ntag` is a clean polymorphic m:m, but `ntags_lookup` carries an enquiry firehose
+
+`ntag` (79 rows, 5 types: 27 interest / 21 area / 17 activity / 7 trip-type / 7 style) is the live tag taxonomy per Julie ruling. Lookups via `ntags_lookup` with shape `(entity_type, entity_id, tag_id)`.
+
+`ntags_lookup` has 157,537 rows, but **148K of them are `entity_type='enquiry'`** — i.e. tagging customer queries (PII). The agent-relevant subset is much smaller:
+
+| entity_type | rows | Agent? |
+|---|---|---|
+| enquiry | 147,959 | **NO — PII, exclude** |
+| image | 4,491 | YES |
+| trip | 2,973 | YES |
+| response | 1,103 | NO |
+| partner | 622 | NO |
+| contentblock | 255 | YES |
+| video | 134 | YES |
+
+`export.sql` should `WHERE entity_type IN ('image', 'trip', 'contentblock', 'video')` when ETL'ing `ntags_lookup`. ~7,853 useful rows, not 157K.
+
+---
+
+## 2026-04-29 — Currency mapping was wrong in the first-pass ontology: 4 ≠ EUR, 4 = AUD
+
+[S-INDEX] inspection guessed `currency_id` 1/2/4 = GBP/USD/EUR (with 4 maybe a "composite"). [S-SQLDUMP-2026-04-27] §S1 confirms: **1=GBP, 2=USD, 3=EUR, 4=AUD**. The public feed didn't expose EUR-priced trips because they happen to be rare; the EUR id is 3.
+
+Full mapping (11 entries via `currency.iso_3`): 1=GBP, 2=USD, 3=EUR, 4=AUD, 5=CLP, 6=ZAR, 7=ARS, 8=NZD, 9=CAD, 10=NOK, 11=DKK. ETL just copies `currency.iso_3` — no hand-mapping needed.
+
+---
+
+## 2026-04-29 — `adventurousness` is a deprecated style classifier, NOT a difficulty/wilderness legend
+
+The first-pass guess was that the `adventurousness` table (11 rows) carried the user-facing legend for the trip-level `difficulty` (1–5) and `wilderness` (0–5) integer fields. It doesn't. The 11 rows name *trip styles* — Adventurous / OBT (off-the-beaten-track) / Camping / Huts/W Trek / Day Hikes / Luxury / Winter / Group / Budget / Yurt / Independent — all with `rating: 5` (a column that's universally unused).
+
+Per Julie ruling: deprecated. The trip-style concept it was meant to encode now lives in `ntag` (types `style` and `trip-type`). Don't ETL `adventurousness`.
+
+`trip.difficulty` and `trip.wilderness` are raw integers 0–5; **no legend exists in the DB**. Agent surfaces raw integers without trying to map them to user-facing words at ETL time.
+
+---
+
+## 2026-04-29 — URL construction rule: `override_url || alias` works universally
+
+Confirmed by [S-SQLDUMP-2026-04-27] §S9: 100% of trips have `alias`; 67% additionally have `override_url`. 100% of pages have `alias`; 91% have `override_url`. The fallback rule `override_url || alias` works for every record.
+
+ETL writes a derived `canonical_url` column on `trip`, `page`, `hotel`, `location`, `tour` — callers never apply the rule themselves. Construction: `"https://www.swoop-patagonia.com/" + (override_url || alias)`.
+
+Sample trip URLs surface the SEO-friendly path on `override_url` (e.g. `chile/torres-del-paine/hiking/w-trek/original`); `alias` is the slug fallback (e.g. `w-trek-torres-del-paine`).
+
+---
+
+## 2026-04-29 — Page-as-hub pattern, but trips also have direct image joins
+
+Confirmed by [S-SQLDUMP-2026-04-27] §S8:
+
+- **Trips** have BOTH paths: direct via `image_trip` (3,361 rows), AND via `trip.page_id → image_page` (453 rows).
+- **Hotels** have ONLY the page path: `hotel.page_id → image_page`. No `image_hotel` table.
+- **Locations** have direct: `image_location` (count not measured but table exists).
+
+Multiple records can share the same `page_id` — e.g. trips 1052 + 1053 both → page 3 (`argentina/welsh-patagonia`). So `page` acts as a *region/topic hub*, not strictly a per-record page. Image sets attached to a page apply to all records hubbed there.
+
+ETL primitive `resolve_image_set(record)`:
+1. If record has direct image join (`image_trip`, `image_location` etc.), return those.
+2. Else if `record.page_id` is set, return `image_page` for that page.
+3. Else return empty.
+
+Images can also be tagged via `image_tag` (and via `ntags_lookup WHERE entity_type='image'`) for filterable retrieval.
+
+---
+
+## 2026-04-29 — Trip count in dump is 852, not 111
+
+The public Trip Finder feed surfaces ~111 trips; the dump has **852**. The long tail is legacy/internal/alt records. Most are draft/retired/orphan via `tripvariant` (only 13 trips have an active variant — see the daybyday discovery above for the full sparseness picture).
+
+ETL should filter to "active and surfaceable" trips. Best-guess filter (subject to confirmation): `WHERE deleted IS NULL AND publishstate_id = 3` (the publishstate value seen on the public feed; needs SELECT to confirm).
+
+---
+
 ## 2026-04-28 — Form submission is a discrete user action, not a chat turn — give it its own HTTP surface
 
 When the lead-capture widget needs to "submit" the visitor's contact details to a backend that will persist a record + send an email, three patterns present themselves: (a) the widget calls `props.addResult` and the agent decides on the next turn to call a `handoff_submit` MCP tool that runs the side-effect, (b) the orchestrator intercepts the addResult inside the chat SSE handler and runs the side-effect inline, (c) the widget POSTs to a discrete HTTP endpoint and resolves the assistant-ui tool call locally with a success-marker once the POST returns.
