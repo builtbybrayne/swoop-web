@@ -21,7 +21,7 @@ Packages are declared in `product/package.json` under `workspaces`:
 | `connector/` | Data-access layer. Wraps Swoop APIs / scraping adapters. | C |
 | `ui/` | Embedded chat surface (web component or iframe host). | D |
 | `cms/` | Content-as-data: authored library/trip data, sales copy, prompt fragments. Read at runtime; never inlined. | G |
-| `ingestion/` | Scraper / API adapter feeding `connector/`. | C |
+| `ingestion/` | Ingest utilities producing local snapshots that feed downstream chunk-C work. Today: WordPress blog fetcher (`src/blog/fetch.ts`, Tier 3 plan `../planning/03-exec-blog-ingest.md`) writing to gitignored `data/blog/raw/<UTC-stamp>/`. Future: SQL-dump derivation, image annotation pipeline. | C |
 | `harness/` | Behavioural evals: TS CLI runs YAML scenarios through `:8080` orchestrator. Non-gating CI. | H |
 
 Until A.t2 and A.t4 land, these are empty directories — the workspace resolves but has nothing to build.
