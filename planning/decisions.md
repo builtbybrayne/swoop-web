@@ -8,6 +8,50 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.18 — Storage engine: Postgres 16 + pgvector + tsvector + pg_trgm; no Vertex AI Search
+
+**Decided**: 2026-04-28
+**Owner**: Al (after Swoop confirmed Postgres acceptability post-Julie call)
+
+**Rationale**: Earlier in the engagement we'd hesitated on Postgres because optically it looks "like another MariaDB" to the Swoop ops team. That objection is now resolved — Swoop are explicitly happy for us to proceed with Postgres. With that constraint gone, the choice between **Postgres alone** and **Postgres-plus-Vertex AI Search** comes down to scope and operational reality.
+
+We pick **Postgres alone** because at Puma's actual size — hundreds of trips, ~108 blog posts in the rolling 5y window, ~10K CMS chunks — every Vertex strength either doesn't apply or is dwarfed by what `pgvector` + `tsvector` + `pg_trgm` give us in one engine:
+
+- Semantic similarity → `pgvector` HNSW indexes (sub-ms at our scale)
+- Lexical / keyword → `tsvector` + `tsquery` + GIN, Porter-stemmed and weighted
+- Typo-tolerant fuzzy → `pg_trgm` (perfect for "Torres del Pain" → "Torres del Paine")
+- Hybrid retrieval → reciprocal rank fusion in a single SQL query with CTEs + window functions
+- Filters / facets / aggregates → standard SQL
+
+Adding Vertex on top would actively cost us:
+1. **Local-dev parity** — Postgres + Docker Compose locally is identical to Cloud SQL prod. Vertex has no local mode; the alternative is stubbing or remote-querying from a laptop.
+2. **Two-store sync** — every Postgres write would need to propagate to a Vertex index with minutes-to-hours latency. Subtle freshness bugs hide in that gap.
+3. **Cost predictability** — Cloud SQL Postgres ~£25–40/mo flat; Vertex per-query + storage scales with agent traffic, easily £100+/mo at modest usage for marginal-or-imaginary gain at our scale.
+4. **Schema iteration speed** — `ALTER TABLE` in Postgres vs re-indexing in Vertex during dev iteration.
+5. **Debuggability** — `EXPLAIN ANALYZE` vs vendor black box.
+6. **Lock-in** — Postgres data and queries are portable; Vertex-indexed structures aren't.
+
+Vertex genuinely wins for million-doc corpora, multimodal search, or out-of-the-box generated answers. None apply to Puma. The agent already produces answers via Claude in the agent-with-tools loop (decision D.11 territory); generated-answer-as-a-service is a duplicate capability for us, not a new one.
+
+**Stack pinned by this decision:**
+- **Postgres 16** — current stable, supports modern `pgvector` and FTS features.
+- **`pgvector`** — HNSW indexes on embedding columns; cosine distance default.
+- **`pg_trgm`** — trigram fuzzy matching extension.
+- **Native FTS** (`tsvector`/`tsquery`/GIN) — built into Postgres core.
+- **Cloud SQL for Postgres** in Swoop's "AI Pat Chat" GCP project for prod (small instance: `db-f1-micro` or `db-g1-small`).
+- **Postgres 16 in Docker Compose** locally — same image, identical behaviour.
+- **Schema migrations**: `node-pg-migrate` (plain-SQL, lean; Prisma rejected as too heavy for our shape — sub-decision worth flagging if it bites us).
+- **Embedding model**: pending lock — leaning Voyage-3 per Anthropic's recommended pairing; swap cost is one column re-population.
+
+**When we'd revisit Vertex** (named triggers, not vibes):
+- Document corpus grows past ~100K (current trajectory says no, even with Antarctica + Arctic expansion — agent reasoning scales, not document count).
+- Recall/precision issues we've shown can't be solved with better embeddings, chunking, or RRF tuning.
+- Genuine multimodal need (e.g. search-by-image of a region) becomes a real product requirement.
+
+The agent-with-tools architecture means Vertex would slot in later as **one new tool implementation** behind the existing tool surface, with no rearchitecting of the agent or other tools. So this is a low-regret decision — the cost of deferring Vertex is essentially zero.
+
+**Swap cost**: Medium. Replacing Postgres with DuckDB or Vertex later means rewriting the export pipeline (MariaDB → store) and the connector's storage layer behind the tool surface. The agent tool surface itself, the entity model, the retrieval semantics, and the RRF approach all carry across unchanged — they're the abstraction. So "swap" is real engineering work but bounded to one layer and shouldn't bleed into agent or product behaviour.
+
 ## G.11 — CMS folder structure: `cms/prompts/{system,skills,tools}/`; system prompt is concatenation of `system/`
 
 **Decided**: 2026-04-27
