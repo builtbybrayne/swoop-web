@@ -1,0 +1,12 @@
+# This dir holds screenshots of the consent journey for review by Swoop's legal counsel.
+#
+# Naming convention (per ../04-consent-flow.md):
+#   01-tier1-disclosure.png       - Tier-1 disclosure + consent modal
+#   02-chrome-tag.png             - Persistent chrome tag during conversation
+#   03-handoff-widget.png         - Lead-capture widget with both consent tickboxes
+#   04-confirmation.png           - Post-submit confirmation card
+#   05-tier1-declined.png         - Tier-1 declined close screen (optional)
+#
+# PNG, 2x retina if practical. Annotations welcome but not required.
+#
+# 🔴 BLOCKED on E.t5 — real legal copy required for non-misleading screenshots.
