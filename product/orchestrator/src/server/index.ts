@@ -20,7 +20,7 @@
  */
 
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
-import type { Runner, BaseSessionService } from '@google/adk';
+import type { Runner } from '@google/adk';
 import type { HandoffStore, MailerConfig } from '@swoop/connector';
 
 import type { SessionAllocator, SessionStore } from '../session/index.js';
@@ -32,7 +32,6 @@ import {
 import { createChatHandler } from './chat.js';
 import { createSessionPingHandler } from './session-ping.js';
 import { createHandoffSubmitHandler } from './handoff-submit.js';
-import { createSessionHistoryHandler } from './session-history.js';
 import { DISCLOSURE_COPY_VERSION } from './errors.js';
 import type { TriageClassifier } from '../functional-agents/triage-classifier.js';
 
@@ -118,19 +117,6 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
   app.delete('/session/:id', createSessionDeleteHandler(sharedDeps));
   // D.t6 proactive-preflight probe. Always 200 — verdict in body.
   app.get('/session/:id/ping', createSessionPingHandler(sharedDeps));
-  // B.t11 server-side history projection. 200 + parts on known session,
-  // 404 on unknown. Reuses the runner's ADK session service so the same
-  // event log that fed the live SSE feeds the rehydration response.
-  app.get(
-    '/session/:id/history',
-    createSessionHistoryHandler({
-      sessionStore: deps.sessionStore,
-      sessionService: deps.runner.sessionService as BaseSessionService,
-      appName: deps.runner.appName,
-      userId: deps.userId,
-      now: deps.now,
-    }),
-  );
 
   app.post(
     '/chat',
