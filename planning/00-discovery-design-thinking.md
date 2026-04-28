@@ -255,11 +255,28 @@ Paths in this repo unless noted. The PoC repo is at `/Users/al/Studio/projects/s
 | Blog ingest implementation | `worktree-agent-a0b7dfee4cfcd79d3` | Clean. 31 tests. **Live verification pulled 102 real posts.** |
 | C.t1 (connector skeleton + Postgres) | `worktree-agent-ab15fbf1e1e56aec9` | **WIP**. Tier 3 plan committed clean. Implementation scaffolded (Express + MCP SDK + pg + migrations + health endpoints + 2 tests) committed but **runtime verification deferred** (docker-compose up + migrate-up not run). |
 
-**Notes for the merge pass:**
-- WIP branches (D.t9, C.t1) want a follow-up pass before main. D.t9 needs the seed-call swap; C.t1 needs runtime verification.
-- E.t6's report flagged that it scaffolded `FsHandoffStore` itself because its base branch didn't have E.t2's work — when merging, expect a conflict against E.t2's already-merged version. E.t6's interface differs slightly; reconcile in the merge.
-- E.t7's report flagged forward-references to E.t5's files (which now exist post-merge of E.t5).
-- E.t8's report flagged `E.1–E.10` decisions live in `02-impl-handoff-and-compliance.md` §5 not `decisions.md` — minor consistency tidy.
+### Merge state at end-of-session 2026-04-28
+
+7 of 10 agent branches merged into `claude/nervous-goodall-1fe7d6` cleanly:
+- B.t11 — merge `85d2e41` (one trivial import-only conflict resolved)
+- Blog-ingest — merge `b56ed5c`
+- H.t7 — merge `1f142f9`
+- E.t7 — merge `4de5d3f`
+- E.t5 — merge `e3a8af1`
+- E.t8 — merge `536f40b`
+- H.t3 — landed in-place at `5d04b90` (isolation didn't engage; clean commit on this branch)
+
+3 branches remain unmerged, on their own branches, awaiting follow-up:
+
+- **D.t9 — `worktree-agent-aca0f1cf63634e3d6` @ `4e59f2c`**. WIP. Translator + fetch + hook + 23 tests pass. The remaining issue is one swap: `runtime.thread.reset(messages)` doesn't seed thread state on the `useChatRuntime`-shaped runtime we use. Forward path identified by the agent: replay parts through the existing transport up front. Translator + fetch + hook scaffolding is reusable; only the seed call needs to change. Estimate to finish: ~1–2 hours of focused work.
+- **C.t1 — `worktree-agent-ab15fbf1e1e56aec9` @ `f736495`**. WIP. Tier 3 plan committed cleanly (`cfe76a9`); scaffolded implementation (Express + MCP SDK + pg pool + migrations + health endpoints + 2 tests) committed by the orchestrator after the agent's finalisation timeout. **Runtime verification deferred** — needs `docker-compose up` + `npm run migrate:up` to confirm the Postgres path actually works. Estimate: ~30 min focused verification + any small fix-ups.
+- **E.t6 — `worktree-agent-a67216b65b2f02c64` @ `6359817`**. **MERGE ABORTED** — 9 conflicts. The agent's base branch lacked E.t2's already-merged `FsHandoffStore` work, so it reinvented the store.ts + store.test.ts as if they didn't exist. The merge conflicts span: `connector/src/handoff/store.ts`, `store.test.ts`, `connector/src/index.ts`, `connector/package.json`, `orchestrator/src/index.ts`, `orchestrator/src/config/{schema,load}.ts`, `orchestrator/.env.example`, `package-lock.json`, `progress.md`. The actually-novel work in this branch is the **sweeper module** (`sweep.ts` + `sweep.test.ts` + the boot wiring + 3 new env vars `HANDOFF_RETENTION_SWEEP_*` + decisions E.16/E.17/E.18). Recommended forward path: cherry-pick only the sweeper-specific files onto the current state, ignoring the store.ts reinvention. Estimate: ~1 hour focused manual port + verification.
+
+### Other notes from this session
+
+- E.t7's runbook forward-references E.t5's files; those forward-references resolve cleanly post-merge.
+- E.t8's compliance bundle flagged that E.1–E.10 decisions live in `02-impl-handoff-and-compliance.md` §5 rather than `decisions.md` — minor consistency tidy worth doing.
+- H.t3 added decisions H.14/H.15/H.16. Worth confirming they're in `decisions.md`.
 
 ---
 
