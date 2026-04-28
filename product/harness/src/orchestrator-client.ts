@@ -5,7 +5,8 @@
  *   1. `createSession()` — POST /session → { sessionId, disclosureCopyVersion }.
  *   2. `grantConsent()`  — PATCH /session/:id/consent with { granted, copyVersion }.
  *   3. `sendMessage()`   — POST /chat, consume the SSE stream, aggregate utter
- *      text + tool-call records, return the aggregated payload for assertions.
+ *      text + tool-call records + per-part structural counts, return the
+ *      aggregated payload for assertions.
  *
  * Session deletion is intentionally omitted: the orchestrator's idle sweeper
  * eventually cleans up, and each scenario starts a fresh session anyway.
@@ -13,6 +14,10 @@
  * Error handling: every method throws on non-2xx. The runner catches and
  * records the failure against the scenario; the CLI itself never crashes on a
  * single scenario failure (per H.13 non-gating posture).
+ *
+ * H.t3 extends the response shape with `toolCalls: CapturedToolCall[]` and
+ * `structure: TurnStructure` so the new assertion handlers have what they
+ * need without re-parsing the SSE.
  */
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
@@ -22,13 +27,48 @@ export interface OrchestratorSession {
   readonly disclosureCopyVersion: string;
 }
 
+/**
+ * Per-turn structural counts, by SSE part type.
+ * - `utterPartCount`     — `text` parts (the visible utterance fragments).
+ * - `fyiPartCount`       — `data-fyi` parts (status affordances).
+ * - `reasoningPartCount` — should always be zero (B.t4 invariant: reasoning
+ *                          is filtered server-side). Counted defensively so
+ *                          `response_format` assertions can sanity-check the
+ *                          invariant still holds.
+ * - `toolCallCount`      — `tool-call` parts.
+ */
+export interface TurnStructure {
+  readonly utterPartCount: number;
+  readonly fyiPartCount: number;
+  readonly reasoningPartCount: number;
+  readonly toolCallCount: number;
+}
+
+export interface CapturedToolCall {
+  /** 1-indexed turn this call belongs to. The runner sets this. */
+  readonly turnIndex: number;
+  readonly toolName: string;
+  readonly input: unknown;
+}
+
 export interface AggregatedResponse {
   /** Concatenation of all `text` parts delivered during the turn. */
   readonly utterText: string;
-  /** Every tool-call part the server emitted — shape is orchestrator-defined. */
-  readonly toolCalls: readonly unknown[];
+  /** Tool-call records lifted from the SSE stream (without `turnIndex`). */
+  readonly toolCalls: readonly RawToolCall[];
+  /** Structural counts for the turn (for `response_format` assertions). */
+  readonly structure: TurnStructure;
   /** Every raw MessagePart observed on the wire (for debugging / H.t3). */
   readonly rawParts: readonly unknown[];
+}
+
+/**
+ * Tool-call record at the SSE-consumer layer — turn index is stamped at the
+ * runner level (since the client doesn't know which turn-of-N this is).
+ */
+export interface RawToolCall {
+  readonly toolName: string;
+  readonly input: unknown;
 }
 
 export interface OrchestratorClientOptions {
@@ -148,7 +188,10 @@ async function consumeSseStream(
 
   let buffer = '';
   let utterText = '';
-  const toolCalls: unknown[] = [];
+  let utterPartCount = 0;
+  let fyiPartCount = 0;
+  let reasoningPartCount = 0;
+  const toolCalls: RawToolCall[] = [];
   const rawParts: unknown[] = [];
   let errored: string | null = null;
 
@@ -168,7 +211,17 @@ async function consumeSseStream(
 
       if (event.event === 'done') {
         // Clean end of turn.
-        return { utterText, toolCalls, rawParts };
+        return {
+          utterText,
+          toolCalls,
+          structure: {
+            utterPartCount,
+            fyiPartCount,
+            reasoningPartCount,
+            toolCallCount: toolCalls.length,
+          },
+          rawParts,
+        };
       }
       if (event.event === 'error') {
         errored = event.data;
@@ -184,16 +237,30 @@ async function consumeSseStream(
           part !== null &&
           typeof (part as { type?: unknown }).type === 'string'
         ) {
-          const typed = part as { type: string; text?: unknown };
+          const typed = part as {
+            type: string;
+            text?: unknown;
+            toolName?: unknown;
+            input?: unknown;
+          };
           if (typed.type === 'text' && typeof typed.text === 'string') {
             utterText += typed.text;
+            utterPartCount += 1;
+          } else if (typed.type === 'data-fyi') {
+            fyiPartCount += 1;
+          } else if (typed.type === 'reasoning') {
+            // Should never happen — B.t4 invariant. Counted so the
+            // `response_format` assertion can flag it loudly.
+            reasoningPartCount += 1;
           } else if (typed.type === 'tool-call') {
-            toolCalls.push(part);
+            toolCalls.push({
+              toolName: typeof typed.toolName === 'string' ? typed.toolName : '<unknown>',
+              input: typed.input,
+            });
           }
         }
       } catch {
-        // Malformed JSON on the wire — ignore for scaffold; H.t3 might
-        // want to surface this explicitly.
+        // Malformed JSON on the wire — ignore.
       }
     }
 
@@ -205,7 +272,17 @@ async function consumeSseStream(
   }
 
   // Stream ended without an explicit `done` event — return what we have.
-  return { utterText, toolCalls, rawParts };
+  return {
+    utterText,
+    toolCalls,
+    structure: {
+      utterPartCount,
+      fyiPartCount,
+      reasoningPartCount,
+      toolCallCount: toolCalls.length,
+    },
+    rawParts,
+  };
 }
 
 function parseSseFrame(frame: string): { event: string; data: string } | null {

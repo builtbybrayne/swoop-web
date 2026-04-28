@@ -8,6 +8,36 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## H.16 — `triage_verdict` derives final state from captured `triage.decided` events; future `/session/:id` endpoint will tighten
+
+**Decided**: 2026-04-28
+**Owner**: H.t3 assertion-catalogue session
+**Rationale**: The `triage_verdict` assertion needs to know the session's final triage state at end-of-run. There is no orchestrator endpoint exposing it today (no `/session/:id` introspection route). Three options considered: (a) build a thin GET endpoint right now, (b) sniff state from the assistant's response text via regex/judge, (c) reduce captured `triage.decided` events to "the most recent one wins" and stand on that. Picked (c). Rationale: the F-a event schema already carries verdict + reasonCode in a structured form, the orchestrator already emits one per turn the classifier runs, and the `EventCapture` plumbing this task already adds is the right surface. Option (a) is correct long-term but expands the H.t3 scope to a B-side route addition; option (b) is fragile and double-counts the LLM. The `triage_verdict` handler treats `null` (no `triage.decided` events captured) as a failure with a clear message, so scenarios authored against this kind fail loudly until either (1) `EventCapture` is wired to a real source (decision H.14) or (2) a `/session/:id` route lands and the runner pulls state directly. Either upgrade keeps the assertion shape unchanged.
+
+**Swap cost**: Low. The `deriveFinalTriage(events)` helper in `runner.ts` is the only consumer of this convention. Replacing it with a `client.getSession(id)` call once the route exists is a single-function swap; the `RunContext.finalTriage` field stays the same.
+
+## H.15 — Schema-level cross-variant validation via `superRefine`, not per-variant `refine`
+
+**Decided**: 2026-04-28
+**Owner**: H.t3 assertion-catalogue session
+**Rationale**: The `response_format` assertion needs at least one of `hasUtter` / `hasReasoning` / `fyiCount` set; a `fyiCount` bound needs at least one of `min` / `max`. Native Zod expression of these constraints is `.refine` on each variant — but `z.discriminatedUnion` rejects `ZodEffects` members (refine-wrapped objects), so per-variant refinement breaks the discriminator. Two viable shapes: (a) drop the constraints (silent permissive bug-class — an empty `response_format` would silently pass, hiding author error), (b) build the discriminated union from raw objects, then `.superRefine` the union itself for cross-variant rules. Picked (b). Rationale: keeps the discriminator clean for TypeScript narrowing, keeps authoring-time error visibility (Zod still surfaces a clear path-and-message), and consolidates cross-variant rules in one place where future kinds can join. The downside is `superRefine` runs after the per-variant parse, so it's slightly less precise on error attribution — acceptable for human-authored YAML where the surface is small.
+
+**Swap cost**: Low. If Zod adds first-class refined-discriminator support (proposals exist), migration is mechanical: lift each constraint back into the variant.
+
+## H.14 — Event capture: pluggable interface defaulting to `NullEventCapture`; orchestrator-stdout streaming wired by an outer wrapper, not the harness CLI
+
+**Decided**: 2026-04-28
+**Owner**: H.t3 assertion-catalogue session
+**Rationale**: H.t3's `handoff_event` / `disclosure_event` assertions need access to events emitted by the orchestrator's `emitEvent` (F-a / F-b). The H.t3 brief suggested capturing the orchestrator's stdout (the default sink writes one JSON line per event), under the premise that the harness in CI starts the orchestrator as a child process. On inspection that's not the scaffold's posture: the harness CLI does NOT spawn the orchestrator (locally OR in CI per `.github/workflows/harness.yml`) — both modes assume a separately-started `:8080`. Three viable shapes for getting events back to the harness:
+
+  (a) **Harness owns the orchestrator child process**: harness CLI spawns + supervises orchestrator, captures its stdout, parses event JSON inline. Cleanest for scenarios that need events; bigger architectural shift than H.t3 warrants — touches CI workflow, the local dev story, and the harness's "speak HTTP, assert results" focus (Tier 3 H.t1 plan §"Orchestrator invocation").
+  (b) **Side-channel header + in-memory event collector** on the orchestrator: harness sends `X-Swoop-Eval-Run-Id`, the orchestrator's emit-event sink stashes events keyed by run-id, harness queries `/eval/events/<run-id>` after the run. Adds an eval-only route to the orchestrator, which means more producer-side code under test.
+  (c) **`EventCapture` interface with three implementations**: `NullEventCapture` (CLI default — events-based assertions cleanly fail with "no event captured"), `MemoryEventCapture` (test workhorse — push events directly), `StreamingEventCapture` (wraps a Node `Readable` of newline-delimited JSON; an outer wrapper script — `eval-with-orchestrator.sh` or a future `cli-with-orchestrator.ts` — wires the orchestrator child's stdout to it). The harness CLI today wires `NullEventCapture`. The interface lives at `product/harness/src/event-capture.ts`.
+
+Picked (c). Rationale: (i) the interface seam is ~50 LOC and lets H.t3 land its handlers fully tested without forcing a CI architectural shift, (ii) the streaming impl is ready for a future outer wrapper without that wrapper having to exist today, (iii) the test surface is honest — `MemoryEventCapture` exercises every event-based assertion handler, and the unit tests prove the wire-format consumer works. The cost is that authored scenarios using `handoff_event` / `disclosure_event` / `triage_verdict` will fail until either an outer wrapper plumbs `StreamingEventCapture` or future tasks adopt option (a) / (b). Failure mode is a clear assertion message ("no event captured"), not a crash.
+
+**Swap cost**: Low. (a) is one new file (`cli-with-orchestrator.ts`) that imports the existing `StreamingEventCapture`, spawns the orchestrator child, and runs `cli.ts`'s body with the streaming capture instead of null. (b) is a moderate orchestrator-side change but doesn't disturb the harness — it would be a fourth `EventCapture` implementation (`HttpEventCapture` polling the eval-only route).
+
 ## E.15 — Tier-2 consent timestamp is captured client-side at submit, not server-side
 
 **Decided**: 2026-04-28
