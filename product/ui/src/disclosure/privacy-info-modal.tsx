@@ -9,22 +9,16 @@
 // click-outside. Focus is trapped while open and restored to the opener
 // on close.
 //
+// Copy is loaded from `cms/legal/privacy-info.md` via `legal-copy.ts`
+// (E.t5). The body is markdown rendered via `react-markdown` so authors can
+// add sub-headings and paragraphs without a code change.
+//
 // See planning/03-exec-chat-surface-t4.md §"Privacy info modal" + §7.
 
 import { useEffect, useRef } from "react";
-
-// TODO(E.t5): replace with cms/legal/privacy-info.md authored copy once the
-// legal / CMS surfaces land. Placeholder strings are deliberately generic
-// so Swoop's team can brand-name the tool on embed.
-const COPY = {
-  heading: "How your conversation is handled",
-  paragraphs: [
-    "This is an AI-powered assistant. When you send a message, your text is processed by an AI model so the assistant can respond. The conversation is retained only long enough to help you — typically until you close the window.",
-    "We do not sell your data, and your conversation is not used to train third-party AI models. Suppliers involved in processing may include our hosting provider and the AI model provider. If you'd like a copy of your conversation, or to have it deleted on request, contact us at privacy@example.com.",
-  ],
-  closeLabel: "Close",
-  ariaCloseLabel: "Close privacy information",
-} as const;
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { PrivacyInfo } from "./legal-copy";
 
 export interface PrivacyInfoModalProps {
   open: boolean;
@@ -108,14 +102,13 @@ export function PrivacyInfoModal({ open, onClose }: PrivacyInfoModalProps) {
             id="swoop-privacy-modal-heading"
             className="text-base font-semibold text-slate-900"
           >
-            {/* TODO(E.t5): replace with cms/legal/privacy-info.md heading */}
-            {COPY.heading}
+            {PrivacyInfo.heading}
           </h2>
           <button
             ref={firstFocusableRef}
             type="button"
             onClick={onClose}
-            aria-label={COPY.ariaCloseLabel}
+            aria-label={PrivacyInfo.ariaCloseLabel}
             data-testid="privacy-info-modal-close-x"
             className="-m-1 inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
           >
@@ -123,11 +116,37 @@ export function PrivacyInfoModal({ open, onClose }: PrivacyInfoModalProps) {
           </button>
         </div>
 
-        <div className="mt-3 space-y-3 text-sm text-slate-700">
-          {/* TODO(E.t5): replace with cms/legal/privacy-info.md body */}
-          {COPY.paragraphs.map((p, i) => (
-            <p key={i}>{p}</p>
-          ))}
+        <div
+          data-testid="privacy-info-modal-body"
+          className="mt-3 max-h-[60vh] space-y-3 overflow-y-auto pr-1 text-sm text-slate-700"
+        >
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              h2: (props) => (
+                <h3
+                  className="mt-4 text-sm font-semibold text-slate-900 first:mt-0"
+                  {...props}
+                />
+              ),
+              p: (props) => (
+                <p className="text-sm text-slate-700" {...props} />
+              ),
+              strong: (props) => (
+                <strong className="font-medium text-slate-900" {...props} />
+              ),
+              a: (props) => (
+                <a
+                  className="font-medium text-slate-900 underline underline-offset-2 hover:text-slate-700"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  {...props}
+                />
+              ),
+            }}
+          >
+            {PrivacyInfo.body}
+          </ReactMarkdown>
         </div>
 
         <div className="mt-5 flex justify-end">
@@ -137,8 +156,7 @@ export function PrivacyInfoModal({ open, onClose }: PrivacyInfoModalProps) {
             data-testid="privacy-info-modal-close"
             className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400"
           >
-            {/* TODO(E.t5): replace with cms/legal/privacy-info.md close label */}
-            {COPY.closeLabel}
+            {PrivacyInfo.closeLabel}
           </button>
         </div>
       </div>
