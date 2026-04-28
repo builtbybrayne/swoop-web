@@ -21,6 +21,12 @@ const PASSED: ScenarioResult = {
       utterText: 'Hello traveller!',
       toolCallCount: 0,
       rawPartCount: 3,
+      structure: {
+        utterPartCount: 1,
+        fyiPartCount: 0,
+        reasoningPartCount: 0,
+        toolCallCount: 0,
+      },
     },
   ],
   assertions: [
@@ -42,6 +48,12 @@ const FAILED: ScenarioResult = {
       utterText: 'The exact price is £2,750.',
       toolCallCount: 0,
       rawPartCount: 2,
+      structure: {
+        utterPartCount: 1,
+        fyiPartCount: 0,
+        reasoningPartCount: 0,
+        toolCallCount: 0,
+      },
     },
   ],
   assertions: [

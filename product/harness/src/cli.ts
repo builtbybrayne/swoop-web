@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { OrchestratorClient } from './orchestrator-client.js';
 import { StubJudge } from './judge.js';
+import { NullEventCapture } from './event-capture.js';
 import { loadScenarios, type LoadedScenario } from './scenario.js';
 import { runScenario, type ScenarioResult } from './runner.js';
 import { formatJson, formatMarkdown } from './report.js';
@@ -134,11 +135,16 @@ async function main(): Promise<void> {
     args.baseUrl ?? process.env.ORCHESTRATOR_URL ?? 'http://localhost:8080';
   const client = new OrchestratorClient({ baseUrl });
   const judge = new StubJudge();
+  // Default capture: NullEventCapture. Event-based assertions (handoff_event,
+  // disclosure_event, triage_verdict) will fail with a "no event captured"
+  // message until an outer wrapper plumbs a `StreamingEventCapture` against
+  // the orchestrator's stdout. Decision H.14.
+  const events = new NullEventCapture();
 
   const results: ScenarioResult[] = [];
   for (const loaded of scenarios) {
     console.log(`[harness] running ${loaded.scenario.name} …`);
-    const result = await runScenario(loaded, { client, judge });
+    const result = await runScenario(loaded, { client, judge, events });
     const badge =
       result.status === 'passed'
         ? 'PASS'

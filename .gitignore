@@ -56,5 +56,9 @@ product/connector/var/
 Thumbs.db
 
 .claude
-/data/content-data-swoop-patagonia_prod.sgl.zip
-/data/content-data-swoop-patagonia_prod.sql
+
+# Local-only data dumps. Holds the Swoop SQL dump (received 2026-04-27) and
+# the WordPress blog ingest snapshots (`data/blog/raw/<UTC-stamp>/`). Never
+# commit — these contain content we don't have a redistribution licence for
+# and may include PII-adjacent surfaces.
+/data/
