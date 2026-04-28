@@ -255,18 +255,40 @@ Paths in this repo unless noted. The PoC repo is at `/Users/al/Studio/projects/s
 | Blog ingest implementation | `worktree-agent-a0b7dfee4cfcd79d3` | Clean. 31 tests. **Live verification pulled 102 real posts.** |
 | C.t1 (connector skeleton + Postgres) | `worktree-agent-ab15fbf1e1e56aec9` | **WIP**. Tier 3 plan committed clean. Implementation scaffolded (Express + MCP SDK + pg + migrations + health endpoints + 2 tests) committed but **runtime verification deferred** (docker-compose up + migrate-up not run). |
 
-### Merge state at end-of-session 2026-04-28
+### Merge state at end-of-session 2026-04-28 (revised after stale-base discovery)
 
-7 of 10 agent branches merged into `claude/nervous-goodall-1fe7d6` cleanly:
-- B.t11 — merge `85d2e41` (one trivial import-only conflict resolved)
-- Blog-ingest — merge `b56ed5c`
-- H.t7 — merge `1f142f9`
-- E.t7 — merge `4de5d3f`
-- E.t5 — merge `e3a8af1`
-- E.t8 — merge `536f40b`
-- H.t3 — landed in-place at `5d04b90` (isolation didn't engage; clean commit on this branch)
+**Critical context for next session:** sub-agents in this session were dispatched with `isolation: "worktree"` which appears to branch from `main`'s tip rather than the current branch's tip. At least 2 agents (C.t1, E.t6) were demonstrably based on a commit (`5c9534f`) pre-dating major architectural decisions including:
+- C.18 (Postgres lock; Vertex AI Search out)
+- C.13–C.23 (sales-shaped tools, ntag live, no departures, no swoopers, headline pricing only)
+- The full chunk-C Tier 2 rewrite (10-tool surface, composer pattern)
+- E.t2 work (the connector workspace itself)
 
-3 branches remain unmerged, on their own branches, awaiting follow-up:
+The concern isn't just merge conflicts — agents reasoned over stale planning docs, decisions, and progress.md. So design decisions in their work may be against superseded architecture.
+
+**Decision (Al, 2026-04-28)**: revert any merge that has even the slightest chance of being affected. Keep only 100% safe ones. Re-do the work cleanly in fresh sessions where the base is verified current.
+
+**Kept on this branch (100% safe):**
+- **H.t3** at `5d04b90` — landed in-place on the current branch (no isolation engaged), inherently against current state
+- **Blog-ingest** at merge `b56ed5c` — the agent self-corrected, fast-forwarded its worktree to current main, explicitly noted this in its report
+- The working-doc commits (`6cf85a0`, `d9809e2`)
+
+**Reverted from this branch (had any chance of stale-base contamination):**
+- B.t11 server history endpoint — reverted at `9974984`
+- E.t5 legal copy + UI rewiring — reverted at `c5e6f91`
+- E.t7 deletion runbook — reverted at `89e055f`
+- E.t8 compliance bundle — reverted at `f812a2e`
+- H.t7 evalset growth runbook — reverted at `c03bd9a`
+
+**The reverts removed code from this branch but the original agent branches still exist.** They can be referenced for substance (voice notes, design choices that survive the architecture refresh) but the WORK should be re-done cleanly in a future session that verifies its base is current. Specifically:
+- `worktree-agent-a8e6c237df1d50495` — B.t11 source (reference only)
+- `worktree-agent-a95b92173d0d6db38` — E.t5 source (reference only)
+- `worktree-agent-a457c8a59ea51c863` — E.t7 source (reference only)
+- `worktree-agent-aa937af55c9b5ea42` — E.t8 source (reference only)
+- `worktree-agent-aa4ecd7b52da09acb` — H.t7 source (reference only)
+
+Re-doing each is cheap because the substance + voice + structure is captured on those branches. A fresh-base agent can read the prior branch's work as input, verify against current planning docs, adjust where stale-base reasoning produced wrong choices, and commit clean.
+
+**Never merged, on their own branches, awaiting follow-up:**
 
 - **D.t9 — `worktree-agent-aca0f1cf63634e3d6` @ `4e59f2c`**. WIP. Translator + fetch + hook + 23 tests pass. The remaining issue is one swap: `runtime.thread.reset(messages)` doesn't seed thread state on the `useChatRuntime`-shaped runtime we use. Forward path identified by the agent: replay parts through the existing transport up front. Translator + fetch + hook scaffolding is reusable; only the seed call needs to change. Estimate to finish: ~1–2 hours of focused work.
 - **C.t1 — `worktree-agent-ab15fbf1e1e56aec9` @ `f736495`**. WIP. Tier 3 plan committed cleanly (`cfe76a9`); scaffolded implementation (Express + MCP SDK + pg pool + migrations + health endpoints + 2 tests) committed by the orchestrator after the agent's finalisation timeout. **Runtime verification deferred** — needs `docker-compose up` + `npm run migrate:up` to confirm the Postgres path actually works. Estimate: ~30 min focused verification + any small fix-ups.
