@@ -2,7 +2,7 @@
 
 **Parent**: chunk C (retrieval & data) — feeds the agent's grounding-content surface (search-first, not filter-first; see [inbox.md](../inbox.md) 2026-04-27 entry on retrieval patterns).
 
-**Status**: Plan only. Not yet implemented.
+**Status**: Implemented. Snapshot pipeline landed in `product/ingestion/` workspace package; first backfill run produces `data/blog/raw/<UTC-stamp>/`. Plan kept canonical for the design rationale and forward-looking sections.
 
 **Triggered by**: 2026-04-27 conversation — Swoop has a 5-year+ WordPress blog we'd forgotten to scope. Decision: pull it for agent grounding.
 
@@ -111,9 +111,9 @@ Per Al's steer: *"lean towards a rich dump so we can analyse and plan; we can al
 
 ### Script location
 
-`product/ingest/blog/fetch.ts` — Node TS, single-file initially.
+`product/ingestion/src/blog/fetch.ts` — Node TS, single-file. The `@swoop/ingestion` package is a workspace under `product/` (see `product/CLAUDE.md`); the original plan said `product/ingest/blog/fetch.ts` ahead of the workspace decision, the realised home is the equivalent path inside the workspace package's `src/`.
 
-Subject to broader-ingest-workspace decisions when chunk C is reshaped post-Julie-call. If the workspace rejig moves it elsewhere, the path inside `data/` doesn't change.
+Vitest suite alongside at `product/ingestion/src/blog/__tests__/fetch.test.ts` covers `parseArgs`, `computeRelevanceCutoff`, `buildPostsUrl`, `toFolderStamp`, `fetchPageWithRetry` (success / 5xx-retry / 429 / 4xx / network-error / retries-exhausted), `ManifestSchema`, `readPriorFloor`, and the `run()` orchestrator end-to-end with mocked fetcher (backfill, incremental, partial-failure, malformed-post, dry-run, 5y cutoff non-negotiable across modes).
 
 ### Dependencies
 
@@ -124,20 +124,22 @@ Subject to broader-ingest-workspace decisions when chunk C is reshaped post-Juli
 ### CLI shape
 
 ```bash
+# All commands run from product/. Direct npm scripts on the workspace:
+
 # Incremental — reads modified_after from latest manifest, pulls deltas only
-npx tsx product/ingest/blog/fetch.ts
+npm --workspace @swoop/ingestion run blog:fetch
 
 # Full backfill — ignores state, walks everything
-npx tsx product/ingest/blog/fetch.ts --backfill
-
-# Explicit floor — useful for catch-up after manifest corruption
-npx tsx product/ingest/blog/fetch.ts --since=2024-01-01
+npm --workspace @swoop/ingestion run blog:fetch:backfill
 
 # Dry-run — fetch headers + first page only, log what would happen
-npx tsx product/ingest/blog/fetch.ts --dry-run
+npm --workspace @swoop/ingestion run blog:fetch:dry-run
+
+# Explicit floor — useful for catch-up after manifest corruption (no npm alias; direct invocation)
+cd ingestion && npx tsx src/blog/fetch.ts --since=2024-01-01
 ```
 
-Wired as `npm run blog:fetch` (and `:backfill`, `:dry-run`) in the workspace's `package.json`.
+The three named scripts (`blog:fetch`, `blog:fetch:backfill`, `blog:fetch:dry-run`) are wired in `product/ingestion/package.json`. Output paths live under the repo root's gitignored `data/blog/raw/<UTC-stamp>/`, two levels above the workspace; the script resolves the repo root via `.git`/`.gitignore` marker walk.
 
 ### Algorithm
 
