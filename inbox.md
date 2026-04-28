@@ -6,6 +6,26 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-04-28 — Tier 2 plan refresh + Firestore cleanup follow-up
+
+Major Tier 2 plan refresh landed today: chunk C rewritten around Postgres + sales-shaped tools woven with existing PoC tools (C.19); B's session strategy clarified (B.22: ADK in-built → custom Postgres post-M4); E's handoff store flipped to Cloud SQL Postgres (E.10); Firestore dropped project-wide (C.23). 12 new decisions landed in [decisions.md](planning/decisions.md). All sub-decisions (C.13–C.17 sales-funnel + data rulings) also formalised.
+
+**Code follow-up tracked but deferred** (per C.23): Firestore name-references remain in three shipped/Tier-3 places that get cleaned up alongside the post-M4 session-backend implementation, not now:
+
+1. `planning/03-exec-agent-runtime-t2.md` — references `session/firestore.ts` and the `SESSION_BACKEND="firestore"` enum. Action: rename the file → `postgres.ts`, update enum value → `"postgres"`. Code is in `product/orchestrator/src/session/`.
+2. `planning/03-exec-agent-runtime-t6.md` — documents the same enum. Update to match.
+3. `planning/03-exec-observability-b.md` line 279 — describes a future contract for `createHandoffSubmitHandler` writing to Firestore. Update to "writes to Postgres `handoff` table" when chunk E.t2 lands.
+4. `planning/01-side-quest-persistence.md` lines 77, 80 — references "the eventual Firestore migration" in a partially-superseded doc. Action: archive review when the persistence side-quest is next touched.
+
+These are mechanical edits (~30 minutes total) that pair naturally with the post-M4 backend implementation work, rather than disrupting shipped Tier 3 plans now.
+
+**Other deferred follow-ups from today's plan refresh** (none blocking):
+
+- The `02-impl-retrieval-and-data-source-exploration.md` first-pass exploration doc has a superseded banner; eventual archival is fine when convenient.
+- The C.13–C.17 decisions are now in `decisions.md`; the inbox 2026-04-27 "plans-to-update" list referencing them as "pending" can be considered closed once Al confirms.
+
+---
+
 ## 2026-04-27 — Blog content ingest plan added
 
 Forgotten earlier; surfaced today. Swoop blog (WordPress, `/blog/wp-json/wp/v2/posts`) has 465 posts spanning 2010-10 → 2026-03 — 15+ years available, not just 5. Sized at ~10–25 MB total; backfill is trivial. Plan landed at [planning/03-exec-blog-ingest.md](planning/03-exec-blog-ingest.md). Storage at `data/blog/raw/<utc-stamp>/{manifest.json, posts.ndjson, log.txt}`; state derived from latest manifest, no separate state file. Out of scope for this task: HTML cleaning, chunking, embedding, derived-store insert, image mirroring — all gated on inspecting the actual dump first.

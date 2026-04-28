@@ -10,51 +10,32 @@ Mark `✅ Answered: ...` inline once resolved, then move to the closed section a
 
 ## Open
 
-### Julie call — 2026-04-27 (today)
+### Julie call — 2026-04-27 ✅ Held; outcomes captured below
 
-Topics for Julie. Some are stance-confirmation (we have a working hypothesis, want her sign-off); some are unblockers; some refresh existing open items.
+Most topics resolved during the call. Headline rulings landed in [inbox.md](inbox.md) 2026-04-27 entry "Swoop-side answers from Julie call" + decisions C.13–C.17 + B.22 + E.10 + C.18 + C.23 in [planning/decisions.md](planning/decisions.md). Per-topic status:
 
-**Sales-funnel "golden thread" — stance confirmation**
+- **Sales-funnel "golden thread"** ✅ **Confirmed**. Decision C.13. Bot's job is Awareness → Interest → Strong Consideration. With the gradient: bot engages on specifics when pushed, refuses only on the shadow-itinerary boundary (Al's "without the fascism").
+- **Pricing exposure** ✅ **Resolved tighter than proposed**: headline `base_price` only, no calculated ranges. Decision C.14. ETL surfaces `from_price` from `base_price` as-is, currency-normalised. Specifics route to specialist.
+- **Departures stance** ✅ **Confirmed**: no departures surfaced. Patagonia is demand-driven, departure data shifts daily, misrepresentation risk too high. Decision C.14.
+- **Specialist handoff persona** ✅ **Confirmed**: generic Patagonia specialist; no named advisor pre-call. Underlying reason sharper than expected — `swooper_*` fields are *customer* PII (Swoop's term for their customers), so we can't access them anyway. Decision C.14.
+- **Data refresh cadence** ✅ **Working agreement**: weekly manual SQL dump during M1–M5 is fine. Steady-state still TBC — could become an API, CDC, or scheduled feed. Captured under "Data pipeline" Q13 below.
+- **Derived data store posture** ✅ **Confirmed (Postgres approved post-call)**: Swoop are happy for us to use Postgres. Original optical concern unfounded. Decisions C.18 + C.23 + E.10 + B.22 follow from this.
+- **`ntag` system purpose** ⚠️ **Partly answered**: Julie confirmed `tag` is dead and `ntag` is live (decision C.17). Operational meaning of `ntag` (what each entry means; how `ntags_lookup` joins) is **still open** — route to Thomas / Richard during the chunk-C ETL design pass (`questions.md` data-pipeline Q5 territory).
+- **Refresh of existing open items** — touched on; the underlying items (Patagonia sales-thinking doc / sales inbox / legal counsel / Claude account tier / analytics platform) remain open as their own entries below.
 
-We're proposing the bot's job is to move users Awareness → Interest → Strong Consideration. Stoking imagination + supporting consideration. Specialist call closes the loop. The bot does NOT try to build itineraries or simulate booking — that's sales-team territory and risks a "shadow itinerary" that misrepresents what's actually bookable. The bot CAN engage with specifics (including price ranges) when a user pushes, as long as it's not crossing into shadow-itinerary territory.
+### Pre-purge conversation analysis policy — Julie + Swoop legal
 
-Confirm Julie agrees this is the right framing.
+Opened 2026-04-28 by the chunk F refresh. Chunk F's new placeholder task (F.t6, see [planning/02-impl-observability.md](planning/02-impl-observability.md) §2.7) builds a council-of-experts analysis harness that runs over conversations *before* retention TTL deletes them. Findings (anonymised summaries, expert observations on what visitors are asking for, where conversations get stuck, etc.) would land in a `conversation_analysis` table in Cloud SQL Postgres, retained longer than the raw conversation data.
 
-**Pricing exposure — where's the line?**
+Open questions:
+1. **Legal stance on retaining conversation derivatives** past the raw-data TTL. Anonymised expert findings — OK to keep indefinitely? Or do they inherit the raw conversation's TTL?
+2. **What do you want to learn from real conversations?** — drives which expert prompts we build. Candidates: sales-process effectiveness, voice/tone consistency, content quality (did imagination land?), refusal compliance, unmet visitor needs, content gaps in the catalogue / blog.
+3. **Reporting cadence + surface**: per-conversation summaries to a Swoop inbox? Daily/weekly batch reports? Spreadsheet feed? In-product dashboard?
+4. **Cost tolerance**: each expert pass is a Claude call per conversation. What's the per-conversation analysis budget? (Drives whether we run experts on every conversation or sample/batch.)
 
-We want to talk pricing because users will ask. Default proposal:
-- Headline "from £X per person" on every trip.
-- Calculated band ("£2,200–£3,800 for this trip across season + tier") when relevant.
-- Calculated regional/category bands ("Patagonia treks typically £1,500–£4,500").
-- On a user push: tier-by-tier or season-by-season ranges if derivable from the data.
-- Off-limits by default: specific dated departures with prices, single-supplement specifics, occupancy-specific quotes — those route to specialist.
+Why it matters: F.t6 is the chunk's "Puma learns from itself before forgetting itself" mechanism. Without Swoop's WHAT-to-learn input, the harness ships with a single starter prompt and no defined ongoing analyses. Real loss of learning if the question is left open through M5.
 
-Where's Swoop's line? In particular: are they comfortable with the bot quoting calculated ranges, or do they want a tighter "from £X — let's talk for the rest" stance?
-
-**Departures stance — confirm we don't surface dates**
-
-Patagonia is largely demand-driven; the SQL dump has no `departure` table. We're proposing the bot answers "departures run throughout the season — let's talk to a specialist about your preferred dates" rather than ever quoting bookable dates. Confirm.
-
-**Specialist handoff persona — generic vs named**
-
-The dump has no `swooper` / specialist table. We're proposing the bot hands off to a generic "Patagonia specialist" rather than assigning a named advisor pre-call. Confirm — and if there's a CRM-side mapping she wants us to surface eventually, capture how.
-
-**Data refresh cadence**
-
-Weekly manual ingest of a SQL dump while we iterate — OK with her? What's Swoop's preferred steady-state? (Scheduled dump, API, CDC, hybrid?) Affects chunk C §2.1 final shape.
-
-**Derived data store posture**
-
-We're proposing to ingest the dump into our own derived store (DuckDB-leaning — embedded, AI-side, optically distinct from her MariaDB) rather than ever querying Swoop's MariaDB directly. Confirm she's comfortable with that (separation, security, operational independence).
-
-**`ntag` system purpose** — 79 entries plus 157K lookups. Is this the live tagging system superseding the legacy `tag` table (2,374 entries), or a different domain? Julie may know; if not, route to Thomas/Richard.
-
-**Refresh of existing open items** — also worth raising while we have her:
-- Patagonia sales-thinking doc status (Luke + Lane, target ~May 4) — see "Patagonia sales-thinking doc status" below.
-- Sales inbox + SMTP — see below.
-- Legal counsel engagement model — see below.
-- Claude account Enterprise tier — see below.
-- Analytics platform preference — see below.
+Where it lands: Tier 2 chunk F (observability & analytics).
 
 ---
 

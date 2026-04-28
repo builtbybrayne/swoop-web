@@ -110,6 +110,38 @@ Handed over to Swoop's internal team post-M5.
 - Long-retention path: export to BigQuery with its own retention policy (Swoop's call once analytics platform is chosen).
 - PII: avoided at emission (see §2.2). If any payload field could carry PII, it's flagged in the schema and deliberately redacted.
 
+### 2.7 Conversation-analysis harness (placeholder)
+
+**Status**: scoped here as a placeholder Tier 2 task. The WHAT (which analyses we run) is deliberately deferred — a real product/legal decision that wants Swoop input. The HOW (a simple harness for running *something*) is committed in scope so we have a place to plug analyses in once the WHAT is decided.
+
+**Why this exists**: handoffs and conversation logs hit retention TTLs (chunk E §2.7 — `disqualified` 90 days, `qualified`/`referred_out` up to 12 months or until CRM ingest, in-progress sessions 24h idle / 7d archived). Without an extraction step before purge, learnings about what conversations succeed, fail, or surface unmet visitor needs disappear with the data. The Puma project should be able to *learn from itself* before it forgets itself.
+
+**Direction (not yet specified)**: the natural shape is a **council-of-experts** analysis pattern — multiple Claude prompts each playing a different expert role, run independently against a single conversation (or a batch), each emitting structured findings. Candidate experts:
+- Sales-process expert (did the conversation move the visitor through the funnel? Where did it stick?)
+- UX/conversational-design expert (was the bot's voice on-brand? Were the tools picked at the right moments?)
+- Content/imagination expert (did `stoke_imagination` / `recall_someone_who` outputs land vividly? Were customer stories on-target?)
+- Refusal/compliance expert (any shadow-itinerary slips? Disclosure-respect intact?)
+
+The harness composes findings across experts into either a per-conversation summary or a batch-pattern report. Findings can feed:
+- Chunk H's evalset (interesting conversations become regression scenarios)
+- Chunk G's content iteration (style-avoid additions, system-prompt refinements)
+- Sales-team feedback (qualitative reports on what visitors are asking for)
+
+**M1 scope**: build the **harness**, not the experts. Specifically:
+- Single Cloud Run Job invocation that takes a session id (or session-id list) → fetches the conversation events from Cloud Logging → runs N expert prompts in parallel against the transcript → writes findings to a `conversation_analysis` table in Cloud SQL Postgres before retention runs.
+- One concrete expert prompt as a starter (probably the sales-process one) so the harness is exercised end-to-end and produces *something* usable.
+- Schema for findings designed for additive expert growth — adding experts later is config + a prompt file, not a code change.
+
+Crucially: this is **observation, not closing the loop**. We don't auto-feed findings back into the agent at runtime. They land in the analysis table for human review (or for chunk H's eval refresh). Closing the loop is a future-V decision.
+
+**Deferred (post-M1, gated on the WHAT decision):**
+- Which experts to run. Designed via a Tier 3 task once Swoop confirm what they want to learn.
+- Cadence (per-conversation immediate, daily batch, weekly batch).
+- Reporting surface (text summaries to Swoop's inbox, dashboard, spreadsheet).
+- Whether disqualified / very-short conversations get analysed at all (cost vs signal trade-off).
+
+**Open with Swoop** (`questions.md`): legal stance on retention of conversation derivatives (anonymised summaries, expert findings) past the raw-conversation TTL — required to size the analysis table's retention.
+
 ---
 
 ## 3. Architectural principles applied here
@@ -207,9 +239,10 @@ Chunk F is done when:
 - **F.t3 — Producer integration**: each of B / C / D / E wires the emission points. Coordinated; lands via small PRs per producer.
 - **F.t4 — Spot-check runbook**: documented queries + expected sequences.
 - **F.t5 — BigQuery export readiness check** (no wiring): schema compatibility verified; documented. Actual export flipped on only if Swoop asks.
+- **F.t6 — Conversation-analysis harness (placeholder, post-M1)**: per §2.7. Build the harness — Cloud Run Job that reads conversation events for a session-id, runs N expert prompts in parallel, writes structured findings to a `conversation_analysis` table in Cloud SQL Postgres before retention TTL hits. Ship one starter expert prompt (sales-process leaning) so the harness produces something usable end-to-end. **The WHAT — which experts to run, cadence, reporting surface — is deferred** pending Swoop's WHAT-to-learn decision (`questions.md` open item). Subsequent expert additions are config + a prompt file, not code changes. **Pairs with chunk E.t6 retention enforcement**: this runs *before* the auto-purge so learnings are extracted while raw data is still available.
 
-F.t1 + F.t2 are foundational — they precede F.t3 on each producer. F.t4 is lightweight. F.t5 is a one-off verification.
+F.t1 + F.t2 are foundational — they precede F.t3 on each producer. F.t4 is lightweight. F.t5 is a one-off verification. F.t6 is the placeholder structural task; sized for ~1–2 days of harness work + 0.5 day for one starter expert prompt.
 
-Parallelism: F.t1 + F.t2 are sequential but tiny. F.t3 depends on producers being far enough along to have real emission points (post-M1). F.t4 + F.t5 are end-of-chunk.
+Parallelism: F.t1 + F.t2 are sequential but tiny. F.t3 depends on producers being far enough along to have real emission points (post-M1). F.t4 + F.t5 are end-of-chunk. F.t6 is post-M1 and depends on E.t6 (retention) + B / E being far enough along to produce real analyzable conversations.
 
-Estimated: 1–1.5 days of focused F-owned work (F.t1, F.t2, F.t4, F.t5), plus 0.25 day per producer to wire F.t3 (B / C / D / E).
+Estimated: 1–1.5 days of focused F-owned work (F.t1, F.t2, F.t4, F.t5), plus 0.25 day per producer to wire F.t3 (B / C / D / E), plus ~1.5–2 days for F.t6 (harness + starter expert).

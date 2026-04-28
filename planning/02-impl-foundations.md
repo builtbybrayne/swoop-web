@@ -76,7 +76,7 @@ A running record of Tier 2 and Tier 3 decisions with date, rationale, and who de
 ### 2.7 Runtime targets
 Cloud Run is the runtime target for every deployable in Puma — both persistent services (agent orchestrator, data connector) and any scheduled/batch jobs (scraper or API-ingest, if either lands). **Firebase Functions is not in scope** unless a concrete need emerges that Cloud Run + Cloud Scheduler can't serve; keeping the deployment surface uniform reduces complexity and avoids the Firebase Emulator yak-shave.
 
-**Firebase Emulators are not used in Puma local dev.** For persistence during the Phase 1 vertical slice, use in-memory or file-backed adapters behind the `ts-common` session / handoff store interfaces. When real persistence becomes necessary (post-M4), connect to a real GCP dev Firestore (or whichever store gets picked in chunk B/E). This sidesteps emulator setup pain without compromising production fidelity — all the real integration happens against real GCP.
+**Firebase Emulators are not used in Puma local dev.** For persistence during the Phase 1 vertical slice, use in-memory or file-backed adapters behind the `ts-common` session / handoff store interfaces. When real persistence becomes necessary (post-M4), connect to a real **Cloud SQL Postgres** dev instance (single-store per C.18: retrieval, handoff, and the post-M4 custom session backend all share one Postgres instance). Locally during dev, the same Docker Compose Postgres image used for retrieval testing serves the same role. This sidesteps emulator setup pain without compromising production fidelity — all the real integration happens against real GCP.
 
 ---
 
@@ -113,7 +113,7 @@ Path-level only. Specific file contents get copied / adapted during Tier 3 execu
 | A.5 | CI provider | **GitHub Actions default; re-evaluate for Cloud Build at M4** | Lowest friction to start. Cloud Build is more "native" for the GCP handover story and worth switching to if the deploy pipeline starts to want it. Mark as medium swap-cost (CI workflow rewrite). |
 | A.6 | Test-runner-at-foundation-level | **Scaffold Vitest; author no tests yet** | Real test surface is the Tier 2 H harness. A package-level runner exists so a future chunk (translator layer, classifier) can drop focused tests in when the failure mode is genuinely narrow. |
 | A.7 | Runtime target | **Cloud Run for all deployables (services + jobs)** | Uniform deployment surface; avoids Firebase Functions scope + the Emulator yak-shave. Firebase Functions remains a future option if a concrete need appears. |
-| A.8 | Local persistence during Phase 1 vertical slice | **In-memory / file-backed adapters behind `ts-common` interfaces** | Skips Firebase Emulator setup pain. Real GCP dev Firestore (or equivalent) gets wired when persistence genuinely matters (post-M4). |
+| A.8 | Local persistence during Phase 1 vertical slice | **In-memory / file-backed adapters behind `ts-common` interfaces** | Skips Firebase Emulator setup pain. Real Cloud SQL Postgres dev instance gets wired when persistence genuinely matters (post-M4) — single-store per C.18 (retrieval + handoff + post-M4 sessions all share one Postgres). |
 
 Decisions deferred out of this chunk — they don't gate the foundation:
 
