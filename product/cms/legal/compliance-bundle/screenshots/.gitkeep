@@ -1,9 +1,0 @@
-# Reserved for compliance-bundle screenshots.
-#
-# Files to add before sending the bundle to legal counsel:
-#   01-disclosure-opening.png  — paired AI-disclosure + tier-1 consent screen
-#   02-chrome-badge.png        — persistent chrome badge during conversation
-#   03-lead-capture-widget.png — tier-2 consent + marketing opt-in inside the lead-capture widget
-#   04-privacy-info-modal.png  — privacy-info content reachable from the disclosure screen
-#
-# See ../consent-flow.md "Screenshots" section for the canonical list.
