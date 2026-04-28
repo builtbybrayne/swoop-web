@@ -89,25 +89,29 @@ GDPR requires a lawful basis for processing personal data. Puma stores conversat
 
 ### 2.4 Durable handoff store
 
-Firestore collection (default per top-level §9). Keyed by handoff id. Stores:
-- The full handoff payload (§2.1)
-- Timestamps (conversation start, handoff submission, email delivery)
-- Delivery status (email sent / bounced / deferred)
-- Retention metadata (created-at, scheduled-deletion)
+**Status (2026-04-28)**: shipped as an interim file-backed implementation; Firestore swap deferred to post-IAM. Decision **E.12**.
 
-Behind a `ts-common` interface so the backend can swap (Cloud SQL if Swoop prefers relational; Cloud Storage JSON if simpler; BigQuery if the analytics story drags the schema there).
+Interface lives at `@swoop/connector/src/handoff/store.ts`: `HandoffStore { save, get, list }`, keyed by `handoffId`. The eventual `FirestoreHandoffStore` will implement the same interface; caller code (`submitHandoff`, the route, the tests) sees no change at swap time.
 
-Write path: chunk C's `handoff_submit` tool is the writer. Chunk E's Tier 3 plan defines the write logic (idempotent, verdict-aware, consent-gated).
+Today's implementation is `FsHandoffStore` — file-backed JSON under `<orchestrator-package-root>/var/handoffs/<handoffId>.json`. Atomic write via tmp-file-rename. Filename safety guarded by `^[a-zA-Z0-9_-]+$` regex (path-traversal defence). Schema-validated round-trip on `get()` so a corrupted record can't bleed into runtime code. Directory ignored in `.gitignore` so visitor PII never enters the repo.
+
+Tomorrow's implementation: `FirestoreHandoffStore` (or whichever backend wins after Cloud Run IAM lands). Same interface; one new class file; one config flip at boot. Cloud SQL if Swoop prefers relational; Cloud Storage JSON if simpler; BigQuery if the analytics story drags the schema there — all options remain open.
+
+Write path: the connector's `submitHandoff()` is the writer. Triggered today via the orchestrator's `POST /handoff/submit` route (decision **E.13**). Idempotent on `handoffId` (last-write-wins), verdict-aware, consent-gated (decision **E.4** + the backstop in `submitHandoff()`).
 
 ### 2.5 Email delivery
 
-Template from chunk G (`product/cms/templates/handoff-email.md`), rendered against the handoff payload, sent via SMTP (nodemailer — PoC pattern, carried forward in chunk C's mailer evolution).
+**Status (2026-04-28)**: shipped, off by default behind `HANDOFF_EMAIL_ENABLED=false`. Mailer code, two templates, and the verdict-aware send path are in production-ready shape; the master switch flips when Julie confirms sales-inbox + SMTP creds.
 
-- **`qualified`**: full handoff email to the sales inbox. Verbose, warm, quotes the visitor.
-- **`referred_out`**: lightweight email, may go to a different inbox or be skipped entirely (Tier 3 decides). Tells sales the lead came through but isn't a direct fit.
-- **`disqualified`**: no email. The durable record exists for analytics; sales doesn't see it.
+Templates live at `product/cms/templates/handoff/{qualified,referred-out}.md` (one per verdict that ships email; `disqualified` produces no email per E.3). Rendered against the `HandoffPayload` via the tiny `{{path.to.field}}` substituter at `@swoop/connector/src/handoff/template-renderer.ts`. Plain-text body. Subject line generated server-side from verdict + reason code.
 
-SMTP provider: TBC — tracked in `questions.md` (Julie to confirm whether a transactional provider like Postmark is in play, or Swoop's own SMTP, or Gmail via app password as the PoC did).
+Sent via SMTP (nodemailer). Transport options come from env: `SMTP_HOST` (default `smtp.gmail.com`), `SMTP_PORT` (465), `SMTP_SECURE` (true), `SMTP_USER`, `SMTP_PASS`. Cross-field config refine: when `HANDOFF_EMAIL_ENABLED=true`, `HANDOFF_EMAIL_FROM` + `HANDOFF_EMAIL_TO_QUALIFIED` + `SMTP_USER` + `SMTP_PASS` are all required at startup or boot fails.
+
+- **`qualified`**: full handoff email to `HANDOFF_EMAIL_TO_QUALIFIED`. Verbose, quotes the visitor's reason text + motivation anchor.
+- **`referred_out`**: lighter email to `HANDOFF_EMAIL_TO_REFERRED_OUT` (falls back to `HANDOFF_EMAIL_TO_QUALIFIED` if blank — common-case at launch with one inbox + subject-prefix differentiation).
+- **`disqualified`**: no email; durable record only.
+
+SMTP provider TBC pending Julie. Default assumption: a transactional provider if Swoop has one (Postmark / SES / Mailgun); fallback Gmail-via-app-password for Phase 1 dev. Defaults in env-example are Gmail-shaped so dev works out of the box if `SMTP_USER` / `SMTP_PASS` are app-password-style.
 
 ### 2.6 Disclosure + consent copy
 
@@ -183,6 +187,11 @@ Al's framing from the 30 Mar proposal: "I handle this simply; available to work 
 | E.8 | Retention — in-progress sessions | **24h idle → archive; 7d archive → delete.** | Matches chunk B §2.6. |
 | E.9 | Data-deletion process | **Manual runbook, Swoop-operated post-handover.** No automated self-service UI in Puma. | Traffic volume doesn't justify a self-service UI yet. |
 | E.10 | Legal counsel engagement | **Swoop-driven review loop. Al provides the compliance bundle; Swoop's counsel signs off.** | 30 Mar proposal framing; SLA pending (`questions.md`). |
+| E.11 | Handoff side-effects home | **`@swoop/connector` workspace.** Mailer + store + `submitHandoff()` orchestration live there. Orchestrator imports as a workspace dep. | Architecturally correct: connector owns data + side-effects, orchestrator owns the agent loop. Initial placement in orchestrator was a transient artefact of the empty-workspace state; relocated 2026-04-28. |
+| E.12 | Durable store implementation | **`FsHandoffStore` interim; `FirestoreHandoffStore` is the swap target.** Both implement the same `HandoffStore` interface in `@swoop/connector/src/handoff/store.ts`. | E.1 named Firestore as the backend; GCP IAM is blocked on Thomas. Rather than wait, ship a tiny file-backed implementation behind the same interface, swap when IAM lands. Caller code is invariant. Decided 2026-04-28. |
+| E.13 | Widget submit path | **Discrete `POST /handoff/submit` HTTP endpoint on the orchestrator.** Widget POSTs the form + agent's tool-call args; route enriches against session state and delegates to `submitHandoff()` from `@swoop/connector`. The widget then resolves the assistant-ui tool call locally with `HandoffSubmitOutput`. | Rejected: (a) "agent calls handoff_submit as another tool on the next turn" wastes an LLM call + adds latency; (b) "intercept the addResult inside the chat SSE handler" tangles two lifecycles. Direct HTTP is the cleanest separation: form submission is a discrete action, not a chat turn. Tested in isolation (`handoff-submit.test.ts`). Decided 2026-04-28. |
+| E.14 | Payload assembly | **Server-side enrichment from session state, not client-side bundling.** The widget sends only what it has (agent args + form contact + tier-2 consent + sessionId); the route handler builds the full `HandoffPayload` by enriching against the session snapshot (handoffId, tier-1 timestamp, conversation start, turn count, wishlist, entry URL). | Single source of truth, no widget-tampering surface, no staleness if session state evolved post tool-trigger. Wire shape (`HandoffSubmitRequestSchema`) is `.strict()` — extra fields rejected. Decided 2026-04-28. |
+| E.15 | Tier-2 consent timestamp | **Captured client-side at the moment of submit (`new Date().toISOString()` before POST).** Server takes the value into the durable record verbatim. | The timestamp encodes the visitor's *intent* (the click), not the server's processing time. GDPR audit posture is "when did the visitor consent". `session.handoffSubmittedAt` is the complementary server-time field. Decided 2026-04-28. |
 
 Deferred:
 - Cohort-level deletion (e.g. "delete all handoffs before date X") — runbook handles.
@@ -258,16 +267,16 @@ Chunk E is done when:
 
 ## 10. Order of execution (Tier 3 hand-off)
 
-- **E.t1 — Handoff payload + schema finalisation**: in `ts-common`. Verdict codes, consent fields, reason taxonomy.
-- **E.t2 — Durable handoff store**: Firestore collection, interface, write path from `handoff_submit` (collaborates with C.t4).
-- **E.t3 — Verdict-aware email delivery**: integrate with chunk G template; wire into the connector's mailer (C); handle `qualified` / `referred_out` / no-email cases.
-- **E.t4 — Consent flow end-to-end**: consent UI in lead-capture (D); backstop in `handoff_submit` (C); consent record persisted (E.t2).
-- **E.t5 — Disclosure + consent copy authoring**: `product/cms/legal/` content. Al drafts; later reviewed by legal counsel.
-- **E.t6 — Retention enforcement**: scheduled job or Firestore TTL; covers sessions, handoffs (per verdict), logs.
-- **E.t7 — Data-deletion runbook**: documented steps for Swoop-operated manual deletion.
-- **E.t8 — Compliance bundle for legal**: packaged disclosure copy, consent flow (screenshots), retention policy, processor list, DPAs, data flow diagram.
-- **E.t9 — Legal review coordination**: send bundle; track iteration; land sign-off for M5.
+- **E.t1 — Handoff payload + schema finalisation**: ✅ shipped 2026-04-24. Verdict codes, consent fields, reason taxonomy in `@swoop/common/handoff`. See `planning/03-exec-handoff-t1.md`.
+- **E.t2 — Durable handoff store**: ✅ shipped 2026-04-28 as **interim** (`FsHandoffStore` file-backed). Firestore swap deferred until GCP IAM lands; same `HandoffStore` interface ready for the new class. See `planning/03-exec-handoff-t2-t3.md` + decision **E.12**.
+- **E.t3 — Verdict-aware email delivery**: ✅ shipped 2026-04-28, **off by default** (`HANDOFF_EMAIL_ENABLED=false`). Mailer + templates + `submitHandoff()` orchestration in place. Flips on once Julie confirms SMTP + sales-inbox. See `planning/03-exec-handoff-t2-t3.md`.
+- **E.t4 — Consent flow end-to-end**: ✅ functionally shipped 2026-04-28. Tier-1 disclosure already lived in D.t4 + tier-1 backstop in `/chat`; tier-2 consent now captured in lead-capture widget + persisted into the durable record + backstopped in `submitHandoff()`. The end-to-end audit trail (paper trail of which copy version the visitor saw) needs E.t5 (versioned copy files) to fully close.
+- **E.t5 — Disclosure + consent copy authoring**: open. `product/cms/legal/` content authoring is Al's editorial work. Today's strings are placeholders inline in the components.
+- **E.t6 — Retention enforcement**: open. No cron / sweeper for the handoff store yet. The `var/handoffs/` dir grows forever in dev; needs to swap into Firestore TTL semantics post-IAM.
+- **E.t7 — Data-deletion runbook**: open. Documented steps for Swoop-operated manual deletion against the durable store backend.
+- **E.t8 — Compliance bundle for legal**: open. Packaged disclosure copy, consent flow (screenshots), retention policy, processor list, DPAs, data flow diagram.
+- **E.t9 — Legal review coordination**: open; blocks M5.
 
-E.t1 is Phase 0 contract work (settles the handoff payload shape). E.t2–E.t4 run in Phase 1 / early Phase 2. E.t5 can start in parallel (content drafting, like chunk G). E.t6–E.t9 come later — E.t9 blocks M5.
+E.t1 was Phase 0 contract work. E.t2–E.t4 shipped in two waves (E.t1 in wave-1, E.t2/t3/t4 on 2026-04-28). E.t5 starts in parallel with chunk G's content drafting. E.t6–E.t9 come later — E.t9 blocks M5.
 
-Estimated: 2–3 days of focused work for E.t1–E.t4 (the functional handoff path), 1 day for E.t5 (copy), 0.5 day for E.t7 + E.t8 (runbook + bundle), plus elapsed time (not Al-time) for E.t9 legal review.
+Estimated remaining: 1 day for E.t5 (copy), 0.5 day each for E.t6 (retention enforcement, post-IAM) and E.t7 + E.t8 (runbook + bundle), plus elapsed time (not Al-time) for E.t9 legal review and the Firestore swap when IAM lands.

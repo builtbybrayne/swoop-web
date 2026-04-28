@@ -244,3 +244,67 @@ export type HandoffSubmitConsentGate = Pick<
   HandoffPayload["consent"],
   "conversationGranted" | "handoffGranted"
 >;
+
+// -----------------------------------------------------------------------------
+// HandoffSubmitRequestSchema — the HTTP wire shape between the lead-capture
+// widget and the orchestrator's `POST /handoff/submit` endpoint.
+//
+// What's IN this shape:
+//   - `sessionId` — the orchestrator looks up session state to enrich the
+//     payload (tier-1 consent timestamp, conversation start, turn count,
+//     wishlist accumulator, motivationAnchor in session if present).
+//   - The agent's tool-call args (`verdict`, `reasonCode`, `reasonText`,
+//     `motivationAnchor`) — passed back from the widget which received them
+//     via `props.args`.
+//   - The form's contact + tier-2 consent (handoff + optional marketing).
+//
+// What's OUT of this shape (server enriches before validating against
+// `HandoffPayloadSchema`):
+//   - `handoffId` — server-generated.
+//   - `consent.conversationGranted` + `conversationTimestamp` — pulled from
+//     session state (the source of truth for tier-1 consent).
+//   - `session` block — derived from session state + the request itself.
+//   - `visitorProfile` + `wishlist` — read from session state.
+// -----------------------------------------------------------------------------
+
+export const HandoffSubmitRequestSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    verdict: HandoffVerdictSchema,
+    reasonCode: z.string().min(1),
+    reasonText: z.string().min(1),
+    motivationAnchor: z.string().optional(),
+    /** Required on qualified / referred_out; absent on disqualified. */
+    contact: HandoffContactSchema.optional(),
+    consent: z.object({
+      handoffGranted: z.boolean(),
+      handoffTimestamp: z.string().datetime(),
+      marketingGranted: z.boolean().optional(),
+      marketingTimestamp: z.string().datetime().optional(),
+      consentCopyVersion: z.string().optional(),
+    }),
+  })
+  .strict();
+export type HandoffSubmitRequest = z.infer<typeof HandoffSubmitRequestSchema>;
+
+export const HandoffSubmitResponseSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    handoffId: z.string(),
+    emailStatus: z.enum(["sent", "skipped", "failed"]),
+    emailReason: z.string().optional(),
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.enum([
+      "session_not_found",
+      "consent_required",
+      "invalid_request",
+      "consent_missing",
+      "store_failed",
+      "internal_error",
+    ]),
+    detail: z.string().optional(),
+  }),
+]);
+export type HandoffSubmitResponse = z.infer<typeof HandoffSubmitResponseSchema>;

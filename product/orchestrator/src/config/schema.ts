@@ -142,6 +142,32 @@ export const configSchema = z
     // latent architectural prep, not a perf win.
     WARM_POOL_SIZE: z.coerce.number().int().nonnegative().default(0),
     WARM_POOL_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+
+    // --- Handoff mailer (E.t3) ------------------------------------------
+    // Off by default. Flip HANDOFF_EMAIL_ENABLED to true once the
+    // sales-inbox address + SMTP creds are confirmed (Julie — tracked in
+    // questions.md). When enabled, the cross-field refine below requires
+    // HANDOFF_EMAIL_FROM, HANDOFF_EMAIL_TO_QUALIFIED, SMTP_USER, SMTP_PASS.
+    HANDOFF_EMAIL_ENABLED: z
+      .string()
+      .default('false')
+      .transform((s) => s.toLowerCase() === 'true' || s === '1'),
+    HANDOFF_EMAIL_FROM: z.string().trim().default(''),
+    HANDOFF_EMAIL_TO_QUALIFIED: z.string().trim().default(''),
+    /** Falls back to HANDOFF_EMAIL_TO_QUALIFIED at send time if blank. */
+    HANDOFF_EMAIL_TO_REFERRED_OUT: z.string().trim().default(''),
+    /** Directory holding qualified.md / referred-out.md template files. */
+    HANDOFF_TEMPLATES_DIR: z.string().trim().min(1).default('../cms/templates/handoff'),
+
+    // --- SMTP transport (consumed by the handoff mailer) ----------------
+    SMTP_HOST: z.string().trim().min(1).default('smtp.gmail.com'),
+    SMTP_PORT: z.coerce.number().int().positive().default(465),
+    SMTP_SECURE: z
+      .string()
+      .default('true')
+      .transform((s) => s.toLowerCase() !== 'false' && s !== '0'),
+    SMTP_USER: z.string().trim().default(''),
+    SMTP_PASS: z.string().trim().default(''),
   })
   // Warm-pool TTL must be strictly shorter than the idle-session TTL.
   // A warm entry outliving the session sweeper is a footgun: the pool could
@@ -153,6 +179,22 @@ export const configSchema = z
       path: ['WARM_POOL_TTL_MINUTES'],
       message:
         'WARM_POOL_TTL_MINUTES (in seconds) must be strictly less than SESSION_TTL_IDLE_HOURS (in seconds) so warm entries do not outlive the session sweeper window.',
+    },
+  )
+  // When the handoff mailer is enabled, the credentials + recipient + from
+  // address must all be present. Fail-fast at config parse so a misconfigured
+  // production deploy never silently swallows handoffs.
+  .refine(
+    (cfg) =>
+      !cfg.HANDOFF_EMAIL_ENABLED ||
+      (cfg.HANDOFF_EMAIL_FROM.length > 0 &&
+        cfg.HANDOFF_EMAIL_TO_QUALIFIED.length > 0 &&
+        cfg.SMTP_USER.length > 0 &&
+        cfg.SMTP_PASS.length > 0),
+    {
+      path: ['HANDOFF_EMAIL_ENABLED'],
+      message:
+        'HANDOFF_EMAIL_ENABLED=true requires HANDOFF_EMAIL_FROM, HANDOFF_EMAIL_TO_QUALIFIED, SMTP_USER, and SMTP_PASS. Set them in .env or set HANDOFF_EMAIL_ENABLED=false to disable the mailer.',
     },
   );
 // Note: Zod's default `.strip()` mode silently drops extra keys from the
@@ -172,6 +214,7 @@ export type RawConfig = z.infer<typeof configSchema>;
  *   - packageRoot: absolute fs path to this package's root.
  *   - systemPromptDirAbsolutePath: SYSTEM_PROMPT_DIR resolved against packageRoot.
  *   - skillsDirAbsolutePath: SKILLS_DIR resolved against packageRoot.
+ *   - handoffTemplatesDirAbsolutePath: HANDOFF_TEMPLATES_DIR resolved against packageRoot.
  *   - isProduction: NODE_ENV === 'production'.
  *
  * Backward-compatibility with B.t1:
@@ -189,6 +232,8 @@ export type Config = Readonly<
     readonly systemPromptDirAbsolutePath: string;
     /** Absolute path to the skills directory (ADK loadAllSkillsInDir base path). */
     readonly skillsDirAbsolutePath: string;
+    /** Absolute path to the handoff email-template directory (E.t3 mailer reads from here). */
+    readonly handoffTemplatesDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. Controls prompt-loader caching, CORS strictness, etc. */
     readonly isProduction: boolean;
   }

@@ -46,6 +46,12 @@ coverage/
 product/harness/runs/*
 !product/harness/runs/.gitkeep
 
+# Local-only file-backed durable stores (E.t3 interim — FsHandoffStore writes
+# handoff records here pending the Firestore swap targeted in E.t2). Never
+# commit visitor PII / contact details to git.
+product/orchestrator/var/
+product/connector/var/
+
 # OS / misc
 Thumbs.db
 

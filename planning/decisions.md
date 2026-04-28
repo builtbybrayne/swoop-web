@@ -8,6 +8,58 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## E.15 — Tier-2 consent timestamp is captured client-side at submit, not server-side
+
+**Decided**: 2026-04-28
+**Owner**: E.t3 wiring session
+**Rationale**: The lead-capture widget produces `consent.handoffTimestamp` from `new Date().toISOString()` at the moment the user clicks Send, before the POST. The server takes the value verbatim into the durable record. Alternative considered: server stamps `now()` at request-handler entry. Chose client-side for two reasons: (i) the timestamp encodes the visitor's *intent* (the click), and the round-trip latency could be material on a flaky connection — server-stamping would mis-attribute the lawful-basis moment; (ii) GDPR audit posture is "what time did the visitor consent" not "what time did the server hear about it". The server still snapshots `handoffSubmittedAt` (different field) into `session.handoffSubmittedAt` from its own clock — that's the processing-time signal, complementary to the consent-time signal.
+
+**Swap cost**: Low. If a future audit requires a single authoritative clock source, swap to server-stamping in the route handler — the schema field stays the same. The field name disambiguates the meaning either way.
+
+## E.14 — Server-side payload enrichment from session state, not client-side bundling
+
+**Decided**: 2026-04-28
+**Owner**: E.t3 wiring session
+**Rationale**: The widget could in principle bundle the entire `HandoffPayload` (handoffId, session metadata, wishlist, visitor profile) before POSTing. Rejected. The widget receives the agent's tool-call args (`verdict`, `reasonCode`, `reasonText`, `motivationAnchor`) and the form's contact + tier-2 consent — that's it. Everything else (handoffId, conversationStartedAt, turnCount, entryUrl, tier-1 consent timestamp, wishlist accumulator) is server-state and the orchestrator is the source of truth. Sending it through the client would create three failure modes: (a) widget tampering yielding a falsified record, (b) staleness if session state evolved after the agent triggered the widget, (c) duplication of trust paths. The server-side enrichment in `enrichPayload()` (see `product/orchestrator/src/server/handoff-submit.ts`) keeps a single source of truth and makes the client surface tiny.
+
+**Swap cost**: Low. The wire shape (`HandoffSubmitRequestSchema` in `@swoop/common/handoff`) is what's externally visible; if a future client wants to send pre-enriched fields they get ignored — the schema is `.strict()` and the enrichment function builds the canonical payload regardless.
+
+## E.13 — Widget submit path: discrete `POST /handoff/submit` HTTP endpoint, not an MCP tool call
+
+**Decided**: 2026-04-28
+**Owner**: E.t3 wiring session
+**Rationale**: Three viable patterns for "widget form submission triggers backend persistence + email":
+  (a) The widget calls `props.addResult(payload)`; assistant-ui forwards it as the `handoff` tool's result; the agent decides on the next turn to call `handoff_submit` as another MCP tool; the connector's `handoff_submit` runs the side-effects. (Original PoC pattern.)
+  (b) The orchestrator intercepts the addResult inside the chat SSE flow, runs the side-effects, replaces the tool result before the agent sees it.
+  (c) The widget POSTs to a discrete `/handoff/submit` HTTP endpoint on the orchestrator, which validates + enriches + calls the connector's `submitHandoff` in-process, returns a typed `HandoffSubmitResponse` to the widget. The widget then resolves the assistant-ui tool call locally.
+
+Chose (c). Rationale: (i) form submission is a discrete user action, not part of the conversation flow — it has its own HTTP semantics, its own success/failure shape, its own loading state, and the visitor expects a synchronous outcome (confirmation card or error toast). Threading it through SSE conflates two different lifecycles. (ii) Re-entry into the agent loop just to perform a side-effect wastes an LLM call and adds latency; (b) avoids that but at the cost of a stateful interceptor in the chat handler. (iii) Pattern (c) lets the widget render an inline "couldn't send — try again" affordance directly off the response code, with no agent retry logic. (iv) The endpoint contract is fully tested in isolation — `handoff-submit.test.ts` covers happy path + 404 / 403 / 422 / 500 failure modes without spinning up the runner. (v) `addResult` still fires (with `HandoffSubmitOutput { status: 'accepted', handoffId }`) so assistant-ui's tool-call lifecycle resolves cleanly and the agent gets a tidy result for the next turn.
+
+**Swap cost**: Low. The `submitHandoff()` function in `@swoop/connector` is the single side-effect surface. A future MCP `handoff_submit` tool simply imports + delegates to it. The HTTP endpoint can stay (and the MCP tool can be added alongside if Swoop ever wants third-party clients to drive handoffs).
+
+## E.12 — Durable handoff store: file-backed `FsHandoffStore` is the interim; Firestore swap is the E.t2 target
+
+**Decided**: 2026-04-28
+**Owner**: E.t3 wiring session
+**Rationale**: E.1 (2026-04-22) named Firestore as the durable backend. Firestore in-process needs GCP credentials + a project + IAM (blocked on Thomas / "AI Pat Chat") and the chunk-E work was unblocked first. Rather than wait, we shipped a tiny `FsHandoffStore` implementation behind the same `HandoffStore` interface that the eventual `FirestoreHandoffStore` will satisfy. Properties:
+
+- One JSON file per handoff at `<connector-or-orchestrator-package-root>/var/handoffs/<handoffId>.json`, atomically written via tmp-file-rename.
+- Filename safety: handoffId checked against `^[a-zA-Z0-9_-]+$` before any fs op (path-traversal guard).
+- Schema-validated round-trip: `get` parses each file against `HandoffPayloadSchema` and returns null on mismatch, so a corrupted record can't bleed into runtime code.
+- Disabled in `.gitignore` (`product/orchestrator/var/`, `product/connector/var/`) so visitor PII never leaks into git.
+
+The E.t2 task in the planning doc described "Firestore default + a `ts-common` interface so the backend can swap". We have the interface (in `@swoop/connector/src/handoff/store.ts`); we have a working impl (file-backed); the Firestore swap is one new class implementing the same interface, behind one config flip in `index.ts`. The E.t1 contract (`HandoffSubmitConsentGate`) is honoured by `submitHandoff()` regardless of backend.
+
+**Swap cost**: Low. Defined explicitly: when GCP credentials land, write a `FirestoreHandoffStore implements HandoffStore`, instantiate it conditionally in `index.ts` (e.g. on `HANDOFF_STORE_BACKEND=firestore`), let the `FsHandoffStore` carry the dev-mode default. Caller code (`submitHandoff`, the route, the tests) sees no change.
+
+## E.11 — Handoff side-effects live in `@swoop/connector`, not the orchestrator
+
+**Decided**: 2026-04-28
+**Owner**: E.t3 wiring session
+**Rationale**: The mailer + durable store + `submitHandoff()` orchestration first landed in `product/orchestrator/src/handoff/` because the connector workspace was empty. They were relocated to `product/connector/src/handoff/` once we accepted that's their architecturally-correct home. Rationale stands per the chunk-C/chunk-E split: connector owns data + side-effects, orchestrator owns the agent loop. The orchestrator imports `submitHandoff`, `FsHandoffStore`, and `MailerConfig` from `@swoop/connector` as a workspace dep; `nodemailer` is now a connector-package dep (removed from orchestrator). The `POST /handoff/submit` route handler stays in the orchestrator because the route is part of the orchestrator's HTTP surface — it just delegates the side-effect work to the connector via in-process import. When MCP-fication eventually happens (the connector grows a `handoff_submit` tool exposed over MCP-HTTP), the route handler swaps in-process import for an MCP client call. Same `submitHandoff` function on the connector side; minimal disturbance.
+
+**Swap cost**: Low. The `@swoop/connector` workspace dep on the orchestrator is the only surface that would change at MCP-fication.
+
 ## G.11 — CMS folder structure: `cms/prompts/{system,skills,tools}/`; system prompt is concatenation of `system/`
 
 **Decided**: 2026-04-27

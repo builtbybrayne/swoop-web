@@ -6,6 +6,62 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-04-28 — Form submission is a discrete user action, not a chat turn — give it its own HTTP surface
+
+When the lead-capture widget needs to "submit" the visitor's contact details to a backend that will persist a record + send an email, three patterns present themselves: (a) the widget calls `props.addResult` and the agent decides on the next turn to call a `handoff_submit` MCP tool that runs the side-effect, (b) the orchestrator intercepts the addResult inside the chat SSE handler and runs the side-effect inline, (c) the widget POSTs to a discrete HTTP endpoint and resolves the assistant-ui tool call locally with a success-marker once the POST returns.
+
+Going with (c). The form submission has its own HTTP semantics, its own success/failure shape, its own loading state, its own retry affordance. Threading it through the chat SSE flow (a) wastes an LLM call and adds latency; (b) tangles two lifecycles inside one handler. The discrete endpoint at `POST /handoff/submit` lets the widget render an inline "couldn't send — try again" affordance directly off the response code, with no agent retry logic. The endpoint is also fully tested in isolation (`product/orchestrator/src/server/__tests__/handoff-submit.test.ts`) without spinning up the runner.
+
+`addResult` still fires (with `HandoffSubmitOutput { status: 'accepted', handoffId }`) so assistant-ui's tool-call lifecycle resolves cleanly and the agent gets a tidy result for the next turn. Decision **E.13**.
+
+---
+
+## 2026-04-28 — Server enriches the handoff payload from session state — never trust the client to bundle it
+
+The widget could in principle bundle the entire `HandoffPayload` (handoffId, session metadata, wishlist accumulator, visitor profile, tier-1 consent timestamp) before POSTing. We don't. The widget sends only what it has direct knowledge of: agent tool-call args (verdict, reasonCode, reasonText, motivationAnchor) + form contact + tier-2 consent + sessionId. Everything else is derived server-side in `enrichPayload()` (`product/orchestrator/src/server/handoff-submit.ts`).
+
+Three reasons: (i) widget tampering — a malicious or buggy client could falsify tier-1 consent timestamps, conversation start times, turn counts. The server is the source of truth for those. (ii) Staleness — session state evolves between the agent triggering the widget and the visitor clicking submit (e.g. a wishlist item added in a later turn). Server-side enrichment captures the freshest state. (iii) Single trust path — the durable record reflects what the server knows, not a client-asserted snapshot.
+
+Wire shape is `.strict()`-validated (`HandoffSubmitRequestSchema`) so unknown fields bounce. The full `HandoffPayload` is built only in the route handler. Decision **E.14**.
+
+---
+
+## 2026-04-28 — File-backed `FsHandoffStore` is a legitimate interim — interface is what survives
+
+GCP IAM is blocked on Thomas. The Tier 2 plan named Firestore as the durable backend (decision E.1) but waiting on it would have blocked all of E.t2/E.t3. Built a tiny `FsHandoffStore` (one JSON file per handoff under `var/handoffs/<id>.json`, atomic write via tmp-file-rename, filename safety regex, schema-validated round-trip on read) behind the same `HandoffStore` interface that the eventual `FirestoreHandoffStore` will satisfy.
+
+Important property: caller code (`submitHandoff`, the route handler, the orchestrator wiring, every test) depends on the interface, not the implementation. Swap is one new class file plus one config flip in `index.ts`. The E.t1 contract (`HandoffSubmitConsentGate`) is honoured by `submitHandoff()` regardless of backend. Decision **E.12**.
+
+The `var/handoffs/` directory is gitignored — visitor PII never enters git. `product/orchestrator/var/` and `product/connector/var/` both covered.
+
+---
+
+## 2026-04-28 — Connector workspace home for handoff side-effects, not the orchestrator
+
+The mailer + durable store + `submitHandoff()` orchestration first landed in `product/orchestrator/src/handoff/` because the connector workspace was empty (`export {};`). Within the same day they were relocated to `product/connector/src/handoff/`. Why: per the chunk-C / chunk-E split, connector owns data + side-effects; orchestrator owns the agent loop. Conflating them in `orchestrator/` only because connector was unscaffolded would have created later refactor pressure.
+
+The orchestrator imports from `@swoop/connector` as a workspace dep. `nodemailer` moved with the code (now a connector dep, removed from orchestrator). The `POST /handoff/submit` route handler stays in the orchestrator because it's part of the orchestrator's HTTP surface — it just delegates the side-effect work via in-process import.
+
+When MCP-fication eventually happens (the connector grows a `handoff_submit` tool exposed over MCP-HTTP), the route handler swaps the in-process import for an MCP client call. Same `submitHandoff` function on the connector side; minimal disturbance. Decision **E.11**.
+
+---
+
+## 2026-04-27 — System-prompt loader is the file system, not a CMS framework
+
+G.10 (2026-04-24) decided to split style guidance into `why.md` + `style-avoid.md` but left the wiring undefined — "referenced from the WHY prompt" with no mechanism. Live testing on 2026-04-27 surfaced the gap: the avoidance file existed on disk but no code loaded it. The agent never saw the rules.
+
+Resolved by giving `cms/prompts/` a deliberate sub-structure (`system/`, `skills/`, `tools/`) with one well-defined load contract per concern. The system-prompt half is the file system as content management:
+
+- Files matching `^\d{2}_[a-z0-9-]+\.md$` in `system/` are concatenated in lexicographic order, separated by `\n\n---\n\n`. Two-digit numeric prefixes give deterministic ordering past 9; sparse numbering (00, 10, 20…) leaves gaps for inserts without renumbering.
+- Files outside the pattern (drafts, `README.md`, sub-dirs) are silently skipped.
+- No metadata layer, no manifest, no interpolation. Anyone can `cat cms/prompts/system/*.md` and see what the agent sees.
+
+Skills use ADK 1.0's native `loadAllSkillsInDir` (one folder per skill, `SKILL.md` + frontmatter). Tools fragments are read explicitly by tool code from `tools/<tool-name>/`.
+
+The two-layer voice control from G.10 now actually works: positive examples in `00_why.md` + avoidance list in `10_style-avoid.md` are both auto-loaded; neither file needs to reference the other; both iterate independently. Decision **G.11** + Tier 3 plan in `planning/03-exec-agent-runtime-t1a.md`.
+
+---
+
 ## 2026-04-24 — LLM voice regresses under load; positive examples are necessary but not sufficient
 
 Observed during D.t5 live testing: Claude Sonnet's default register bleeds through any "voice guide" approach that uses only positive examples. Specific tells surfacing under load (long conversations, tool orchestration, strong lean on visitor phrasing): em-dash-heavy rhythm; corporate hedges ("it's worth noting", "that said"); AI-signature verbs ("delve", "unpack", "dive into", "navigate the complexities"); empty-affirmation openers ("Great question!", "I'd be happy to…"); trailing offers ("Let me know if you'd like to explore…"); bullet-heavy responses where a sentence would do.

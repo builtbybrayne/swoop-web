@@ -1,0 +1,263 @@
+/**
+ * Handoff mailer (E.t3 — partial port from PoC).
+ *
+ * Sends a verdict-aware email when a handoff is submitted. Currently lives
+ * here in the orchestrator workspace because the eventual home (`product/
+ * connector/`) hasn't been scaffolded yet — once chunk C lands the real
+ * connector, this module relocates with no API change beyond imports.
+ *
+ * Behaviour:
+ *   - `qualified`     → full email to the qualified-recipient inbox.
+ *   - `referred_out`  → lighter email to the referred-out-recipient inbox
+ *                       (defaults to the qualified inbox if not set —
+ *                       Tier 3 plan E.t3 §"referred_out variants" allows
+ *                       Julie to decide later whether referrals split out).
+ *   - `disqualified`  → no email. Durable record only (E.t2 / future).
+ *
+ * Templates live at `cms/templates/handoff/{qualified,referred-out}.md`,
+ * loaded at send time so authoring iterations don't require a restart in
+ * dev. Substitution uses the tiny `renderTemplate` helper —
+ * `{{path.to.field}}` plus pre-formatted helper keys (e.g.
+ * `visitorActivities`, `wishlistFormatted`) computed below.
+ *
+ * Off-by-default. The orchestrator's config exposes `HANDOFF_EMAIL_ENABLED`
+ * (boolean) gated on the operator providing real SMTP credentials and a
+ * sales-inbox address (tracked in `questions.md` — pending Julie). When
+ * disabled, the mailer is a no-op that returns `{ status: 'skipped',
+ * reason: 'mailer_disabled' }` so handoff_submit can still log the
+ * durable record without trying to send.
+ *
+ * Integration point — currently unwired:
+ *   The lead-capture widget calls `props.addResult(payload)` to resolve
+ *   the orchestrator's `handoff` tool call. The orchestrator-side
+ *   `handoff_submit` handler (E.t2 + E.t3 proper) will:
+ *     1. Validate the payload against `HandoffPayloadSchema`
+ *        (`@swoop/common/handoff`).
+ *     2. Persist the durable record (Firestore once C lands; in-memory
+ *        store for now).
+ *     3. Call `sendHandoffEmail(payload, mailerConfig)` if the verdict is
+ *        `qualified` or `referred_out`.
+ *     4. Emit observability events
+ *        (`handoff.submitted`, `handoff.email.sent | skipped | failed`).
+ *   None of those exist today. This module is the plumbed-but-not-yet-
+ *   called dependency they will reach for.
+ */
+
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import nodemailer from 'nodemailer';
+import type { Transporter, SendMailOptions } from 'nodemailer';
+import type {
+  HandoffPayload,
+  HandoffPayloadQualified,
+  HandoffPayloadReferredOut,
+  VisitorProfile,
+  HandoffWishlistEntry,
+} from '@swoop/common';
+
+import { renderTemplate } from './template-renderer.js';
+
+// ---------------------------------------------------------------------------
+// Public types.
+// ---------------------------------------------------------------------------
+
+/**
+ * Configuration the mailer needs at send time. Built by the caller from
+ * the orchestrator's `Config` object — the mailer doesn't read env vars
+ * directly so it stays unit-testable without process.env mocking.
+ */
+export interface MailerConfig {
+  /** Master kill-switch. When false, every send returns `skipped`. */
+  readonly enabled: boolean;
+  /** Absolute path to `cms/templates/handoff/`. */
+  readonly templatesDirAbsolutePath: string;
+  /** From-address on every email. Required when `enabled === true`. */
+  readonly fromAddress: string;
+  /** Where qualified leads go. Required when `enabled === true`. */
+  readonly qualifiedRecipient: string;
+  /**
+   * Where referred-out leads go. Falls back to `qualifiedRecipient` if
+   * empty — common case at launch (one inbox, subject prefix
+   * differentiates).
+   */
+  readonly referredOutRecipient: string;
+  /** SMTP transport options. */
+  readonly smtp: {
+    readonly host: string;
+    readonly port: number;
+    readonly secure: boolean;
+    readonly user?: string;
+    readonly pass?: string;
+  };
+}
+
+/**
+ * The result returned from a send attempt. The caller (handoff_submit
+ * handler) routes this into observability events + the durable record.
+ */
+export type SendResult =
+  | { readonly status: 'sent'; readonly toAddress: string; readonly subject: string }
+  | { readonly status: 'skipped'; readonly reason: 'mailer_disabled' | 'verdict_disqualified' }
+  | { readonly status: 'failed'; readonly reason: string };
+
+/**
+ * Internal seam for tests — pass a stub transporter to bypass real SMTP.
+ */
+export interface MailerDeps {
+  readonly createTransport?: (
+    smtp: MailerConfig['smtp'],
+  ) => Pick<Transporter, 'sendMail'>;
+  readonly readTemplate?: (filePath: string) => string;
+}
+
+// ---------------------------------------------------------------------------
+// Public entry point.
+// ---------------------------------------------------------------------------
+
+/**
+ * Render and send a handoff email. Returns a structured `SendResult`
+ * regardless of outcome so the caller can branch / log uniformly.
+ */
+export async function sendHandoffEmail(
+  payload: HandoffPayload,
+  config: MailerConfig,
+  deps: MailerDeps = {},
+): Promise<SendResult> {
+  if (!config.enabled) {
+    return { status: 'skipped', reason: 'mailer_disabled' };
+  }
+  if (payload.verdict === 'disqualified') {
+    return { status: 'skipped', reason: 'verdict_disqualified' };
+  }
+
+  const templateFilename =
+    payload.verdict === 'qualified' ? 'qualified.md' : 'referred-out.md';
+  const templatePath = path.join(config.templatesDirAbsolutePath, templateFilename);
+
+  const readTemplate = deps.readTemplate ?? ((p: string) => readFileSync(p, 'utf8'));
+  let rawTemplate: string;
+  try {
+    rawTemplate = readTemplate(templatePath);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { status: 'failed', reason: `template_read_failed: ${message}` };
+  }
+
+  const data = preparePayloadForTemplate(payload);
+  const body = renderTemplate(rawTemplate, data);
+  const subject = computeSubject(payload);
+  const toAddress =
+    payload.verdict === 'qualified'
+      ? config.qualifiedRecipient
+      : config.referredOutRecipient || config.qualifiedRecipient;
+
+  const transporter =
+    deps.createTransport?.(config.smtp) ?? nodemailer.createTransport(config.smtp);
+
+  const mailOptions: SendMailOptions = {
+    from: config.fromAddress,
+    to: toAddress,
+    subject,
+    text: body,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    return { status: 'sent', toAddress, subject };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { status: 'failed', reason: `smtp_send_failed: ${message}` };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subject line.
+// ---------------------------------------------------------------------------
+
+function computeSubject(payload: HandoffPayload): string {
+  switch (payload.verdict) {
+    case 'qualified':
+      return `Swoop lead — ${payload.contact.name} (qualified, ${payload.reason.code})`;
+    case 'referred_out':
+      return `Swoop referral — ${payload.contact.name} (referred_out, ${payload.reason.code})`;
+    case 'disqualified':
+      // Unreachable under normal flow (we early-return above), but
+      // exhaustive switch keeps the type checker honest.
+      return `Swoop lead — disqualified (${payload.reason.code})`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Payload preparation.
+//
+// The renderer is deliberately string-substitution-only (no array loops, no
+// conditionals) — so we do the formatting work here in JS and surface
+// authored-friendly top-level keys the template consumes by name.
+// ---------------------------------------------------------------------------
+
+/** Visible to tests only. */
+export function preparePayloadForTemplate(
+  payload: HandoffPayloadQualified | HandoffPayloadReferredOut | HandoffPayload,
+): Record<string, unknown> {
+  const v = payload.verdict;
+  const contact = v === 'disqualified' ? null : payload.contact;
+
+  return {
+    ...payload,
+
+    // ---- Contact fallbacks (disqualified has no contact field) -----------
+    contactPhoneOrDash: formatOptional(contact?.phone),
+    contactPreferredMethod: formatOptional(contact?.preferredMethod),
+    contactTimeZoneOrDash: formatOptional(contact?.timeZoneHint),
+
+    // ---- Visitor profile -------------------------------------------------
+    visitorIndependence: formatOptional(payload.visitorProfile.independenceLevel),
+    visitorBudgetBand: formatOptional(payload.visitorProfile.budgetBand),
+    visitorActivities: formatActivityList(payload.visitorProfile),
+    visitorRegions: formatRegionList(payload.visitorProfile),
+
+    // ---- Wishlist (multi-line bulleted) ---------------------------------
+    wishlistFormatted: formatWishlist(payload.wishlist),
+
+    // ---- Session ---------------------------------------------------------
+    sessionEntryUrlOrDash: formatOptional(payload.session.entryUrl),
+
+    // ---- Consent ---------------------------------------------------------
+    consentCopyVersionOrDash: formatOptional(payload.consent.consentCopyVersion),
+    marketingConsentLabel: formatMarketingConsent(
+      payload.consent.marketingGranted,
+      payload.consent.marketingTimestamp,
+    ),
+  };
+}
+
+function formatOptional(value: string | undefined | null): string {
+  if (value === undefined || value === null || value === '') return '—';
+  return value;
+}
+
+function formatActivityList(profile: VisitorProfile): string {
+  if (profile.activityInclination.length === 0) return '(none surfaced)';
+  return profile.activityInclination.join(', ');
+}
+
+function formatRegionList(profile: VisitorProfile): string {
+  if (profile.regionInterest.length === 0) return '(none surfaced)';
+  return profile.regionInterest.join(', ');
+}
+
+function formatWishlist(items: readonly HandoffWishlistEntry[]): string {
+  if (items.length === 0) return '  (none surfaced during the conversation)';
+  return items
+    .map((item) => {
+      const note = item.note ? ` — ${item.note}` : '';
+      return `  - ${item.slug} (${item.entityType})${note}`;
+    })
+    .join('\n');
+}
+
+function formatMarketingConsent(granted: boolean | undefined, ts: string | undefined): string {
+  if (granted === undefined) return 'not asked';
+  if (granted === false) return 'declined';
+  return ts ? `granted at ${ts}` : 'granted';
+}

@@ -8,20 +8,19 @@
 //   Step 2 — contact form.  Name + email (required), preferred method,
 //            phone (optional), the tier-2 handoff consent tickbox
 //            (required — submit disabled until checked), and a marketing
-//            opt-in (optional, unticked by default). Submit calls the
-//            matching `handoff_submit` tool via assistant-ui's
-//            `addResult`.
+//            opt-in (optional, unticked by default). On submit the widget
+//            POSTs to the orchestrator's `/handoff/submit` endpoint
+//            (E.t3) which runs the connector-side `submitHandoff`
+//            pipeline (consent backstop → durable store → verdict-aware
+//            email). On success the widget calls `props.addResult` with
+//            a `HandoffSubmitOutput` shape so assistant-ui can render
+//            the confirmation; on failure the widget shows an inline
+//            error and lets the visitor retry.
 //
 // Tier-1 (conversation-opening) consent is NOT captured here — that lives
 // in D.t4. This widget only captures the tier-2 handoff-specific consent.
 // See planning/03-exec-chat-surface-t3.md "Key implementation notes" §4–5
 // and chunk E §2.3.
-//
-// The widget is input-driven: it reads the `handoff` tool-call args
-// (verdict / reasonCode / conversationSummary / motivationAnchor) rather
-// than waiting on a tool result. assistant-ui exposes `args` on the part
-// as soon as the tool call is issued; `result` arrives after
-// `handoff_submit` completes.
 
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
@@ -29,7 +28,7 @@ import {
   HandoffInputSchema,
   HandoffSubmitOutputSchema,
   type HandoffInput,
-  type HandoffSubmitInput,
+  type HandoffSubmitOutput,
 } from "@swoop/common";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { CtaButton } from "../shared";
@@ -37,6 +36,7 @@ import {
   safeParse,
   WidgetMalformedPlaceholder,
 } from "./widget-shell";
+import { postHandoffSubmit } from "../runtime/handoff-client";
 
 const VERDICT_INTRO: Record<HandoffInput["verdict"], string> = {
   qualified:
@@ -49,6 +49,10 @@ const VERDICT_INTRO: Record<HandoffInput["verdict"], string> = {
 
 /** Pattern matches HTML5 `type=email` — keep the regex minimal / permissive. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Versioned token mirrored into the durable record's `consentCopyVersion`
+ *  field. Bump when the tier-2 consent text changes. */
+const CONSENT_COPY_VERSION = "consent-handoff/v1";
 
 type Step = "summary" | "form";
 
@@ -74,13 +78,15 @@ export function LeadCaptureWidget(
   const [handoffConsent, setHandoffConsent] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   if (!argsParsed.ok) return <WidgetMalformedPlaceholder />;
   const args = argsParsed.data;
 
-  // Result-driven states. If `handoff_submit` landed successfully, show the
-  // confirmation; if it errored, fall back to malformed.
+  // Result-driven states. After a successful POST we mark `submitted`;
+  // assistant-ui re-renders with `props.result` populated by addResult.
   if (submitted) {
     const resultParsed = safeParse(HandoffSubmitOutputSchema, props.result);
     if (resultParsed.ok && resultParsed.data.status === "accepted") {
@@ -179,34 +185,60 @@ export function LeadCaptureWidget(
     return Object.keys(next).length === 0;
   }
 
-  function handleSubmit(ev: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(ev: FormEvent<HTMLFormElement>) {
     ev.preventDefault();
     if (!handoffConsent) return; // Consent-gate: shouldn't fire since submit is disabled, but belt + braces.
     if (!validate()) return;
 
-    const payload: HandoffSubmitInput = {
-      widgetToken: "pending", // Real token arrives from the handoff tool's output; backend path lands in E.
+    setSubmitting(true);
+    setSubmitError(null);
+
+    const now = new Date().toISOString();
+
+    const reqBody = {
+      verdict: args.verdict,
+      reasonCode: args.reasonCode,
+      reasonText: args.conversationSummary,
+      motivationAnchor: args.motivationAnchor || undefined,
       contact: {
         name: name.trim(),
         email: email.trim(),
         preferredMethod,
-        phone: phone.trim() || undefined,
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
       },
       consent: {
         handoffGranted: handoffConsent,
+        handoffTimestamp: now,
         marketingGranted: marketingConsent,
+        ...(marketingConsent ? { marketingTimestamp: now } : {}),
+        consentCopyVersion: CONSENT_COPY_VERSION,
       },
     };
 
-    // assistant-ui's tool-call part exposes `addResult` — this resolves the
-    // current `handoff` tool call with a widget-driven result the runtime
-    // can forward to `handoff_submit` (chunk E wires the actual submission
-    // path). See node_modules @assistant-ui/core MessagePartComponentTypes.
-    props.addResult(payload as unknown as never);
-    setSubmitted(true);
+    const response = await postHandoffSubmit(reqBody);
+
+    setSubmitting(false);
+
+    if (response.ok) {
+      // Mirror the orchestrator's success into a `HandoffSubmitOutput`
+      // shape — that's what assistant-ui forwards back as the resolved
+      // tool result, and what this widget reads in the `submitted`
+      // branch above to render the confirmation.
+      const out: HandoffSubmitOutput = {
+        status: "accepted",
+        handoffId: response.handoffId,
+      };
+      props.addResult(out as unknown as never);
+      setSubmitted(true);
+      return;
+    }
+
+    // Failed submit — keep the form usable, surface the reason inline.
+    const detail = response.detail ?? response.reason;
+    setSubmitError(`We couldn't send your details just now (${detail}). Please try again.`);
   }
 
-  const canSubmit = handoffConsent;
+  const canSubmit = handoffConsent && !submitting;
 
   return (
     <section
@@ -315,6 +347,16 @@ export function LeadCaptureWidget(
           </span>
         </label>
 
+        {submitError ? (
+          <p
+            role="alert"
+            data-testid="lead-capture-error"
+            className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-800"
+          >
+            {submitError}
+          </p>
+        ) : null}
+
         <div className="mt-2 flex gap-2">
           {/* The submit wrapper carries `data-swoop-part="lead-capture-submit"`
               so Swoop's brand extension can target the primary handoff action
@@ -326,7 +368,7 @@ export function LeadCaptureWidget(
               disabled={!canSubmit}
               ariaLabel="Submit handoff details"
             >
-              Send my details
+              {submitting ? "Sending…" : "Send my details"}
             </CtaButton>
           </span>
           <CtaButton

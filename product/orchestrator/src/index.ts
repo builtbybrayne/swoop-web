@@ -32,6 +32,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { InMemoryRunner } from '@google/adk';
 import { emitEvent } from '@swoop/common';
+import { FsHandoffStore, type MailerConfig } from '@swoop/connector';
 
 import { loadConfig } from './config/index.js';
 import { createPromptLoader } from './agent/prompt-loader.js';
@@ -114,6 +115,28 @@ async function main(): Promise<void> {
     onSessionCreated,
   });
 
+  // E.t3 — handoff store + mailer config. The store is currently
+  // file-backed under <packageRoot>/var/handoffs/ as an interim until
+  // chunk E.t2 settles a real backend (Firestore default per E.1). The
+  // mailer is shaped from env vars; the master `enabled` switch defaults
+  // off until Julie confirms sales-inbox + SMTP creds.
+  const handoffStoreDir = path.join(config.packageRoot, 'var', 'handoffs');
+  const handoffStore = new FsHandoffStore(handoffStoreDir);
+  const mailerConfig: MailerConfig = {
+    enabled: config.HANDOFF_EMAIL_ENABLED,
+    templatesDirAbsolutePath: config.handoffTemplatesDirAbsolutePath,
+    fromAddress: config.HANDOFF_EMAIL_FROM,
+    qualifiedRecipient: config.HANDOFF_EMAIL_TO_QUALIFIED,
+    referredOutRecipient: config.HANDOFF_EMAIL_TO_REFERRED_OUT,
+    smtp: {
+      host: config.SMTP_HOST,
+      port: config.SMTP_PORT,
+      secure: config.SMTP_SECURE,
+      ...(config.SMTP_USER ? { user: config.SMTP_USER } : {}),
+      ...(config.SMTP_PASS ? { pass: config.SMTP_PASS } : {}),
+    },
+  };
+
   const app = buildServer({
     sessionStore,
     runner,
@@ -123,6 +146,8 @@ async function main(): Promise<void> {
     triageClassifier,
     allocator,
     onSessionCreated,
+    handoffStore,
+    mailerConfig,
   });
 
   const server = app.listen(config.PORT, () => {
@@ -142,6 +167,15 @@ async function main(): Promise<void> {
         `${config.WARM_POOL_SIZE === 0 ? 'disabled (direct allocator)' : 'pre-warmed'}`,
     );
     console.log(`[orchestrator] cors allowed origins: [${config.CORS_ALLOWED_ORIGINS.join(', ')}]`);
+    console.log(
+      `[orchestrator] handoff store: file-backed at ${handoffStoreDir} ` +
+        `(interim — Firestore swap targeted in chunk E.t2)`,
+    );
+    console.log(
+      `[orchestrator] handoff mailer: ${
+        config.HANDOFF_EMAIL_ENABLED ? `enabled, sending to ${config.HANDOFF_EMAIL_TO_QUALIFIED}` : 'disabled (set HANDOFF_EMAIL_ENABLED=true to flip)'
+      }`,
+    );
     console.log(`[orchestrator] env: ${config.NODE_ENV} (prompt hot-reload: ${config.isProduction ? 'off' : 'on'})`);
   });
 

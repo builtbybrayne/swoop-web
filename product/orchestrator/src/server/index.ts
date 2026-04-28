@@ -21,6 +21,7 @@
 
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import type { Runner } from '@google/adk';
+import type { HandoffStore, MailerConfig } from '@swoop/connector';
 
 import type { SessionAllocator, SessionStore } from '../session/index.js';
 import { createSessionBootstrapHandler } from './session-bootstrap.js';
@@ -30,6 +31,7 @@ import {
 } from './consent.js';
 import { createChatHandler } from './chat.js';
 import { createSessionPingHandler } from './session-ping.js';
+import { createHandoffSubmitHandler } from './handoff-submit.js';
 import { DISCLOSURE_COPY_VERSION } from './errors.js';
 import type { TriageClassifier } from '../functional-agents/triage-classifier.js';
 
@@ -64,6 +66,18 @@ export interface BuildServerDeps {
    * a `DirectAllocator` that the caller chose not to thread in.
    */
   readonly allocator?: SessionAllocator;
+  /**
+   * Durable handoff store (E.t3). When supplied, `POST /handoff/submit` is
+   * registered. When omitted (e.g. unit tests of unrelated routes), the
+   * endpoint is not registered — callers receive a 404.
+   */
+  readonly handoffStore?: HandoffStore;
+  /**
+   * Mailer config (E.t3). Required alongside `handoffStore`. The mailer
+   * itself is built per-request inside `submitHandoff`; this config carries
+   * the recipient + transport + templates dir.
+   */
+  readonly mailerConfig?: MailerConfig;
 }
 
 export function buildServer(deps: BuildServerDeps): Express {
@@ -115,6 +129,21 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
       triageClassifier: deps.triageClassifier,
     }),
   );
+
+  // E.t3 — only register the handoff-submit route when both deps are
+  // supplied. The mailer config carries the master `enabled` switch, so
+  // boot-time wiring decides whether the route is even discoverable.
+  if (deps.handoffStore && deps.mailerConfig) {
+    app.post(
+      '/handoff/submit',
+      createHandoffSubmitHandler({
+        sessionStore: deps.sessionStore,
+        handoffStore: deps.handoffStore,
+        mailerConfig: deps.mailerConfig,
+        now: deps.now,
+      }),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

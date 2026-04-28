@@ -10,9 +10,9 @@ Mark `✅ Answered: ...` inline once resolved, then move to the closed section a
 
 ## Open
 
-### Data pipeline — Thomas / Richard / Martin (batch, pending Monday 2026-04-27 SQL dump)
+### Data pipeline — Thomas / Richard / Martin (batch — SQL dump arrived 2026-04-27)
 
-On 2026-04-24 Swoop engineering agreed to ship a full SQL database export on Monday. That reshapes chunk C §2.1 — API-vs-scrape is superseded by "ingest the dump, map against our ontology, then decide steady state". The questions below came out of the first-pass web-surface inspection ([data-ontology.md](data-ontology.md), [planning/02-impl-retrieval-and-data-source-exploration.md](planning/02-impl-retrieval-and-data-source-exploration.md)) and should be worked through as the dump is explored.
+The SQL dump has landed at `data/content-data-swoop-patagonia_prod.sql` (gitignored). Ingest session not yet held. That reshapes chunk C §2.1 — API-vs-scrape is superseded by "ingest the dump, map against our ontology, then decide steady state". The questions below came out of the first-pass web-surface inspection ([data-ontology.md](data-ontology.md), [planning/02-impl-retrieval-and-data-source-exploration.md](planning/02-impl-retrieval-and-data-source-exploration.md)) and should be worked through as the dump is explored.
 
 Why it matters: the answers here define the shape of the derived datasource (chunk C §2.2), the retrieval tool set (chunk C §2.3), and whether the dump is a bootstrap or an operating model.
 
@@ -93,7 +93,9 @@ Why it matters: cost routing, not architecture.
 
 What email address does the handoff delivery go to? What SMTP (or transactional email provider) should Puma send through? The PoC used personal Gmail — Puma needs something real. Also: does Swoop want a human to receive the raw AI handoff email, or does it need to thread into an existing CRM / helpdesk?
 
-Why it matters: blocks M3 (triage + handoff end-to-end).
+Specifically need: `HANDOFF_EMAIL_FROM`, `HANDOFF_EMAIL_TO_QUALIFIED`, `HANDOFF_EMAIL_TO_REFERRED_OUT` (or confirmation that referred-out leads share the qualified inbox with a subject prefix), `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS`.
+
+Why it matters: as of 2026-04-28 the handoff submit flow is wired end-to-end and writes durable records on submit, but the email leg is **off by default** behind `HANDOFF_EMAIL_ENABLED=false`. Flipping it on requires the env vars above; the boot-time config refine fails fast if any are missing while ENABLED. The flow is shipped, just gated.
 
 Where it lands: Tier 2 chunk E (handoff & compliance).
 

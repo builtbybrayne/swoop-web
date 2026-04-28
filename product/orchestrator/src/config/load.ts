@@ -76,6 +76,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // know about the orchestrator's working directory.
   const systemPromptDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.SYSTEM_PROMPT_DIR);
   const skillsDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.SKILLS_DIR);
+  const handoffTemplatesDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.HANDOFF_TEMPLATES_DIR);
 
   // Strip PRIMARY_MODEL from the raw surface and replace it with a
   // non-optional alias that mirrors ORCHESTRATOR_MODEL. This is the B.t1
@@ -88,6 +89,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     packageRoot: PACKAGE_ROOT,
     systemPromptDirAbsolutePath,
     skillsDirAbsolutePath,
+    handoffTemplatesDirAbsolutePath,
     isProduction: data.NODE_ENV === 'production',
   });
 

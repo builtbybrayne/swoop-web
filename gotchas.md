@@ -149,3 +149,41 @@ Cause: TWO calls to `useConsent()` — one in `App.tsx`, one in `OpeningScreen.t
 Fix: lift `useConsent()` to App, pass results as props to `OpeningScreen`. Already applied. Verified working.
 
 Design principle: **one hook instance per state**. If multiple components need the same consent state, lift it.
+
+---
+
+## `HANDOFF_EMAIL_ENABLED=true` requires four other env vars or boot fails
+
+Symptom: orchestrator startup prints a Zod refinement error like `HANDOFF_EMAIL_ENABLED=true requires HANDOFF_EMAIL_FROM, HANDOFF_EMAIL_TO_QUALIFIED, SMTP_USER, and SMTP_PASS`.
+
+Cause: cross-field config refine in `product/orchestrator/src/config/schema.ts` enforces that flipping the master mailer switch requires a complete config. Misconfigured prod deploys can't silently swallow handoffs — they fail fast at boot.
+
+Fix (in order of preference): (a) set the four required env vars and restart; (b) set `HANDOFF_EMAIL_ENABLED=false` to disable the mailer entirely (durable record still persists; handoff still flows; email leg is skipped with reason `mailer_disabled`); (c) leave it unset (defaults to `false`).
+
+---
+
+## File-backed handoff records under `var/handoffs/` are gitignored — don't commit them
+
+The `FsHandoffStore` (interim implementation pending Firestore) writes one JSON file per handoff under `<orchestrator-package-root>/var/handoffs/<id>.json`. Each file is a full `HandoffPayload` including visitor name, email, contact preferences, and conversation context — i.e. visitor PII.
+
+`.gitignore` excludes both `product/orchestrator/var/` and `product/connector/var/`. **Do not** add an exception, do not `git add -f` to bypass, do not move records elsewhere in the repo. The Firestore swap (E.t2 proper, post-IAM) takes the records out of the filesystem entirely.
+
+---
+
+## `HandoffStore` filename safety: handoffId must match `^[a-zA-Z0-9_-]+$`
+
+Symptom: `FsHandoffStore.save(payload)` returns `{ ok: false, reason: 'handoff_id_invalid' }` for some payloads.
+
+Cause: defence-in-depth check before any filesystem op. A handoffId with `/`, `..`, dots, spaces, or other special chars would let a malformed payload escape the store directory. The orchestrator's id generator uses `crypto.randomUUID().replaceAll('-', '_')` (prefix `handoff_`) so legitimate ids always pass; the guard is purely belt-and-braces.
+
+Fix: ensure any caller-supplied handoffId conforms to the pattern. The pattern is exported as `HANDOFF_ID_PATTERN` from `@swoop/connector` for tests + future callers.
+
+---
+
+## `system/` prompt fragments must use a two-digit numeric prefix
+
+Symptom: a file you authored at `product/cms/prompts/system/<name>.md` doesn't appear to affect the agent.
+
+Cause: the prompt loader filters by `^\d{2}_[a-z0-9-]+\.md$` (G.11 / B.t1a). Files without the `00_` / `10_` / etc. prefix are silently skipped. So are files with uppercase letters, underscores in the slug, or wrong extension.
+
+Fix: rename to a conforming pattern (`00_why.md`, `10_style-avoid.md`, etc.). Use sparse numbering (gaps of 10) to leave room for inserts past 9 without renumbering existing files. Drafts you don't want loaded yet can sit alongside as `_draft.md` or `notes.md` — both are silently ignored.
