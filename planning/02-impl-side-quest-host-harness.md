@@ -1,8 +1,8 @@
 # 02 — Implementation: Mock Host Harness (Side-Quest)
 
-**Status**: Tier 2 implementation plan. Draft, 2026-04-24.
+**Status**: ✅ **Shipped** 2026-04-XX (Al-built; verified in active use 2026-04-29). Tier 2 plan retained as the post-hoc record.
 **Implements**: [`01-side-quest-persistence.md`](01-side-quest-persistence.md) §5 W3 only. **Narrower scope than the parent side-quest doc originally pitched.**
-**Does NOT implement yet**: W1 (server history endpoint), W2 (client rehydration on mount), W4 (storage-medium reconfirm). These are **parked pending observation** of what actually breaks when the chat is embedded in a realistic multi-page host.
+**Observation outcome (2026-04-29)**: Al confirmed via active use that **assistant-ui doesn't auto-rehydrate** the chat thread on iframe remount — the failure mode this harness was designed to surface. **W1 + W2 unparked** (see [inbox.md](../inbox.md) 2026-04-29 entry); W4 still settled at sessionStorage.
 **Does not depend on**: any canonical chunk A–H work. Does not block, and is not blocked by, Friday's hackathon, chunk C retrieval, chunk G content, or the agent-runtime persistence path.
 
 ---
