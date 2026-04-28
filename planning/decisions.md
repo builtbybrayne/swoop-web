@@ -59,7 +59,162 @@ The E.t2 task in the planning doc described "Firestore default + a `ts-common` i
 **Rationale**: The mailer + durable store + `submitHandoff()` orchestration first landed in `product/orchestrator/src/handoff/` because the connector workspace was empty. They were relocated to `product/connector/src/handoff/` once we accepted that's their architecturally-correct home. Rationale stands per the chunk-C/chunk-E split: connector owns data + side-effects, orchestrator owns the agent loop. The orchestrator imports `submitHandoff`, `FsHandoffStore`, and `MailerConfig` from `@swoop/connector` as a workspace dep; `nodemailer` is now a connector-package dep (removed from orchestrator). The `POST /handoff/submit` route handler stays in the orchestrator because the route is part of the orchestrator's HTTP surface — it just delegates the side-effect work to the connector via in-process import. When MCP-fication eventually happens (the connector grows a `handoff_submit` tool exposed over MCP-HTTP), the route handler swaps in-process import for an MCP client call. Same `submitHandoff` function on the connector side; minimal disturbance.
 
 **Swap cost**: Low. The `@swoop/connector` workspace dep on the orchestrator is the only surface that would change at MCP-fication.
+## C.23 — Firestore dropped project-wide
 
+**Decided**: 2026-04-28
+**Owner**: Al
+
+**Rationale**: Earlier defaults pointed at Firestore for the handoff store (E.1) and as one of the candidate post-M4 session backends (B.2). With C.18 committing to Cloud SQL Postgres for retrieval, the operational case for a single Postgres instance covering retrieval + handoff + (post-M4) sessions wins decisively over running a separate Firestore service. Single backup, single IAM scope, single monitoring surface, SQL across all derived data. Firestore is dumped completely from active plans — no longer a candidate for any storage role.
+
+**Code follow-up scope** (captured in [inbox.md](../inbox.md) as a deferred cleanup task): Tier 3 plans + shipped code still mention Firestore in a few places, and these get cleaned up alongside the post-M4 session-backend implementation work, not now: (a) `planning/03-exec-agent-runtime-t2.md` references `session/firestore.ts` and the `SESSION_BACKEND="firestore"` enum value — the file gets renamed to `postgres.ts` and the enum value to `"postgres"`. (b) `planning/03-exec-agent-runtime-t6.md` documents the same enum. (c) `planning/03-exec-observability-b.md` describes a future contract for `createHandoffSubmitHandler` writing to Firestore — that contract becomes "writes to the Postgres `handoff` table". (d) `planning/01-side-quest-persistence.md` lines 77, 80 reference "the eventual Firestore migration" — superseded text in a partially-superseded doc; flagged for archive review.
+
+**Swap cost**: None (Firestore was never wired). The follow-up code cleanup is mechanical: rename one file, update one enum, update one docstring. ~30 minutes of work bundled into the post-M4 session-backend task.
+
+## C.22 — Composer pattern: per-tool Haiku sub-agent inside the connector
+
+**Decided**: 2026-04-28
+**Owner**: Al
+
+**Rationale**: 5 of the 10 external tools (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`) are fronted by a **composer** — a Haiku 4.5 sub-agent inside the connector that decomposes the sales-shaped request into calls against pure-SQL data primitives, runs them, and synthesises a coherent sales-shaped response. The other 5 tools (`search`, `get_detail`, `illustrate`, `handoff`, `handoff_submit`) are pass-through (no LLM). The composer pattern keeps the orchestrator's tool surface clean — Sonnet sees sales-stage tools, no retrieval-plumbing leaks — and isolates retrieval composition from the orchestrator. Important for downstream changes (different orchestrator LLM, different vendor, additional non-retrieval workload — keeping retrieval composition inside the connector means changes there don't leak into orchestrator tooling). Cost shape: per-conversation cost approximately flat as Sonnet-side composition reduction balances Haiku-side composition addition.
+
+**Swap cost**: Medium. Removing the composer layer means each external tool becomes a single SQL primitive call (which loses synthesis quality but works); promoting Haiku → Sonnet in composers is a config change. Adding a new composer is one new file `src/composers/<tool-name>.ts`.
+
+## C.21 — Source pipeline: SQL dump → local MariaDB → export.sql → Cloud SQL Postgres
+
+**Decided**: 2026-04-28
+**Owner**: Al
+
+**Rationale**: Supersedes the 2026-04-22 plan's scrape-vs-API question. The 2026-04-27 SQL dump is upstream-of-truth (per Julie call: "dump is canonical"). Pipeline shape: drop dump at `data/<dump>.sql` → load into local MariaDB (dev) → run `export.sql` declarative SQL transformations → stream into Cloud SQL Postgres (prod) or local Docker Postgres (dev). Cadence assumed weekly during M1–M5; steady state TBC with Swoop ops (could become an API, CDC, or scheduled feed). Disposable — when Swoop's source schema changes, `export.sql` gets rewritten; nothing downstream needs to change.
+
+**Swap cost**: Medium. Source change means rewriting `export.sql`; destination change means swapping Postgres for an alternative engine (bounded by C.18's swap cost).
+
+## C.20 — Blog ingest as separate stream via WP REST API; 5y fetch-time-filtered window
+
+**Decided**: 2026-04-28
+**Owner**: Al
+
+**Rationale**: Swoop's blog (~465 posts spanning 15+ years on `swoop-patagonia.com/blog/wp-json/wp/v2/posts`) is fetched independently of the SQL-dump ETL. 5y rolling window applied at fetch time via `?after=<5y-ago>` — older content is genuinely stale (defunct hotels, changed routes, dated voice) and not retrieved. ~108 posts in the current window, ~2–5 MB raw NDJSON. Snapshots stored at `data/blog/raw/<utc-stamp>/`; resume floor in the latest manifest. Independent of the SQL-dump ETL — runs on its own cadence. Plan: [03-exec-blog-ingest.md](03-exec-blog-ingest.md).
+
+**Swap cost**: Low. WP REST API → alternative source (SQL dump, alternative API) is a one-script swap.
+
+## C.19 — Sales-shaped tool surface, woven with existing PoC tools
+
+**Decided**: 2026-04-28
+**Owner**: Al
+
+**Rationale**: The agent's external tool surface combines the 5 PoC-derived tools (`search`, `get_detail`, `illustrate`, `handoff`, `handoff_submit`) with 5 new sales-shaped composer tools (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`). **10 tools total** — within Claude's working-memory budget. The PoC tools carry forward intact (three are already sales-shaped: `illustrate`, `handoff*`; the two data-shaped ones — `search`, `get_detail` — are kept as escape hatches for direct visitor queries that don't need narrative framing). The 5 new tools are composer-driven (per C.22) for sales-stage moments. Sales discipline lives in tool-description prose + the system prompt, not in the tool-list shape — `search` / `get_detail` descriptions tilt the agent away from them when sales-shaped tools fit. This is "weave" rather than "replace": existing schemas, adapters, and widgets carry forward; new ones added alongside.
+
+**Swap cost**: Medium. Backing out to a smaller (sales-only) or larger (full data API) surface means rewriting tool descriptions, regenerating widgets, and regenerating Zod schemas. Tool-description authoring is the dominant cost (5 new prose blocks under `cms/prompts/tools/<tool>/description.md` per G.11).
+
+## B.22 — Session backend strategy: ADK in-built first, custom Postgres `SessionService` post-M4 if budget
+
+**Decided**: 2026-04-28
+**Owner**: Al
+
+**Rationale**: Refines B.2 (which left the post-M4 backend choice open between Vertex AI Session Service / Firestore / Cloud SQL). Phase 1 sticks with ADK's in-built in-memory `SessionService` — the simplest in-built option that demonstrably works for the vertical slice. Post-M4, the upgrade is a **custom Postgres `SessionService` implementation** writing to the same Cloud SQL instance that holds the retrieval and handoff stores (single-store philosophy per C.18). Vertex AI Session Service is out of scope (cost, lock-in, separate ops surface for marginal benefit). Firestore is out per C.23. The custom implementation is a thin wrapper — days of work — and consolidates all our owned durable state into one DB. Sequencing: ship ADK-in-built first, validate it works under real load, then promote to Postgres if/when budget supports the implementation work.
+
+**Swap cost**: Medium. The `SessionStore` interface is stable; swapping ADK-in-built for the Postgres impl is ~one file. Backing out from Postgres back to a managed alternative (e.g. if scale demands) is another impl behind the same interface.
+
+## E.10 — Handoff store on Cloud SQL Postgres (Firestore dropped)
+
+**Decided**: 2026-04-28
+**Owner**: Al
+
+**Rationale**: Refines E.1 (which committed to Firestore as default). With C.18 putting Cloud SQL Postgres in the stack for retrieval, the operational case for using the same Postgres instance for the handoff store is decisive: one DB to back up, monitor, and IAM-scope; SQL queries for ad-hoc handoff analytics; same retention enforcement pattern (`DELETE … WHERE scheduled_deletion_at < NOW()`) as everything else; aligns with the "single store for everything we own derived-side" framing. The `HandoffStore` interface stays in `ts-common` for swap-out optionality, but no other backend is currently in scope. Firestore dropped per C.23.
+
+**Swap cost**: Low. The interface is stable; swapping the Postgres impl for an alternative is one file. Postgres handles the write volume trivially (handoffs are write-heavy but very low rate; thousands per year).
+
+## C.18 — Storage engine: Postgres 16 + pgvector + tsvector + pg_trgm; no Vertex AI Search
+
+**Decided**: 2026-04-28
+**Owner**: Al (after Swoop confirmed Postgres acceptability post-Julie call)
+
+**Rationale**: Earlier in the engagement we'd hesitated on Postgres because optically it looks "like another MariaDB" to the Swoop ops team. That objection is now resolved — Swoop are explicitly happy for us to proceed with Postgres. With that constraint gone, the choice between **Postgres alone** and **Postgres-plus-Vertex AI Search** comes down to scope and operational reality.
+
+We pick **Postgres alone** because at Puma's actual size — hundreds of trips, ~108 blog posts in the rolling 5y window, ~10K CMS chunks — every Vertex strength either doesn't apply or is dwarfed by what `pgvector` + `tsvector` + `pg_trgm` give us in one engine:
+
+- Semantic similarity → `pgvector` HNSW indexes (sub-ms at our scale)
+- Lexical / keyword → `tsvector` + `tsquery` + GIN, Porter-stemmed and weighted
+- Typo-tolerant fuzzy → `pg_trgm` (perfect for "Torres del Pain" → "Torres del Paine")
+- Hybrid retrieval → reciprocal rank fusion in a single SQL query with CTEs + window functions
+- Filters / facets / aggregates → standard SQL
+
+Adding Vertex on top would actively cost us:
+1. **Local-dev parity** — Postgres + Docker Compose locally is identical to Cloud SQL prod. Vertex has no local mode; the alternative is stubbing or remote-querying from a laptop.
+2. **Two-store sync** — every Postgres write would need to propagate to a Vertex index with minutes-to-hours latency. Subtle freshness bugs hide in that gap.
+3. **Cost predictability** — Cloud SQL Postgres ~£25–40/mo flat; Vertex per-query + storage scales with agent traffic, easily £100+/mo at modest usage for marginal-or-imaginary gain at our scale.
+4. **Schema iteration speed** — `ALTER TABLE` in Postgres vs re-indexing in Vertex during dev iteration.
+5. **Debuggability** — `EXPLAIN ANALYZE` vs vendor black box.
+6. **Lock-in** — Postgres data and queries are portable; Vertex-indexed structures aren't.
+
+Vertex genuinely wins for million-doc corpora, multimodal search, or out-of-the-box generated answers. None apply to Puma. The agent already produces answers via Claude in the agent-with-tools loop (decision D.11 territory); generated-answer-as-a-service is a duplicate capability for us, not a new one.
+
+**Stack pinned by this decision:**
+- **Postgres 16** — current stable, supports modern `pgvector` and FTS features.
+- **`pgvector`** — HNSW indexes on embedding columns; cosine distance default.
+- **`pg_trgm`** — trigram fuzzy matching extension.
+- **Native FTS** (`tsvector`/`tsquery`/GIN) — built into Postgres core.
+- **Cloud SQL for Postgres** in Swoop's "AI Pat Chat" GCP project for prod (small instance: `db-f1-micro` or `db-g1-small`).
+- **Postgres 16 in Docker Compose** locally — same image, identical behaviour.
+- **Schema migrations**: `node-pg-migrate` (plain-SQL, lean; Prisma rejected as too heavy for our shape — sub-decision worth flagging if it bites us).
+- **Embedding model**: pending lock — leaning Voyage-3 per Anthropic's recommended pairing; swap cost is one column re-population.
+
+**When we'd revisit Vertex** (named triggers, not vibes):
+- Document corpus grows past ~100K (current trajectory says no, even with Antarctica + Arctic expansion — agent reasoning scales, not document count).
+- Recall/precision issues we've shown can't be solved with better embeddings, chunking, or RRF tuning.
+- Genuine multimodal need (e.g. search-by-image of a region) becomes a real product requirement.
+
+The agent-with-tools architecture means Vertex would slot in later as **one new tool implementation** behind the existing tool surface, with no rearchitecting of the agent or other tools. So this is a low-regret decision — the cost of deferring Vertex is essentially zero.
+
+**Swap cost**: Medium. Replacing Postgres with DuckDB or Vertex later means rewriting the export pipeline (MariaDB → store) and the connector's storage layer behind the tool surface. The agent tool surface itself, the entity model, the retrieval semantics, and the RRF approach all carry across unchanged — they're the abstraction. So "swap" is real engineering work but bounded to one layer and shouldn't bleed into agent or product behaviour.
+
+## C.17 — `ntag` is the live tagging system; `tag` + `adventurousness` deprecated
+
+**Decided**: 2026-04-27 (Julie call)
+**Owner**: Al + Julie
+
+**Rationale**: Inverts the first-pass ontology assumption. Per Julie call: the `tag` table (2,374 rows) is dead — ignore entirely. The `ntag` (79 entries) + `ntags_lookup` (157,537 entries) system is the live tagging surface; use `ntag` for all tag-related queries and embeds. Separately: the `adventurousness` table (11 rows) is deprecated/ancient; difficulty (1–5) and wilderness (0–5) are surfaced as raw integers without a user-facing legend.
+
+**Swap cost**: Low. ETL queries reference `ntag*` instead of `tag*`. If Swoop ever revives `tag`, the ETL queries change; one file.
+
+## C.16 — Page-as-hub pattern for cross-entity widget rendering
+
+**Decided**: 2026-04-27 (Julie call)
+**Owner**: Al
+
+**Rationale**: Records that don't carry images directly (e.g. `hotel`) reach images via their `page_id` join. Same rule applies for any record-with-page_id pattern. The `page` row is the presentation hub, holding both the canonical URL (per C.15) and the linked image set. This gives the agent a uniform widget-rendering rule across hotel/location/trip/etc., and avoids per-entity image lookup logic.
+
+**Swap cost**: Low. One resolver utility (`resolveImagesViaPage` in `ts-common`) encapsulates the rule. If a new entity needs different image-resolution logic, that entity's data primitive overrides.
+
+## C.15 — URL + image construction rules
+
+**Decided**: 2026-04-27 (Julie call)
+**Owner**: Al
+
+**Rationale**: SQL dump stores image filenames only and page records with `override_url` + `alias` columns. Rules: (a) Image URLs constructed as `https://swoop-patagonia.imgix.net/<filename>?<imgix-params>` with parameterised render variants (small thumbs for inline mentions, larger crops for widget hero images, originals for detail views). (b) Page URLs derived as `override_url || alias`. (c) Records with `page_id` (e.g. `hotel`) traverse to their `page` row to get URLs and the image set — see C.16 (page-as-hub).
+
+**Swap cost**: Low. Two `ts-common` utilities (`buildImgixUrl`, `resolveImagesViaPage`) encapsulate the rules. If the imgix domain changes or page-URL conventions shift, one file changes.
+
+## C.14 — No departures, no swoopers, headline pricing only
+
+**Decided**: 2026-04-27 (Julie call)
+**Owner**: Al + Julie
+
+**Rationale**: Three product pruning rules baked in by Julie call after first-pass dump inspection:
+1. **No departures** — Patagonia is largely demand-driven, departure data shifts daily, and the bot stating availability risks misrepresentation; the dump has no `departure` table anyway. The bot answers "departures run throughout the season — let's talk to a specialist about your preferred dates" rather than ever quoting bookable dates.
+2. **No swoopers** — `swooper_*` fields in the source data are *customer* PII (Swoop's term for their customers, not their staff). Off-limits in the derived store. Specialist hand-off goes to a generic "Patagonia specialist" rather than assigning a named advisor pre-call.
+3. **Headline pricing only** — surface `trip.base_price` from the SQL dump as-is. No calculated ranges, no tier × season grids, no occupancy-specific quotes. Dated/specific pricing routes to specialist. `raw_price` and `window_price` are website-runtime calculations and not surfaced.
+
+**Swap cost**: Low. Each rule maps to a tool-description constraint + an ETL whitelist exclusion. Loosening any rule is a content + schema decision, not architecture.
+
+## C.13 — Sales-funnel "golden thread" principle
+
+**Decided**: 2026-04-27 (Julie call)
+**Owner**: Al + Julie
+
+**Rationale**: The bot's organising principle: move visitors **Awareness → Interest → Strong Consideration**. Default lean: imagination + consideration content. Engages on specifics (including pricing ranges and trip details) when the visitor pushes, refuses only when the answer would build a *shadow itinerary* — specific bookable dates, definitive package quotes, fake-feeling commitments that misrepresent what's actually available. Specialist hand-off is the natural close of the funnel, not a failure mode. This is the project's organising principle for tool descriptions, system prompts, content authoring, and refusal boundaries. Phrased as a "golden thread" rather than a strict rule — the gradient matters: the bot can engage with specifics when a visitor persists, as long as the answer doesn't construct a shadow itinerary. (Al: "without the fascism".)
+
+**Swap cost**: Conceptual; not architectural. Reframing the project would require rewriting tool descriptions + system prompt + parts of `cms/`. Not a code-shape decision.
 ## G.11 — CMS folder structure: `cms/prompts/{system,skills,tools}/`; system prompt is concatenation of `system/`
 
 **Decided**: 2026-04-27

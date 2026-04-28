@@ -5,7 +5,6 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 ---
 
 ## Status (2026-04-28)
-
 M1 live + chunk D closed. Today's work landed in two waves: **G.11 / B.t1a** (CMS folder restructure + multi-file system-prompt loader) and **E.t2 / E.t3 / E.t4** (`@swoop/connector` workspace populated; durable handoff store as interim file-backed; verdict-aware mailer off-by-default; `POST /handoff/submit` endpoint wired end-to-end).
 
 **Tests**: 311/311 green across 5 workspaces — `@swoop/common` (43), `@swoop/orchestrator` (132), `@swoop/connector` (46), `@swoop/ui` (71), `@swoop/harness` (19). Full workspace typecheck clean.

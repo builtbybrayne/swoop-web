@@ -210,8 +210,8 @@ Deliberately unresolved at the top level — pinned in Tier 2 where they bite.
 | 2 | Image retrieval path | Via Swoop media library (location TBC at hackathon) | Tier 2 chunk C |
 | 3 | Cross-page chat persistence | Default: no. Revisit if deep-linking wins | Tier 2 chunk D |
 | 4 | Message-passing topology | Default: SSE direct from ADK event stream to assistant-ui. **No internal bus unless a concrete need emerges** (e.g. durable events across HTTP connections). Must work cleanly for both ADK's server-side and assistant-ui's consumption | Tier 2 chunk B + D jointly |
-| 5 | Session backend in prod | Default: Firestore (ADK-supported) | Tier 2 chunk B |
-| 6 | Handoff store backend | Default: Firestore | Tier 2 chunk E |
+| 5 | Session backend in prod | Default: ADK in-built (in-memory through Phase 1; the simplest thing that works). Post-M4, **upgrade path is a custom Postgres `SessionService` implementation** if budget allows — keeping all our durable state in one Cloud SQL instance per C.18. Vertex AI Session Service no longer in scope; Firestore dropped per C.23. | Tier 2 chunk B |
+| 6 | Handoff store backend | Default: **Cloud SQL Postgres** (`handoff` table in the same instance as the retrieval store, per E.10). Firestore dropped per C.23. | Tier 2 chunk E |
 | 7 | Branching strategy for swarm | Default: trunk-based with per-stream `STREAM.md`; worktrees only when parallel agents genuinely conflict | Tier 2 chunk A |
 | 8 | Monorepo tooling | Default: npm workspaces | Tier 2 chunk A |
 | 9 | Dynamic prompt fragments (the "HOW" layer) | Default: none. Introduce only if real conversations show need | Tier 2 chunk G |

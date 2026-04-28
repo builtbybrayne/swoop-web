@@ -1,5 +1,22 @@
 # 02 — Retrieval & Data: Source exploration (first pass)
 
+> **⚠️ SUPERSEDED — 2026-04-28**
+>
+> This doc was a first-pass exploration note from 2026-04-24, written before the SQL dump arrived and before the Julie call. Both happened on 2026-04-27 and shifted the plan substantially.
+>
+> **The current canonical Tier 2 plan for chunk C is** [02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md) (rewrite landed 2026-04-28). The pre-rewrite original is preserved at [archive/02-impl-retrieval-and-data-pre-postgres-rewrite.md](archive/02-impl-retrieval-and-data-pre-postgres-rewrite.md) for source-material continuity.
+>
+> Key shifts since this doc was written:
+> - Storage: Vertex AI Search → **Postgres 16 + pgvector + tsvector + pg_trgm** (decision C.18, 2026-04-28).
+> - Source: scrape-vs-API → SQL dump as canonical, ingested via MariaDB → Postgres ETL.
+> - Tool surface: data-shaped retrieval tools → **sales-shaped tools with a Haiku composer layer inside the connector**.
+> - Pricing: calculated ranges → **headline `base_price` only**.
+> - Departures + swoopers: **out of scope** (per Julie call 2026-04-27 — see [inbox.md](../inbox.md)).
+>
+> The body below is left intact for its source-material value (the entity-level inspection of the public Trip Finder feed remains useful as a sense-check against the dump's actual schema), but **don't treat any of it as canonical**. Several specific recommendations in §3 / §4 / §5 have been overturned. See the new Tier 2 plan for what's actually planned.
+
+---
+
 **Status**: First-pass exploration note, 2026-04-24. **Not canonical.** Captured during a live call with Swoop engineering. Superseded by whatever the Monday SQL-dump ingestion reveals — treat this doc as a pre-read and orientation aid, not a source of truth.
 
 **Parent chunk**: C. Retrieval & Data ([02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md)) — specifically §2.1 (data access strategy) and §2.2 (ingestion pipeline shape).
