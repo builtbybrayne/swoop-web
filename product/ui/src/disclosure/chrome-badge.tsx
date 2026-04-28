@@ -6,13 +6,16 @@
 // Visual intent: monochrome, low-contrast, hover-affordance; shouldn't
 // compete with the conversation. See planning/03-exec-chat-surface-t4.md
 // §"Chrome badge is unmissable but unintrusive".
-//
-// Copy is loaded from `cms/legal/disclosure-chrome.md` via `legal-copy.ts`
-// (E.t5).
 
 import { useState } from "react";
 import { PrivacyInfoModal } from "./privacy-info-modal";
-import { DisclosureChrome } from "./legal-copy";
+
+// TODO(E.t5): replace with cms/legal/chrome-badge-label.md
+const COPY = {
+  label: "AI assistant",
+  info: "info",
+  ariaLabel: "Open privacy information for this AI assistant",
+} as const;
 
 export function ChromeBadge() {
   const [open, setOpen] = useState(false);
@@ -21,7 +24,7 @@ export function ChromeBadge() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={DisclosureChrome.ariaLabel}
+        aria-label={COPY.ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
         data-testid="chrome-badge"
@@ -32,11 +35,10 @@ export function ChromeBadge() {
           aria-hidden="true"
           className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400"
         />
-        <span>{DisclosureChrome.badgeLabel}</span>
+        {/* TODO(E.t5): replace with cms/legal/chrome-badge-label.md */}
+        <span>{COPY.label}</span>
         <span className="text-slate-400">·</span>
-        <span className="underline underline-offset-2">
-          {DisclosureChrome.badgeInfoLabel}
-        </span>
+        <span className="underline underline-offset-2">{COPY.info}</span>
       </button>
       <PrivacyInfoModal open={open} onClose={() => setOpen(false)} />
     </>

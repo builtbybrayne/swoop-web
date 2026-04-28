@@ -4,18 +4,32 @@
 // 50 disclosure with GDPR tier-1 consent in a single paired gesture — no chat
 // begins until the visitor explicitly continues.
 //
-// Copy is loaded from `cms/legal/disclosure-opening.md` via `legal-copy.ts`
-// (E.t5). The frontmatter carries labels; the body is markdown rendered via
-// `react-markdown` so authors can break paragraphs without a code change.
-//
 // See planning/03-exec-chat-surface-t4.md §"Pair, don't separate" and
 // §"Continue triggers bootstrap".
 
 import { useEffect, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { ConsentStatus } from "./use-consent";
-import { DisclosureOpening } from "./legal-copy";
+
+// TODO(E.t5): replace with cms/legal/disclosure-opening.md authored copy +
+// final legal review. All strings in this module are placeholder scaffolding
+// so the surface renders end-to-end for the M1 demo. Keep brand-agnostic.
+const COPY = {
+  heading: "Before we start",
+  intro:
+    "This is an AI assistant. It helps you explore trip ideas by chatting with you and suggesting options from our library.",
+  body:
+    "To answer your questions, we process the messages you send during this conversation. Nothing you type is used to train third-party AI models, and the conversation is kept only for as long as it takes to help you.",
+  bodyContinued:
+    "If you'd prefer not to start the conversation, you can decline — no data is recorded.",
+  privacyLinkLabel: "Read how we handle your data",
+  continueLabel: "Continue",
+  declineLabel: "No thanks",
+  grantingLabel: "One moment…",
+  errorPrefix: "Couldn't start the conversation:",
+  declinedHeading: "No problem",
+  declinedBody:
+    "Nothing has been recorded. You can close this window — or reload the page if you change your mind.",
+} as const;
 
 interface OpeningScreenProps {
   /**
@@ -69,11 +83,10 @@ export function OpeningScreen({
             id="swoop-disclosure-declined-heading"
             className="text-lg font-semibold text-slate-900"
           >
-            {DisclosureOpening.declinedHeading}
+            {/* TODO(E.t5): replace with cms/legal/disclosure-declined.md */}
+            {COPY.declinedHeading}
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            {DisclosureOpening.declinedBody}
-          </p>
+          <p className="mt-2 text-sm text-slate-600">{COPY.declinedBody}</p>
         </div>
       </section>
     );
@@ -94,21 +107,15 @@ export function OpeningScreen({
           id="swoop-disclosure-heading"
           className="text-lg font-semibold text-slate-900"
         >
-          {DisclosureOpening.heading}
+          {/* TODO(E.t5): replace with cms/legal/disclosure-opening.md heading */}
+          {COPY.heading}
         </h2>
 
-        <div
-          id="swoop-disclosure-body"
-          className="mt-3 space-y-3 text-sm text-slate-700"
-        >
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              p: (props) => <p className="text-sm text-slate-700" {...props} />,
-            }}
-          >
-            {DisclosureOpening.body}
-          </ReactMarkdown>
+        <div id="swoop-disclosure-body" className="mt-3 space-y-3 text-sm text-slate-700">
+          {/* TODO(E.t5): replace with cms/legal/disclosure-opening.md body copy */}
+          <p>{COPY.intro}</p>
+          <p>{COPY.body}</p>
+          <p>{COPY.bodyContinued}</p>
           {onOpenPrivacyInfo ? (
             <p>
               <button
@@ -117,7 +124,7 @@ export function OpeningScreen({
                 className="text-sm font-medium text-slate-900 underline underline-offset-2 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400"
                 data-testid="opening-screen-privacy-link"
               >
-                {DisclosureOpening.privacyLinkLabel}
+                {COPY.privacyLinkLabel}
               </button>
             </p>
           ) : null}
@@ -129,7 +136,7 @@ export function OpeningScreen({
             data-testid="opening-screen-error"
             className="mt-3 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-800"
           >
-            {DisclosureOpening.errorPrefix} {status.message}
+            {COPY.errorPrefix} {status.message}
           </p>
         ) : null}
 
@@ -142,7 +149,8 @@ export function OpeningScreen({
             data-testid="opening-screen-decline"
             data-swoop-part="opening-decline"
           >
-            {DisclosureOpening.declineLabel}
+            {/* TODO(E.t5): replace with cms/legal/disclosure-opening.md decline label */}
+            {COPY.declineLabel}
           </button>
           <button
             ref={continueRef}
@@ -156,9 +164,8 @@ export function OpeningScreen({
             data-swoop-part="opening-continue"
             aria-busy={isGranting || undefined}
           >
-            {isGranting
-              ? DisclosureOpening.grantingLabel
-              : DisclosureOpening.continueLabel}
+            {/* TODO(E.t5): replace with cms/legal/disclosure-opening.md continue label */}
+            {isGranting ? COPY.grantingLabel : COPY.continueLabel}
           </button>
         </div>
       </div>
