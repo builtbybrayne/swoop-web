@@ -9,22 +9,36 @@ M1 live + chunk D closed. Today's work landed in two waves: **G.11 / B.t1a** (CM
 
 **Tests**: 311/311 green across 5 workspaces — `@swoop/common` (43), `@swoop/orchestrator` (132), `@swoop/connector` (46), `@swoop/ui` (71), `@swoop/harness` (19). Full workspace typecheck clean.
 
-**SQL dump arrived** Mon 2026-04-27 — `data/content-data-swoop-patagonia_prod.sql` (already gitignored). Ingest session not yet held — that's the unblocker for chunk C.
+**SQL dump arrived** Mon 2026-04-27 — `data/content-data-swoop-patagonia_prod.sql` (already gitignored). Tier 2 rewrite + Julie-call decisions landed 2026-04-28 (see [decisions.md](planning/decisions.md) C.13–C.23 + B.22 + E.10; rewrite at [02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md)). Chunk C is now gated on continuing the discovery design HITL at [00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md), out of which C.t2 (sales-shaped tool I/O + Postgres entity model) and Tier 3 plans for C.t1 / C.t3 / C.t3a / C.t4 fall.
 
 ---
 
 ## Next up
 
-### 1. SQL-dump ingest session [~half day, HITL]
+### 1. Continue the discovery design HITL [active thread]
 
-The dump has landed. Session needed to: inspect schema, map against `data-ontology.md` first-pass, decide one-off vs scheduled feed, close the "is this the upstream source of truth?" question. Outputs: updated `data-ontology.md`, closed questions in `questions.md` (data-pipeline section), ready-to-author Tier 3 plans for C.t1–t8.
+[planning/00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md) is the live HITL doc — it merges C.t2 (sales-shaped tool I/O + Postgres entity model) with G.t0 / G.t1 / G.t3 because those design questions are tangled. §4 of that doc lists 6 open questions for the next session. Closing them produces:
 
-### 2. Chunk C — Retrieval & data [~3–4 days after #1]
+- Re-sketched 5 sales-shaped composer tools (input/output shapes; WHY/HOW/WHAT × User/Agent/Swoop matrix per tool; per-tool composer-Haiku reasoning)
+- First-pass G.t1 WHY system prompt at `cms/prompts/system/00_why.md`
+- ≥2 seeded skills under `cms/prompts/skills/<name>/SKILL.md`
+- Customer-type derivation mechanism (recommendation: Haiku post-classifier at handoff submit)
+- Decision on the proposed 4th `inconclusive` verdict
+- Postgres entity model (falls out of "what hydrates each tool's output?")
 
-- **C.t0** — SQL dump synthesis (#1 above).
-- Produce Tier 3 plans for C.t1–t8 just-in-time.
-- Replace stub connector with real `@swoop/connector` data tools (`search`, `get_detail`, `illustrate`) against whatever storage layer the dump session settles on. The connector workspace already exists and hosts the handoff side-effects; data tools land alongside.
-- Image annotation pipeline (parallelisable — can start as soon as media access path is clear).
+### 2. Chunk C — Retrieval & data [~5–7 days after #1]
+
+- **C.t0** — load dump into local MariaDB + clarifying SELECTs (can start immediately; not blocked on #1).
+- **C.t1** — connector service skeleton + Postgres setup (Cloud SQL prod, Docker Compose for handoff parity).
+- **C.t2** — entity model + sales-shaped tool I/O schemas (lands as design HITL output; #1 is the gate).
+- **C.t3** — `export.sql` MariaDB → Postgres ETL (no LLM in the loop).
+- **C.t3a** — embedding pass + sales-shaped derived entity population (`vibe_passage` / `customer_story` / `trust_proof`).
+- **C.t4** — 10-tool implementations (5 PoC pass-through + 5 sales-shaped composer; composer prompts in `cms/prompts/tools/<tool>/composer.md`).
+- **C.t5** — image URL utility + page-as-hub resolver (`buildImgixUrl`, `resolveImagesViaPage` in `@swoop/common`).
+- **C.t6** — image annotation pipeline (parallelisable from C.t0; ~13K images via Claude Vision).
+- **C.t8** — ETL + annotation runbooks for Swoop's internal team.
+- **Blog ingest** — parallel stream per [planning/03-exec-blog-ingest.md](planning/03-exec-blog-ingest.md); independent of the SQL ETL, can run any time.
+- **Downstream augments**: B.t3a (connector adapter wrappers for new tools) + D.t9 (widgets for new tool outputs) fan out from C.t4.
 
 ### 3. Chunk G — Content (bulk) [~3–4 days incl. HITL session]
 
@@ -83,7 +97,7 @@ B.t1a (multi-file prompt loader) shipped 2026-04-27. B.t10 (warm pool) shipped 2
 
 Tracked in [questions.md](questions.md). Blockers:
 
-- **SQL-dump ingest session** — needs Al + (optionally) Swoop engineering. The dump itself is in hand.
+- **C.t0 clarifying SELECTs** — the residual semantic questions (`tripvariant` / `season` / `daybyday` revision logic / `contentblock_*` triage) that resolve by inspection, not by Swoop input.
 - **Patagonia sales-thinking doc** (Luke + Lane, ~May 4) — shapes chunk G.
 - **GCP "AI Pat Chat" IAM** (Thomas) — required for M4 + the Firestore handoff-store swap.
 - **Claude account tier confirmation** (Julie → Tom) — affects scraper cost routing in C.

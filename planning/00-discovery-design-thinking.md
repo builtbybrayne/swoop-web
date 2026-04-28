@@ -212,6 +212,10 @@ Roughly right but **not yet validated under the looser frame**. Need re-sketchin
 
 ## 5. Method notes
 
+- **Top-down, not bottom-up.** (Al, 2026-04-29.) Tools, system prompts, modular guidance are an interlocking ensemble — design them as one. Start from conversational arcs (visitor journeys, §3.2 paths, customer-type segmentation, motivation anchors) and ask "what does the agent need at each beat — guidance? a tool? a piece of WHY context?". Tool I/O follows; Postgres entity model emerges last. **Do NOT** start from the data shape and propagate up — that risks well-shaped tools whose surface contradicts the WHY voice, or skills triggered at the wrong inflection because tool boundaries didn't align with real conversational moments.
+- **All 10 tools are in scope for re-sketch**, not just the 5 new ones. (Al, 2026-04-29.) The PoC tools have value (original thinking + UI widgets) but warrant refresh under the looser frame. Walk all 10 within the ensemble — some may collapse, merge, rename, or retire.
+- **Q5 closed**: `inconclusive` 4th verdict approved. (Al, 2026-04-29.) Lands in `@swoop/common/handoff.ts` (E.t1 contract extension) with per-verdict reason enum from §3.2 Path 7. No email (per E.3 disqualified pattern), 90-day retention.
+- **Q4 closed**: customer-type derivation lives in the main chat agent, not a Haiku post-classifier. (Al, 2026-04-29.) Most context-aware reasoner in the loop; signal not worth a separate model call.
 - **Don't treat the 7 paths as state.** Outcome shapes. Agent reasons; paths emerge.
 - **PoC PROMPT_ENGINEERING.md is the authoring framework** — tool descriptions authored with WHY/HOW/WHAT × User/Agent/Swoop matrix as code-comment scratchpad above the prose.
 - **Voice is authoritative-yet-approachable + candid + playful + plain-language.** "If Swoop were the guide at the refugio bar, would they speak to their customers this way?" is the test.

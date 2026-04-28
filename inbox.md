@@ -6,6 +6,26 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-04-29 — W1 (server-side session history projection) unparked
+
+Original side-quest plan at [planning/01-side-quest-persistence.md](planning/01-side-quest-persistence.md) parked W1 + W2 + W4 pending observation from the mock-host harness. Observation outcome (Al, 2026-04-29): **assistant-ui doesn't auto-rehydrate** — the chat UI loses thread state on iframe remount, confirming the original concern. W1 + W2 are now active; W4 still settled at sessionStorage.
+
+The previous W1 attempt landed and was reverted as part of the worktree-base mess. **Original commit worth reviewing for shape: `6d311240aa3b99e0c53eabccac1dfbfef83682a5`.** Per Al, that implementation was nearly OK from an assistant-ui perspective but predated the C.18 / B.22 / E.10 / C.23 Postgres lock-in — so the orchestrator-side reading of session history needs to factor in the eventual Postgres `SessionService` (B.22) rather than the in-memory ADK-native shape it was built against.
+
+Action for next session: (a) flip W1 + W2 in `01-side-quest-persistence.md` from "parked" to "active"; (b) author Tier 3 plans for `B.t11` (orchestrator history endpoint) + a UI-side rehydration task (W2); (c) review commit `6d31124` and salvage what carries; (d) add a `discoveries.md` entry: "assistant-ui doesn't auto-rehydrate — server history projection + client mount-time replay required".
+
+---
+
+## 2026-04-29 — Method note: tools / system prompts / guidance must be designed as one coherent ensemble, not bottom-up from data
+
+Captured from Al, 2026-04-29 (after I'd been reaching for a tool-by-tool walk grounded in the dump's data shape). The corrective: **don't pick off the discovery design tasks one by one starting from the data**. Tools, system prompts, and modular guidance are interlocking — the agent is a working ensemble, and that ensemble has to make sense as a whole before the individual pieces can land coherently. Bottom-up-from-data risks producing five well-shaped tools whose surface contradicts the WHY prompt's voice, or skills that load at the wrong inflection because the tool boundaries weren't drawn around real conversational moments.
+
+Practical implication for the Q1 / Q2 / Q3 thread in [planning/00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md): when we resume, **start from the conversational arcs** (a typical visitor journey, the §3.2 path sketches, the customer-type segmentation, the motivation anchors) and ask "what does the agent need at each beat — guidance? a tool? a piece of WHY context?". Tool I/O shapes follow; Postgres entity model emerges last. NOT: "what fields hydrate `stoke_imagination`'s output? OK, so the entity model is X, so the tool surface is Y, so the WHY prompt should reference Z."
+
+This is method, not just preference. Future sessions: read this entry before reaching for the data layer.
+
+---
+
 ## 2026-04-28 — Tier 2 plan refresh + Firestore cleanup follow-up
 
 Major Tier 2 plan refresh landed today: chunk C rewritten around Postgres + sales-shaped tools woven with existing PoC tools (C.19); B's session strategy clarified (B.22: ADK in-built → custom Postgres post-M4); E's handoff store flipped to Cloud SQL Postgres (E.10); Firestore dropped project-wide (C.23). 12 new decisions landed in [decisions.md](planning/decisions.md). All sub-decisions (C.13–C.17 sales-funnel + data rulings) also formalised.
