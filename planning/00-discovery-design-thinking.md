@@ -1,21 +1,20 @@
 # Discovery Design Thinking — joint working doc for C.t2 + G.t0
 
-**Status**: Active HITL design thinking. Updated 2026-04-28.
-**Authored from**: a HITL session between Al + Claude (Opus 4.7, 1M context) where the C.t2 conversation + G.t0 conversation merged because the underlying design questions are inextricable.
-**Purpose**: Persist the thinking chain across sessions. Future sessions resume here, evolve the thinking, and refine.
-**Why this doc exists**: tools + system prompt + voice + the philosophy of what a conversation IS are all intimately related. Treating them as separate tasks (C.t2 vs G.t0 vs G.t1) was a planning convenience, not a design reality. This doc holds them together until they're ready to fork back into the per-task Tier 3 deliverables.
+**Status**: Active HITL design thinking. Persistable across sessions.
+**Authored from**: a HITL session 2026-04-28 between Al and Claude (Opus 4.7, 1M context) where the C.t2 conversation and G.t0 conversation merged because the underlying design questions are inextricable.
+**Why this doc exists**: tools + system prompt + voice + the philosophy of what a conversation IS are all intimately related. Treating them as separate Tier 3 tasks (C.t2 vs G.t0 vs G.t1) was a planning convenience, not a design reality. This doc holds them together until the design firms enough to fork back into the per-task deliverables.
 
 ---
 
 ## How to use this doc next session
 
-1. Read top-to-bottom — it's self-contained.
-2. Load the **swoop** skill (covers engagement context + people).
+1. Read top-to-bottom. It's self-contained.
+2. Load the **swoop** skill (engagement context, people, voice).
 3. Load `CLAUDE.md` (root) for project-wide invariants.
-4. Spot-check the **Source materials** list — re-read whichever the next conversational move needs (most useful: the meeting transcripts, the PoC PROMPT_ENGINEERING.md, the PoC guidance-payload.json — see file paths in §3).
+4. Spot-check the **Source materials** list — re-read whichever the next move needs (most useful: meeting transcripts, PoC `PROMPT_ENGINEERING.md`, PoC `guidance-payload.json`).
 5. Pick up from **Where we are now** + **Open questions**.
 
-This doc is **append-and-edit-friendly**. Each session can extend the thinking chain and refine the conclusions. Don't rewrite it from scratch.
+This doc is **append-and-edit-friendly**. Each session can extend the thinking chain and refine the conclusions. Don't rewrite from scratch.
 
 ---
 
@@ -24,8 +23,8 @@ This doc is **append-and-edit-friendly**. Each session can extend the thinking c
 **The deliverable is "the discovery experience" — singular, not three tasks.**
 
 Decomposed in the planning docs as:
-- **C.t2** — sales-shaped tool I/O schemas + entity model
-- **G.t0** — Patagonia conversational flow mapping (HITL)
+- **C.t2** — sales-shaped tool I/O schemas + Postgres entity model
+- **G.t0** — Patagonia conversational flow mapping (HITL session)
 - **G.t1** — WHY system prompt
 - **G.t3** — modular guidance ("skills") seeded ≥2
 
@@ -40,283 +39,190 @@ C.t2's Postgres entity model falls out of "what hydrates each tool's output?" �
 
 ---
 
-## 2. The thinking chain — full trajectory
+## 2. Source materials (with paths)
+
+Paths in this repo unless noted. The PoC repo is at `/Users/al/Studio/projects/swoop/`.
+
+### Meeting transcripts (load these first to ground the conversation)
+- `planning/archive/meetings/Luke _ Julie _ Alastair kick off for the Conversational AI tool - 2026_04_20 16_00 BST - Notes by Gemini.md` — kickoff with Luke + Julie. Defines Patagonia customer segmentation, group-tour priority, motivation anchors, profit floor, inventory constraint, no-itineraries rail.
+- `planning/archive/meetings/AI Tool Technical Requirements  – 2026_04_21 14_00 BST – Notes by Gemini.md` — technical kickoff with Julie + Thomas + Richard. Note: the Vertex AI Search + scrape paths discussed there are now superseded (Postgres + SQL dump per C.18 + C.21).
+
+### PoC sales docs (Swoop's actual sales-team training material)
+- `/Users/al/Studio/projects/swoop/sales docs/extracted/sales-process.md` — Discover → Propose → Close. TED/probing/B&W question types. LEAR objection handling. Closing techniques.
+- `/Users/al/Studio/projects/swoop/sales docs/extracted/the-brand-platform-toolkit---oct-14th-sales.md` — brand platform: "Your adventure story", 400,000 hours of lived experience.
+- `/Users/al/Studio/projects/swoop/sales docs/extracted/tone-of-voicedecember-2025-for-presenting.md` — voice + tone bible. Four pillars. Don't-vs-Do swap table for formal-to-natural language.
+- `/Users/al/Studio/projects/swoop/sales docs/extracted/why-swoop---elevator-pitch-training-ant.md` — 7 Why-Swoop pillars + the full pitch script.
+- `/Users/al/Studio/projects/swoop/sales docs/extracted/why-swoop-emails.md` — sample handoff-style email body language.
+
+### PoC cms (the behavioural brain of the ChatGPT prototype)
+- `/Users/al/Studio/projects/swoop/product/cms/PROMPT_ENGINEERING.md` — **the canonical authoring framework** for tool descriptions. WHY/HOW/WHAT × User/ChatGPT/Swoop matrix. Puma should inherit it (substituting × Agent for × ChatGPT).
+- `/Users/al/Studio/projects/swoop/product/cms/README.md` — content-as-data posture; how content reaches the agent.
+- `/Users/al/Studio/projects/swoop/product/cms/guidance-payload.json` — **the actual prose** for `aboutSwoop`, `salesMethodology`, `toneOfVoice`, `brandPillars`, `howToUseThisGuidance`, `dimensionsFramework`, `readinessWarmthModel`, `handoffTriggers`, `constraints`, `affordabilityGuidance`, `domainSummaries`, `postHandoffGuidance`. Antarctica-flavoured; needs Patagonia-specific equivalents authored.
+
+### Tier 1 + Tier 2 plans (project orientation)
+- `planning/01-top-level.md` — Puma roadmap, JTBDs, themes, milestones.
+- `planning/02-impl-content.md` — chunk G. **Most relevant for G.t0 + G.t1.** Authoritative on G.10 (style-avoid) + G.11 (CMS folder structure).
+- `planning/02-impl-retrieval-and-data.md` — chunk C, **rewrite of 2026-04-28**. Most relevant for tool design + Postgres entity model. 10-tool surface, composer pattern, sales-shaped derived entities.
+- `planning/02-impl-handoff-and-compliance.md` — chunk E. Verdict + reason taxonomy + consent two-tier model.
+- `planning/02-impl-validation.md` — chunk H. Eval harness scope.
+- `planning/02-impl-agent-runtime.md` — chunk B. Two-layer agent model.
+
+### Decisions log
+- `planning/decisions.md`. Most relevant entries:
+  - **G.10** — two-layer voice control (positive examples + explicit avoidance list)
+  - **G.11** — CMS folder structure (`prompts/system/`, `prompts/skills/`, `prompts/tools/`)
+  - **C.13–C.23** — golden thread, no departures/swoopers/calc-pricing, page-as-hub, ntag live, Postgres lock, sales-shaped tool surface, composer pattern
+  - **B.22** — sessions on ADK in-built first; custom Postgres `SessionService` post-M4
+  - **E.1–E.15** — verdict + reason taxonomy + storage + email + consent
+
+### Discoveries + gotchas
+- `discoveries.md` — non-obvious architectural truths.
+- `gotchas.md` — environmental traps.
+
+---
+
+## 3. The thinking chain — full trajectory
 
 Captured as it happened so future sessions can see *why* we landed where we did, not just what we landed.
 
-### 2.1 Starting point — C.t2 schemas in isolation (what didn't work)
-
-First attempt sketched `stoke_imagination(theme | region | mood)` as a discriminated input + a structured output (`framingProse`, `passages`, `images`, `customerStories`, `suggestedNextMoves`). Plus offered to walk the other 4 tools the same way.
-
-Two questions to Al:
-1. Is the input shape right?
-2. Should `framingProse` be a tool output at all, or keep prose authorship as the orchestrator's job?
-
-### 2.2 Al's first reframe — tools + workflows are inextricable
-
-Al pushed back: designing tool I/O without the workflow leads to invented surfaces. The tools' WHY is in the conversation paths.
-
-Suggested I read meeting transcripts + PoC sales docs + PoC cms docs.
-
-### 2.3 Substrate read — what the meetings + PoC docs revealed
+### 3.1 Substrate read — what the meetings + PoC docs reveal
 
 **Patagonia sales reality (Apr 20 kickoff with Luke + Julie):**
-- Patagonia ≠ Antarctica — the Antarctica PoC welcomed every lead; Patagonia needs **active triage during discovery**.
+- Patagonia ≠ Antarctica — Antarctica welcomed every lead; Patagonia needs **active triage during discovery**.
 - Customer types (Luke's segmentation): **Group Tourer / Tailor-Made / Independent / Backpacker (out)**. First dimension is independence level.
 - Region segments: **Torres del Paine only / TdP+1 / off-the-beaten-track**. 80%+ of bookings touch TdP.
 - Activity segments: **softer-adventure / hikers / multi-day-trekkers**.
 - Budget: Patagonia "surprisingly expensive". Luxury lodges thousands per day. Group tours improve unit economics.
 - Strategic priority: **group tours target 50% of bookings**. Surface them proactively for solo travellers (Luke's flagged single biggest priority).
-- Floor: <$1k profit = negative contribution → refer out.
+- Floor: **<$1k profit = negative contribution → refer out**.
 - Inventory constraint: **Dec–Feb luxury lodges need 6–12 month lead time**. Useful urgency lever for premium leads.
-- Motivations Luke called out: W-trail hike, accessible glaciers, **puma photography**, **bragging-rights-luxury-lodge stays**.
+- Motivations Luke called out: W-trail hike, accessible glaciers, **puma photography**, **bragging-rights luxury-lodge stays**.
 - Julie's hard line: **the agent must not construct itineraries** — explicit safety rail.
 
-**Technical reality (Apr 21 kickoff with Julie + Thomas + Richard):**
-- Initial GCP target was Vertex AI Search — superseded by C.18 (Postgres + pgvector + tsvector + pg_trgm).
-- Initial source of truth was discussed as scrape-vs-API — superseded by the SQL dump arriving 2026-04-27 (canonical now per C.21 + C.23).
-- React + assistant-ui as UI; ADK TS as agent runtime. Both still settled.
-
 **Swoop's "Discover" sales methodology (PoC sales docs):**
-- Three-stage process: **Discover → Propose → Close**. The PoC handled only Discover; Puma also handles only Discover.
-- Discover techniques: **listen actively, ask lots of questions, encourage, respond positively, find mutual connections**.
+- Three-stage process: **Discover → Propose → Close**. Puma handles only Discover (same as PoC).
+- Discover techniques: listen actively, ask lots of questions, encourage, respond positively, find mutual connections.
 - Three question types: **TED (Tell, Explain, Describe), Probing, Black-and-white**.
 - Recap → check → agree-next-step closing pattern.
 - Discovery is complete when "you understand the customer's needs AND have made a connection".
-- LEAR objection-handling framework: **Listen, Acknowledge, Explore, Respond**.
+- LEAR objection handling: Listen, Acknowledge, Explore, Respond.
 
 **The PoC's behavioural brain (PoC `cms/guidance-payload.json` + `cms/PROMPT_ENGINEERING.md`):**
 - **2x2 conversation state matrix**: **Readiness × Warmth → Browse / Excite / Convince / Convert**.
 - **6 content dimensions + meta-Affordability**: Destination, Timing, Desires, Concerns, Practical, Emotional, each 0–3.
 - **4 user archetypes**: Dreamer / Planner / Skeptic / Browser.
-- **Tool sequencing strategy**: tools chosen by state cell — but this was over-prescriptive (see 2.6).
-- **PROMPT_ENGINEERING framework**: every tool description authored as **WHY → HOW → WHAT** crossed with **× User / × Agent / × Swoop** = a 3×3 reasoning matrix. The matrix lives as code comments next to the description; the description string is the prose output. Reasoning is preserved for future iteration.
-- **Brand voice (Tone of Voice doc)**: "Attenborough not the encyclopedia" + "candid & trustworthy — the negatives as well as the positives" + "playful & enthusiastic — penguin poo and whale snot" + the "if-Swoop-were-the-guide-at-a-refugio-bar-would-they-speak-this-way" test.
-- **Why Swoop pillars (elevator pitch)**: SPECIALISM / EXPERIENCE (150+ Antarctic trips) / PARTNERSHIPS (impartial across the polar fleet) / GLOBAL TEAM (22h support) / ONE POC (dedicated CX colleague) / EMERGENCY COVER (24/7) / SAME COST (no markup).
-- **Constraints (PoC's 10-point list)**: don't lead with specific ship names; let `show_component_list` browse; bookings via handoff not instructions; detailed itineraries via specialist not text; weave knowledge naturally; concerns first then validate then address; budget directly when natural; etc.
-- **Affordability gating**: NOT a gate for the conversation (everyone deserves an inspiring conversation), IS a gate for handoff (don't waste sales time below £5k tier).
+- **PROMPT_ENGINEERING framework**: every tool description authored as **WHY → HOW → WHAT** crossed with **× User / × Agent / × Swoop** = a 3×3 reasoning matrix. Matrix as code-comment scratchpad; the prose description is the output.
+- **Brand voice**: "Attenborough not the encyclopedia" + "candid & trustworthy — the negatives as well as the positives" + "playful & enthusiastic — penguin poo and whale snot" + "if-Swoop-were-the-guide-at-a-refugio-bar-would-they-speak-this-way" test.
+- **Why Swoop pillars**: SPECIALISM / EXPERIENCE (150+ Antarctic trips) / PARTNERSHIPS (impartial across the polar fleet) / GLOBAL TEAM (22h support) / ONE POC / EMERGENCY COVER / SAME COST.
+- **Affordability gating**: NOT a gate for the conversation, IS a gate for handoff (don't waste sales time below £5k tier).
 
-### 2.4 Synthesis — 7 candidate Patagonia conversation paths (drafted)
-
-Drafted 7 outcome shapes:
+### 3.2 The 7 path sketch — outcome shapes (NOT agent state)
 
 | # | Path | Verdict | Reason code |
 |---|---|---|---|
-| 1 | Solo → Group Tour | qualified | `group_tour_intent` |
-| 2 | Premium Tailor-Made | qualified | `bespoke_request` / `budget_and_timeline_confirmed` |
+| 1 | Solo → Group Tour pivot | qualified | `group_tour_intent` |
+| 2 | Premium Tailor-Made (anniversary, lodges) | qualified | `bespoke_request` / `budget_and_timeline_confirmed` |
 | 3 | Confident Hiker / Independent | qualified | `ready_booking_named_trip` |
-| 4 | Specialist Photography | qualified | `bespoke_request` |
-| 5 | Backpacker → Disqualified | disqualified | `backpacker_no_budget` |
-| 6 | Off-region / sub-$1k | referred_out | `out_of_region` / `below_profit_floor` |
-| 7 | **Inconclusive** (NEW) | **inconclusive (proposed 4th verdict)** | `low_engagement` / `mixed_signals` / `extended_no_convergence` / `comparison_shopping` / `off_offer_in_region` / `drive_by` / `inconclusive_other` |
+| 4 | Specialist Photography (puma niche) | qualified | `bespoke_request` |
+| 5 | Backpacker → Disqualified (politely) | disqualified | `backpacker_no_budget` |
+| 6 | Off-region or sub-$1k profit → Referred Out | referred_out | `out_of_region` / `below_profit_floor` |
+| 7 | **Inconclusive** — agent never reaches confidence | **inconclusive (PROPOSED 4th VERDICT)** | `low_engagement` / `mixed_signals` / `extended_no_convergence` / `comparison_shopping` / `off_offer_in_region` / `drive_by` / `inconclusive_other` |
 
-Path 7 covers visitors who don't fit qualified / referred-out / disqualified — agent never reaches confidence to verdict. The PoC's posture for these visitors is "don't push, keep it warm and inspiring, leave the door open" (the "tell a friend, save up, enjoy dreaming" mode from `affordabilityGuidance`). Sales never sees them; durable record exists for analytics.
+Path 7 covers visitors who don't fit qualified / referred-out / disqualified — agent never reaches confidence. The PoC's posture for these visitors is "don't push, keep it warm and inspiring, leave the door open" (the "tell a friend, save up, enjoy dreaming" mode from `affordabilityGuidance`). Sales never sees them; durable record exists for analytics.
 
-### 2.5 Al's second reframe — trust the agent
+**Paths are outcome shapes, NOT agent state.** They're useful for:
+- Eval harness scenarios (H.t4 — test each resolves correctly)
+- Compliance bundle (failure-mode coverage)
+- Sales-team mental model
 
-Two corrections:
+The agent doesn't track which path it's on — paths *emerge* from the dimensions framework as the conversation unfolds.
 
-1. **Don't over-prescribe.** Sonnet is good at reading context and reasoning. The PoC's `howToUseThisGuidance` over-encodes ("Turn 1: do X. Turn 2: do Y. Turn 3+: bias toward Z"). Better posture: rich WHY context + clear tool affordances + clear motivations, then trust the agent.
-2. **The 7-path model is at the wrong altitude.** Paths-as-state-machine is over-engineering. The dimensions framework already exists; paths are *outcomes* that emerge from dimensions, not states the agent tracks.
+### 3.3 The reframe — trust the agent, don't over-prescribe
 
-### 2.6 The reframe absorbed — what the design now looks like
+**Old PoC posture (over-prescriptive):** `howToUseThisGuidance` encodes turn-by-turn behaviour ("Turn 1: do X. Turn 2: do Y. Turn 3+: bias toward Z"). This was the ChatGPT-era pattern — necessary because ChatGPT Apps SDK has no system prompt.
 
-**Conversation model (clean):**
-- Agent is given **rich WHY context** + **tools as affordances** + **voice + refusals**.
-- Agent reads context, reads visitor, picks tools. **No state machine encoded in code.**
-- The PoC's dimensions framework + R/W matrix + archetypes are useful *mental models the agent can use*, NOT formal state the agent must track.
-- Patagonia adds **customer-type as a derived signal** (Group Tourer / Tailor-Made / Independent / Backpacker / Off-region). Not formally classified at runtime — read from signals like dimensions.
-- The 7 paths are useful for: **eval harness scenarios (H.t4)**, **compliance-bundle failure-mode coverage**, **sales-team mental model** — NOT for agent state.
+**Puma posture (trust-the-agent):**
+- Sonnet is sophisticated enough to read context and reason. Don't encode workflow as a state machine.
+- Provide:
+  - **Rich WHY context** — Swoop's world, who we care about, what we don't do, what makes a great handoff
+  - **Tools as affordances** with strong WHY-flavoured descriptions
+  - **Voice + refusals** — how Swoop sounds, what it won't pretend to be
+- The PoC's dimensions framework + R/W matrix + archetypes are useful **mental models the agent can use**, not formal state the agent must track.
+- Patagonia adds **customer-type as a derived signal** (Group Tourer / Tailor-Made / Independent / Backpacker / Off-region). Read from signals like the existing dimensions; not a new tracked state.
 
-**Verdict taxonomy (proposed addition):**
-- E.t1 currently has 3 verdicts: `qualified` / `referred_out` / `disqualified`.
-- Add **4th verdict: `inconclusive`** for Path 7 visitors.
-- Reason codes per verdict (per E.t1's existing per-verdict enum pattern).
-- **Agent self-asserts the reason code** (Al confirmed) — Sonnet is sophisticated enough to pick from a small enum at handoff time. The PoC's `handoff` tool already has the agent producing structured args; this extends the pattern.
-- Codes are useful for: sales routing, prioritisation, email-template selection, analytics queries, H.t3 assertions.
+### 3.4 Verdict taxonomy — proposed 4th verdict
 
-**Tool design lens:**
-- Less "design tool I/O for inflection X in path Y".
-- More **"design tools as useful affordances"** — what content makes a great response when the agent reaches for this tool?
-- Tool descriptions in prose (per-tool `cms/prompts/tools/<tool>/description.md`) carry chunks of WHY context — the WHY/HOW/WHAT × User/Agent/Swoop matrix from the PoC's PROMPT_ENGINEERING framework.
+E.t1 currently ships 3 verdicts: `qualified` / `referred_out` / `disqualified`. Add **4th verdict `inconclusive`** for Path 7 visitors (agent reached no confidence). E.t1's contract is fresh enough that extending it is cheap.
 
-**The 5 sales-shaped tools (per Tier 2 chunk C §2.2):**
+- Email behaviour: **no email** (per E.3 disqualified pattern).
+- Retention: **90 days** (per E.7 disqualified pattern; not future-leads-with-substance).
+- Reason codes: see Path 7 in §3.2.
+
+### 3.5 Reason codes — agent self-asserts
+
+Al confirmed: **the agent picks reason codes** at handoff time. Sonnet is sophisticated enough to pick from a small per-verdict enum. Existing E.t1 contract already supports this. H.t3 (assertion catalogue, landed clean on this branch) consumes them via `triage_verdict { verdict, reasonCode }` assertions.
+
+### 3.6 Tool design lens — reframed
+
+Less: "design tool I/O for inflection X in path Y".
+More: **"design tools as useful affordances"** — what content makes a great response when the agent reaches for this tool?
+
+Tool descriptions in prose (per-tool `cms/prompts/tools/<tool>/description.md`) carry chunks of WHY context — using the WHY/HOW/WHAT × User/Agent/Swoop matrix from PoC's PROMPT_ENGINEERING.md as code-comment scratchpad above the description string.
+
+The 5 sales-shaped tools per current chunk-C Tier 2 §2.2:
 - `stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`
-- Roughly right but **not yet validated** under the looser frame.
-- Need re-sketching: what does each return? What's the data shape that makes a great response possible?
-- Postgres entities (`vibe_passage`, `customer_story`, `trust_proof`, `trip_card`) fall out of "what hydrates the output?".
 
----
-
-## 3. Source materials
-
-Paths in this repo unless noted. The PoC repo is at `/Users/al/Studio/projects/swoop/` (no symlink in this worktree).
-
-### Meeting transcripts (load these first to ground the conversation)
-- `planning/archive/meetings/Luke _ Julie _ Alastair kick off for the Conversational AI tool - 2026_04_20 16_00 BST - Notes by Gemini.md` — kickoff with Luke + Julie. Defines Patagonia customer segmentation, group-tour priority, motivation anchors, profit floor, inventory constraint, no-itineraries rail.
-- `planning/archive/meetings/AI Tool Technical Requirements  – 2026_04_21 14_00 BST – Notes by Gemini.md` — technical kickoff with Julie + Thomas + Richard. ADK / React / Cloud Run / Vertex (now superseded) / scraping (now superseded by SQL dump).
-
-### PoC sales docs (Swoop's actual sales-team training material)
-- `/Users/al/Studio/projects/swoop/sales docs/extracted/sales-process.md` — Discover → Propose → Close. TED/probing/B&W questions. LEAR objection handling. Closing techniques.
-- `/Users/al/Studio/projects/swoop/sales docs/extracted/the-brand-platform-toolkit---oct-14th-sales.md` — brand platform: "Your adventure story", 400,000 hours of lived experience, tap-into framing.
-- `/Users/al/Studio/projects/swoop/sales docs/extracted/tone-of-voicedecember-2025-for-presenting.md` — voice + tone bible. Four pillars: Authoritative-yet-Approachable / Candid-&-Trustworthy / Playful-&-Enthusiastic / Language-Choices. Don't-vs-Do swap table for formal-to-natural language.
-- `/Users/al/Studio/projects/swoop/sales docs/extracted/why-swoop---elevator-pitch-training-ant.md` — 7 Why-Swoop pillars + the full pitch script.
-- `/Users/al/Studio/projects/swoop/sales docs/extracted/why-swoop-emails.md` — sample handoff-style email body language.
-
-### PoC cms (the behavioural brain of the ChatGPT prototype)
-- `/Users/al/Studio/projects/swoop/product/cms/PROMPT_ENGINEERING.md` — **the framework** for writing tool descriptions. WHY/HOW/WHAT × User/ChatGPT/Swoop matrix, principles, do/don't, the test. **This is the canonical authoring framework Puma should inherit** (substituting × Agent for × ChatGPT).
-- `/Users/al/Studio/projects/swoop/product/cms/README.md` — content-as-data posture; how content reaches the agent.
-- `/Users/al/Studio/projects/swoop/product/cms/guidance-payload.json` — **the actual prose** for `aboutSwoop`, `salesMethodology`, `toneOfVoice`, `brandPillars`, `howToUseThisGuidance`, `dimensionsFramework`, `readinessWarmthModel`, `handoffTriggers`, `constraints`, `affordabilityGuidance`, `domainSummaries`, `postHandoffGuidance`. Antarctica-flavoured; needs Patagonia-specific equivalents authored.
-
-### Tier 1 plans (project orientation)
-- `planning/01-top-level.md` — Puma roadmap, JTBDs, themes, milestones, parallelisation strategy.
-- `planning/01-side-quest-persistence.md` — cross-iframe rehydration plan (W1+W2 unparked 2026-04-28 after mock-host evidence).
-
-### Tier 2 plans (chunk-level implementation context)
-- `planning/02-impl-content.md` — chunk G. **Most relevant** for G.t0 + G.t1 design. Authoritative on G.10 (style-avoid) + G.11 (CMS folder structure).
-- `planning/02-impl-retrieval-and-data.md` — chunk C, rewrite of 2026-04-28. **Most relevant** for tool design + Postgres entity model. 10-tool surface, composer pattern, sales-shaped derived entities.
-- `planning/02-impl-handoff-and-compliance.md` — chunk E. Verdict + reason taxonomy + consent two-tier model.
-- `planning/02-impl-validation.md` — chunk H. Eval harness scope (H.t4 will scenario-author Path 1–7).
-- `planning/02-impl-agent-runtime.md` — chunk B. Two-layer agent model (orchestrator Sonnet + functional internal Haiku agents).
-- `planning/02-impl-chat-surface.md` — chunk D. Disclosure + consent UX context.
-- `planning/02-impl-foundations.md` — chunk A. Workspace + ts-common contracts.
-- `planning/02-impl-observability.md` — chunk F. Event schema for handoff/triage events.
-
-### Tier 3 plans (most relevant landed during this session)
-- `planning/03-exec-blog-ingest.md` — blog ingest pipeline. Implemented in this session (`worktree-agent-a0b7dfee4cfcd79d3`). 102 posts pulled live.
-- `planning/03-exec-handoff-t1.md` — verdict + reason taxonomy in `@swoop/common/handoff`. **Authoritative on E.t1's contract**; the proposed `inconclusive` verdict extends this.
-- `planning/03-exec-validation-scaffold.md` — H.t1 harness scaffold. The 13 stub scenarios under `product/harness/scenarios/` are where Path 1–7 walk-throughs eventually land as YAML.
-
-### Decisions log
-- `planning/decisions.md` — running log. Most relevant entries for this design:
-  - **G.10** (2026-04-24) — two-layer voice control (positive examples + explicit avoidance list)
-  - **G.11** (2026-04-27) — CMS folder structure (`prompts/system/`, `prompts/skills/`, `prompts/tools/`)
-  - **C.13–C.23** (2026-04-28) — golden thread, no departures/swoopers/calc-pricing, page-as-hub, ntag live, Postgres lock, sales-shaped tool surface, blog ingest, composer pattern
-  - **B.22** (2026-04-28) — sessions on ADK in-built first; custom Postgres `SessionService` post-M4
-  - **E.1–E.15** — verdict + reason taxonomy + storage + email + consent + connector home + endpoint + payload-enrichment + consent-timestamp
-  - **H.9–H.13** + new **H.14–H.16** (this session) — harness language, scenario format, orchestrator invocation, event-schema imports, CI gating, event-capture interface, Zod-discriminated-union refinements
-
-### Discoveries + gotchas
-- `discoveries.md` — non-obvious architectural truths. Particularly: form submission is a discrete user action (not a chat turn), connector returns `{ok, value}` envelopes, `<reasoning>` filtered from outbound SSE, Two-layer agent model works cleanly in ADK, etc.
-- `gotchas.md` — environmental traps. dotenv override, model IDs, session-state-is-in-memory, etc.
+Roughly right but **not yet validated under the looser frame**. Need re-sketching: what does each return? What's the data shape that makes a great response possible? Postgres entities (`vibe_passage`, `customer_story`, `trust_proof`, `trip_card`) fall out of "what hydrates the output?".
 
 ---
 
 ## 4. Where we are now (2026-04-28 EOD)
 
 ### Design state
-- **Reframe absorbed**: trust-the-agent posture; rich context + tools, not workflow encoding.
-- **7 path sketches drafted** — held as outcome-shapes for eval scenarios + sales-team mental model + compliance-bundle failure-mode coverage. Not encoded as agent state.
-- **4th verdict `inconclusive` proposed** — touches E.t1's contract but E.t1's schema is fresh enough to extend cheaply. Reason codes: `low_engagement` / `mixed_signals` / `extended_no_convergence` / `comparison_shopping` / `off_offer_in_region` / `drive_by` / `inconclusive_other`. **Awaits Al's go-ahead** to land in `@swoop/common/handoff.ts`.
-- **Customer-type as new dimension** — Group Tourer / Tailor-Made / Independent / Backpacker / Off-region. Derived signal alongside existing 7 dimensions. **Not formalised yet.**
-- **Reason codes — agent self-asserts** (Al confirmed). Codes stay structured for queryability + sales routing + H.t3 assertions.
-- **Tool design lens** flipped — affordances + content shape, not state-machine inflections.
+- **Reframe absorbed**: trust-the-agent posture. Rich context + tools, not workflow encoding.
+- **7 path sketches drafted** as outcome-shapes for eval / compliance / sales-team mental model. Not encoded as agent state.
+- **4th verdict `inconclusive` proposed** — awaits go-ahead to land in `@swoop/common/handoff.ts`.
+- **Customer-type as derived signal** — Group Tourer / Tailor-Made / Independent / Backpacker / Off-region. Not formalised yet.
+- **Reason codes — agent self-asserts** (Al confirmed). Codes stay structured for queryability + sales routing.
+- **Tool design lens flipped** — affordances + content shape, not state-machine inflections.
 
-### What's NOT done — open questions for next session
+### Open questions for next session
 
 1. **Re-sketch the 5 sales-shaped tools under the looser frame.** For each:
-   - What's the input? (Likely simpler than I first sketched — mostly free-text seed strings.)
-   - What's the output? (Rich content payload that makes a great response possible.)
-   - What's the WHY/HOW/WHAT × User/Agent/Swoop matrix for the tool description?
-   - Which composer Haiku reasoning does this tool need internally (per chunk C §2.3)?
-
+   - Input shape (likely simpler than first sketches — mostly free-text seed strings + small filter objects).
+   - Output shape (rich content payload that makes a great response possible).
+   - WHY/HOW/WHAT × User/Agent/Swoop matrix for the tool description.
+   - Composer Haiku reasoning the tool needs internally (per chunk C §2.3).
    Tools to walk: `stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`.
 
-2. **G.t1 WHY system prompt — first pass.** The PoC's `aboutSwoop` + `salesMethodology` + `toneOfVoice` + `brandPillars` are the substrate. Patagonia equivalents authored from those + Luke's 20 Apr motivation segmentation + the strategic group-tour priority. Fits the G.10 two-file pattern (positive examples + style-avoid). **Lane's sales-thinking doc (~May 4) will refine** — first pass can land on PoC + meeting-derived placeholders.
+2. **G.t1 WHY system prompt — first pass.** PoC's `aboutSwoop` + `salesMethodology` + `toneOfVoice` + `brandPillars` are the substrate. Patagonia equivalents authored from those + Luke's 20 Apr motivation segmentation + the strategic group-tour priority. Fits the G.10 two-file pattern (positive examples + style-avoid). Lane's sales-thinking doc (~May 4) will refine; first pass can land on PoC + meeting-derived placeholders.
 
-3. **G.t3 seed skills — at least 2.** Likely candidates from Path sketches:
+3. **G.t3 seed skills — at least 2.** Likely candidates from the path sketches:
    - `tailor-made-prospect-posture` (when high-budget + independence signals present)
    - `group-tour-surfacing-for-solos` (Luke's strategic priority — load when solo + mid-budget + active)
    - `triage-to-referral-polite-redirect` (when low-fit signals reach threshold)
-   Candidate selection falls out of which path-shapes need their own loaded posture.
 
-4. **Customer-type signal — derivation mechanism.** Options:
-   - Free-form: agent infers + writes into handoff payload as text.
-   - Haiku post-classifier: composer pattern at handoff time, fills `customerType` field.
-   - Continuous classifier: Haiku per-turn updates session state (heavy; probably not Puma).
-   Recommend option 2: Haiku post-classifier fills customer type alongside reason code at handoff submission.
+4. **Customer-type signal — derivation mechanism.** Recommended: Haiku post-classifier fills `customerType` field at handoff submission time alongside reason code. Composer pattern at handoff time, not continuous classifier per-turn.
 
-5. **Inconclusive verdict — go-ahead?** Adding to `@swoop/common/handoff.ts` is small. Email behaviour: no email (per E.3 disqualified pattern). Retention: 90 days (per E.7 disqualified pattern, since these aren't future-leads-with-substance).
+5. **Inconclusive verdict — go-ahead?** Adding to `@swoop/common/handoff.ts` is small. Cheap because E.t1 schema is fresh.
 
-6. **Postgres entity model.** Fall-out from the tool re-sketches. Unblocks C.t3 (ETL) + C.t3a (embeddings) + C.t4 (tool implementations).
-
-### Agent work landed this session — branches awaiting review
-
-| Task | Branch | Status |
-|---|---|---|
-| B.t11 (server history endpoint) | `worktree-agent-a8e6c237df1d50495` | Clean. 7 new tests. |
-| D.t9 (UI rehydration) | `worktree-agent-aca0f1cf63634e3d6` | **WIP**. Translator + fetch + hook + 23 tests pass. assistant-ui seed call needs swap to "replay parts through transport". Forward path documented. |
-| E.t5 (legal copy authoring) | `worktree-agent-a95b92173d0d6db38` | Clean. 6 markdown files + UI loader + 3 components rewired. Voice notes captured for editorial pass. 5 consent-flow gotchas surfaced. |
-| E.t6 (retention sweeper) | `worktree-agent-a67216b65b2f02c64` | Clean. 20 tests. Decisions E.16/E.17/E.18 logged. |
-| E.t7 (data-deletion runbook) | `worktree-agent-a457c8a59ea51c863` | Clean. 178-line runbook. |
-| E.t8 (compliance bundle) | `worktree-agent-aa937af55c9b5ea42` | Clean. 9-doc bundle with verified mermaid diagram. 10 open questions for Julie + counsel. |
-| H.t3 (assertion catalogue) | `claude/nervous-goodall-1fe7d6` (this branch — isolation didn't engage) | Clean. 6 new assertion kinds + EventCapture helper + 62 new tests. Decisions H.14/H.15/H.16 logged. |
-| H.t7 (evalset growth runbook) | `worktree-agent-aa4ecd7b52da09acb` | Clean. 217-line runbook. |
-| Blog ingest implementation | `worktree-agent-a0b7dfee4cfcd79d3` | Clean. 31 tests. **Live verification pulled 102 real posts.** |
-| C.t1 (connector skeleton + Postgres) | `worktree-agent-ab15fbf1e1e56aec9` | **WIP**. Tier 3 plan committed clean. Implementation scaffolded (Express + MCP SDK + pg + migrations + health endpoints + 2 tests) committed but **runtime verification deferred** (docker-compose up + migrate-up not run). |
-
-### Merge state at end-of-session 2026-04-28 (revised after stale-base discovery)
-
-**Critical context for next session:** sub-agents in this session were dispatched with `isolation: "worktree"` which appears to branch from `main`'s tip rather than the current branch's tip. At least 2 agents (C.t1, E.t6) were demonstrably based on a commit (`5c9534f`) pre-dating major architectural decisions including:
-- C.18 (Postgres lock; Vertex AI Search out)
-- C.13–C.23 (sales-shaped tools, ntag live, no departures, no swoopers, headline pricing only)
-- The full chunk-C Tier 2 rewrite (10-tool surface, composer pattern)
-- E.t2 work (the connector workspace itself)
-
-The concern isn't just merge conflicts — agents reasoned over stale planning docs, decisions, and progress.md. So design decisions in their work may be against superseded architecture.
-
-**Decision (Al, 2026-04-28)**: revert any merge that has even the slightest chance of being affected. Keep only 100% safe ones. Re-do the work cleanly in fresh sessions where the base is verified current.
-
-**Kept on this branch (100% safe):**
-- **H.t3** at `5d04b90` — landed in-place on the current branch (no isolation engaged), inherently against current state
-- **Blog-ingest** at merge `b56ed5c` — the agent self-corrected, fast-forwarded its worktree to current main, explicitly noted this in its report
-- The working-doc commits (`6cf85a0`, `d9809e2`)
-
-**Reverted from this branch (had any chance of stale-base contamination):**
-- B.t11 server history endpoint — reverted at `9974984`
-- E.t5 legal copy + UI rewiring — reverted at `c5e6f91`
-- E.t7 deletion runbook — reverted at `89e055f`
-- E.t8 compliance bundle — reverted at `f812a2e`
-- H.t7 evalset growth runbook — reverted at `c03bd9a`
-
-**The reverts removed code from this branch but the original agent branches still exist.** They can be referenced for substance (voice notes, design choices that survive the architecture refresh) but the WORK should be re-done cleanly in a future session that verifies its base is current. Specifically:
-- `worktree-agent-a8e6c237df1d50495` — B.t11 source (reference only)
-- `worktree-agent-a95b92173d0d6db38` — E.t5 source (reference only)
-- `worktree-agent-a457c8a59ea51c863` — E.t7 source (reference only)
-- `worktree-agent-aa937af55c9b5ea42` — E.t8 source (reference only)
-- `worktree-agent-aa4ecd7b52da09acb` — H.t7 source (reference only)
-
-Re-doing each is cheap because the substance + voice + structure is captured on those branches. A fresh-base agent can read the prior branch's work as input, verify against current planning docs, adjust where stale-base reasoning produced wrong choices, and commit clean.
-
-**Never merged, on their own branches, awaiting follow-up:**
-
-- **D.t9 — `worktree-agent-aca0f1cf63634e3d6` @ `4e59f2c`**. WIP. Translator + fetch + hook + 23 tests pass. The remaining issue is one swap: `runtime.thread.reset(messages)` doesn't seed thread state on the `useChatRuntime`-shaped runtime we use. Forward path identified by the agent: replay parts through the existing transport up front. Translator + fetch + hook scaffolding is reusable; only the seed call needs to change. Estimate to finish: ~1–2 hours of focused work.
-- **C.t1 — `worktree-agent-ab15fbf1e1e56aec9` @ `f736495`**. WIP. Tier 3 plan committed cleanly (`cfe76a9`); scaffolded implementation (Express + MCP SDK + pg pool + migrations + health endpoints + 2 tests) committed by the orchestrator after the agent's finalisation timeout. **Runtime verification deferred** — needs `docker-compose up` + `npm run migrate:up` to confirm the Postgres path actually works. Estimate: ~30 min focused verification + any small fix-ups.
-- **E.t6 — `worktree-agent-a67216b65b2f02c64` @ `6359817`**. **MERGE ABORTED** — 9 conflicts. The agent's base branch lacked E.t2's already-merged `FsHandoffStore` work, so it reinvented the store.ts + store.test.ts as if they didn't exist. The merge conflicts span: `connector/src/handoff/store.ts`, `store.test.ts`, `connector/src/index.ts`, `connector/package.json`, `orchestrator/src/index.ts`, `orchestrator/src/config/{schema,load}.ts`, `orchestrator/.env.example`, `package-lock.json`, `progress.md`. The actually-novel work in this branch is the **sweeper module** (`sweep.ts` + `sweep.test.ts` + the boot wiring + 3 new env vars `HANDOFF_RETENTION_SWEEP_*` + decisions E.16/E.17/E.18). Recommended forward path: cherry-pick only the sweeper-specific files onto the current state, ignoring the store.ts reinvention. Estimate: ~1 hour focused manual port + verification.
-
-### Other notes from this session
-
-- E.t7's runbook forward-references E.t5's files; those forward-references resolve cleanly post-merge.
-- E.t8's compliance bundle flagged that E.1–E.10 decisions live in `02-impl-handoff-and-compliance.md` §5 rather than `decisions.md` — minor consistency tidy worth doing.
-- H.t3 added decisions H.14/H.15/H.16. Worth confirming they're in `decisions.md`.
+6. **Postgres entity model.** Falls out of the tool re-sketches. Unblocks C.t3 (ETL) + C.t3a (embeddings) + C.t4 (tool implementations).
 
 ---
 
-## 5. Cross-references
+## 5. Method notes
 
-- **The 7 paths sketch** in full prose — see the conversation transcript / chat session.
-- **Tier 3 plans for C.t2 / G.t0 / G.t1 / G.t3** — not yet authored. They'll fall out of this thinking doc once the design firms.
-- **H.t4 evalset authorship** — depends on this thinking. Each path becomes 1–2 scenarios under `product/harness/scenarios/` with appropriate assertions (tool-call, triage-verdict, handoff-event, judge-rubric).
-- **Compliance bundle (E.t8)** — `product/cms/legal/compliance-bundle/consent-flow.md` describes the consent flow but assumes 3 verdicts; needs a small update if `inconclusive` lands.
-- **F.t6 conversation-analysis harness** — the experts that read conversations need to know the path taxonomy + verdict taxonomy. This doc is input to F.t6 prompt design.
-
----
-
-## 6. Method notes (for future-Claude)
-
-- **Don't treat the 7 paths as state.** They're outcome shapes. The agent reasons; paths emerge.
-- **PROMPT_ENGINEERING.md (PoC) is the authoring framework** — every tool description should be authored with the WHY/HOW/WHAT × User/Agent/Swoop matrix as code-comment scratchpad above the prose.
+- **Don't treat the 7 paths as state.** Outcome shapes. Agent reasons; paths emerge.
+- **PoC PROMPT_ENGINEERING.md is the authoring framework** — tool descriptions authored with WHY/HOW/WHAT × User/Agent/Swoop matrix as code-comment scratchpad above the prose.
 - **Voice is authoritative-yet-approachable + candid + playful + plain-language.** "If Swoop were the guide at the refugio bar, would they speak to their customers this way?" is the test.
-- **Don't over-describe the negative space.** Anti-pattern lists belong in `cms/prompts/system/10_style-avoid.md`. Positive examples in `00_why.md`. Decoupled.
-- **Trust Sonnet's reasoning**, but give it lots of context to reason from. Rich brief > prescriptive workflow.
-- **Patagonia ≠ Antarctica** in three load-bearing ways: triage during discovery; group-tour strategic priority; customer-type segmentation (Group Tourer / Tailor-Made / Independent / Backpacker-out).
+- **Don't over-describe negative space.** Anti-pattern lists in `cms/prompts/system/10_style-avoid.md`. Positive examples in `00_why.md`. Decoupled.
+- **Trust Sonnet's reasoning** — but give it lots of context to reason from. Rich brief > prescriptive workflow.
+- **Patagonia ≠ Antarctica** in three load-bearing ways: triage during discovery; group-tour strategic priority; customer-type segmentation.
+
+---
+
+## 6. Operational note (only if you go digging into git history)
+
+Sub-agents in the 2026-04-28 dispatch were branched from `main`'s tip rather than the current work-branch's tip — at least one agent reasoned over outdated planning docs. Several merge commits were reverted. The git history of `claude/nervous-goodall-1fe7d6` therefore contains a chain of reverts. **Ignore the reverts and their original commits unless something specifically requires git-archaeology.** They have no bearing on current state.
+
+When dispatching parallel agents in future sessions: verify `git log main --oneline -1` matches the work-branch's relevant tip first. If `main` lags, either promote work to `main` first OR instruct each agent to fast-forward its worktree at the start of its run.
