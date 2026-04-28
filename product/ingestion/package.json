@@ -1,11 +1,26 @@
 {
   "name": "@swoop/ingestion",
+  "version": "0.1.0",
   "private": true,
+  "description": "Ingestion utilities feeding the derived datasource (chunk C). Today: WordPress blog snapshot fetcher (planning/03-exec-blog-ingest.md). Future: SQL-dump derivation, image annotation pipeline.",
+  "type": "module",
   "main": "./src/index.ts",
-  "dependencies": {
-    "@swoop/common": "*"
-  },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "blog:fetch": "tsx src/blog/fetch.ts",
+    "blog:fetch:backfill": "tsx src/blog/fetch.ts --backfill",
+    "blog:fetch:dry-run": "tsx src/blog/fetch.ts --dry-run"
+  },
+  "dependencies": {
+    "@swoop/common": "*",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
   }
 }
