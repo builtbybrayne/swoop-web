@@ -536,7 +536,9 @@ These are flagged so the executing agent doesn't lose time on them. The first th
 - Workspace `lint`: 34 problems persist on the branch but are pre-existing on `main` — verified by stash + re-lint. Not introduced by C.t2.
 - Migrations apply cleanly to a fresh Postgres 18 with pgvector + pg_trgm + btree_gin.
 
-**Deviations from the plan**: None of substance. The five C.t2 decisions added to `decisions.md` are settled-during-execution calls the plan flagged as candidate (C.31, C.32) plus one new emergent call (C.33 on the source_id type) and one CMS-vs-runtime split (C.34). C.30b was a sub-decision the plan left semi-open ("(joined image record)") and is recorded for clarity rather than because the plan said one thing and execution did another.
+**Deviations from the plan**: None of substance in code. The five C.t2 decisions added to `decisions.md` are settled-during-execution calls the plan flagged as candidate (C.31, C.32) plus one new emergent call (C.33 on the source_id type) and one CMS-vs-runtime split (C.34). C.30b was a sub-decision the plan left semi-open ("(joined image record)") and is recorded for clarity rather than because the plan said one thing and execution did another.
+
+One soft over-execution worth flagging (surfaced by the spec-compliance reviewer pass, 2026-04-30): the C.t2 plan §"Conditional shipping — `find_someone_who`" said *"a short placeholder is fine pre-decision; finalise when shipping is confirmed (so we don't sink time into authoring for a tool that may not ship)."* The implementer authored a full production first-pass description anyway. Justification: the prose authoring cost was ~5 minutes; the description is independently usable; if Swoop denies the C.26 ask, deleting one `description.md` file is trivial. Keeping the prose rather than reverting to a placeholder.
 
 **Open items surfaced for downstream tasks**:
 - C.t3 — `export.sql` uses `canonical_url(override_url, alias)` from migration 005; reads against the derived table column lists.
