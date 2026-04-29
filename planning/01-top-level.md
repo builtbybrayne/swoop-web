@@ -101,7 +101,7 @@ The agent loop itself. **Google ADK (TypeScript)** — pinned. System prompt loa
 ### C. Retrieval & data
 **Settled** as of the 2026-04-27 SQL dump + 2026-04-29 data review:
 - Source: SQL dump → transform → Cloud SQL Postgres (per C.21). The earlier "load to local MariaDB for inspection" step was a C.t0 dev-time helper; closed and not part of the canonical ETL.
-- Storage engine: **Postgres 16 + pgvector + tsvector + pg_trgm** (per C.18). Weaviate out, Vertex out.
+- Storage engine: **Postgres 18 + pgvector + tsvector + pg_trgm** (per C.18). Weaviate out, Vertex out.
 - Tool surface: **eight tools shaped to five conversational jobs** (Inspire / Mirror / Reassure / Inform / Propose-options) plus the carried-forward visual + handoff utilities. **No composer layer** (per C.24); orchestrator-level Sonnet calls intent-named tools directly. Detail in [02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md) §2.2.
 - Image resolution: deterministic URL construction from filename + imgix render params; canonical via `override_url || alias` (per C.15).
 - Blog ingest as a separate parallel stream via WP REST API (per C.20; landed).
@@ -239,7 +239,7 @@ Deliberately unresolved at the top level — pinned in Tier 2 where they bite.
 ### Settled at top level (do not revisit without evidence)
 
 - **Agent framework**: Google ADK (TypeScript). Settled 21 Apr.
-- **Search / retrieval backend**: Postgres 16 + `pgvector` + `tsvector` + `pg_trgm` per C.18. Vertex AI Search and Weaviate are both out.
+- **Search / retrieval backend**: Postgres 18 + `pgvector` + `tsvector` + `pg_trgm` per C.18. Vertex AI Search and Weaviate are both out.
 - **Chat UI library**: assistant-ui.
 - **Language throughout**: TypeScript. No Python in the runtime (validation harness may be Python — Tier 2 H decision).
 - **Primary model**: Claude (Sonnet tier). ADK abstracts the provider so swap is config.

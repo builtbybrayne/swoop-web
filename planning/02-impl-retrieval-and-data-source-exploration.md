@@ -7,7 +7,7 @@
 > **The current canonical Tier 2 plan for chunk C is** [02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md) (rewrite landed 2026-04-28). The pre-rewrite original is preserved at [archive/02-impl-retrieval-and-data-pre-postgres-rewrite.md](archive/02-impl-retrieval-and-data-pre-postgres-rewrite.md) for source-material continuity.
 >
 > Key shifts since this doc was written:
-> - Storage: Vertex AI Search → **Postgres 16 + pgvector + tsvector + pg_trgm** (decision C.18, 2026-04-28).
+> - Storage: Vertex AI Search → **Postgres 18 + pgvector + tsvector + pg_trgm** (decision C.18, 2026-04-28).
 > - Source: scrape-vs-API → SQL dump as canonical, ingested via MariaDB → Postgres ETL.
 > - Tool surface: data-shaped retrieval tools → **sales-shaped tools with a Haiku composer layer inside the connector**.
 > - Pricing: calculated ranges → **headline `base_price` only**.
