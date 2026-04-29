@@ -27,7 +27,9 @@ That four-shift reshapes most of this chunk's design. The architectural principl
 
 ## Purpose
 
-C owns everything the agent retrieves. A data-connector service runs on Cloud Run, exposing a small set of **sales-shaped MCP tools** to the orchestrator. Behind each external tool sits a **composer**: a Haiku-powered sub-agent that decomposes the sales-shaped request into data calls, runs them against Postgres data primitives, and synthesises a coherent sales-shaped response. The Postgres derived store is populated by an ETL that ingests Swoop's SQL dump (and the WordPress blog REST API as a parallel stream), transforms it into purpose-built read-shaped views, and pre-computes embeddings + lexical indexes for hybrid retrieval.
+C owns everything the agent retrieves. A data-connector service runs on Cloud Run, exposing a small set of **intent-named MCP tools** (per C.25) to the orchestrator. Each tool is a thin handler over data primitives — input validation, 1–N SQL/vector calls against Postgres, output validation, return. **No composer layer in the request path** (per C.24): Sonnet at the orchestrator handles synthesis directly from concrete row-shaped tool outputs.
+
+The Postgres derived store is populated by an ETL that ingests Swoop's SQL dump (and the WordPress blog REST API as a parallel stream), transforms it into purpose-built read-shaped views, and pre-computes embeddings + lexical indexes for hybrid retrieval. Cheap LLM (Haiku) earns its keep in the ETL — classifying blog posts by job, extracting persona summaries, generating image annotations, normalising blog tags against `ntag`. Done once, persisted to columns; never on the conversational path.
 
 Mongo is explicitly not in scope. Weaviate is out. Vertex AI Search is out (per C.18). The ETL is throwaway by design — when Swoop's data consolidation lands later in 2026, the export queries get rewritten; the derived-store shape and tool surface stay stable.
 
@@ -39,7 +41,7 @@ When this chunk is done:
 
 - A data-connector service runs on Cloud Run, speaking MCP over HTTP, exposing the finalised eight-tool intent-named surface (see §2.2). **No composer layer**; tools call SQL/vector helpers directly and return results to the orchestrator (decision C.24).
 - A Postgres 16 derived store (Cloud SQL in prod, Postgres-in-Docker locally for parity) holds Patagonia content shaped for retrieval — Trip / Tour / Hotel / Vessel / Location / Activity / FAQ / BlogPost / Page, plus job-shaped derived entities (InspirePassage / TrustProof / InformChunk and — *conditional on Swoop providing a redacted customer-review export* per C.26 — CustomerStory). Indexed with `pgvector` HNSW, `tsvector` GIN, and `pg_trgm` GIN as appropriate.
-- An ETL pipeline ingests the SQL dump (loaded into local MariaDB during dev) and produces the derived store via declarative SQL transformations + an embedding pass. Re-runnable, idempotent, diffable across runs. **Profile pagetype excluded** (decision C.27); **test pages filtered** (decision C.28).
+- An ETL pipeline ingests the SQL dump and produces the derived store via declarative transformations + an embedding pass. Re-runnable, idempotent, diffable across runs. **Profile pagetype excluded** (decision C.27); **test pages filtered** (decision C.28). (The C.t0 design-phase practice of loading the dump into a local MariaDB for inspection is closed; the canonical ETL doesn't depend on it.)
 - A separate WordPress REST API ingest stream (see [planning/03-exec-blog-ingest.md](03-exec-blog-ingest.md)) lands ~102 posts in the rolling 5y window. Each blog post is classified at ingest into one (or more) of the four content jobs (Inspire / Mirror / Reassure / Inform); chunks land in the corresponding derived tables alongside page-derived chunks.
 - Images resolve via a single annotated `image` table with flexible canonical URLs (per C.15) — source-of-truth (WP media vs imgix vs S3) is irrelevant once normalised. Tool responses carry pre-rendered URLs the chat surface (D) can render directly.
 - Tool responses carry public page URLs derived deterministically as `override_url || alias`, enabling the "go see this page" deep-link affordance.
@@ -65,21 +67,22 @@ When this chunk is done:
 
 ## 2. Target functionalities
 
-### 2.1 Data ingestion: SQL dump → MariaDB → Postgres
+### 2.1 Data ingestion: SQL dump → transform → Postgres
 
-The 2026-04-27 SQL dump (Sequel Ace `.sql`, ~210 MB, MariaDB 5.5.64) is the canonical source. Cadence assumed weekly during M1–M5; steady state TBC with Swoop ops (could become an API, CDC, or scheduled feed; see `questions.md` Q13).
+The 2026-04-27 SQL dump (Sequel Ace `.sql`, ~210 MB, exported from Swoop's MariaDB 5.5.64 production database) is the canonical source. Cadence assumed weekly during M1–M5; steady state TBC with Swoop ops (could become an API, CDC, or scheduled feed; see `questions.md` Q13).
 
-**Pipeline shape:**
+**Pipeline shape (canonical):**
 
 1. **Land the dump** — drop the `.sql` file at `data/<dump-name>.sql`. `data/` is gitignored.
-2. **Load into local MariaDB** (dev only) — `mariadb swoop_patagonia < data/...sql`. Local MariaDB is dev-side only; not deployed.
-3. **Transform via `export.sql`** — declarative SQL that whitelists the tables we use, drops the cruft (audit columns, soft-delete fields, internal-ops tables, the entire `partner*` PII subgraph), flattens denormalised joins where the agent always reads them together (trip + canonical day-by-day; hotel + page-as-hub for images), computes derived columns (`from_price` from `base_price` + currency normalisation, voice/style descriptors from `ntag` joins, story-richness flags), and writes results into the Postgres derived store via `INSERT … ON CONFLICT DO UPDATE`. **This is C.t3.**
-4. **Embed prose fields + populate sales-shaped derived entities** — separate Node CLI pass (C.t3a). Reads the freshly-populated Postgres tables + the blog NDJSON snapshot, chunks per entity strategy, embeds via Voyage-3 (or whichever embedding model is locked), populates `embedding` columns + `content_hash` for idempotency, and assembles `vibe_passage` / `customer_story` / `trust_proof` derived entities. Re-runs only embed rows whose `content_hash` has changed.
-5. **Indexes refresh** — `REINDEX` only if schema changes; otherwise the standard incremental index updates suffice.
+2. **Transform** — read the MariaDB-format dump, apply the declarative transformations (whitelist the tables we use, drop the cruft — audit columns, soft-delete fields, internal-ops tables, the entire `partner*` PII subgraph; flatten denormalised joins where the agent always reads them together — trip + canonical day-by-day; hotel + page-as-hub for images; compute derived columns — `from_price` from `base_price` + currency normalisation, voice/style descriptors from `ntag` joins, story-richness flags; filter Profile pagetype per C.27 and test pages per C.28), and write the result into the Postgres derived store via `INSERT … ON CONFLICT DO UPDATE`. Tooling pick (e.g. `pgloader` + a SQL transform layer, or a Node CLI translator) lands at C.t3 design time. **This is C.t3.**
+3. **Embed prose fields + populate job-shaped derived entities** — separate Node CLI pass (C.t3a). Reads the freshly-populated Postgres tables + the blog NDJSON snapshot, chunks per entity strategy, embeds via Voyage-3 (or whichever embedding model is locked), populates `embedding` columns + `content_hash` for idempotency, and assembles `inspire_passage` / `customer_story` / `trust_proof` / `inform_chunk` derived entities. Plus runs the Haiku-driven ETL classifiers (blog-post job classifier, persona-summary extractor, blog-tag normaliser). Re-runs only embed/classify rows whose `content_hash` has changed.
+4. **Indexes refresh** — `REINDEX` only if schema changes; otherwise the standard incremental index updates suffice.
 
 The pipeline runs as a Cloud Run Job on demand, or scheduled (post-M4). Handed off to Swoop's internal team for operation — architectural priority from 21 Apr.
 
-**Disposable**: when Swoop's source schema changes (October 2026 data consolidation, or any other shift), the `export.sql` queries get rewritten; nothing downstream needs to change because the derived store's interface is stable.
+**Note on the C.t0 dev-time MariaDB step**: during the C.t0 inspection phase (2026-04-27 → 2026-04-29) we loaded the dump into a local MariaDB to SQL-poke the data while designing the schema. That step is **closed and not part of the canonical ETL** — the production transform reads the `.sql` file directly. No live MariaDB on the production path.
+
+**Disposable**: when Swoop's source schema changes (October 2026 data consolidation, or any other shift), the transform layer gets rewritten; nothing downstream needs to change because the derived store's interface is stable.
 
 ### 2.2 Tool surface (the agent's view)
 
@@ -333,7 +336,7 @@ IAM: connector needs scoped service accounts for Cloud SQL (read/write to the de
 
 **Superseded by SQL-dump ETL:**
 
-- `chatgpt_poc/product/scripts/build-library.ts`, `build-image-catalogue.ts` — PoC ingestion scripts (MongoDB-dump transformers). Goal carries (idempotent, re-runnable ingest); shape is replaced by `export.sql` MariaDB → Postgres + an embedding pass.
+- `chatgpt_poc/product/scripts/build-library.ts`, `build-image-catalogue.ts` — PoC ingestion scripts (MongoDB-dump transformers). Goal carries (idempotent, re-runnable ingest); shape is replaced by the new SQL-dump → Postgres transform + an embedding pass.
 
 ---
 
@@ -363,7 +366,7 @@ The following decisions are pinned at chunk-C scope. C.18 has landed in [decisio
 | C.18 | **Postgres 16 + pgvector + tsvector + pg_trgm; no Vertex** | **LANDED** (2026-04-28). |
 | C.19 | ~~Sales-shaped tool surface (10 tools); composer pattern~~ | **SUPERSEDED** by C.25 (2026-04-29). Eight intent-named tools, no composer. |
 | C.20 | Blog ingest as separate stream via WP REST API; 5y fetch-time-filtered window | **LANDED** in decisions.md (2026-04-28); plan at [03-exec-blog-ingest.md](03-exec-blog-ingest.md). |
-| C.21 | Source = SQL dump → local MariaDB → export.sql → Cloud SQL Postgres | **LANDED** in decisions.md (2026-04-28). |
+| C.21 | Source = SQL dump → transform → Cloud SQL Postgres (canonical pipeline; the dev-time MariaDB-load step from C.t0 is closed) | **LANDED** in decisions.md (2026-04-28); summary reframed 2026-04-29 to drop the no-longer-relevant MariaDB step from the canonical pipeline. |
 | C.22 | ~~Composer pattern: per-tool Haiku sub-agent~~ | **SUPERSEDED** by C.24 (2026-04-29). No composer at query path; cheap-LLM moves to ETL. |
 | C.23 | Firestore dropped project-wide | **LANDED** in decisions.md (2026-04-28). |
 | C.24 ⏳ | **No composer layer**; tools are thin handlers over data primitives. Sonnet at orchestrator handles synthesis. Cheap LLM (Haiku) earns keep at ETL, not query. | New decision pending decisions.md entry. Replaces C.22. |
@@ -387,7 +390,7 @@ The following decisions are pinned at chunk-C scope. C.18 has landed in [decisio
 **Produced (into `ts-common` or the connector's own boundary):**
 
 - The connector's MCP endpoint contract — URL, auth, tool discovery shape. Consumed by chunk B's tool-connector adapter. **B.t3 already shipped against the existing 5 tools; B.t3a updates by replacing those wrappers with the new eight intent-named tool wrappers.** This is replace, not augment, because the 2026-04-29 surface deprecates `search` / `get_detail` (their surface collapses into `lookup` / `find_options`).
-- The ETL's input contract — MariaDB schema assumptions, column whitelists. Internal to the export script; doesn't leak.
+- The ETL's input contract — assumptions about the upstream schema shape (a MariaDB-format dump of the live Swoop CMS), column whitelists. Internal to the transform layer; doesn't leak past chunk C.
 - Image URL construction utility — single function in `ts-common`, used by both the ETL and the data primitives.
 - Page-as-hub resolver utility — single function `resolveImagesViaPage(record)` likewise.
 
@@ -460,7 +463,7 @@ Chunk C is done when:
 - **C.t0 — SQL-dump load + clarifying SELECTs** (in flight 2026-04-28; broadened 2026-04-29). Load dump into local MariaDB. Original SELECT scope: `tripvariant` / `season` / `daybyday` / `currency` / `adventurousness` (deprecated, confirm) / `contentblock_*` subtypes. **Updated 2026-04-29**: also explicitly verifies the dangling `customerreview`/`customertip`/`pressreview` source tables (decision C.26), audits pagetype distribution (input to C.27 + C.29), confirms `ntag` taxonomy shape, and inventories prose volume per pagetype. Updates `data-ontology.md` with `S-SQLDUMP-2026-04-27` source tag.
 - **C.t1 — Connector service skeleton + Postgres setup**: Cloud Run-ready Express + MCP SDK; Postgres 16 + extensions provisioned (Cloud SQL for prod, Docker Compose for handoff parity); health endpoints; service-account wiring. **Greenfield** — `product/connector/src/` is empty today.
 - **C.t2 — Entity model + tool surface schemas** (revised 2026-04-29): design Postgres schema (domain entities + job-shaped derived entities per §2.5) + `ts-common` tool I/O schemas for the eight intent-named tools (C.25). **Both layers co-define each other.** Lands as a single Tier 3 plan. Replaces shipped A.t2 schemas: `product/ts-common/src/tools.ts` is **rewritten** to drop `search` / `get_detail` (their surface collapses into `lookup` / `find_options`) and to add `find_inspiring`, `find_someone_who` (conditional on C.26), `find_proof`, `lookup`, `find_options`. `illustrate`, `handoff`, `handoff_submit` carry forward. Old `Sample*` fixtures retire alongside the deprecated tools; new fixtures added for the new derived entities (InspirePassage, CustomerStory, TrustProof, InformChunk, TripCard).
-- **C.t3 — ETL: `export.sql` MariaDB → Postgres** (data-shape transformation): declarative SQL whitelists, flattens, denormalises, computes derived columns. Filters at boundary: Profile pagetype excluded (C.27), test pages excluded (C.28). Populates `canonical_url` (`override_url || alias` per C.15). Plus the Node CLI that orchestrates the run + idempotent re-run. **Pure data movement + structural transformation; no LLM in the loop at this stage.** **Greenfield** — no existing ETL code.
+- **C.t3 — ETL: SQL dump → Postgres transform** (data-shape transformation): declarative transformations whitelist tables, flatten, denormalise, compute derived columns. Filters at boundary: Profile pagetype excluded (C.27), test pages excluded (C.28). Populates `canonical_url` (`override_url || alias` per C.15). Tooling pick (e.g. `pgloader` + a SQL transform layer, or a Node CLI translator) lands at C.t3 design time. Plus the orchestrator CLI that runs the pipeline + idempotent re-run. **Pure data movement + structural transformation; no LLM in the loop at this stage.** **Greenfield** — no existing ETL code.
 - **C.t3a — Embedding pass + blog post-processing + ETL classifiers** (revised 2026-04-29): three related sub-tasks running off C.t3's output and the blog snapshot:
   - **Per-entity chunking strategy** — decide chunk granularity per entity type (Trip prose: per day-by-day day; CMS contentblock: per block; page intro_text + summary: as-is; page contentblock prose: per block, optionally split on `subheading`; blog post: per `<h2>`/`<h3>` section, sliding-window fallback).
   - **Embed prose fields** — Node CLI reads Postgres tables (post-C.t3) and the blog NDJSON snapshot, chunks per entity strategy, calls Voyage-3 (or whichever embedding model is locked) in batches, populates `embedding` columns + `content_hash` for idempotency. Re-running embeds only rows whose `content_hash` has changed since the last run. **Plus**: embeds the 79 active `ntag` rows (one-time, near-zero cost).
@@ -480,7 +483,7 @@ Chunk C is done when:
 - **D.t9 — Widget replace** (revised 2026-04-29; was "augment"): adds new widgets in `product/ui/src/widgets/*` for the new tool outputs — likely a vibe-passage panel for `find_inspiring`, a story-vignette card for `find_someone_who`, a proof carousel for `find_proof`, a chunk-list for `lookup`, an options-card-set for `find_options`. The existing 4 PoC widgets (`component-list`, `component-detail`, `inspiration`, `lead-capture`) deprecate alongside `search`/`get_detail` (their consuming tools); only `inspiration` and `lead-capture` survive (rendering `illustrate` and `handoff` respectively). Gated on C.t2 (schemas) + C.t4 (real outputs).
 
 **Parallelisation:**
-- C.t0 + C.t1 in series (need MariaDB loaded before Postgres setup is wired).
+- C.t0 (dev-time inspection) closed before C.t1 (connector + Postgres setup); the two were sequential historically because the entity model design depended on inspection findings. Now closed; not a runtime dependency.
 - C.t2 + C.t6 + Blog ingest can parallelise once C.t0 is done.
 - C.t3 depends on C.t2 (schemas).
 - C.t3a depends on C.t3 (data in Postgres) + Blog ingest (NDJSON snapshot exists).

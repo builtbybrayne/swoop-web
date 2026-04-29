@@ -247,14 +247,16 @@ These are batch, persisted-once jobs running off Cloud Run Jobs. Done at ETL tim
 
 **Swap cost**: Medium. Removing the composer layer means each external tool becomes a single SQL primitive call (which loses synthesis quality but works); promoting Haiku → Sonnet in composers is a config change. Adding a new composer is one new file `src/composers/<tool-name>.ts`.
 
-## C.21 — Source pipeline: SQL dump → local MariaDB → export.sql → Cloud SQL Postgres
+## C.21 — Source pipeline: SQL dump → transform → Cloud SQL Postgres
 
-**Decided**: 2026-04-28
+**Decided**: 2026-04-28 — **summary reframed 2026-04-29** to drop the no-longer-canonical MariaDB step.
 **Owner**: Al
 
-**Rationale**: Supersedes the 2026-04-22 plan's scrape-vs-API question. The 2026-04-27 SQL dump is upstream-of-truth (per Julie call: "dump is canonical"). Pipeline shape: drop dump at `data/<dump>.sql` → load into local MariaDB (dev) → run `export.sql` declarative SQL transformations → stream into Cloud SQL Postgres (prod) or local Docker Postgres (dev). Cadence assumed weekly during M1–M5; steady state TBC with Swoop ops (could become an API, CDC, or scheduled feed). Disposable — when Swoop's source schema changes, `export.sql` gets rewritten; nothing downstream needs to change.
+**Rationale**: Supersedes the 2026-04-22 plan's scrape-vs-API question. The 2026-04-27 SQL dump is upstream-of-truth (per Julie call: "dump is canonical"). Pipeline shape: drop dump at `data/<dump>.sql` → run a declarative transform that whitelists/flattens/denormalises/computes derived columns → stream into Cloud SQL Postgres (prod) or local Docker Postgres (dev). The transform reads the MariaDB-format dump file directly; tooling pick (e.g. `pgloader` + a SQL transform layer, or a Node CLI translator) lands at C.t3 design time. Cadence assumed weekly during M1–M5; steady state TBC with Swoop ops (could become an API, CDC, or scheduled feed). Disposable — when Swoop's source schema changes, the transform gets rewritten; nothing downstream needs to change.
 
-**Swap cost**: Medium. Source change means rewriting `export.sql`; destination change means swapping Postgres for an alternative engine (bounded by C.18's swap cost).
+**Note on the C.t0 dev-time MariaDB step**: during the design phase (2026-04-27 → 2026-04-29) we loaded the dump into a local MariaDB to SQL-poke the data while shaping the entity model. That was a tactical inspection step for human design work — **closed and not part of the canonical pipeline**. The original 2026-04-28 framing of this decision included MariaDB as a pipeline step; the 2026-04-29 reframe drops it.
+
+**Swap cost**: Medium. Source change means rewriting the transform; destination change means swapping Postgres for an alternative engine (bounded by C.18's swap cost).
 
 ## C.20 — Blog ingest as separate stream via WP REST API; 5y fetch-time-filtered window
 
@@ -336,7 +338,7 @@ Vertex genuinely wins for million-doc corpora, multimodal search, or out-of-the-
 
 The agent-with-tools architecture means Vertex would slot in later as **one new tool implementation** behind the existing tool surface, with no rearchitecting of the agent or other tools. So this is a low-regret decision — the cost of deferring Vertex is essentially zero.
 
-**Swap cost**: Medium. Replacing Postgres with DuckDB or Vertex later means rewriting the export pipeline (MariaDB → store) and the connector's storage layer behind the tool surface. The agent tool surface itself, the entity model, the retrieval semantics, and the RRF approach all carry across unchanged — they're the abstraction. So "swap" is real engineering work but bounded to one layer and shouldn't bleed into agent or product behaviour.
+**Swap cost**: Medium. Replacing Postgres with DuckDB or Vertex later means rewriting the dump-to-store transform pipeline and the connector's storage layer behind the tool surface. The agent tool surface itself, the entity model, the retrieval semantics, and the RRF approach all carry across unchanged — they're the abstraction. So "swap" is real engineering work but bounded to one layer and shouldn't bleed into agent or product behaviour.
 
 ## C.17 — `ntag` is the live tagging system; `tag` + `adventurousness` deprecated
 

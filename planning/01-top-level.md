@@ -83,7 +83,7 @@ The agent loop itself. **Google ADK (TypeScript)** — pinned. System prompt loa
 
 ### C. Retrieval & data
 **Settled** as of the 2026-04-27 SQL dump + 2026-04-29 data review:
-- Source: SQL dump → MariaDB (dev) → `export.sql` → Cloud SQL Postgres (per C.21).
+- Source: SQL dump → transform → Cloud SQL Postgres (per C.21). The earlier "load to local MariaDB for inspection" step was a C.t0 dev-time helper; closed and not part of the canonical ETL.
 - Storage engine: **Postgres 16 + pgvector + tsvector + pg_trgm** (per C.18). Weaviate out, Vertex out.
 - Tool surface: **eight tools shaped to five conversational jobs** (Inspire / Mirror / Reassure / Inform / Propose-options) plus the carried-forward visual + handoff utilities. **No composer layer** (per C.24); orchestrator-level Sonnet calls intent-named tools directly. Detail in [02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md) §2.2.
 - Image resolution: deterministic URL construction from filename + imgix render params; canonical via `override_url || alias` (per C.15).
@@ -119,7 +119,7 @@ Lightweight behavioural eval harness. Small evalset of scenario-based tests that
 - **M1 — Vertical slice end-to-end.** A single narrow happy-path conversation runs in a browser: one search tool, one rendered widget, one handoff. Stubbed data allowed. Proves the architecture integrates. (See §5 — this is the first real integration checkpoint; it doubles as Strategy A's entry gate.)
 - **M2 — Real data flowing.** Data-access strategy from Friday hackathon implemented; retrieval returns real Patagonia content. Depends on GCP access.
 - **M3 — Triage + handoff working.** Full conversation arc: discovery → triage decision → consent → handoff with email delivery. Depends on Luke + Lane's sales-thinking doc landing.
-- **M4 — Deployed to Swoop GCP ("AI Pat Chat").** Cloud Run services live; session state persisted; Vertex indexes; logging. Depends on Thomas's GCP provisioning.
+- **M4 — Deployed to Swoop GCP ("AI Pat Chat").** Cloud Run services live; session state persisted; Cloud SQL Postgres (with `pgvector` + `tsvector` + `pg_trgm`) populated; logging. Depends on Thomas's GCP provisioning.
 - **M5 — Legal sign-off + ready for embed.** Swoop's legal counsel reviews; in-house team embeds. Ships.
 
 ---
@@ -222,7 +222,7 @@ Deliberately unresolved at the top level — pinned in Tier 2 where they bite.
 ### Settled at top level (do not revisit without evidence)
 
 - **Agent framework**: Google ADK (TypeScript). Settled 21 Apr.
-- **Search / retrieval backend**: Vertex AI Search. Weaviate is out.
+- **Search / retrieval backend**: Postgres 16 + `pgvector` + `tsvector` + `pg_trgm` per C.18. Vertex AI Search and Weaviate are both out.
 - **Chat UI library**: assistant-ui.
 - **Language throughout**: TypeScript. No Python in the runtime (validation harness may be Python — Tier 2 H decision).
 - **Primary model**: Claude (Sonnet tier). ADK abstracts the provider so swap is config.
