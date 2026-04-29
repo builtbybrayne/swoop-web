@@ -48,6 +48,8 @@ Where it lands: Tier 2 chunk C.
 
 **Status after dump inspection (2026-04-27):** schema questions 1, 3, 4, 5 closed by inspection. Semantic 11 + 12 closed (no swooper, no review tables). Semantic 7 + 10 partly closed. Operational 15 closed. Remaining open items still need Swoop input. See Closed section for the batch entry; inline ✅ markers below.
 
+**Status after C.t0 SELECT inspection (2026-04-29):** semantic questions 6, 7, 8, 9, 10, 16 closed fully by SELECT/Julie ruling. New finding routed back to Swoop: `customerreview`/`customertip` source tables are missing from dump (FKs dangle). Tracked under "New from C.t0 inspection" below. See Closed section's 2026-04-29 batch entry.
+
 **Schema questions — answerable by inspecting the dump:**
 
 1. ✅ **Answered** (2026-04-27, dump inspection): 129 tables enumerated. Mapping written to [data-ontology.md](data-ontology.md). Trip / Tour (via `tours`+`tour_items`) / Location / Accommodation (`hotel`) / Vessel / Cabin / Itinerary-Day (`daybyday`) / Page / Tag / Image present and first-class. **Departure: no table.** **Swooper: no table.** **Review: no per-trip table** (curated review excerpts exist as `contentblock_customerreview`, 2,390 rows). Notable additions not anticipated: full hotel pricing matrix, partner ops layer (PII), CMS chunk family, parallel `ntag` system.
@@ -58,20 +60,39 @@ Where it lands: Tier 2 chunk C.
 
 **Semantic questions — need Swoop input regardless of dump:**
 
-6. Currency-id mapping: 1 / 2 / 4 → ? (`currency` table has 11 rows — a quick `SELECT *` once the dump is loaded should resolve this without needing Swoop input. Promote to closed once confirmed.)
-7. `difficulty` 1–5 and `wilderness` 0–5 — user-facing definitions of each level? **Likely answerable by inspection** — `adventurousness` table (11 rows) almost certainly carries the legend (5 difficulty + 6 wilderness levels ≈ 11). Promote to closed once confirmed via SELECT.
-8. `base_price` vs `raw_price` — why they diverge (W-Trek: raw 2,900 → base 4,119), what formula produces base?
-9. `window_price` — promotional? seasonal? time-windowed? Only populated on ~18% of records.
-10. ✅ **Partly answered** (2026-04-27, dump inspection): No first-class `departure` table. Closest candidates: `tripvariant` (584), `season` (12), `trip_operators_itineraries` (885), `start_location` (11), `partnerbooking` (37,767 — but operational, not catalogue). Confirms the demand-driven hypothesis for Patagonia. Per Julie call (2026-04-27), we won't surface dated departures anyway. Still need Swoop's semantic walkthrough of which of `tripvariant` / `season` / `trip_operators_itineraries` carry which meaning.
-11. ✅ **Answered** (2026-04-27, dump inspection + Julie call): No `swooper`/specialist table in this DB. Specialists live in another system (CRM, likely). Per Julie call, the bot will hand off to a generic "Patagonia specialist" — no named-advisor pre-call assignment needed.
-12. ✅ **Answered** (2026-04-27, dump inspection): No per-trip review store in the dump — Trustpilot aggregate is external. Useful side-finding: `contentblock_customerreview` (2,390) and `contentblock_customertip` (119) are sales-curated excerpts/tips authored for marketing use. Perfect surface for our sales-funnel content layer.
+6. ✅ **Answered** (2026-04-29, C.t0 SELECT): `currency.iso_3` is the lookup column. Mapping: 1=GBP, 2=USD, **3=EUR**, 4=AUD, 5=CLP, 6=ZAR, 7=ARS, 8=NZD, 9=CAD, 10=NOK, 11=DKK. (First-pass guess that 4=EUR was wrong; EUR is id 3.)
+7. ✅ **Answered** (2026-04-27 + 2026-04-29): Julie ruled `adventurousness` deprecated. Confirmed by C.t0 SELECT — `adventurousness` is in fact a parallel "trip style" classifier (Adventurous/OBT/Camping/Luxury/Winter/Group/Budget/Independent etc., 11 rows, all `rating: 5` unused), not the difficulty/wilderness legend. Difficulty/wilderness on `trip` are raw integers 0–5; **no in-DB legend exists**. Agent surfaces raw integers without trying to map.
+8. ✅ **Answered** (2026-04-27, Julie call): Out of scope. `raw_price` is a website-runtime calculation; ETL surfaces only `trip.base_price` (currency-normalised via `currency.iso_3`). The base/raw divergence is by design and irrelevant to our path.
+9. ✅ **Answered** (2026-04-27, Julie call): Out of scope. `window_price` is also a website-runtime calculation; ETL ignores it.
+10. ✅ **Answered fully** (2026-04-29, C.t0 SELECT + Julie ruling): No first-class `departure` table. Semantic walkthrough of nearby tables:
+    - **`tripvariant` (584 rows)** — operational draft/active/retired versioning of trip records. `state` enum {draft, active, retired}. **Operational only — exclude from agent surface**.
+    - **`season` (12 rows)** — annual fiscal-year periods (1 Sept → 31 Aug). Used for booking-year scoping and webinar campaign flags. **Back-office only — exclude from agent surface**.
+    - **`trip_operators_itineraries` (885)** — partner-facing operational scheduling, not surfaced to public.
+    - **`start_location` (11)** — likely small reference table; not load-bearing.
+    Departures decision per Julie (C.14): **not surfaced**. Operational tables also excluded. Closes Q10 fully.
+11. ✅ **Answered** (2026-04-27, dump inspection + Julie call): No `swooper`/specialist table in this DB. **`swooper_*` fields are customer PII** (Swoop's term for their customers). Per Julie call, the bot will hand off to a generic "Patagonia specialist" — no named-advisor pre-call assignment needed.
+12. ✅ **Answered** (2026-04-27, dump inspection) + **new finding 2026-04-29 (C.t0)**: No per-trip review store in the dump — Trustpilot aggregate is external. **Side-finding from C.t0**: `contentblock_customerreview` (2,390) and `contentblock_customertip` (119) are *junction tables* with FKs to `customerreview` and `customertip` source tables — and **those source tables are NOT in the dump**. The 2,390 + 119 junction rows dangle. Either the export filtered them out (PII?) or the schema migration left stale FKs. **New question for Thomas/Richard** — see "New from C.t0 inspection" below.
 
 **Operational questions:**
 
 13. Is Monday's dump a one-off, or can it become a scheduled feed? I.e. is steady state `/weekly-dump`, or do we switch to API / CDC later?
 14. ✅ **Partly answered** (2026-04-27, dump inspection): PII-heavy tables identified — `partnerbooking` (37,767 customer bookings), `partnerbookingfile` (20,767 attachments), `inspection` (210 partner inspections), `partnertask` (294), `partnercomment`, `partnerrelationship`. These must be excluded from the LLM-accessible derived store. Still need Swoop sign-off on what level of redaction they want before we even hold the data locally / on GCS.
 15. ✅ **Answered** (2026-04-27, dump received): Raw `.sql` Sequel Ace export, MariaDB 5.5.64-flavoured. ~210 MB plain SQL plus a 38 MB zip alongside. Also confirms source DB version.
-16. Authoritative vs. denormalised — is the dump the upstream source of truth, or is some of it itself derived from a CMS? (Matters for "derived datasource" framing in chunk C §2.2.)
+16. ✅ **Answered** (2026-04-27, Julie call): Dump is canonical, period. Even derived parts treated canonically. Closes Q16.
+
+### New from C.t0 inspection (2026-04-29) — Thomas / Richard
+
+Routed during the chunk-C ETL design pass (C.t3). Surfaced by the SELECTs in `planning/03-exec-c-t0.md`:
+
+a. **`customerreview` and `customertip` source tables are missing from the SQL dump — formally requesting a redacted export.** The junction tables `contentblock_customerreview` (2,390 rows) and `contentblock_customertip` (119 rows) carry FK constraints pointing at `customerreview.id` and `customertip.id`, but those source tables don't exist in the export. PII redaction at export time is the most likely cause. Without the prose, the supply for the agent's Mirror tool (`find_someone_who` per C.25) collapses from ~2,400 short customer-voice rows to ~15 first-person blog posts.
+
+**The ask** (route to Julie initially; she may bring in Thomas/Richard for the technical export): can Swoop provide a separate redacted export of `customerreview` + `customertip` (names stripped, any other identifying detail removed)? The data is sales-curated review excerpts already published on Swoop's website, so the privacy fence around the prose itself is much smaller than the privacy fence around the customer record they came from. If granted, those rows feed `find_someone_who` directly (with persona-signal extraction at ETL time, per C.t3a). If not granted, the architecture supports dropping `find_someone_who` from the eight-tool surface — see decision C.26.
+
+**Decision gate**: Al has confirmed (2026-04-29) that the Mirror tool ships if-and-only-if Swoop grants permission. Otherwise it's deferred to a post-Puma release that may pivot to a different supply (Trustpilot scrape, curated story library, etc.). Tracked as C.26 in [planning/decisions.md](planning/decisions.md).
+
+b. **`daybyday` is much sparser than expected — confirm canonical filter.** The `daybyday` table holds 88,367 rows but only 13 trips have an `active` `tripvariant`, with 125 active rows. Of `presale`-typed rows (the candidate for sales-page rendering), 12,415 have `tripvariant_id=NULL` (i.e. not linked through a variant) and 0 are active. Best-guess ETL filter: `WHERE type='presale' AND trip_id IS NOT NULL AND deleted IS NULL` — but only 12,415 candidate rows for 852 trips means many trips will have no day-by-day data. **Question**: confirm the website renders these `presale` rows (or which other source it draws from). Critical for C.t3.
+
+c. **`ntag` operational meaning of less-obvious entries.** Most of the 79 ntags are self-evident (areas, activities). A few `interest` tags need confirmation: `Futa`, `Queulat`, `Pumalin`, `Navarino`, `San Martin` — are these region-bounded sub-themes, specific routes, or marketing campaigns? Affects how `stoke_imagination` weights them.
 
 ### Analytics platform preference — Julie / Thomas
 
@@ -163,3 +184,19 @@ The 2026-04-27 SQL dump arrived from Swoop engineering and resolved a chunk of t
 - **Operational 15** — Format confirmed (Sequel Ace `.sql`, ~210 MB, MariaDB 5.5.64).
 
 **Still open** in the Data pipeline section: 6 (currency mapping — likely closeable by SELECT), 7 (difficulty/wilderness legend — likely closeable by SELECT against `adventurousness`), 8 (base/raw price formula), 9 (`window_price` meaning), 13 (one-off vs feed), 14 (full PII redaction sign-off), 16 (authoritative vs derived).
+
+### 2026-04-29 — Data pipeline tail closed by C.t0 SELECT inspection
+
+The C.t0 task ([planning/03-exec-c-t0.md](planning/03-exec-c-t0.md)) loaded the dump into local MariaDB and ran ten clarifying SELECT batches. Closes the remaining schema/semantic tail. Inline `✅ Answered (2026-04-29, C.t0 SELECT)` markers under "Data pipeline" above carry the per-question detail. Headline closures:
+
+- **Q6** Currency mapping resolved — confirmed 1=GBP, 2=USD, **3=EUR** (first-pass guess of 4=EUR was wrong; 4=AUD), and the full 11-currency table includes CLP, ZAR, ARS, NZD, CAD, NOK, DKK.
+- **Q7** Difficulty/wilderness legend resolved — `adventurousness` is *not* a legend at all; it's a parallel "trip style" classifier (deprecated). Difficulty/wilderness are raw integers 0–5 with no in-DB legend; agent surfaces raw values.
+- **Q8** Base/raw divergence — out of scope per Julie. Closed.
+- **Q9** `window_price` — out of scope per Julie. Closed.
+- **Q10** Departure storage + semantic walkthrough of nearby tables — `tripvariant`/`season`/`trip_operators_itineraries` all confirmed operational/back-office only; excluded from agent surface. Closed fully.
+- **Q16** Dump-as-canonical — confirmed by Julie. Closed.
+
+**New question raised** (kept under "Data pipeline" / "New from C.t0 inspection" above, route to Thomas/Richard):
+- The `customerreview` and `customertip` source tables are absent from the dump — junction tables exist but FK targets are missing. Is the export selective, or has the schema migrated?
+- The `daybyday` canonical-filter best guess is `type='presale' AND trip_id IS NOT NULL AND deleted IS NULL`, yielding only 12,415 candidate rows for 852 trips. Confirm the website actually renders these.
+- A few `ntag` interest entries need semantic confirmation (Futa, Queulat, Pumalin, Navarino, San Martin).

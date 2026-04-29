@@ -6,6 +6,58 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-04-29 — Blog ETL `data/` lands in worktree, not main repo
+
+The `resolveDataRoot()` walk in `product/ingestion/src/blog/fetch.ts` walks parents looking for the first `.git` directory or `.gitignore` file. In a git worktree, `.git` is a *file* (not a directory) at the worktree root, and a `.gitignore` lives there too — so the walk stops at the worktree, not the main repo. Net: every `npm run blog:fetch:backfill` from a worktree creates `data/blog/raw/<stamp>/` *inside that worktree*, gitignored locally and invisible to other worktrees / the main repo. That's why the snapshots from agent worktrees `agent-a84896f740d205018` and `agent-a0b7dfee4cfcd79d3` weren't findable today — they were stranded in their respective worktree dirs.
+
+Workaround used today: copied the freshest snapshot (`20260428T231414Z`, 102 posts, 6.3 MB, zero errors) into `/Users/al/Studio/projects/swoop_web/data/blog/raw/` and symlinked back into this worktree.
+
+Fix candidates for the resolver:
+1. **Walk past `.git` files** — when `.git` is a file (worktree marker), read it to find the canonical repo root (`gitdir: ../../../../.git/worktrees/<name>` → climb to the parent of `.git/`) and land `data/` there.
+2. **Hard-pin to a known-good marker** — search for `.gitignore` containing the line `/data/` and only stop at that one. (Brittle; not great.)
+3. **Env var override** — `SWOOP_DATA_ROOT=/Users/al/Studio/projects/swoop_web/data npm run blog:fetch:backfill`. Trivial; works around the bug, doesn't fix it.
+
+Smallest sufficient fix is (1). ~30 minutes including a vitest case for the worktree scenario. Worth doing before the next backfill run from a worktree.
+
+---
+
+## 2026-04-30 — Blog + corpus content analysis MUST precede chunk C tool design
+
+Al's signal: the chunk C tool surface (5 PoC pass-through + 3-5 sales-shaped) and the proposed sales-tag taxonomy (`evocative` / `customer-story` / `trust-proof` / `comparison-helpful` / `practical-info`) are still speculation — we haven't actually looked at what the corpus contains. Before designing further, inspect:
+
+1. **Blog content** (already on disk): `data/blog/raw/<latest>/posts.ndjson`, 102 posts in the 5y window. Sample 20–50 random posts. What kinds of content actually exist? Travel diaries from past customers? Region overviews? Trip recaps? Practical guides? Author profiles? Are there genuine customer-story narratives we can feed into a `recall_someone_who` shape, or is most of it Swoop-staff-authored marketing?
+2. **`trip.description` prose** (in MariaDB): what's the typical length, tone, content shape? Evocative or factual? Day-by-day breakdowns or holistic pitches?
+3. **`contentblock_*` subtypes** (in MariaDB): which subtypes carry useful prose? Agent C identified `customertip` (119) and `customerreview` (2,390 — but source tables missing). What about the other 12 subtypes? Are any of them agent-feedable?
+4. **Image annotations** (existing 47.5% via `image.description`): random sample. What's the quality? Are descriptions detailed enough to power a `mood`-filtered `illustrate` query, or do they read as alt-text-grade short labels?
+
+Outputs: a "blog content shape" + "trip prose shape" + "contentblock triage" addendum, probably under `data-ontology.md` or a new short doc, plus refined sales-tag taxonomy that's grounded in observed content rather than assumed content.
+
+Why it matters: today's chunk C plan defines tool surface + tag taxonomy as if we know what `customer-story` content looks like. We don't. If 100% of the blog is Swoop-staff-authored, `recall_someone_who` collapses or has to repurpose review excerpts. If 30% is travel diaries, it has a real corpus. We can't know which without looking.
+
+Next session: prioritise this inspection pass before any further tool-design work. The chunk C plan ([02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md)) waits on the inspection output.
+
+---
+
+## 2026-04-29 — W1 (server-side session history projection) unparked
+
+Original side-quest plan at [planning/01-side-quest-persistence.md](planning/01-side-quest-persistence.md) parked W1 + W2 + W4 pending observation from the mock-host harness. Observation outcome (Al, 2026-04-29): **assistant-ui doesn't auto-rehydrate** — the chat UI loses thread state on iframe remount, confirming the original concern. W1 + W2 are now active; W4 still settled at sessionStorage.
+
+The previous W1 attempt landed and was reverted as part of the worktree-base mess. **Original commit worth reviewing for shape: `6d311240aa3b99e0c53eabccac1dfbfef83682a5`.** Per Al, that implementation was nearly OK from an assistant-ui perspective but predated the C.18 / B.22 / E.10 / C.23 Postgres lock-in — so the orchestrator-side reading of session history needs to factor in the eventual Postgres `SessionService` (B.22) rather than the in-memory ADK-native shape it was built against.
+
+Action for next session: (a) flip W1 + W2 in `01-side-quest-persistence.md` from "parked" to "active"; (b) author Tier 3 plans for `B.t11` (orchestrator history endpoint) + a UI-side rehydration task (W2); (c) review commit `6d31124` and salvage what carries; (d) add a `discoveries.md` entry: "assistant-ui doesn't auto-rehydrate — server history projection + client mount-time replay required".
+
+---
+
+## 2026-04-29 — Method note: tools / system prompts / guidance must be designed as one coherent ensemble, not bottom-up from data
+
+Captured from Al, 2026-04-29 (after I'd been reaching for a tool-by-tool walk grounded in the dump's data shape). The corrective: **don't pick off the discovery design tasks one by one starting from the data**. Tools, system prompts, and modular guidance are interlocking — the agent is a working ensemble, and that ensemble has to make sense as a whole before the individual pieces can land coherently. Bottom-up-from-data risks producing five well-shaped tools whose surface contradicts the WHY prompt's voice, or skills that load at the wrong inflection because the tool boundaries weren't drawn around real conversational moments.
+
+Practical implication for the Q1 / Q2 / Q3 thread in [planning/00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md): when we resume, **start from the conversational arcs** (a typical visitor journey, the §3.2 path sketches, the customer-type segmentation, the motivation anchors) and ask "what does the agent need at each beat — guidance? a tool? a piece of WHY context?". Tool I/O shapes follow; Postgres entity model emerges last. NOT: "what fields hydrate `stoke_imagination`'s output? OK, so the entity model is X, so the tool surface is Y, so the WHY prompt should reference Z."
+
+This is method, not just preference. Future sessions: read this entry before reaching for the data layer.
+
+---
+
 ## 2026-04-28 — Tier 2 plan refresh + Firestore cleanup follow-up
 
 Major Tier 2 plan refresh landed today: chunk C rewritten around Postgres + sales-shaped tools woven with existing PoC tools (C.19); B's session strategy clarified (B.22: ADK in-built → custom Postgres post-M4); E's handoff store flipped to Cloud SQL Postgres (E.10); Firestore dropped project-wide (C.23). 12 new decisions landed in [decisions.md](planning/decisions.md). All sub-decisions (C.13–C.17 sales-funnel + data rulings) also formalised.

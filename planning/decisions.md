@@ -8,6 +8,38 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## H.20 — Living-evalset ritual ownership documented as a role, not a name
+
+**Decided**: 2026-04-29
+**Owner**: H.t7 living-evalset runbook
+**Rationale**: The runbook needs to name an owner so the weekly ritual doesn't become orphaned. Two shapes considered: (a) name a person ("Al" or "Thomas"), (b) name a role ("the harness owner — currently Thomas / Richard at handover; until then, Al"). Picked (b). Names rot — the moment the named person changes role, the runbook either misleads or gets edited under pressure; either way the ritual loses time. A role-with-current-incumbent stays accurate as long as the parenthetical is updated on handover sign-off, and the operator reading the doc knows to update it because they ARE the new incumbent.
+
+**Swap cost**: Trivial. One sentence in `product/cms/ops/evalset-growth.md` § "Cadence + ownership" gets updated whenever ownership changes.
+
+## H.19 — Transcript source for evalset growth: handoff records + Cloud Logging by session id, transcript-text logging deferred
+
+**Decided**: 2026-04-29
+**Owner**: H.t7 living-evalset runbook
+**Rationale**: The weekly ritual needs the operator to read what visitors actually said, then re-author the messages into a scenario. Today, two stable sources cover most cases: (a) handoff records under `var/handoffs/<id>.json` carry verdict + visitor profile + wishlist + reason text — enough context for any conversation that ended in a handoff (the dominant case worth testing, by definition); (b) Cloud Logging events by session id carry the **shape** of the conversation (turn count, tool calls, latency) but not the message text — events log lengths + SHA256 hashes, per chunk F's privacy posture. The gap: "no-handoff" conversations in production have no recoverable transcript. Three options considered: (i) widen event logging to include `<utter>` text behind a privacy gate, (ii) build a separate transcript-write path on session end, (iii) accept the gap and prescribe operator workarounds. Picked (iii) for Puma launch. Rationale: (i)/(ii) both want a deliberate privacy + retention review and a schema change that ripples through F; deferring keeps Puma's launch surface honest and small. The ritual still works for the conversation classes that matter most (those that produced a handoff). Operators flag interesting "no-handoff" sessions during dev and capture transcripts from stdout at the time. The runbook records this as an open item for Al.
+
+**Swap cost**: Medium. If launch experience shows the no-handoff blind-spot is hurting evalset growth, the fix is a schema-change to log final `<utter>` text (with PII redaction policy) — touches `ts-common/src/events.ts`, the orchestrator turn-end emit site, and the runbook's Step 1b. The runbook structure (sections + sanitisation procedure) doesn't change; only the source-of-truth pointer in Step 1 does.
+
+## H.18 — PII sanitisation: manual checklist + committed `grep` smoke test, no scripted sanitiser at launch
+
+**Decided**: 2026-04-29
+**Owner**: H.t7 living-evalset runbook
+**Rationale**: When converting real conversations into scenarios, visitor PII (names, emails, phones, freeform `reason.text`) must not commit to the scenario file. Two mechanisms considered: (a) a scripted sanitiser that takes a transcript + emits a redacted seed, (b) a manual rewrite procedure backed by a `grep`-based smoke test the operator runs before staging. Picked (b). Rationale: at Puma's expected scenario growth rate (5–10/week), manual rewrite is ~5 minutes per scenario and forces the operator to actually read what they're committing — the meta-control of being responsible for every line shipped is exactly what PII review needs. A scripted sanitiser at this volume would either over-redact (replacing every `[A-Z][a-z]+` token, mangling place names) or under-redact (missing context like "I work at Acme Corp"). The grep smoke test catches the most common leaks (email-shaped strings, phone-shaped strings, identity-disclosure phrases) without claiming completeness. Verified: all three patterns return clean against the H.t1 scaffold scenarios (000–019).
+
+**Swap cost**: Low–Medium. If the suite passes ~50 scenarios or a leak slips through, build a scripted sanitiser as a Tier 3 task. The runbook structure stays the same; "Step 4" gets a scripted alternative path. The grep smoke test stays as a defence-in-depth check either way.
+
+## H.17 — Living-evalset cadence: weekly, Friday afternoon by default, movable
+
+**Decided**: 2026-04-29
+**Owner**: H.t7 living-evalset runbook
+**Rationale**: Tier 2 §2.7 commits to a weekly ritual; H.t7 fixes the slot so the ritual has a default landing place on the operator's calendar. Friday afternoon is a low-stakes slot — most engineering activity for the week has settled, so Saturday-Sunday won't pull a half-finished PR into review. The runbook documents the slot as movable: the cadence (weekly) is load-bearing, the day is not. Skipping a week is the failure mode to prevent; a weekly ritual that drifts to "every other Wednesday" is fine.
+
+**Swap cost**: Trivial. One paragraph in the runbook updates when the operator's preferred slot changes.
+
 ## H.16 — `triage_verdict` derives final state from captured `triage.decided` events; future `/session/:id` endpoint will tighten
 
 **Decided**: 2026-04-28
@@ -89,6 +121,110 @@ The E.t2 task in the planning doc described "Firestore default + a `ts-common` i
 **Rationale**: The mailer + durable store + `submitHandoff()` orchestration first landed in `product/orchestrator/src/handoff/` because the connector workspace was empty. They were relocated to `product/connector/src/handoff/` once we accepted that's their architecturally-correct home. Rationale stands per the chunk-C/chunk-E split: connector owns data + side-effects, orchestrator owns the agent loop. The orchestrator imports `submitHandoff`, `FsHandoffStore`, and `MailerConfig` from `@swoop/connector` as a workspace dep; `nodemailer` is now a connector-package dep (removed from orchestrator). The `POST /handoff/submit` route handler stays in the orchestrator because the route is part of the orchestrator's HTTP surface — it just delegates the side-effect work to the connector via in-process import. When MCP-fication eventually happens (the connector grows a `handoff_submit` tool exposed over MCP-HTTP), the route handler swaps in-process import for an MCP client call. Same `submitHandoff` function on the connector side; minimal disturbance.
 
 **Swap cost**: Low. The `@swoop/connector` workspace dep on the orchestrator is the only surface that would change at MCP-fication.
+## C.30 — `customer_story` persona shape: natural-language summary + embedding, no structured columns
+
+**Decided**: 2026-04-29
+**Owner**: Al
+
+**Rationale**: The `customer_story` table (Mirror job, conditional on C.26) needs a way to remember *who* each story is about so the visitor's persona signal can be matched to similar customers. Two shapes were considered: structured columns (`travel_style`, `age_band`, `motivation_tags`, …) vs JSONB blob. Both lock the persona taxonomy to schema time, before we've actually read enough customer reviews to know what dimensions matter.
+
+The chosen shape: **`persona_summary TEXT` + `persona_embedding vector(1536)`**. At ETL time, the Haiku classifier writes a 1–3 sentence natural-language description per row (e.g. *"Sarah, mid-40s, solo traveller, post-divorce reset trip. Intermediate hiker, drawn to wildlife photography and accessible glaciers. Wanted quiet trails over W-trail crowds."*). That text gets embedded. At query time the Mirror tool embeds the visitor's signal and finds matching customers via cosine similarity on the embedding.
+
+Why this is right for Puma:
+- We already run Haiku at ETL (per C.24's "cheap LLM at ETL, embeddings + Sonnet at runtime"). Adding one more classifier prompt is near-zero cost.
+- Persona taxonomy is genuinely unsettled — we'll discover what matters by reading actual reviews. Natural language captures whatever the classifier picks up; we're not pre-committing to a vocabulary.
+- The Mirror tool's job is "find a similar customer", which is fundamentally a similarity query, not a faceted filter. Cosine search delivers that natively.
+- Debuggability is fine — `persona_summary` is human-readable; QA can read the row to see what the classifier inferred.
+- Filtering by region (the one persona-adjacent dimension we're confident about) stays in the structured `region TEXT` column for the cases where geography matters.
+
+**Trade-off accepted**: faceted persona filtering is impossible without a content embedding. If a future use case wants "show me only solo travellers in their 40s", we'd need to either add structured columns at that point (cheap migration) or run a second classifier pass to extract specific fields. For now, the embedding-driven retrieval is the only matching mechanism.
+
+**Swap cost**: Low. Adding structured persona columns later is a `ALTER TABLE ADD COLUMN` + a Haiku-classifier re-run that extracts fields from existing `persona_summary` text. The decision is reversible.
+
+## C.29 — Page prose is the dominant content supply for Inspire/Reassure/Inform
+
+**Decided**: 2026-04-29
+**Owner**: Al
+
+**Rationale**: Surfaced by the 2026-04-29 data review against the loaded SQL dump. 482 content-relevant pages (excluding accommodation/ship/itinerary/trip-anchored types and Profile staff bios per C.27 + test pages per C.28) carry **~2 MB page-level prose** (intro_text + summary) plus **~2 MB contentblock prose**. By comparison, the blog corpus is ~6.3 MB but more sprawling/editorial; pages are tighter, on-message, and properly sectioned by `subheading`. Top contributing pagetypes by block-prose volume: Guidebook (87 pages, 523K chars), Swoop (43 pages, 415K chars — the sustainability/B-Corp/About-Swoop slice is the canonical TrustProof source), City (23, 226K), Activity (25, 147K), Region-Activity (26, 127K), Profile *(excluded)*, National Park (16, 112K), Region (16, 102K). The earlier plan focused on the blog as the primary content surface; the pages eclipse it. ETL capacity tilts page-first, with the blog as a parallel narrative-rich complement.
+
+The pagetype → job mapping is documented in [planning/02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md) §2.5.
+
+**Swap cost**: Low. The four job-shaped derived tables (`inspire_passage`, `customer_story`, `trust_proof`, `inform_chunk`) ingest from both pages and blog with the same chunking/embedding contract — adjusting the source-mix is a matter of which `pagetype_id` filters land where in the export SQL.
+
+## C.28 — Test pages filtered at ETL boundary
+
+**Decided**: 2026-04-29
+**Owner**: Al
+
+**Rationale**: Some pages in the dump are obvious dev/staging artefacts (e.g. "Megs Test Page", "Test (Zoe) - Los Glaciares National Park", "Test meggg"). Mechanical hygiene: filter at the ETL boundary with a heuristic — `WHERE alias NOT LIKE '%test%' AND title NOT LIKE '%Test %'`. No architectural significance; just keeping the derived store clean.
+
+**Swap cost**: None. If the heuristic over- or under-filters in practice, adjust the WHERE clause and re-run.
+
+## C.27 — Profile pagetype excluded from ETL
+
+**Decided**: 2026-04-29
+**Owner**: Al
+
+**Rationale**: 40 pages of Swoop's specialist team bios (Agustín, Alicia, Ben, Carola, Cecilia, ...) under `pagetype_id=20` (Profile). Per Al's stance — "we don't care about authors / strip" — excluded from ETL. They don't fit any of the five conversational jobs: visitors aren't being mirrored against staff, and Puma's handoff is to a sales-team inbox, not to a specific specialist. May reappear if a future release adds a "speak to specialist X" affordance; not in Puma scope.
+
+**Swap cost**: Trivial. One `WHERE pagetype_id != 20` clause in the export. Reversed in the same one-line edit.
+
+## C.26 — Customer-review supply is dangling in the dump; `find_someone_who` is conditional
+
+**Decided**: 2026-04-29
+**Owner**: Al
+
+**Rationale**: The 2026-04-28 chunk-C plan committed to feeding the Mirror tool (`recall_someone_who` then, `find_someone_who` now per C.25) from `contentblock_customerreview` (2,390 rows) + `contentblock_customertip` (119) + relevant blog posts. The 2026-04-29 dump inspection revealed those `contentblock_*` tables are **pure junctions** — they hold FK references to `customerreview` / `customertip` source tables that don't exist in the dump. PII redaction at export time is the most likely cause. Same for `contentblock_pressreview` (0 rows alive but the source `pressreview` table is also missing).
+
+Net: **2,390 dangling FK references with no prose attached.** The Mirror tool's intended supply is reduced to ~15 first-person blog posts.
+
+Action: Al asks Swoop for a separate redacted export of `customerreview` + `customertip` tables (names stripped, PII removed). If granted, `find_someone_who` ships with the original supply level; the persona-signal extraction pass at ETL (per C.t3a) handles structuring. If not granted, **`find_someone_who` is dropped from Puma's tool surface**, and the Mirror job is filled inadequately by the blog alone — a known gap to revisit post-launch (potentially via Trustpilot scrape or a Swoop-curated story library). Swoop ask captured in `questions.md`.
+
+**Swap cost**: Low if granted (one new ETL source table, mechanical). If dropped: removing one tool from the eight-tool surface, the corresponding Zod schemas, and the matching widget — ~half a day total. The architecture supports re-adding the tool when supply improves.
+
+## C.25 — Five-jobs / eight-tools intent-named surface (replaces C.19)
+
+**Decided**: 2026-04-29
+**Owner**: Al
+
+**Rationale**: The 2026-04-28 plan named ten tools (five PoC + five sales-shaped composer tools per C.19/C.22). The 2026-04-29 review ran first-principles top-down from the sales journey: at every conversational moment the data does one of four jobs (Inspire / Mirror / Reassure / Inform), plus a fifth structural-output job (Propose-options). Five jobs → five jobs-shaped tools; plus the carried-forward `illustrate` + `handoff` + `handoff_submit` utility set = **eight tools**.
+
+Tools (intent-named):
+- `find_inspiring(theme | region | mood)` — Inspire
+- `find_someone_who(visitor_signal)` — Mirror *(conditional on C.26)*
+- `find_proof(concern | topic)` — Reassure
+- `lookup(question)` — Inform
+- `find_options(filters)` — Propose options
+- `illustrate(scope)` — visual companion
+- `handoff(reason, summary)` — open lead-capture
+- `handoff_submit(payload)` — submit lead
+
+The PoC tools `search` and `get_detail` are deprecated alongside C.19 — their surface absorbs into `lookup` (free-form factual) and `find_options` (structured trip filter). The composer tool names (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`) never shipped and don't appear anywhere outside the now-superseded planning text.
+
+Mapping the five tools to four+1 jobs follows the framing arrived at in the 2026-04-29 thinking session: Inspire turns vague interest into vivid anticipation; Mirror lets visitors see themselves in someone who's done it; Reassure converts curiosity into confidence to talk to a human; Inform answers concrete questions; Propose-options is the closest the agent gets to recommending. Tool descriptions encode the conversational moment Sonnet uses to pick.
+
+**Swap cost**: Medium. Backing out to the previous ten-tool / composer surface means restoring the deprecated schemas, the composer code, and re-augmenting B.t3a / D.t9 instead of replacing. Adding a sixth job (e.g. a dedicated FAQ tool separate from `lookup`) is additive and cheap.
+
+## C.24 — No composer layer; cheap LLM moves to ETL (replaces C.22)
+
+**Decided**: 2026-04-29
+**Owner**: Al
+
+**Rationale**: The C.22 composer pattern was justified when tool outputs were *vague* (`stoke_imagination` returns "evocative content" — what shape exactly?). Once the eight intent-named tools (C.25) are designed with concrete row-shaped outputs, an internal Haiku-driven composer between handler and data primitives adds no value: tool descriptions encode intent for selection, and Sonnet's native skill is weaving structured material into conversational prose. One LLM call per turn (Sonnet only) — lower latency, lower cost, fewer failure modes than the C.22 three-layer architecture.
+
+The composer pattern stays in the toolbox for any future tool that genuinely needs multi-step retrieval Sonnet can't plan reliably from a description alone — none of Puma's eight meet that bar. Adding one later is additive: a single new file `src/composers/<tool>.ts` between handler and data primitives. The data-primitive layer is unchanged; nothing about the architecture forecloses composer addition.
+
+**Where Haiku does earn its keep — at ETL/ingest, not query**:
+- Classifying each blog post into one (or more) of the four content jobs (Inspire / Mirror / Reassure / Inform).
+- Extracting persona signals from each first-person customer story (and customer reviews if C.26 unblocks them) — solo / family / age band / motivation tag — stored as structured columns the `find_someone_who` tool can match on.
+- Generating image annotations + tags for the `image` table (per C.10).
+- Normalising blog tags against the `ntag` taxonomy (per C.17).
+
+These are batch, persisted-once jobs running off Cloud Run Jobs. Done at ETL time, not on the conversational path.
+
+**Swap cost**: Low both ways. Removing composers is a code deletion (no data migration). Adding a composer back for a single tool is one new file. The data-primitive layer is invariant.
+
 ## C.23 — Firestore dropped project-wide
 
 **Decided**: 2026-04-28
@@ -100,23 +236,27 @@ The E.t2 task in the planning doc described "Firestore default + a `ts-common` i
 
 **Swap cost**: None (Firestore was never wired). The follow-up code cleanup is mechanical: rename one file, update one enum, update one docstring. ~30 minutes of work bundled into the post-M4 session-backend task.
 
-## C.22 — Composer pattern: per-tool Haiku sub-agent inside the connector
+## C.22 — ~~Composer pattern: per-tool Haiku sub-agent inside the connector~~ — **SUPERSEDED by C.24 (2026-04-29)**
 
-**Decided**: 2026-04-28
+**Decided**: 2026-04-28 — **Superseded 2026-04-29 by C.24**
 **Owner**: Al
 
-**Rationale**: 5 of the 10 external tools (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`) are fronted by a **composer** — a Haiku 4.5 sub-agent inside the connector that decomposes the sales-shaped request into calls against pure-SQL data primitives, runs them, and synthesises a coherent sales-shaped response. The other 5 tools (`search`, `get_detail`, `illustrate`, `handoff`, `handoff_submit`) are pass-through (no LLM). The composer pattern keeps the orchestrator's tool surface clean — Sonnet sees sales-stage tools, no retrieval-plumbing leaks — and isolates retrieval composition from the orchestrator. Important for downstream changes (different orchestrator LLM, different vendor, additional non-retrieval workload — keeping retrieval composition inside the connector means changes there don't leak into orchestrator tooling). Cost shape: per-conversation cost approximately flat as Sonnet-side composition reduction balances Haiku-side composition addition.
+**Status**: No composer layer in Puma. Cheap LLM (Haiku) moves to ETL (blog-post classification, persona-signal extraction, image annotation, tag normalisation). See C.24 for the rationale and C.25 for the eight-tool intent-named surface that replaces the ten-tool composer surface.
+
+**Original rationale (preserved for context)**: 5 of the 10 external tools (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`) are fronted by a **composer** — a Haiku 4.5 sub-agent inside the connector that decomposes the sales-shaped request into calls against pure-SQL data primitives, runs them, and synthesises a coherent sales-shaped response. The other 5 tools (`search`, `get_detail`, `illustrate`, `handoff`, `handoff_submit`) are pass-through (no LLM). The composer pattern keeps the orchestrator's tool surface clean — Sonnet sees sales-stage tools, no retrieval-plumbing leaks — and isolates retrieval composition from the orchestrator. Important for downstream changes (different orchestrator LLM, different vendor, additional non-retrieval workload — keeping retrieval composition inside the connector means changes there don't leak into orchestrator tooling). Cost shape: per-conversation cost approximately flat as Sonnet-side composition reduction balances Haiku-side composition addition.
 
 **Swap cost**: Medium. Removing the composer layer means each external tool becomes a single SQL primitive call (which loses synthesis quality but works); promoting Haiku → Sonnet in composers is a config change. Adding a new composer is one new file `src/composers/<tool-name>.ts`.
 
-## C.21 — Source pipeline: SQL dump → local MariaDB → export.sql → Cloud SQL Postgres
+## C.21 — Source pipeline: SQL dump → transform → Cloud SQL Postgres
 
-**Decided**: 2026-04-28
+**Decided**: 2026-04-28 — **summary reframed 2026-04-29** to drop the no-longer-canonical MariaDB step.
 **Owner**: Al
 
-**Rationale**: Supersedes the 2026-04-22 plan's scrape-vs-API question. The 2026-04-27 SQL dump is upstream-of-truth (per Julie call: "dump is canonical"). Pipeline shape: drop dump at `data/<dump>.sql` → load into local MariaDB (dev) → run `export.sql` declarative SQL transformations → stream into Cloud SQL Postgres (prod) or local Docker Postgres (dev). Cadence assumed weekly during M1–M5; steady state TBC with Swoop ops (could become an API, CDC, or scheduled feed). Disposable — when Swoop's source schema changes, `export.sql` gets rewritten; nothing downstream needs to change.
+**Rationale**: Supersedes the 2026-04-22 plan's scrape-vs-API question. The 2026-04-27 SQL dump is upstream-of-truth (per Julie call: "dump is canonical"). Pipeline shape: drop dump at `data/<dump>.sql` → run a declarative transform that whitelists/flattens/denormalises/computes derived columns → stream into Cloud SQL Postgres (prod) or local Docker Postgres (dev). The transform reads the MariaDB-format dump file directly; tooling pick (e.g. `pgloader` + a SQL transform layer, or a Node CLI translator) lands at C.t3 design time. Cadence assumed weekly during M1–M5; steady state TBC with Swoop ops (could become an API, CDC, or scheduled feed). Disposable — when Swoop's source schema changes, the transform gets rewritten; nothing downstream needs to change.
 
-**Swap cost**: Medium. Source change means rewriting `export.sql`; destination change means swapping Postgres for an alternative engine (bounded by C.18's swap cost).
+**Note on the C.t0 dev-time MariaDB step**: during the design phase (2026-04-27 → 2026-04-29) we loaded the dump into a local MariaDB to SQL-poke the data while shaping the entity model. That was a tactical inspection step for human design work — **closed and not part of the canonical pipeline**. The original 2026-04-28 framing of this decision included MariaDB as a pipeline step; the 2026-04-29 reframe drops it.
+
+**Swap cost**: Medium. Source change means rewriting the transform; destination change means swapping Postgres for an alternative engine (bounded by C.18's swap cost).
 
 ## C.20 — Blog ingest as separate stream via WP REST API; 5y fetch-time-filtered window
 
@@ -127,12 +267,14 @@ The E.t2 task in the planning doc described "Firestore default + a `ts-common` i
 
 **Swap cost**: Low. WP REST API → alternative source (SQL dump, alternative API) is a one-script swap.
 
-## C.19 — Sales-shaped tool surface, woven with existing PoC tools
+## C.19 — ~~Sales-shaped tool surface, woven with existing PoC tools~~ — **SUPERSEDED by C.25 (2026-04-29)**
 
-**Decided**: 2026-04-28
+**Decided**: 2026-04-28 — **Superseded 2026-04-29 by C.25**
 **Owner**: Al
 
-**Rationale**: The agent's external tool surface combines the 5 PoC-derived tools (`search`, `get_detail`, `illustrate`, `handoff`, `handoff_submit`) with 5 new sales-shaped composer tools (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`). **10 tools total** — within Claude's working-memory budget. The PoC tools carry forward intact (three are already sales-shaped: `illustrate`, `handoff*`; the two data-shaped ones — `search`, `get_detail` — are kept as escape hatches for direct visitor queries that don't need narrative framing). The 5 new tools are composer-driven (per C.22) for sales-stage moments. Sales discipline lives in tool-description prose + the system prompt, not in the tool-list shape — `search` / `get_detail` descriptions tilt the agent away from them when sales-shaped tools fit. This is "weave" rather than "replace": existing schemas, adapters, and widgets carry forward; new ones added alongside.
+**Status**: Eight intent-named tools (Inspire / Mirror / Reassure / Inform / Propose-options + carried-forward illustrate + handoff pair) replace the ten-tool sales-shaped surface. The composer-driven tool names (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`) never shipped. PoC's `search` and `get_detail` are deprecated alongside (their surface absorbs into `lookup` / `find_options`); `illustrate`, `handoff`, `handoff_submit` carry forward intact. See C.25 for the canonical surface.
+
+**Original rationale (preserved for context)**: The agent's external tool surface combines the 5 PoC-derived tools (`search`, `get_detail`, `illustrate`, `handoff`, `handoff_submit`) with 5 new sales-shaped composer tools (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`). **10 tools total** — within Claude's working-memory budget. The PoC tools carry forward intact (three are already sales-shaped: `illustrate`, `handoff*`; the two data-shaped ones — `search`, `get_detail` — are kept as escape hatches for direct visitor queries that don't need narrative framing). The 5 new tools are composer-driven (per C.22) for sales-stage moments. Sales discipline lives in tool-description prose + the system prompt, not in the tool-list shape — `search` / `get_detail` descriptions tilt the agent away from them when sales-shaped tools fit. This is "weave" rather than "replace": existing schemas, adapters, and widgets carry forward; new ones added alongside.
 
 **Swap cost**: Medium. Backing out to a smaller (sales-only) or larger (full data API) surface means rewriting tool descriptions, regenerating widgets, and regenerating Zod schemas. Tool-description authoring is the dominant cost (5 new prose blocks under `cms/prompts/tools/<tool>/description.md` per G.11).
 
@@ -196,7 +338,7 @@ Vertex genuinely wins for million-doc corpora, multimodal search, or out-of-the-
 
 The agent-with-tools architecture means Vertex would slot in later as **one new tool implementation** behind the existing tool surface, with no rearchitecting of the agent or other tools. So this is a low-regret decision — the cost of deferring Vertex is essentially zero.
 
-**Swap cost**: Medium. Replacing Postgres with DuckDB or Vertex later means rewriting the export pipeline (MariaDB → store) and the connector's storage layer behind the tool surface. The agent tool surface itself, the entity model, the retrieval semantics, and the RRF approach all carry across unchanged — they're the abstraction. So "swap" is real engineering work but bounded to one layer and shouldn't bleed into agent or product behaviour.
+**Swap cost**: Medium. Replacing Postgres with DuckDB or Vertex later means rewriting the dump-to-store transform pipeline and the connector's storage layer behind the tool surface. The agent tool surface itself, the entity model, the retrieval semantics, and the RRF approach all carry across unchanged — they're the abstraction. So "swap" is real engineering work but bounded to one layer and shouldn't bleed into agent or product behaviour.
 
 ## C.17 — `ntag` is the live tagging system; `tag` + `adventurousness` deprecated
 

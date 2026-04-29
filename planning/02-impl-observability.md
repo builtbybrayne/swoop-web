@@ -119,7 +119,7 @@ Handed over to Swoop's internal team post-M5.
 **Direction (not yet specified)**: the natural shape is a **council-of-experts** analysis pattern — multiple Claude prompts each playing a different expert role, run independently against a single conversation (or a batch), each emitting structured findings. Candidate experts:
 - Sales-process expert (did the conversation move the visitor through the funnel? Where did it stick?)
 - UX/conversational-design expert (was the bot's voice on-brand? Were the tools picked at the right moments?)
-- Content/imagination expert (did `stoke_imagination` / `recall_someone_who` outputs land vividly? Were customer stories on-target?)
+- Content/imagination expert (did `find_inspiring` / `find_someone_who` outputs land vividly? Were customer stories on-target?)
 - Refusal/compliance expert (any shadow-itinerary slips? Disclosure-respect intact?)
 
 The harness composes findings across experts into either a per-conversation summary or a batch-pattern report. Findings can feed:
