@@ -6,6 +6,23 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-04-30 — Blog + corpus content analysis MUST precede chunk C tool design
+
+Al's signal: the chunk C tool surface (5 PoC pass-through + 3-5 sales-shaped) and the proposed sales-tag taxonomy (`evocative` / `customer-story` / `trust-proof` / `comparison-helpful` / `practical-info`) are still speculation — we haven't actually looked at what the corpus contains. Before designing further, inspect:
+
+1. **Blog content** (already on disk): `data/blog/raw/<latest>/posts.ndjson`, 102 posts in the 5y window. Sample 20–50 random posts. What kinds of content actually exist? Travel diaries from past customers? Region overviews? Trip recaps? Practical guides? Author profiles? Are there genuine customer-story narratives we can feed into a `recall_someone_who` shape, or is most of it Swoop-staff-authored marketing?
+2. **`trip.description` prose** (in MariaDB): what's the typical length, tone, content shape? Evocative or factual? Day-by-day breakdowns or holistic pitches?
+3. **`contentblock_*` subtypes** (in MariaDB): which subtypes carry useful prose? Agent C identified `customertip` (119) and `customerreview` (2,390 — but source tables missing). What about the other 12 subtypes? Are any of them agent-feedable?
+4. **Image annotations** (existing 47.5% via `image.description`): random sample. What's the quality? Are descriptions detailed enough to power a `mood`-filtered `illustrate` query, or do they read as alt-text-grade short labels?
+
+Outputs: a "blog content shape" + "trip prose shape" + "contentblock triage" addendum, probably under `data-ontology.md` or a new short doc, plus refined sales-tag taxonomy that's grounded in observed content rather than assumed content.
+
+Why it matters: today's chunk C plan defines tool surface + tag taxonomy as if we know what `customer-story` content looks like. We don't. If 100% of the blog is Swoop-staff-authored, `recall_someone_who` collapses or has to repurpose review excerpts. If 30% is travel diaries, it has a real corpus. We can't know which without looking.
+
+Next session: prioritise this inspection pass before any further tool-design work. The chunk C plan ([02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md)) waits on the inspection output.
+
+---
+
 ## 2026-04-29 — W1 (server-side session history projection) unparked
 
 Original side-quest plan at [planning/01-side-quest-persistence.md](planning/01-side-quest-persistence.md) parked W1 + W2 + W4 pending observation from the mock-host harness. Observation outcome (Al, 2026-04-29): **assistant-ui doesn't auto-rehydrate** — the chat UI loses thread state on iframe remount, confirming the original concern. W1 + W2 are now active; W4 still settled at sessionStorage.

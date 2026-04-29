@@ -15,7 +15,20 @@ M1 live + chunk D closed + mock-host shipped. Tonight's parallel agent swarm lan
 
 ## Next up
 
-### 1. Continue the discovery design HITL [active thread]
+### 0. Corpus content analysis [first thing next session]
+
+Before any further chunk C tool-design work or sales-tag-taxonomy speculation, **inspect what the corpus actually contains**. Captured in detail at [inbox.md](inbox.md) 2026-04-30 entry. Headline targets:
+
+1. **Blog content** at `data/blog/raw/<latest>/posts.ndjson` (102 posts, already fetched by `@swoop/ingestion`). Sample 20–50 random posts. Question: how much is genuine customer-narrative vs Swoop-staff-authored marketing? Is there a `recall_someone_who` corpus or do we repurpose?
+2. **`trip.description` prose** in local MariaDB. Typical length, tone, content shape. Evocative or factual?
+3. **`contentblock_*` subtype triage** in MariaDB. Which of the 14 subtypes beyond `customertip`/`customerreview` (the latter's source tables missing) carry useful prose?
+4. **Image annotations** — random sample of the 47.5% with `image.description`. Quality check: alt-text-grade or rich enough to feed mood-filtered retrieval?
+
+Outputs: short "blog content shape" + "trip prose shape" + "contentblock triage" addendum (probably in [data-ontology.md](data-ontology.md) or a sibling), plus refined sales-tag taxonomy grounded in observed content. **The chunk C plan rewrite + Tier 3 plans for C.t1/t3/t3a/t4 wait on this.**
+
+Method note (now in [00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md) §5): tool *bindings* come from corpus evidence, not assumption. Don't propagate up from the data shape, but don't propagate *into* the data layer without looking either.
+
+### 1. Continue the discovery design HITL [active thread, post-inspection]
 
 [planning/00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md) is the live HITL doc — it merges C.t2 (sales-shaped tool I/O + Postgres entity model) with G.t0 / G.t1 / G.t3 because those design questions are tangled. **Closed in §5 already**: Q5 (`inconclusive` 4th verdict approved), Q4 (main agent derives customer-type, NOT a Haiku post-classifier — the orchestrator is the most context-aware reasoner in the loop). **Q1 expanded** to walk all 10 tools (5 PoC carry-forward + 5 new sales-shaped) — the PoC tools have value (original thinking + UI widgets) but warrant refresh. **Method**: walk top-down from conversational arcs (visitor journeys, §3.2 path sketches, customer-type segmentation, motivation anchors). Tool I/O follows; Postgres entity model emerges last. Remaining outputs:
 
