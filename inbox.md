@@ -6,6 +6,21 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-04-29 — Blog ETL `data/` lands in worktree, not main repo
+
+The `resolveDataRoot()` walk in `product/ingestion/src/blog/fetch.ts` walks parents looking for the first `.git` directory or `.gitignore` file. In a git worktree, `.git` is a *file* (not a directory) at the worktree root, and a `.gitignore` lives there too — so the walk stops at the worktree, not the main repo. Net: every `npm run blog:fetch:backfill` from a worktree creates `data/blog/raw/<stamp>/` *inside that worktree*, gitignored locally and invisible to other worktrees / the main repo. That's why the snapshots from agent worktrees `agent-a84896f740d205018` and `agent-a0b7dfee4cfcd79d3` weren't findable today — they were stranded in their respective worktree dirs.
+
+Workaround used today: copied the freshest snapshot (`20260428T231414Z`, 102 posts, 6.3 MB, zero errors) into `/Users/al/Studio/projects/swoop_web/data/blog/raw/` and symlinked back into this worktree.
+
+Fix candidates for the resolver:
+1. **Walk past `.git` files** — when `.git` is a file (worktree marker), read it to find the canonical repo root (`gitdir: ../../../../.git/worktrees/<name>` → climb to the parent of `.git/`) and land `data/` there.
+2. **Hard-pin to a known-good marker** — search for `.gitignore` containing the line `/data/` and only stop at that one. (Brittle; not great.)
+3. **Env var override** — `SWOOP_DATA_ROOT=/Users/al/Studio/projects/swoop_web/data npm run blog:fetch:backfill`. Trivial; works around the bug, doesn't fix it.
+
+Smallest sufficient fix is (1). ~30 minutes including a vitest case for the worktree scenario. Worth doing before the next backfill run from a worktree.
+
+---
+
 ## 2026-04-30 — Blog + corpus content analysis MUST precede chunk C tool design
 
 Al's signal: the chunk C tool surface (5 PoC pass-through + 3-5 sales-shaped) and the proposed sales-tag taxonomy (`evocative` / `customer-story` / `trust-proof` / `comparison-helpful` / `practical-info`) are still speculation — we haven't actually looked at what the corpus contains. Before designing further, inspect:

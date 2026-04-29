@@ -82,12 +82,12 @@ Repo bootstrap, monorepo tooling, shared types package (evolution of `ts-common`
 The agent loop itself. **Google ADK (TypeScript)** — pinned. System prompt loaded from content. Session state. Tool invocation via the connector (chunk C). Streaming events out to the chat surface (chunk D). The thing that was "free from ChatGPT" in Phase 1 and now we own.
 
 ### C. Retrieval & data
-**Data access strategy pending Friday 24 Apr hackathon**: API-direct vs scrape-the-site. Outcome reshapes this chunk. Constants regardless of outcome:
-- Search / retrieval backend: **Vertex AI Search** (settled). Weaviate is out.
-- MCP-style data connector service exposing the evolved tool set from the PoC.
-- Image resolution via Swoop's existing media library (location TBC, part of the hackathon scope).
-
-Scrape path's side-benefit: real page URLs per product/region/story — enables "go see this page" deep links in the chat. If API-direct wins the hackathon, check whether we can reconstruct URLs from type+id. See inbox entry 2026-04-22.
+**Settled** as of the 2026-04-27 SQL dump + 2026-04-29 data review:
+- Source: SQL dump → MariaDB (dev) → `export.sql` → Cloud SQL Postgres (per C.21).
+- Storage engine: **Postgres 16 + pgvector + tsvector + pg_trgm** (per C.18). Weaviate out, Vertex out.
+- Tool surface: **eight tools shaped to five conversational jobs** (Inspire / Mirror / Reassure / Inform / Propose-options) plus the carried-forward visual + handoff utilities. **No composer layer** (per C.24); orchestrator-level Sonnet calls intent-named tools directly. Detail in [02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md) §2.2.
+- Image resolution: deterministic URL construction from filename + imgix render params; canonical via `override_url || alias` (per C.15).
+- Blog ingest as a separate parallel stream via WP REST API (per C.20; landed).
 
 Mongo is **not** in scope — confirmed no longer used.
 
@@ -206,9 +206,9 @@ Deliberately unresolved at the top level — pinned in Tier 2 where they bite.
 
 | # | Decision | Default / leaning | Decided in |
 |---|---|---|---|
-| 1 | Data access: API-direct vs scrape | Resolved by Friday 24 Apr hackathon | Tier 2 chunk C |
-| 2 | Image retrieval path | Via Swoop media library (location TBC at hackathon) | Tier 2 chunk C |
-| 3 | Cross-page chat persistence | Default: no. Revisit if deep-linking wins | Tier 2 chunk D |
+| 1 | Data access: API-direct vs scrape | ✅ **Closed** by 2026-04-27 SQL dump (per C.21). Scrape-vs-API is moot. | Tier 2 chunk C |
+| 2 | Image retrieval path | ✅ **Closed**: deterministic URL construction (filename + imgix render params), `override_url \|\| alias` for page URLs (per C.15) | Tier 2 chunk C |
+| 3 | Cross-page chat persistence | Default: no. Mock-host harness (`02-impl-side-quest-host-harness.md`) confirmed the failure mode; W1 + W2 unparked. Status in flight. | Tier 2 chunk D / side-quest |
 | 4 | Message-passing topology | Default: SSE direct from ADK event stream to assistant-ui. **No internal bus unless a concrete need emerges** (e.g. durable events across HTTP connections). Must work cleanly for both ADK's server-side and assistant-ui's consumption | Tier 2 chunk B + D jointly |
 | 5 | Session backend in prod | Default: ADK in-built (in-memory through Phase 1; the simplest thing that works). Post-M4, **upgrade path is a custom Postgres `SessionService` implementation** if budget allows — keeping all our durable state in one Cloud SQL instance per C.18. Vertex AI Session Service no longer in scope; Firestore dropped per C.23. | Tier 2 chunk B |
 | 6 | Handoff store backend | Default: **Cloud SQL Postgres** (`handoff` table in the same instance as the retrieval store, per E.10). Firestore dropped per C.23. | Tier 2 chunk E |
@@ -216,6 +216,8 @@ Deliberately unresolved at the top level — pinned in Tier 2 where they bite.
 | 8 | Monorepo tooling | Default: npm workspaces | Tier 2 chunk A |
 | 9 | Dynamic prompt fragments (the "HOW" layer) | Default: none. Introduce only if real conversations show need | Tier 2 chunk G |
 | 10 | Validation harness depth | Stay minimal; no vendor in Puma | Tier 2 chunk H |
+| 11 | Composer pattern inside connector | ✅ **Closed (no composers)** per C.24 (2026-04-29 review). Orchestrator-level Sonnet calls intent-named tools directly; Haiku-at-ETL retained as a separate question. | Tier 2 chunk C |
+| 12 | Customer review supply for `find_someone_who` | **Pending** — `customerreview`/`customertip` source tables are dangling in the dump. Permission-asked of Swoop (per C.26). If granted, Mirror tool ships; if not, Mirror tool is dropped from Puma scope and revisits post-launch. | Tier 2 chunk C |
 
 ### Settled at top level (do not revisit without evidence)
 
@@ -236,5 +238,6 @@ This doc replaces the previous `planning/` content (now in `planning/archive/`).
 - 21 Apr technical meeting notes (`archive/meetings/`) — TypeScript throughout, ADK, two Cloud Run services, React, Vertex Search lean
 - Quoting notes (`archive/project_proposal_notes.md`) — Julie's production bar, scope deferrals, time calibration
 - Research docs (`archive/research/`) — UI deep research, eval-harness research, discovery agent architecture brief
+- 2026-04-29 data review (this conversation) — first full inspection of pages + contentblocks + chunk + faqitem + ntag against the five-jobs/eight-tools framing. Surfaced the dangling `customerreview`/`customertip` FKs (decision C.26), the page-prose dominance over blog supply (decision C.29), the Profile-pagetype drop (decision C.27), the test-page filter (decision C.28), the composer-removal call (decision C.24), and the five-jobs framing (decision C.25).
 
 Where archived docs go deeper than this top-level plan allows, Tier 2 implementation plans cite them directly. Where archived docs got the calibration wrong (e.g. over-specified three-layer prompt architecture, Mongo as a data source, Weaviate as a fallback, detailed repo layout before the vertical slice has even proven integration), the new tiered plans are canonical.

@@ -398,7 +398,7 @@ Run on 2026-04-29.
 
 - **`customerreview`/`customertip` source tables missing** — Thomas/Richard. Tracked as new question in `questions.md`. Not blocking C.t1/C.t2/C.t3; agent's customer-story surface falls back to blog content.
 - **`daybyday` canonical filter confirmation** — Thomas/Richard. The presale-only filter is a best guess; if wrong, only ~12K rows are at stake. C.t3 should ship with the best-guess filter and a comment-flag.
-- **`ntag` interest-tag semantic confirmation** — for ~5 less-obvious tags (Futa, Queulat etc.). Doesn't block any C task but useful for `stoke_imagination` weighting.
+- **`ntag` interest-tag semantic confirmation** — for ~5 less-obvious tags (Futa, Queulat etc.). Doesn't block any C task but useful for `find_inspiring` weighting (the tool that `stoke_imagination` was renamed to per C.25; see [02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md) §2.2).
 - **Trip "publishstate_id = 3" assumption** — needs SELECT to confirm what publishstates exist and which the website surfaces. Will pick up at C.t3 design time.
 - **Imgix render-variant params** — the `thumb` / `hero` / `detail` variant params are an educated guess. Confirm in C.t6 against the imgix account (someone at Swoop has the imgix admin login).
 

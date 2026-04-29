@@ -4,6 +4,8 @@
 **Authored from**: a HITL session 2026-04-28 between Al and Claude (Opus 4.7, 1M context) where the C.t2 conversation and G.t0 conversation merged because the underlying design questions are inextricable.
 **Why this doc exists**: tools + system prompt + voice + the philosophy of what a conversation IS are all intimately related. Treating them as separate Tier 3 tasks (C.t2 vs G.t0 vs G.t1) was a planning convenience, not a design reality. This doc holds them together until the design firms enough to fork back into the per-task deliverables.
 
+> **2026-04-29 supersession note**: The tool names referenced throughout this doc (`stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`) are from the 2026-04-28 sales-shaped + composer surface, **superseded** by the eight intent-named tools in [02-impl-retrieval-and-data.md](02-impl-retrieval-and-data.md) §2.2 (decisions C.24 + C.25). Mapping: `stoke_imagination` → `find_inspiring`; `recall_someone_who` → `find_someone_who` *(conditional on C.26)*; `build_confidence` → `find_proof`; `offer_options` + `compare_paths` collapse into `find_options`; `lookup` is new for direct factual questions. The thinking chain in this doc is still valid; the tool naming is dated.
+
 ---
 
 ## How to use this doc next session
