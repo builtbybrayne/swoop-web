@@ -121,6 +121,26 @@ The E.t2 task in the planning doc described "Firestore default + a `ts-common` i
 **Rationale**: The mailer + durable store + `submitHandoff()` orchestration first landed in `product/orchestrator/src/handoff/` because the connector workspace was empty. They were relocated to `product/connector/src/handoff/` once we accepted that's their architecturally-correct home. Rationale stands per the chunk-C/chunk-E split: connector owns data + side-effects, orchestrator owns the agent loop. The orchestrator imports `submitHandoff`, `FsHandoffStore`, and `MailerConfig` from `@swoop/connector` as a workspace dep; `nodemailer` is now a connector-package dep (removed from orchestrator). The `POST /handoff/submit` route handler stays in the orchestrator because the route is part of the orchestrator's HTTP surface — it just delegates the side-effect work to the connector via in-process import. When MCP-fication eventually happens (the connector grows a `handoff_submit` tool exposed over MCP-HTTP), the route handler swaps in-process import for an MCP client call. Same `submitHandoff` function on the connector side; minimal disturbance.
 
 **Swap cost**: Low. The `@swoop/connector` workspace dep on the orchestrator is the only surface that would change at MCP-fication.
+## C.30 — `customer_story` persona shape: natural-language summary + embedding, no structured columns
+
+**Decided**: 2026-04-29
+**Owner**: Al
+
+**Rationale**: The `customer_story` table (Mirror job, conditional on C.26) needs a way to remember *who* each story is about so the visitor's persona signal can be matched to similar customers. Two shapes were considered: structured columns (`travel_style`, `age_band`, `motivation_tags`, …) vs JSONB blob. Both lock the persona taxonomy to schema time, before we've actually read enough customer reviews to know what dimensions matter.
+
+The chosen shape: **`persona_summary TEXT` + `persona_embedding vector(1536)`**. At ETL time, the Haiku classifier writes a 1–3 sentence natural-language description per row (e.g. *"Sarah, mid-40s, solo traveller, post-divorce reset trip. Intermediate hiker, drawn to wildlife photography and accessible glaciers. Wanted quiet trails over W-trail crowds."*). That text gets embedded. At query time the Mirror tool embeds the visitor's signal and finds matching customers via cosine similarity on the embedding.
+
+Why this is right for Puma:
+- We already run Haiku at ETL (per C.24's "cheap LLM at ETL, embeddings + Sonnet at runtime"). Adding one more classifier prompt is near-zero cost.
+- Persona taxonomy is genuinely unsettled — we'll discover what matters by reading actual reviews. Natural language captures whatever the classifier picks up; we're not pre-committing to a vocabulary.
+- The Mirror tool's job is "find a similar customer", which is fundamentally a similarity query, not a faceted filter. Cosine search delivers that natively.
+- Debuggability is fine — `persona_summary` is human-readable; QA can read the row to see what the classifier inferred.
+- Filtering by region (the one persona-adjacent dimension we're confident about) stays in the structured `region TEXT` column for the cases where geography matters.
+
+**Trade-off accepted**: faceted persona filtering is impossible without a content embedding. If a future use case wants "show me only solo travellers in their 40s", we'd need to either add structured columns at that point (cheap migration) or run a second classifier pass to extract specific fields. For now, the embedding-driven retrieval is the only matching mechanism.
+
+**Swap cost**: Low. Adding structured persona columns later is a `ALTER TABLE ADD COLUMN` + a Haiku-classifier re-run that extracts fields from existing `persona_summary` text. The decision is reversible.
+
 ## C.29 — Page prose is the dominant content supply for Inspire/Reassure/Inform
 
 **Decided**: 2026-04-29
