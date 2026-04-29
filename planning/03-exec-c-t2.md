@@ -451,7 +451,7 @@ Task is done when:
 1. `cd product && npm run typecheck` is green across the workspace.
 2. `cd product && npm run lint` is green.
 3. `cd product && npm test --workspace @swoop/common` passes — fixtures round-trip clean for every tool I/O pair and every derived entity.
-4. `psql swoop_puma_dev < product/connector/migrations/001_extensions.sql` (then 002, 003, 004, 005) applies cleanly to an empty Postgres 16 + pgvector + pg_trgm + btree_gin install.
+4. `psql puma_dev < product/connector/migrations/001_extensions.sql` (then 002, 003, 004, 005) applies cleanly to an empty Postgres 18 + pgvector + pg_trgm + btree_gin install.
 5. Every domain entity table exists and has the columns named in §"Schema design — Postgres".
 6. Every derived entity table exists and has its full column set.
 7. Every index exists (verify via `\d+ <tablename>` in psql).

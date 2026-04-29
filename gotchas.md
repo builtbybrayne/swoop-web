@@ -6,6 +6,26 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## Local Postgres is Postgres.app v18, not 16 — and `psql` may not be on `$PATH`
+
+The plan originally specified Postgres 16; local dev is **Postgres 18** via Postgres.app. C.18 was updated 2026-04-29 to reflect this — no functional difference, pgvector / tsvector / pg_trgm all behave identically. Cloud SQL prod will follow.
+
+The Postgres.app binary directory is `/Applications/Postgres.app/Contents/Versions/latest/bin`. If `psql` returns "not found", either add that to your shell `$PATH` or invoke `psql` by full path.
+
+**Local dev DB**: `puma_dev` on `localhost:5432`, role `al`, password `pick-a-password`. Single store per C.18 — retrieval, handoff, and the post-M4 custom Postgres `SessionService` all share this one DB. Connection URL: `postgresql://al:pick-a-password@localhost:5432/puma_dev`.
+
+**Bootstrap (one-shot, idempotent)** — re-run if you blow the DB away:
+```sh
+PG=/Applications/Postgres.app/Contents/Versions/latest/bin
+$PG/psql -d postgres -c "ALTER ROLE al WITH PASSWORD 'pick-a-password';"
+$PG/createdb -O al puma_dev 2>/dev/null || true
+$PG/psql -d puma_dev -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+```
+
+The Docker Compose mirror (handoff-parity artefact for Swoop's team) is deferred to pre-M5 ship per Tier 2 chunk C §2.5.
+
+---
+
 ## Claude Code injects an empty `ANTHROPIC_API_KEY` — dotenv silently refuses to overwrite
 
 Symptom: orchestrator startup prints `ANTHROPIC_API_KEY is required` despite `.env` having a valid key.

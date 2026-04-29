@@ -131,7 +131,7 @@ Mongo is explicitly not in scope. Weaviate is out. Vertex AI Search is out (per 
 When this chunk is done:
 
 - A data-connector service runs on Cloud Run, speaking MCP over HTTP, exposing the finalised eight-tool intent-named surface (see §2.2). **No composer layer**; tools call SQL/vector helpers directly and return results to the orchestrator (decision C.24).
-- A Postgres 16 derived store (Cloud SQL in prod, Postgres-in-Docker locally for parity) holds Patagonia content shaped for retrieval — Trip / Tour / Hotel / Vessel / Location / Activity / FAQ / BlogPost / Page, plus job-shaped derived entities (InspirePassage / TrustProof / InformChunk and — *conditional on Swoop providing a redacted customer-review export* per C.26 — CustomerStory). Indexed with `pgvector` HNSW, `tsvector` GIN, and `pg_trgm` GIN as appropriate.
+- A Postgres 18 derived store (Cloud SQL in prod, Postgres-in-Docker locally for parity) holds Patagonia content shaped for retrieval — Trip / Tour / Hotel / Vessel / Location / Activity / FAQ / BlogPost / Page, plus job-shaped derived entities (InspirePassage / TrustProof / InformChunk and — *conditional on Swoop providing a redacted customer-review export* per C.26 — CustomerStory). Indexed with `pgvector` HNSW, `tsvector` GIN, and `pg_trgm` GIN as appropriate.
 - An ETL pipeline ingests the SQL dump and produces the derived store via declarative transformations + an embedding pass. Re-runnable, idempotent, diffable across runs. **Profile pagetype excluded** (decision C.27); **test pages filtered** (decision C.28). (The C.t0 design-phase practice of loading the dump into a local MariaDB for inspection is closed; the canonical ETL doesn't depend on it.)
 - A separate WordPress REST API ingest stream (see [planning/03-exec-blog-ingest.md](03-exec-blog-ingest.md)) lands ~102 posts in the rolling 5y window. Each blog post is classified at ingest into one (or more) of the four content jobs (Inspire / Mirror / Reassure / Inform); chunks land in the corresponding derived tables alongside page-derived chunks.
 - Images resolve via a single annotated `image` table with flexible canonical URLs (per C.15) — source-of-truth (WP media vs imgix vs S3) is irrelevant once normalised. Tool responses carry pre-rendered URLs the chat surface (D) can render directly.
@@ -306,7 +306,7 @@ Every derived row carries: id, source provenance (for debugging + retention rule
 
 **Schema migrations**: `node-pg-migrate` per C.18. Plain-SQL migrations under `product/ingest/migrations/`. No ORM.
 
-**Local-dev parity**: Postgres 16 in Docker Compose for the handoff artefact. Al's direct Homebrew install works fine for individual dev velocity in the meantime; we add the `docker-compose.yml` before M5 ship so Swoop's team have a reproducible mirror.
+**Local-dev parity**: Postgres 18 in Docker Compose for the handoff artefact. Al's direct Homebrew install works fine for individual dev velocity in the meantime; we add the `docker-compose.yml` before M5 ship so Swoop's team have a reproducible mirror.
 
 **Pagetype mapping summary (decision C.29):**
 
@@ -454,7 +454,7 @@ The following decisions are pinned at chunk-C scope. C.18 has landed in [decisio
 | C.15 | URL + image construction rules | **LANDED** in decisions.md (2026-04-28). |
 | C.16 | Page-as-hub pattern for cross-entity rendering | **LANDED** in decisions.md (2026-04-28). |
 | C.17 | `ntag` is the live tagging system; `tag` + `adventurousness` deprecated | **LANDED** in decisions.md (2026-04-28). |
-| C.18 | **Postgres 16 + pgvector + tsvector + pg_trgm; no Vertex** | **LANDED** (2026-04-28). |
+| C.18 | **Postgres 18 + pgvector + tsvector + pg_trgm; no Vertex** | **LANDED** (2026-04-28). |
 | C.19 | ~~Sales-shaped tool surface (10 tools); composer pattern~~ | **SUPERSEDED** by C.25 (2026-04-29). Eight intent-named tools, no composer. |
 | C.20 | Blog ingest as separate stream via WP REST API; 5y fetch-time-filtered window | **LANDED** in decisions.md (2026-04-28); plan at [03-exec-blog-ingest.md](03-exec-blog-ingest.md). |
 | C.21 | Source = SQL dump → transform → Cloud SQL Postgres (canonical pipeline; the dev-time MariaDB-load step from C.t0 is closed) | **LANDED** in decisions.md (2026-04-28); summary reframed 2026-04-29 to drop the no-longer-relevant MariaDB step from the canonical pipeline. |
@@ -543,7 +543,7 @@ Chunk C is done when:
 9. Swoop's internal team can run the ETL from documented steps (the runbook).
 10. ADK-native skill loader (B.t9) returns skill content from `cms/prompts/skills/<skill-name>/SKILL.md` for valid skill names; returns empty/not-found for unknown skills.
 11. ETL classifier runs are observable: blog-post job-classifier outputs are reviewable by Al on sample data; classifier prompt iteration loop works.
-12. `docker-compose.yml` provisions Postgres 16 with `pgvector` + `pg_trgm` + FTS extensions; the ETL runs against it identically to local Homebrew Postgres.
+12. `docker-compose.yml` provisions Postgres 18 with `pgvector` + `pg_trgm` + FTS extensions; the ETL runs against it identically to local Homebrew Postgres.
 
 ---
 
@@ -552,7 +552,7 @@ Chunk C is done when:
 > **Note on numbering**: Tier 3 task numbers are **immutable**. The 2026-04-29 revision keeps every C.t number and updates the *contents* of any task whose specifics were tied to the now-superseded composer pattern. Where a task's identity has changed substantially (no longer the same task), it's marked **DEPRECATED** in place and a new task is added with a new number.
 
 - **C.t0 — SQL-dump load + clarifying SELECTs** (in flight 2026-04-28; broadened 2026-04-29). Load dump into local MariaDB. Original SELECT scope: `tripvariant` / `season` / `daybyday` / `currency` / `adventurousness` (deprecated, confirm) / `contentblock_*` subtypes. **Updated 2026-04-29**: also explicitly verifies the dangling `customerreview`/`customertip`/`pressreview` source tables (decision C.26), audits pagetype distribution (input to C.27 + C.29), confirms `ntag` taxonomy shape, and inventories prose volume per pagetype. Updates `data-ontology.md` with `S-SQLDUMP-2026-04-27` source tag.
-- **C.t1 — Connector service skeleton + Postgres setup**: Cloud Run-ready Express + MCP SDK; Postgres 16 + extensions provisioned (Cloud SQL for prod, Docker Compose for handoff parity); health endpoints; service-account wiring. **Greenfield** — `product/connector/src/` is empty today.
+- **C.t1 — Connector service skeleton + Postgres setup**: Cloud Run-ready Express + MCP SDK; Postgres 18 + extensions provisioned (Cloud SQL for prod, Docker Compose for handoff parity); health endpoints; service-account wiring. **Greenfield** — `product/connector/src/` is empty today.
 - **C.t2 — Entity model + tool surface schemas** (revised 2026-04-29): design Postgres schema (domain entities + job-shaped derived entities per §2.5) + `ts-common` tool I/O schemas for the eight intent-named tools (C.25). **Both layers co-define each other.** Lands as a single Tier 3 plan. Replaces shipped A.t2 schemas: `product/ts-common/src/tools.ts` is **rewritten** to drop `search` / `get_detail` (their surface collapses into `lookup` / `find_options`) and to add `find_inspiring`, `find_someone_who` (conditional on C.26), `find_proof`, `lookup`, `find_options`. `illustrate`, `handoff`, `handoff_submit` carry forward. Old `Sample*` fixtures retire alongside the deprecated tools; new fixtures added for the new derived entities (InspirePassage, CustomerStory, TrustProof, InformChunk, TripCard).
 - **C.t3 — ETL: SQL dump → Postgres transform** (data-shape transformation): declarative transformations whitelist tables, flatten, denormalise, compute derived columns. Filters at boundary: Profile pagetype excluded (C.27), test pages excluded (C.28). Populates `canonical_url` (`override_url || alias` per C.15). Tooling pick (e.g. `pgloader` + a SQL transform layer, or a Node CLI translator) lands at C.t3 design time. Plus the orchestrator CLI that runs the pipeline + idempotent re-run. **Pure data movement + structural transformation; no LLM in the loop at this stage.** **Greenfield** — no existing ETL code.
 - **C.t3a — Embedding pass + blog post-processing + ETL classifiers** (revised 2026-04-29): three related sub-tasks running off C.t3's output and the blog snapshot:
@@ -593,7 +593,7 @@ Chunk C is done when:
 For continuity with anyone reading the archived original or the 2026-04-28 rewrite — the high-level shifts.
 
 **2026-04-28 (vs 2026-04-22):**
-- **Backend**: Vertex AI Search → Postgres 16 + pgvector + tsvector + pg_trgm (C.18).
+- **Backend**: Vertex AI Search → Postgres 18 + pgvector + tsvector + pg_trgm (C.18).
 - **Source**: scrape-vs-API hackathon → SQL dump as canonical (C.21).
 - **Tool surface (later superseded)**: PoC's five **woven with** five new sales-shaped composer tools (10 tools total). C.19.
 - **Composer pattern (later superseded)**: Haiku sub-agents inside the connector. C.22.

@@ -296,10 +296,11 @@ These are batch, persisted-once jobs running off Cloud Run Jobs. Done at ETL tim
 
 **Swap cost**: Low. The interface is stable; swapping the Postgres impl for an alternative is one file. Postgres handles the write volume trivially (handoffs are write-heavy but very low rate; thousands per year).
 
-## C.18 — Storage engine: Postgres 16 + pgvector + tsvector + pg_trgm; no Vertex AI Search
+## C.18 — Storage engine: Postgres 18 + pgvector + tsvector + pg_trgm; no Vertex AI Search
 
 **Decided**: 2026-04-28
 **Owner**: Al (after Swoop confirmed Postgres acceptability post-Julie call)
+**Update 2026-04-29**: version bumped from 16 to 18 — local dev runs PG 18 via Postgres.app; Cloud SQL prod will follow. pgvector / tsvector / pg_trgm behaviour unchanged across versions.
 
 **Rationale**: Earlier in the engagement we'd hesitated on Postgres because optically it looks "like another MariaDB" to the Swoop ops team. That objection is now resolved — Swoop are explicitly happy for us to proceed with Postgres. With that constraint gone, the choice between **Postgres alone** and **Postgres-plus-Vertex AI Search** comes down to scope and operational reality.
 
@@ -322,12 +323,12 @@ Adding Vertex on top would actively cost us:
 Vertex genuinely wins for million-doc corpora, multimodal search, or out-of-the-box generated answers. None apply to Puma. The agent already produces answers via Claude in the agent-with-tools loop (decision D.11 territory); generated-answer-as-a-service is a duplicate capability for us, not a new one.
 
 **Stack pinned by this decision:**
-- **Postgres 16** — current stable, supports modern `pgvector` and FTS features.
+- **Postgres 18** — current stable, supports modern `pgvector` and FTS features.
 - **`pgvector`** — HNSW indexes on embedding columns; cosine distance default.
 - **`pg_trgm`** — trigram fuzzy matching extension.
 - **Native FTS** (`tsvector`/`tsquery`/GIN) — built into Postgres core.
 - **Cloud SQL for Postgres** in Swoop's "AI Pat Chat" GCP project for prod (small instance: `db-f1-micro` or `db-g1-small`).
-- **Postgres 16 in Docker Compose** locally — same image, identical behaviour.
+- **Postgres 18 in Docker Compose** locally — same image, identical behaviour.
 - **Schema migrations**: `node-pg-migrate` (plain-SQL, lean; Prisma rejected as too heavy for our shape — sub-decision worth flagging if it bites us).
 - **Embedding model**: pending lock — leaning Voyage-3 per Anthropic's recommended pairing; swap cost is one column re-population.
 
