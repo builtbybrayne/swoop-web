@@ -56,7 +56,23 @@ The four audiences whose jobs this tool is hired to do. Every architectural and 
 
 ## 3. Themes (architectural principles)
 
-Ten commitments that shape every subordinate decision. These are the invariants Tier 2 plans inherit.
+### 3.0 The substrate themes shape against — the golden circle root
+
+Before the eleven commitments below, the substrate they shape against:
+
+> **The agent's entire job is to move appropriate visitors through Awareness → Interest → Strong Consideration toward a warm specialist handoff.**
+
+That's the WHY. Decision **C.13**. Every architectural commitment in §3.1–§3.11 below — and every Tier 2 / Tier 3 plan — exists in service of that arc. If a tool / schema / column / prompt / decision doesn't trace to a moment in that journey, it shouldn't exist.
+
+The HOW: at every conversational moment, content is doing one of four+1 jobs *for the visitor* — **Inspire** (turns vague interest into vivid anticipation), **Mirror** (lets the visitor see themselves in someone who's been there), **Reassure** (converts curiosity into confidence to talk to a human), **Inform** (answers a concrete question), and the structural **Propose options** (offers concrete trips at the right moment). These jobs are functions content performs, not categories of content. They are the substrate everything else falls out of.
+
+The WHAT: eight intent-named tools (`find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`, `illustrate`, `handoff`, `handoff_submit`); five job-shaped derived tables; one MCP-over-HTTP connector; one orchestrator running a single Sonnet `LlmAgent` with cheap-Haiku-at-ETL classifiers feeding the derived store. Specifics in chunks A through H.
+
+**Central design discipline (theme 11 below has the full statement)**: every choice gets justified by the journey-moment it serves, top-down. Never bottom-up from "we have data X, what should we do with it?". This single rule has prevented more drift on this engagement than any other.
+
+### 3.1–3.11 The eleven commitments
+
+These are the invariants Tier 2 plans inherit. Together they shape every subordinate decision.
 
 1. **PoC-first, greenfield only where necessary.** Reuse is margin. If something in `chatgpt_poc/product/` does the job, we evolve it rather than rewrite.
 2. **Content-as-data.** Prompts, fragments, sales material, library data, email templates, legal disclosures all live outside code as markdown/JSON. Authorable by non-engineers. Loaded at runtime.
@@ -68,6 +84,7 @@ Ten commitments that shape every subordinate decision. These are the invariants 
 8. **Observable handoff.** Outputs are three-state (`qualified` / `referred_out` / `disqualified`) with reasons, not binary lead/no-lead. Enables sales feedback + future prompt iteration.
 9. **Legal compliance built-in.** EU AI Act Art. 50 disclosure + GDPR consent are day-one chrome, not a bolted-on afterthought.
 10. **Triage-aware discovery.** Patagonia is not Antarctica. Triage sits inside the conversational flow as polite redirection, never as rejection.
+11. **Top-down from the sales journey, never bottom-up from the data.** Every tool, schema, column, prompt fragment is justified by which conversational moment it serves and which of the four+1 jobs it performs. The wrong reasoning, always, is *"we have data X, what should the agent do with it?"* — that produces librarian-shaped tools that feel cold, not warm. The right reasoning, always, is *"at this moment in the conversation, the visitor needs Y; what data shape supports that?"* The composer pattern that the 2026-04-28 plan introduced was a symptom of slipping into bottom-up thinking — an LLM middleman to translate librarian-output into sales-output. The 2026-04-29 review fixed it by shaping the tools by the job in the first place. Every future tier-2/tier-3 author must reanchor here before adding anything to the architecture. (Decisions C.24, C.25, and the chunk-C plan §"Read this first" carry the full reasoning.)
 
 ---
 

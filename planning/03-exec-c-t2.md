@@ -17,6 +17,22 @@
 
 ---
 
+## ★ Read this first — the WHY of chunk C, the design discipline of C.t2
+
+> **Before you touch a Zod schema or a CREATE TABLE statement, read [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §"Read this first — the WHY of chunk C" end-to-end.** That section names the agent's actual job, the four+1 jobs the data does, the design discipline (top-down from sales, not bottom-up from data), and how the eight-tool surface falls out. It's the calibration layer for everything in this task. Multiple Claude sessions have walked into bottom-up reasoning on this engagement; that section is the antidote.
+
+The compressed reminder for C.t2 specifically:
+
+- **The agent moves appropriate visitors through Awareness → Interest → Strong Consideration toward a warm specialist handoff.** That's the entire mandate. Decision C.13.
+- **At every conversational moment, content is doing one of four jobs**: Inspire, Mirror, Reassure, Inform. Plus a fifth, structural: Propose options. These are the substrate. Schemas and tools fall out of them; never the other way.
+- **C.t2 is a contract task.** The migrations and Zod schemas you ship here are what every downstream task consumes (C.t3, C.t3a, C.t4, B.t3a, D.t9). The contract being right matters more than the contract being elaborate.
+- **The bar for tool descriptions is "production first-pass" — ship-ready.** Each `cms/prompts/tools/<tool>/description.md` carries the load that the now-removed composer pattern used to carry: it tells Sonnet *when in the conversation* to reach for this tool. That work is voice-shaped, not technical-shaped. Take it seriously.
+- **If you find yourself reasoning "we have data X, so we should expose tool Y", stop and re-anchor.** The right question is: *whose journey am I serving, and at what point in it?* If you can't answer concretely from the conversational arc, you're going bottom-up. Re-read the §"Read this first" in the Tier 2 plan and try again.
+
+This task ships exactly what the Tier 2 plan has settled — eight intent-named tools, five job-shaped derived tables, the persona-summary natural-language shape (C.30), forward-only migrations. **Don't add tools, don't add derived tables, don't add columns the Tier 2 plan didn't name unless you can justify the addition by which job it serves and which conversational moment it shows up in.** "But the data is there" is not a justification.
+
+---
+
 ## Purpose
 
 C.t2 is **the substantive new artefact** for chunk C. Both layers — the Postgres schema for the derived store, and the `ts-common` Zod schemas for the tool surface — co-define each other. Designing them together as a single task avoids the "schema in flight while tools assume something" failure mode that bit the 2026-04-22 plan.

@@ -5,9 +5,15 @@
 **Depends on**: A (foundations — `ts-common` tool I/O schemas, workspace scaffolded). 2026-04-27 SQL dump received and available locally. C.18 (Postgres + pgvector + tsvector + pg_trgm) and G.11 (CMS folder structure) landed.
 **Coordinates with**: B (agent runtime calls tools via MCP), G (placeholder content at M1 → real content at M2; tool-description copy lives in `cms/prompts/tools/<tool>/`), F (tool calls emit events), D (widgets hydrate from tool outputs), E (handoff submission writes durable record + sends email).
 
+> ## ⚡ Future agent reading this for the first time?
+>
+> **Skip past the revision history below and read [§"★ Read this first — the WHY of chunk C"](#-read-this-first--the-why-of-chunk-c) end-to-end before anything else.** That section names the agent's actual job, the four+1 jobs the data does, and the design discipline (top-down from sales, not bottom-up from data) that grounds every choice in this chunk. Multiple Claude sessions on this engagement have walked into bottom-up reasoning when starting from the data shapes; that section is the antidote. The revision history that follows is reference material — it's there for readers tracking what's changed across plan versions, not as an entry point.
+
 ---
 
-## Why this plan exists in its current form
+## Revision history — what shifted across plan versions
+
+*(For readers tracking changes. Not an entry point — see ★ section above for the WHY.)*
 
 The original 2026-04-22 draft was structured around an unresolved scrape-vs-API question, Vertex AI Search as the retrieval backend, and a tool surface evolved tactically from the PoC's seven tools. Four things have shifted since.
 
@@ -25,9 +31,94 @@ That four-shift reshapes most of this chunk's design. The architectural principl
 
 ---
 
+## ★ Read this first — the WHY of chunk C
+
+> **Why this section exists**: chunk C touches data, schemas, tables, columns, embeddings, indexes — concrete things with shapes you can hold in your hand. That's exactly the territory where bottom-up reasoning sneaks in. An agent reads about `contentblock` and starts asking "what tool would query this?" — and within an hour the design has drifted from "what should the conversation do?" to "how do we expose the database?". Multiple Claude sessions have walked into this trap on this engagement. **This section is the calibration layer. Don't proceed past it without grounding.**
+
+### 1. The agent's actual job
+
+Puma's agent is a **conversational discovery surface for adventurous travellers considering Patagonia.** Its job is to move *appropriate* visitors through three sales stages:
+
+> **Awareness → Interest → Strong Consideration → warm specialist handoff**
+
+That's the entire mandate. Not "answer questions about Patagonia". Not "expose Swoop's content catalogue". Not "build itineraries". Not "book trips". The agent is a *funnel surface* whose success is measured by:
+
+- Did appropriate visitors leave the conversation more confident, more excited, and more inclined to speak with a Swoop specialist?
+- Did inappropriate visitors (backpacker-tier, sub-$1k-profit, off-piste queries) get politely redirected without feeling rejected or patronised?
+- Did the sales team receive qualified leads with enough conversational substance to pick up the thread warm, not cold?
+
+The agent is the **knowledgeable friend who's been to Patagonia**, not an FAQ bot, not a salesperson with a quota, not a librarian doing CRUD on a content catalogue. Voice: warm, expert, human, honest about what it can't do (no itineraries, no authoritative pricing, no availability guarantees).
+
+The "golden thread" is decision **C.13** — Awareness → Interest → Strong Consideration. Every architectural choice in this chunk traces back to it. If a tool / schema / column doesn't serve a moment in that arc, it shouldn't exist.
+
+### 2. The four jobs the data does for that conversation (plus a fifth structural one)
+
+Here is the load-bearing reframe. Step away from the data shapes for a moment.
+
+At every point in a Patagonia sales conversation, **content** (blog post / page / customer review / FAQ / image) is doing one of four jobs *for the visitor*. These aren't categories of content. They're **functions content performs in service of the journey**.
+
+| Job | What it does for the visitor | What it does for the agent | Conversational moment |
+|---|---|---|---|
+| **Inspire** | Turns vague interest into vivid anticipation. *"Patagonia? oh wait — that sounds incredible."* | Gives the agent imagery, sensory prose, evocative anchors to weave into its response. Warmth-fuel, not an answer. | Discovery → Interest. Visitor is curious, exploring. |
+| **Mirror** | Lets the visitor see themselves in someone who's done it. Reduces fear of being weird/wrong. *"People like me have done this — and loved it."* | Gives the agent a customer story matching a persona signal the visitor revealed. | Interest → Strong Consideration. Triggered by persona-tells: *"I'm going alone"*, *"we're retiring"*, *"I love photography"*. |
+| **Reassure** | Converts curiosity into confidence to talk to a human. *"These people seem legit. They actually care."* | Gives the agent proof — B-Corp, conservation work, expert credentials, real reviews — matching the visitor's hesitation. | Anywhere a hesitation surfaces. Consolidates trust before handoff. |
+| **Inform** | Answers a concrete question. *"How long is the W trek?", "Is December crowded?"* | Gives the agent factual content + the option to deep-link to the canonical Swoop page. | Anywhere. Tactical, not load-bearing for the journey itself. |
+
+Plus a fifth, structural job:
+
+| Job | What it does | Notes |
+|---|---|---|
+| **Propose options** | Offers concrete trips for the visitor to consider | The closest the agent gets to recommending. Structured trip-table filter, not unstructured retrieval. Triggered when the visitor is ready to narrow. |
+
+**These four+1 jobs are the substrate.** Everything else — the tool surface, the derived database tables, the ETL classifier passes, the schemas — falls out of them.
+
+### 3. The design discipline: top-down from sales, not bottom-up from data
+
+This is the principle that prevents drift. **Every architectural choice in this chunk gets justified by which job it serves and which conversational moment it shows up in.** No exceptions.
+
+**The right pattern (top-down):**
+> *"At this conversational moment, the visitor needs X (a vivid anchor, a persona-mirroring story, a piece of trust evidence, a factual answer). What data shape supports X? Which tool exposes that shape to the agent? Which derived table holds those rows? Which source rows feed that derived table?"*
+
+**The wrong pattern (bottom-up):**
+> *"We have a `tag` table with 79 rows. We have `contentblock_customerreview` with 2,390 rows. We have a 102-row blog corpus. What tools should the agent have to query these?"*
+
+The bottom-up pattern produces librarian-shaped tools (`search_pages`, `find_trips`, `query_tags`, `get_blog_post`). Those tools are *correct against the database* but *wrong against the conversation*. They make the agent feel like a search engine. They turn warm-friend interactions into ticket-counter interactions. They were the failure mode the 2026-04-28 plan tried to patch with a Haiku composer layer — adding an LLM middleman to translate librarian-shaped output into sales-shaped output. The 2026-04-29 review revealed the cleaner fix: **shape the tools by the job, not the data, in the first place.** Composers are then unnecessary; Sonnet at the orchestrator weaves directly.
+
+**Anti-pattern signals to push back on, hard:**
+- *"We have data X, what tool should query it?"* — Wrong direction. Always.
+- *"Let's design tools that mirror the database structure."* — That's CRUD, not conversation.
+- *"More tools means more flexibility."* — Usually wrong. Eight is enough at our scale; more dilutes Sonnet's selection accuracy.
+- *"The data tells us what's possible."* — Yes, but doesn't tell us what's *useful in the conversation*.
+- *"This is a search problem."* — No, it's a conversation problem that uses search inside it.
+- *"Just expose the entities, the agent can figure out what to do."* — That's how you get a librarian, not a knowledgeable friend.
+
+**The right question, always:** *"Whose journey am I serving, and at what point in their journey? What conversational move does this enable?"* — if you can't answer that concretely, you're reasoning bottom-up. Stop. Re-anchor.
+
+### 4. How everything else in this chunk falls out
+
+With the four+1 jobs as the substrate, the rest of chunk C is derivation:
+
+- **Five intent-named tools** front the four+1 jobs: `find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`. Plus three utilities (`illustrate`, `handoff`, `handoff_submit`) carried forward from the PoC. **Eight total** (decision C.25).
+- **Five job-shaped derived tables** match the five tools: `inspire_passage`, `customer_story`, `trust_proof`, `inform_chunk`, `trip_card`. Each table holds rows shaped for the job, *regardless of which source row they originally came from*. A blog post can land in `inspire_passage` (if it's narrative) or `trust_proof` (if it's a B-Corp piece) or both.
+- **ETL Haiku classifiers** are how raw rows get assigned to jobs. They run once at ingest, persist to columns, and never run on the conversational path. The "cheap LLM at ETL, embeddings + Sonnet at runtime" division of labour (decision C.24) is what makes the eight-tool surface work without composers.
+- **Tool descriptions** carry the load that composers used to carry: they encode the conversational moment Sonnet uses to pick. They are not "what does this tool query?" — they are "when in the conversation does this tool show up?". Production-quality from day one (per C.t2's scope).
+- **Page-as-hub + canonical_url + ntag taxonomy + image annotations** are all enabling infrastructure. Each one is justified by a job: page-as-hub gives every conversational citation a deep-link; canonical_url is what the agent shows the visitor when they want to "go see the page"; ntag bridges visitor utterance to retrieval; annotated images let `illustrate` return visuals matched to mood/region/topic.
+
+If you ever find yourself unsure whether to add a tool, a column, a table — ask: **does it serve a job at a moment in the journey?** If yes, build it. If you're justifying it from the data side ("we have this, so we should expose it"), that's the wrong reasoning, no matter how technically reasonable the addition seems.
+
+### 5. The voice of the conversation, briefly
+
+The agent talks like a knowledgeable friend who's been to Patagonia and runs Swoop's day-to-day operations. Warmth that isn't performance. Expertise that isn't gatekeeping. Honesty about uncertainty (no false pricing, no fake itineraries, no over-promises). Energy when the visitor is excited; calm when they're hesitant; respect when they're not the right fit.
+
+What it sounds like is owned by chunk G's content authoring (the WHY system prompt + style-avoid list — decisions G.10 + G.11). What it *doesn't* sound like is anything in this list (drawn from chunk G §2.1a and seen in default LLM output): em-dash-laced rhythm, "delve" / "dive into" / "unpack", openers like "Let me help you with that!", trailing offers like "Let me know if you'd like to explore…", empty affirmations like "Great question!", parenthetical-heavy sentences, bullets where prose belongs.
+
+That voice runs through the *tool descriptions* in this chunk (`cms/prompts/tools/<tool>/description.md`) — not just the system prompt. Every authored prose surface is a chance for the agent's voice to land.
+
+---
+
 ## Purpose
 
-C owns everything the agent retrieves. A data-connector service runs on Cloud Run, exposing a small set of **intent-named MCP tools** (per C.25) to the orchestrator. Each tool is a thin handler over data primitives — input validation, 1–N SQL/vector calls against Postgres, output validation, return. **No composer layer in the request path** (per C.24): Sonnet at the orchestrator handles synthesis directly from concrete row-shaped tool outputs.
+C owns everything the agent retrieves. A data-connector service runs on Cloud Run, exposing the eight intent-named MCP tools (per C.25) to the orchestrator. Each tool is a thin handler over data primitives — input validation, 1–N SQL/vector calls against Postgres, output validation, return. **No composer layer in the request path** (per C.24): Sonnet at the orchestrator handles synthesis directly from concrete row-shaped tool outputs.
 
 The Postgres derived store is populated by an ETL that ingests Swoop's SQL dump (and the WordPress blog REST API as a parallel stream), transforms it into purpose-built read-shaped views, and pre-computes embeddings + lexical indexes for hybrid retrieval. Cheap LLM (Haiku) earns its keep in the ETL — classifying blog posts by job, extracting persona summaries, generating image annotations, normalising blog tags against `ntag`. Done once, persisted to columns; never on the conversational path.
 
