@@ -494,3 +494,53 @@ These are flagged so the executing agent doesn't lose time on them. The first th
 ## Execution log
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
+
+### 2026-04-29 — C.t2 contract layer landed
+
+**What landed**:
+
+- **Migrations** at `product/connector/migrations/`:
+  - `001_extensions.sql` — vector, pg_trgm, btree_gin.
+  - `002_domain_tables.sql` — 21 domain tables (geography, tag, image, page, contentblock, chunk, faqitem, trip, tour, tour_item, hotel/hotel_room/hotel_pricing, vessel/cabintype/cabin, blog_post, blog_chunk).
+  - `003_derived_tables.sql` — the five job-shaped derived tables (`inspire_passage`, `customer_story`, `trust_proof`, `inform_chunk`, `trip_card`). `customer_story.persona_summary` + `persona_embedding` per C.30.
+  - `004_indexes.sql` — 46 indexes (HNSW, GIN tsvector, GIN array, pg_trgm, B-tree on query keys + content_hash).
+  - `005_canonical_url_function.sql` — `canonical_url(override_url, alias)` IMMUTABLE PARALLEL SAFE.
+
+  Verified by applying all five forward migrations to a fresh `puma_test_ct2` database (Postgres 18.3 + pgvector + pg_trgm + btree_gin); 26 tables, 73 indexes, function present and correct (override-when-set, alias-fallback, empty-string treated as absent).
+
+- **Zod schemas**:
+  - `product/ts-common/src/derived.ts` — five derived entities, each with a `*Schema` (full ETL shape, includes embedding/tsv/content_hash) and a `*PublicSchema` (tool-facing projection that strips internals). Plus `DerivedImageSchema` for the joined image record returned alongside derived rows that surface imagery (per C.16 page-as-hub).
+  - `product/ts-common/src/tools.ts` — rewritten:
+    - `Search*` and `GetDetail*` schemas marked `@deprecated since 2026-04-29 — superseded by lookup / find_options. Removed in B.t3a.` Kept exported (orchestrator's connector adapter + UI's search-results widget still import them).
+    - Five new tool I/O pairs added: `FindInspiringInputSchema`/`OutputSchema`, `FindSomeoneWhoInputSchema`/`OutputSchema`, `FindProofInputSchema`/`OutputSchema`, `LookupInputSchema`/`OutputSchema`, `FindOptionsInputSchema`/`OutputSchema`.
+    - `TOOL_NAMES` const map added (single source of truth for tool name strings).
+    - `CONDITIONAL_TOOLS` array added — registers `find_someone_who` as conditional on C.26 with a pointer to `questions.md`.
+    - `TOOL_DESCRIPTIONS` extended; rich prose lives in markdown (see C.34); the map carries short pointer labels.
+  - `product/ts-common/src/index.ts` — re-exports `derived.js`.
+
+- **Fixtures** at `product/ts-common/src/fixtures/`: 10 new fixture files. One full + one public projection per derived entity (5 × 2), one input + one output per new tool I/O pair (5 × 2). All round-trip clean against their schemas — verified by `npm test --workspace @swoop/common` (58 tests pass, 15 of them new C.t2 cases).
+
+- **Tool descriptions** (production first-pass) at `product/cms/prompts/tools/`:
+  - `find_inspiring/description.md`, `find_someone_who/description.md`, `find_proof/description.md`, `lookup/description.md`, `find_options/description.md`. Each is 1–3 paragraphs plus an italicised "When to pick this" disambiguation line. Voice-checked against the chunk-G §2.1a avoidance list (no em-dash-as-rhythm, no "delve / dive into / unpack", no openers like "Let me help you with that!", no trailing offers, no empty affirmations).
+
+- **Decision log** entries added to `planning/decisions.md`:
+  - **C.31** — Forward-only migrations, zero-padded numeric prefix, plain SQL.
+  - **C.32** — `tag` derived table holds `ntag` rows only; legacy `tag` excluded.
+  - **C.33** — Derived-table `source_id` is TEXT (spans INTEGER source ids and UUID blog chunk ids).
+  - **C.34** — Tool description prose lives in markdown at `cms/prompts/tools/<tool>/description.md`; `TOOL_DESCRIPTIONS` map carries short labels only.
+  - **C.30b** — `inspire_passage.image_id` (and the same for `customer_story` / `trip_card`) is INTEGER FK to image, not denormalised image record. The public projection wraps the joined image as a nested `DerivedImage`.
+
+**Verification status**:
+- Workspace `typecheck`: green across all packages (ts-common, orchestrator, connector, ui, ingestion, harness).
+- Workspace `test`: green (58 tests in @swoop/common, 31 in ingestion, 74 in harness, plus orchestrator + connector + ui suites).
+- Workspace `lint`: 34 problems persist on the branch but are pre-existing on `main` — verified by stash + re-lint. Not introduced by C.t2.
+- Migrations apply cleanly to a fresh Postgres 18 with pgvector + pg_trgm + btree_gin.
+
+**Deviations from the plan**: None of substance. The five C.t2 decisions added to `decisions.md` are settled-during-execution calls the plan flagged as candidate (C.31, C.32) plus one new emergent call (C.33 on the source_id type) and one CMS-vs-runtime split (C.34). C.30b was a sub-decision the plan left semi-open ("(joined image record)") and is recorded for clarity rather than because the plan said one thing and execution did another.
+
+**Open items surfaced for downstream tasks**:
+- C.t3 — `export.sql` uses `canonical_url(override_url, alias)` from migration 005; reads against the derived table column lists.
+- C.t3a — embedding pass writes to: `tag.embedding`, `image.embedding`, `faqitem.embedding`, `blog_chunk.embedding`, `inspire_passage.embedding` + `tsv` + `content_hash`, `customer_story.persona_embedding` + `persona_summary` + `tsv` + `content_hash`, `trust_proof.embedding` + `tsv` + `content_hash`, `inform_chunk.embedding` + `tsv` + `content_hash`, `trip_card.embedding` + `tsv` + `content_hash`. Source_id is TEXT throughout (per C.33).
+- C.t4 — tool handlers validate against the Zod schemas in `tools.ts`. Tool descriptions to register with MCP should be loaded from `cms/prompts/tools/<tool>/description.md` (per C.34); the runtime label strings in `TOOL_DESCRIPTIONS` are not the rich prose.
+- B.t3a — when rewriting the orchestrator's connector adapter, drop the `@deprecated` `Search*` and `GetDetail*` schemas; cascade through `product/ui/src/widgets/search-results.tsx` and `item-detail.tsx`.
+- D.t9 — widgets render `find_inspiring` / `find_someone_who` / `find_proof` / `lookup` / `find_options` outputs from `*PublicSchema` shapes; `DerivedImageSchema` is the nested image record where applicable.

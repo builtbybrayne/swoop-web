@@ -8,6 +8,48 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.34 — Tool description prose lives in `cms/prompts/tools/<tool>/description.md`; `TOOL_DESCRIPTIONS` map carries short labels only
+
+**Decided**: 2026-04-29
+**Owner**: C.t2 execution
+**Rationale**: `tools.ts` exports `TOOL_DESCRIPTIONS` as the runtime label map for tool registration with the SDK. The C.t2 plan also requires authored production-quality prose at `cms/prompts/tools/<tool-name>/description.md` (per G.11 + decision C.25). Two ways to keep both consistent: (a) inline the full description prose into `TOOL_DESCRIPTIONS`; (b) keep `TOOL_DESCRIPTIONS` as short labels and treat the markdown as the authoritative rich description that tool code reads explicitly. Picked (b). Rationale: (i) violates content-as-data (theme 2) — multi-paragraph prose in a `.ts` file is exactly what `cms/` exists to avoid; (ii) creates two surfaces that drift, given Al refines descriptions empirically post-launch (G.t1/G.t5 loop); (b) keeps the rich copy in markdown where the loader contract lives, with the runtime label string just enough for SDK registration. C.t4 wires the connector tool handlers to read `cms/prompts/tools/<tool>/description.md` at boot and pass that string to MCP registration; until then `TOOL_DESCRIPTIONS` strings (which include "See cms/prompts/tools/<tool>/description.md" pointers) cover the gap.
+
+**Swap cost**: Low. If the SDK shape later wants the full prose inline, C.t4's loader code goes away and `TOOL_DESCRIPTIONS` becomes the canonical surface. The markdown files stay where they are; only the wiring changes.
+
+## C.33 — Derived-table `source_id` is TEXT, not INTEGER
+
+**Decided**: 2026-04-29
+**Owner**: C.t2 execution
+**Rationale**: Each derived row carries a `source_id` pointing back to the row it was generated from. Source rows include INTEGER ids (page, contentblock, faqitem, chunk) AND TEXT ids (blog_chunk, where the surrogate id is `gen_random_uuid()`-shaped per the blog ingest design). Three options considered: (a) two columns (`source_id_int` + `source_id_uuid`) with a CHECK constraint enforcing exactly one populated; (b) one TEXT column carrying the source id stringified; (c) split derived tables by source-id type. Picked (b). Rationale: (a) is correct but gives every consumer a CASE expression on every read — high overhead for a tiny correctness benefit nobody's actually checking; (c) destroys the clean "one job, one table" shape that decision C.25 settled. (b) is one column, indexable, comparable, and the source_provenance enum already encodes the type-of-source unambiguously. The tradeoff is that a numeric source id stringifies, but every consumer either treats source_id opaquely (debugging only) or rounds-trips it through a switch on `source_provenance` anyway.
+
+**Swap cost**: Low. ALTER TABLE migration to add a typed column + back-populate from `source_id` is mechanical; the read-side code change is one line per primitive.
+
+## C.32 — `tag` derived table holds `ntag` rows only; legacy `tag` excluded
+
+**Decided**: 2026-04-29
+**Owner**: C.t2 execution
+**Rationale**: Per decision C.17, the legacy 2,374-row `tag` table is dead and `ntag` (79 active rows) is the live tagging surface. The `tag` derived table in 002_domain_tables.sql could in principle hold both ("for completeness"), but doing so propagates dead data into the derived store, polluting tag-space embeddings and making `find_tags_by_utterance` (Tier 2 §2.4) match against retired taxonomy. Recorded explicitly here so future schema changes don't accidentally re-include the legacy rows under "let's mirror everything from the source".
+
+**Swap cost**: None. ETL filters `WHERE is_active=1` against the 79 ntag rows; reverting would require a schema-shape decision, not just an ETL flag flip — the embedding would need to disambiguate retired-vs-live taxonomy at query time.
+
+## C.31 — Postgres migrations are forward-only, zero-padded numeric prefix, plain SQL
+
+**Decided**: 2026-04-29
+**Owner**: C.t2 execution
+**Rationale**: Recommended in the C.t2 Tier 3 plan as a settled call (no `down.sql` pairs); recorded canonically here at execution time. Three properties locked: (a) **plain SQL files**, no ORM, no DSL — `node-pg-migrate` runs them in lex order; (b) **zero-padded numeric prefix** (`001_*`, `002_*`, …) so order is unambiguous past 9 and humans reading `ls migrations/` see the dependency chain at a glance; (c) **forward-only — no `*_down.sql` pairs**. The derived store is throwaway by design (theme 5). Recovery from a bad migration is "drop the database, re-run all migrations forward, re-run ETL", which takes minutes. Hand-written reverse migrations are real ongoing cost (especially error-prone for data-shape changes) for a benefit we'd rarely use. If Swoop's in-house team prefers proper up/down pairs at C.t8 runbook handover, revisit then.
+
+**Swap cost**: Low. Adding down migrations later is mechanical (one new file per existing forward migration, written when needed). Switching off zero-padding is purely cosmetic.
+
+## C.30b — `inspire_passage.image_id` is INTEGER FK to image, not embedded image record
+
+**Decided**: 2026-04-29
+**Owner**: C.t2 execution
+**Rationale**: The Tier 3 plan said "image (joined image record)" in the public projection but didn't pin whether the derived row carries the FK only (lazy join at tool time) or a denormalised image snapshot. Picked **FK only on the row**, **joined image** in the public projection. Rationale: (i) image annotations are the single most-likely-to-mutate column set in the whole derived store (C.t6 will iterate the annotation prompt repeatedly); denormalising would force a re-write of every derived row whenever annotations change; (ii) joins on a single integer FK against a 13K-row table with B-tree primary key are sub-millisecond — there's no performance case for denormalisation at our scale; (iii) the public projection (`InspirePassagePublicSchema`, `TripCardPublicSchema`) wraps the joined image as a nested `DerivedImage` object, so tool callers see a single shape regardless. Same pattern applies to `customer_story.image_id` and `trip_card.image_id`.
+
+**Swap cost**: Low. If image-join cost becomes painful at higher row counts (it won't at Puma scale), denormalising is one column-add migration + an ETL pass to populate it.
+
+---
+
 ## H.20 — Living-evalset ritual ownership documented as a role, not a name
 
 **Decided**: 2026-04-29
