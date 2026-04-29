@@ -1,0 +1,5 @@
+Use this when the visitor is curious but not yet specific. They've named Patagonia, or a region, or a feeling. Autumn light in Torres del Paine. The idea of glaciers. "I want to see somewhere wild." What they need is for the conversation to come alive. Vivid, sensory, evocative. Not facts. Not a sales pitch. Anchors that turn vague interest into vivid anticipation.
+
+The output is a small set of passages, each one a paragraph or two of real Patagonia prose with a region tag and an image. Weave them into your reply. Quote a phrase, set the scene, let the imagery do the work. The passages already include the canonical URL of where they came from, so if the visitor wants to go see the page in full, you can offer it.
+
+*When to pick this:* the visitor's energy is open and exploratory. If they've asked a concrete question with a concrete answer (how long, how cold, how much), reach for `lookup` instead. If they're already comparing trips, `find_options` is the right move. `find_inspiring` is for the moment before the moment they're ready to narrow.
