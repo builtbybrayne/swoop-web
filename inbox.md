@@ -161,3 +161,11 @@ Where this lands:
 - Files to touch when we do this: `product/cms/legal/` (doesn't exist yet) + the disclosure components in `product/ui/src/disclosure/`.
 
 Noticed while building the mock-host harness and seeing the consent screen through "new eyes" as a visitor.
+
+---
+
+## 2026-04-29 — pgEdge Agentic AI Toolkit for Postgres
+
+Option to evaluate for the Postgres setup: pgEdge's Agentic AI Toolkit. Might be relevant to the agent-with-structured-tools retrieval pattern (C.19) and/or the Cloud SQL Postgres backing store. Link: https://share.google/Hxz8BG2S91t0mUwxi
+
+Triage alongside the storage decision (C.18) when next reviewing infra options.
