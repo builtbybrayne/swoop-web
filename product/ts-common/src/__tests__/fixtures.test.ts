@@ -13,19 +13,41 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CustomerStorySchema,
+  CustomerStoryPublicSchema,
   EventSchema,
+  FindInspiringInputSchema,
+  FindInspiringOutputSchema,
+  FindOptionsInputSchema,
+  FindOptionsOutputSchema,
+  FindProofInputSchema,
+  FindProofOutputSchema,
+  FindSomeoneWhoInputSchema,
+  FindSomeoneWhoOutputSchema,
   HandoffPayloadSchema,
   type HandoffPayload,
   type Event,
   ImageSchema,
+  InformChunkSchema,
+  InformChunkPublicSchema,
+  InspirePassageSchema,
+  InspirePassagePublicSchema,
+  LookupInputSchema,
+  LookupOutputSchema,
   RegionSchema,
   SessionStateSchema,
   StorySchema,
   TourSchema,
   TripSchema,
+  TripCardSchema,
+  TripCardPublicSchema,
+  TrustProofSchema,
+  TrustProofPublicSchema,
 } from "../index.js";
 
 import {
+  SampleCustomerStory,
+  SampleCustomerStoryPublic,
   SampleEvent,
   SampleEventHandoffSubmitted,
   SampleEventConsentGranted,
@@ -39,16 +61,34 @@ import {
   SampleEventSessionExpired,
   SampleEventWarmPoolHit,
   SampleEventWarmPoolMiss,
+  SampleFindInspiringInput,
+  SampleFindInspiringOutput,
+  SampleFindOptionsInput,
+  SampleFindOptionsOutput,
+  SampleFindProofInput,
+  SampleFindProofOutput,
+  SampleFindSomeoneWhoInput,
+  SampleFindSomeoneWhoOutput,
   SampleHandoff,
   SampleHandoffQualified,
   SampleHandoffReferredOut,
   SampleHandoffDisqualified,
   SampleImage,
+  SampleInformChunk,
+  SampleInformChunkPublic,
+  SampleInspirePassage,
+  SampleInspirePassagePublic,
+  SampleLookupInput,
+  SampleLookupOutput,
   SampleRegion,
   SampleSession,
   SampleStory,
   SampleTour,
   SampleTrip,
+  SampleTripCard,
+  SampleTripCardPublic,
+  SampleTrustProof,
+  SampleTrustProofPublic,
 } from "../fixtures/index.js";
 
 describe("fixtures round-trip through their Zod schemas", () => {
@@ -135,5 +175,108 @@ describe("fixtures round-trip through their Zod schemas", () => {
 
   it("SampleEvent (back-compat alias) still parses against EventSchema", () => {
     expect(EventSchema.parse(SampleEvent)).toEqual(SampleEvent);
+  });
+
+  // ---------------------------------------------------------------------------
+  // C.t2 — derived entity fixtures (full + public projections).
+  // ---------------------------------------------------------------------------
+
+  it("SampleInspirePassage parses against InspirePassageSchema", () => {
+    expect(InspirePassageSchema.parse(SampleInspirePassage)).toEqual(
+      SampleInspirePassage,
+    );
+  });
+
+  it("SampleInspirePassagePublic parses against InspirePassagePublicSchema", () => {
+    expect(InspirePassagePublicSchema.parse(SampleInspirePassagePublic)).toEqual(
+      SampleInspirePassagePublic,
+    );
+  });
+
+  it("SampleCustomerStory parses against CustomerStorySchema", () => {
+    expect(CustomerStorySchema.parse(SampleCustomerStory)).toEqual(
+      SampleCustomerStory,
+    );
+  });
+
+  it("SampleCustomerStoryPublic parses against CustomerStoryPublicSchema", () => {
+    expect(CustomerStoryPublicSchema.parse(SampleCustomerStoryPublic)).toEqual(
+      SampleCustomerStoryPublic,
+    );
+  });
+
+  it("SampleTrustProof parses against TrustProofSchema", () => {
+    expect(TrustProofSchema.parse(SampleTrustProof)).toEqual(SampleTrustProof);
+  });
+
+  it("SampleTrustProofPublic parses against TrustProofPublicSchema", () => {
+    expect(TrustProofPublicSchema.parse(SampleTrustProofPublic)).toEqual(
+      SampleTrustProofPublic,
+    );
+  });
+
+  it("SampleInformChunk parses against InformChunkSchema", () => {
+    expect(InformChunkSchema.parse(SampleInformChunk)).toEqual(SampleInformChunk);
+  });
+
+  it("SampleInformChunkPublic parses against InformChunkPublicSchema", () => {
+    expect(InformChunkPublicSchema.parse(SampleInformChunkPublic)).toEqual(
+      SampleInformChunkPublic,
+    );
+  });
+
+  it("SampleTripCard parses against TripCardSchema", () => {
+    expect(TripCardSchema.parse(SampleTripCard)).toEqual(SampleTripCard);
+  });
+
+  it("SampleTripCardPublic parses against TripCardPublicSchema", () => {
+    expect(TripCardPublicSchema.parse(SampleTripCardPublic)).toEqual(
+      SampleTripCardPublic,
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // C.t2 — eight-tool intent-named surface I/O fixtures.
+  // ---------------------------------------------------------------------------
+
+  it("find_inspiring I/O round-trips clean", () => {
+    expect(FindInspiringInputSchema.parse(SampleFindInspiringInput)).toEqual(
+      SampleFindInspiringInput,
+    );
+    expect(FindInspiringOutputSchema.parse(SampleFindInspiringOutput)).toEqual(
+      SampleFindInspiringOutput,
+    );
+  });
+
+  it("find_someone_who I/O round-trips clean", () => {
+    expect(FindSomeoneWhoInputSchema.parse(SampleFindSomeoneWhoInput)).toEqual(
+      SampleFindSomeoneWhoInput,
+    );
+    expect(FindSomeoneWhoOutputSchema.parse(SampleFindSomeoneWhoOutput)).toEqual(
+      SampleFindSomeoneWhoOutput,
+    );
+  });
+
+  it("find_proof I/O round-trips clean", () => {
+    expect(FindProofInputSchema.parse(SampleFindProofInput)).toEqual(
+      SampleFindProofInput,
+    );
+    expect(FindProofOutputSchema.parse(SampleFindProofOutput)).toEqual(
+      SampleFindProofOutput,
+    );
+  });
+
+  it("lookup I/O round-trips clean", () => {
+    expect(LookupInputSchema.parse(SampleLookupInput)).toEqual(SampleLookupInput);
+    expect(LookupOutputSchema.parse(SampleLookupOutput)).toEqual(SampleLookupOutput);
+  });
+
+  it("find_options I/O round-trips clean", () => {
+    expect(FindOptionsInputSchema.parse(SampleFindOptionsInput)).toEqual(
+      SampleFindOptionsInput,
+    );
+    expect(FindOptionsOutputSchema.parse(SampleFindOptionsOutput)).toEqual(
+      SampleFindOptionsOutput,
+    );
   });
 });

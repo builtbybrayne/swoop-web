@@ -36,3 +36,61 @@ export {
   SampleEventWarmPoolHit,
   SampleEventWarmPoolMiss,
 } from "./event.sample.js";
+
+// -----------------------------------------------------------------------------
+// C.t2 — derived entity fixtures (one full + one public projection per entity)
+// -----------------------------------------------------------------------------
+
+export {
+  SampleInspirePassage,
+  SampleInspirePassagePublic,
+} from "./inspire-passage.sample.js";
+
+export {
+  SampleCustomerStory,
+  SampleCustomerStoryPublic,
+} from "./customer-story.sample.js";
+
+export {
+  SampleTrustProof,
+  SampleTrustProofPublic,
+} from "./trust-proof.sample.js";
+
+export {
+  SampleInformChunk,
+  SampleInformChunkPublic,
+} from "./inform-chunk.sample.js";
+
+export {
+  SampleTripCard,
+  SampleTripCardPublic,
+} from "./trip-card.sample.js";
+
+// -----------------------------------------------------------------------------
+// C.t2 — eight-tool intent-named surface I/O fixtures
+// -----------------------------------------------------------------------------
+
+export {
+  SampleFindInspiringInput,
+  SampleFindInspiringOutput,
+} from "./find-inspiring.sample.js";
+
+export {
+  SampleFindSomeoneWhoInput,
+  SampleFindSomeoneWhoOutput,
+} from "./find-someone-who.sample.js";
+
+export {
+  SampleFindProofInput,
+  SampleFindProofOutput,
+} from "./find-proof.sample.js";
+
+export {
+  SampleLookupInput,
+  SampleLookupOutput,
+} from "./lookup.sample.js";
+
+export {
+  SampleFindOptionsInput,
+  SampleFindOptionsOutput,
+} from "./find-options.sample.js";

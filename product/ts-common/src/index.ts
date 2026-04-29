@@ -9,6 +9,7 @@
 // -----------------------------------------------------------------------------
 
 export * from "./domain.js";
+export * from "./derived.js";
 export * from "./tools.js";
 export * from "./streaming.js";
 export * from "./session.js";
