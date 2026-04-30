@@ -113,3 +113,33 @@ Chunk F hasn't landed yet. B.t7 uses `console.log` temporarily where diagnostics
 - Do not add the response-format parser here if B.t4's spike said "not needed" — the agent outputs raw text + tool calls.
 - Real Claude API calls cost money — be mindful; don't leave integration tests on a loop.
 - `<reasoning>` behaviour isn't tested here (the placeholder prompt doesn't exercise it). Add reasoning-specific tests when G.t1's real prompt lands.
+
+---
+
+## 2026-04-30 code-review fixes
+
+Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
+
+### Perf-2 — Triage classifier blocks SSE turn serially — 🔲 [DEFERRED-STRATEGIC]
+
+**Problem**: `chat.ts:137-180` awaits `triageClassifier.classify(...)` BEFORE `res.flushHeaders()` at `:189` and the heartbeat starts at `:191`. User's first SSE byte cannot arrive until Haiku has fully responded. The classifier verdict is *advisory only* (`triage-classifier.ts:14-17`, `chat.ts:131-135`), so it could run concurrently with the orchestrator turn (verdict landing on `session.triage` for the *next* turn) or fired-and-forgotten. Single biggest p50 latency cliff in the loop per the agent-loop trace.
+
+**Fix shape (deferred — design decision required)**: two viable directions:
+- (a) **Concurrent**: `Promise.all([triageClassifier.classify(...), runner.runAsync(...)])`. Verdict lands on `session.triage` between turns, available for the NEXT turn's tool-decision logic. Requires confirming nothing in the current orchestrator turn reads the just-computed verdict.
+- (b) **Fire-and-forget**: detach the classify call entirely; persist verdict on completion via `store.update`. Same semantic as (a) but with explicit non-blocking framing; pairs with R2's per-session mutex to avoid lost-update.
+
+Either change is bigger than a quick win and embeds a design call about whether the orchestrator's current turn ever reads `session.triage` (it doesn't today, but G.t0 may want it). **Defer until G.t0 lands the real classifier prompt** — at which point the design question is concrete.
+
+**Verification**: when actioned, latency benchmark on a 5-turn conversation showing TTFB drops by Haiku-call latency.
+
+**Commits**: _(deferred — revisit after G.t0)_
+
+### Perf-3 — Skip triage on turn 1 (cheap interim win) — 🔲
+
+**Problem**: `chat.ts:137` `if (deps.triageClassifier) { ... }` has no gate on `userTurnIndex` or message length. `triage-classifier.ts:215-218` always slices `priorUserTurns.slice(-2)` even when the array is empty. Today's classifier is a placeholder pending G.t0; running it on turn 1 (typically a one-line greeting) produces no behaviour change but pays Haiku TTFB on every first impression.
+
+**Fix shape**: gate on `userTurnIndex > 0` OR `message.length > N` in `chat.ts`. ~3 lines. Independent of Perf-2 (and serves as the half-measure if Perf-2 stays deferred).
+
+**Verification**: route test asserts no Haiku call on turn 1 (`triageClassifier.classify` not invoked).
+
+**Commits**: _(landed: filled when done)_

@@ -99,3 +99,19 @@ The SSE chat endpoint is B.t5. Don't add it here.
 - **Do not add SSE** — that's B.t5.
 - **Do not write the real system prompt** — placeholder only; G.t1 owns real content.
 - If ADK's current API materially diverges from what Tier 2 B assumed, flag it immediately and raise a PR against `planning/02-impl-agent-runtime.md` before implementing a workaround.
+
+---
+
+## 2026-04-30 code-review fixes
+
+Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
+
+### Perf-1 — Anthropic prompt caching on system + tools — 🔲
+
+**Problem**: `claude-llm.ts:117-125` builds `MessageCreateParamsStreaming` on every call with no `cache_control`. ~2,500 static input tokens (system prompt + tool schemas) re-charged on every turn. Anthropic's 5-minute ephemeral cache is a near-perfect fit for multi-turn chat. Cost lens estimates 30–50% input-token reduction. The file's own opening comment at `:28-29` already names this as a "future optimisation task, not Puma-critical" — flagging here that it should land BEFORE G.t1 fills `00_why.md` and the CMS tool-loader (which together will materially inflate the static prefix and make caching essential, not optional).
+
+**Fix shape**: in `splitContents` / `buildAnthropicTools`, attach `cache_control: { type: 'ephemeral' }` to the LAST entry of `system` blocks and to the `tools` array. One-line change per surface plus a smoke test that logs `cache_creation_input_tokens` and `cache_read_input_tokens` from a 2-turn conversation to confirm hit/miss behaviour.
+
+**Verification**: integration test asserts `cache_read_input_tokens > 0` on the second turn of a hello-world conversation. Cost-per-turn ledger updated in `discoveries.md`.
+
+**Commits**: _(landed: filled when done)_
