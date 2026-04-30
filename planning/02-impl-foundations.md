@@ -131,7 +131,7 @@ These are the interface boundaries that cross multiple chunks. Each lands in `ts
 |---|---|---|---|
 | Tool I/O schemas (per MCP tool) | Chunk C (connector) | B (orchestrator invokes), D (widgets render `structuredContent`), H (validation asserts trajectories) | Evolved from `chatgpt_poc/product/ts-common/src/tools.ts`. PoC's 7-tool set is the starting point; Puma may collapse / rename during Phase 1. |
 | Streaming event shape | B (producer) + D (consumer) | F (observability reads) | Vercel AI SDK v5 `message.parts` is the candidate. Phase 0 task: confirm ADK event stream translates cleanly; confirm assistant-ui accepts unchanged. |
-| Handoff payload | E | B (builds it), F (logs it), H (asserts on it) | Triage-aware — three-state verdict + reason + visitor context. No PoC equivalent (PoC was binary). |
+| Handoff payload | E | B (builds it), F (logs it), H (asserts on it) | Triage-aware — four-state verdict (qualified / referred_out / disqualified / inconclusive per HITL Q5) + reason + visitor context. No PoC equivalent (PoC was binary). |
 | Session state shape | B | F (derives metrics), D (rehydrates on resume if in scope) | ADK's session primitives set the base; Puma adds wishlist-in-progress + triage state. |
 | Event schema for observability | F | B, C, D, E (all emit events) | New. Authored so BigQuery (or whatever analytics tool Swoop prefers — see `questions.md`) export is possible later without rework. |
 

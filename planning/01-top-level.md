@@ -81,7 +81,7 @@ These are the invariants Tier 2 plans inherit. Together they shape every subordi
 5. **Disposable ETL.** Whatever we use to land data for Puma (scraper, API adapter) is throwaway — Swoop's late-2026 data consolidation retires it. No engineering sunk-cost.
 6. **Single-agent Puma, multi-agent deferred.** ADK's A2A path is effectively free to add later; we take zero Puma complexity for it.
 7. **Production quality on minimum surface.** Julie's bar applied to what ships: streaming, error states, disclosure UX, clean React + Tailwind. Not applied to: polished design system, CRM, memory, analytics dashboards.
-8. **Observable handoff.** Outputs are three-state (`qualified` / `referred_out` / `disqualified`) with reasons, not binary lead/no-lead. Enables sales feedback + future prompt iteration.
+8. **Observable handoff.** Outputs are four-state (`qualified` / `referred_out` / `disqualified` / `inconclusive`) with reasons, not binary lead/no-lead. The `inconclusive` verdict (HITL Q5) covers Path 7 visitors where the agent never reached confidence — durable record for analytics, no email, 90-day retention. Enables sales feedback + future prompt iteration.
 9. **Legal compliance built-in.** EU AI Act Art. 50 disclosure + GDPR consent are day-one chrome, not a bolted-on afterthought.
 10. **Triage-aware discovery.** Patagonia is not Antarctica. Triage sits inside the conversational flow as polite redirection, never as rejection.
 11. **Top-down from the sales journey, never bottom-up from the data.** Every tool, schema, column, prompt fragment is justified by which conversational moment it serves and which of the four+1 jobs it performs. The wrong reasoning, always, is *"we have data X, what should the agent do with it?"* — that produces librarian-shaped tools that feel cold, not warm. The right reasoning, always, is *"at this moment in the conversation, the visitor needs Y; what data shape supports that?"* The composer pattern that the 2026-04-28 plan introduced was a symptom of slipping into bottom-up thinking — an LLM middleman to translate librarian-output into sales-output. The 2026-04-29 review fixed it by shaping the tools by the job in the first place. Every future tier-2/tier-3 author must reanchor here before adding anything to the architecture. (Decisions C.24, C.25, and the chunk-C plan §"Read this first" carry the full reasoning.)
@@ -177,7 +177,7 @@ Default to file-based coordination. Use direct messaging for genuinely interacti
 ## 6. In scope for Puma
 
 - Conversational discovery for Patagonia
-- Triage: qualified / referred_out / disqualified
+- Triage: qualified / referred_out / disqualified / inconclusive (per HITL Q5)
 - Specialist handoff via email + durable record
 - System prompt–driven agent behaviour (dynamic fragments only if real conversations demand them — see theme 3)
 - Widget-rendered content (visual cards, lists, detail, lead capture)

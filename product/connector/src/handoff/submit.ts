@@ -11,7 +11,9 @@
  *      (handoff) consent is missing. Per
  *      planning/02-impl-handoff-and-compliance.md §"Verification" step 5.
  *   3. Save to the durable store. Today: file-backed JSON via
- *      `FsHandoffStore`. Tomorrow: Firestore (E.t2 / decision E.1).
+ *      `FsHandoffStore`. Tomorrow: `PostgresHandoffStore` against Cloud SQL
+ *      (E.t2 proper / decisions E.10 + C.18 + C.23 — Firestore was the
+ *      original target but is dropped project-wide).
  *   4. Send the verdict-aware email via the mailer. Mailer handles the
  *      "disqualified → no email" + "disabled → skip" branches internally;
  *      this layer just forwards the result.

@@ -12,23 +12,31 @@ import { describe, expect, it } from "vitest";
 import {
   DisqualifiedReasonCodeSchema,
   HandoffPayloadDisqualifiedSchema,
+  HandoffPayloadInconclusiveSchema,
   HandoffPayloadQualifiedSchema,
   HandoffPayloadReferredOutSchema,
   HandoffPayloadSchema,
   HandoffVerdictSchema,
+  InconclusiveReasonCodeSchema,
   QualifiedReasonCodeSchema,
   ReferredOutReasonCodeSchema,
   type HandoffSubmitConsentGate,
 } from "../handoff.js";
 import {
   SampleHandoffDisqualified,
+  SampleHandoffInconclusive,
   SampleHandoffQualified,
   SampleHandoffReferredOut,
 } from "../fixtures/index.js";
 
 describe("HandoffVerdictSchema", () => {
-  it("accepts the three canonical verdicts", () => {
-    for (const v of ["qualified", "referred_out", "disqualified"] as const) {
+  it("accepts the four canonical verdicts", () => {
+    for (const v of [
+      "qualified",
+      "referred_out",
+      "disqualified",
+      "inconclusive",
+    ] as const) {
       expect(HandoffVerdictSchema.parse(v)).toBe(v);
     }
   });
@@ -80,17 +88,39 @@ describe("per-verdict reason code enums", () => {
     expect(DisqualifiedReasonCodeSchema.safeParse("ready_booking_named_trip").success).toBe(false);
   });
 
+  it("InconclusiveReasonCodeSchema covers all seven codes", () => {
+    const codes = [
+      "low_engagement",
+      "mixed_signals",
+      "extended_no_convergence",
+      "comparison_shopping",
+      "off_offer_in_region",
+      "drive_by",
+      "inconclusive_other",
+    ];
+    for (const c of codes) {
+      expect(InconclusiveReasonCodeSchema.parse(c)).toBe(c);
+    }
+    expect(InconclusiveReasonCodeSchema.safeParse("ready_booking_named_trip").success).toBe(false);
+  });
+
   it("codes are distinct across verdicts (no shared code)", () => {
     const qualified = new Set(QualifiedReasonCodeSchema.options);
     const referred = new Set(ReferredOutReasonCodeSchema.options);
     const disq = new Set(DisqualifiedReasonCodeSchema.options);
+    const inconc = new Set(InconclusiveReasonCodeSchema.options);
 
     for (const c of qualified) {
       expect(referred.has(c as never)).toBe(false);
       expect(disq.has(c as never)).toBe(false);
+      expect(inconc.has(c as never)).toBe(false);
     }
     for (const c of referred) {
       expect(disq.has(c as never)).toBe(false);
+      expect(inconc.has(c as never)).toBe(false);
+    }
+    for (const c of disq) {
+      expect(inconc.has(c as never)).toBe(false);
     }
   });
 });
@@ -111,6 +141,12 @@ describe("HandoffPayloadSchema round-trip per variant", () => {
   it("disqualified variant parses via the per-verdict schema", () => {
     expect(HandoffPayloadDisqualifiedSchema.parse(SampleHandoffDisqualified)).toEqual(
       SampleHandoffDisqualified,
+    );
+  });
+
+  it("inconclusive variant parses via the per-verdict schema", () => {
+    expect(HandoffPayloadInconclusiveSchema.parse(SampleHandoffInconclusive)).toEqual(
+      SampleHandoffInconclusive,
     );
   });
 });
@@ -136,6 +172,22 @@ describe("HandoffPayloadSchema reject paths", () => {
     const bad = {
       ...SampleHandoffDisqualified,
       contact: { name: "Sneaky", email: "sneaky@example.com" },
+    };
+    expect(HandoffPayloadSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects an inconclusive payload with a contact block (strict mode)", () => {
+    const bad = {
+      ...SampleHandoffInconclusive,
+      contact: { name: "Sneaky", email: "sneaky@example.com" },
+    };
+    expect(HandoffPayloadSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects an inconclusive payload carrying a qualified code", () => {
+    const bad = {
+      ...SampleHandoffInconclusive,
+      reason: { code: "ready_booking_named_trip", text: "misrouted" },
     };
     expect(HandoffPayloadSchema.safeParse(bad).success).toBe(false);
   });

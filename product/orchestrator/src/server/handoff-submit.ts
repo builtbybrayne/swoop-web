@@ -32,6 +32,7 @@ import {
   emitEvent,
   type HandoffPayload,
   type HandoffPayloadDisqualified,
+  type HandoffPayloadInconclusive,
   type HandoffPayloadQualified,
   type HandoffPayloadReferredOut,
   type HandoffSubmitResponse,
@@ -288,6 +289,16 @@ function enrichPayload(args: EnrichArgs): HandoffPayload {
     case 'disqualified': {
       const out: HandoffPayloadDisqualified = {
         verdict: 'disqualified',
+        reason: { code: reqBody.reasonCode as never, text: reqBody.reasonText },
+        ...common,
+      };
+      return out;
+    }
+    case 'inconclusive': {
+      // No contact field on inconclusive — same as disqualified per HITL Q5.
+      // Agent never reached confidence to surface the lead-capture widget.
+      const out: HandoffPayloadInconclusive = {
+        verdict: 'inconclusive',
         reason: { code: reqBody.reasonCode as never, text: reqBody.reasonText },
         ...common,
       };

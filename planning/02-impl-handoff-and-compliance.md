@@ -43,7 +43,7 @@ When this chunk is done:
 
 Handoff payload (contract in `ts-common` from chunk A):
 
-- **Verdict**: `qualified` | `referred_out` | `disqualified`
+- **Verdict**: `qualified` | `referred_out` | `disqualified` | `inconclusive` (4th verdict added per HITL Q5; covers Path 7 visitors where the agent never reached confidence — same downstream consequences as `disqualified`: no email, 90-day retention, no contact field)
 - **Reason**: structured short code + freeform agent rationale
 - **Visitor profile**: persona sketch (independence level, budget band, activity inclination, region interest — mapped to the 20 Apr segmentation)
 - **Wishlist**: what the visitor gravitated to (trips / tours / regions named, motivations surfaced)
@@ -60,6 +60,7 @@ This schema is what chunk G's handoff email template renders against. It's what 
 - **`qualified`**: agent has signalled via its `<reasoning>` + structured analysis that this visitor is a handoff-worthy lead. `handoff` tool triggers lead-capture widget; visitor confirms + consents; `handoff_submit` fires; email sent to sales; durable record written.
 - **`referred_out`**: visitor is outside Swoop's direct service scope (e.g. <$1k-profit booking per Luke's 20 Apr note) but still deserves a helpful next step. Agent explains and points to partner / self-service resource. `handoff_submit` may still fire with a different email template (or no email) — decided below.
 - **`disqualified`**: visitor is clearly out of scope (backpacker-tier with no budget; intentionally off-brand queries; someone using the tool as a proxy to Claude). Agent closes politely. No email to sales. Durable record with verdict for analytics.
+- **`inconclusive`**: agent never reached confidence to qualify / refer-out / disqualify. Path 7 in `planning/00-discovery-design-thinking.md` §3.2 — visitors who don't fit the other three (low engagement, mixed signals, extended-no-convergence, comparison shopping, off-offer-in-region, drive-by). Agent leaves the door open warmly without forcing a triage call. No email. Durable record for analytics; sales never sees these. Per HITL Q5.
 
 Verdict transitions happen inside the agent's reasoning — surfaced via the triage-stance skill (chunk G §2.6) and the session state `triage` field (chunk B §2.6). Chunk E doesn't *decide* the verdict; it enacts the consequences of the decision once made.
 

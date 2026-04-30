@@ -276,7 +276,7 @@ No overlap. D.t8 owns styles + HANDOVER.md; F-b does not touch styling, and HAND
 
 `handoff.submitted` and `handoff.triggered` are in the F-a schema. E's Tier 3 plans (E.t1 + E.t2) add the two emit points when they implement the handoff submit path. F-b does not pre-wire — same Option-B reasoning as §6.1.
 
-Contract for E: at the moment `createHandoffSubmitHandler` writes the handoff record to Firestore and dispatches the email:
+Contract for E: at the moment `createHandoffSubmitHandler` writes the handoff record to the durable store (Cloud SQL Postgres `handoff` table per E.10 + C.18 + C.23 — Firestore was the original target but is dropped project-wide; today an `FsHandoffStore` interim writes JSON to disk) and dispatches the email:
 
 ```ts
 emitEvent({

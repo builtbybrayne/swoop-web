@@ -13,6 +13,8 @@
  *                       Tier 3 plan E.t3 §"referred_out variants" allows
  *                       Julie to decide later whether referrals split out).
  *   - `disqualified`  → no email. Durable record only (E.t2 / future).
+ *   - `inconclusive`  → no email. Durable record only (E.3 pattern, per
+ *                       HITL Q5 — agent never reached confidence).
  *
  * Templates live at `cms/templates/handoff/{qualified,referred-out}.md`,
  * loaded at send time so authoring iterations don't require a restart in
@@ -33,8 +35,9 @@
  *   `handoff_submit` handler (E.t2 + E.t3 proper) will:
  *     1. Validate the payload against `HandoffPayloadSchema`
  *        (`@swoop/common/handoff`).
- *     2. Persist the durable record (Firestore once C lands; in-memory
- *        store for now).
+ *     2. Persist the durable record (Cloud SQL Postgres once IAM lands
+ *        per E.10 + C.18 + C.23 — Firestore was the original target but is
+ *        dropped; today an `FsHandoffStore` interim writes JSON to disk).
  *     3. Call `sendHandoffEmail(payload, mailerConfig)` if the verdict is
  *        `qualified` or `referred_out`.
  *     4. Emit observability events
@@ -97,7 +100,13 @@ export interface MailerConfig {
  */
 export type SendResult =
   | { readonly status: 'sent'; readonly toAddress: string; readonly subject: string }
-  | { readonly status: 'skipped'; readonly reason: 'mailer_disabled' | 'verdict_disqualified' }
+  | {
+      readonly status: 'skipped';
+      readonly reason:
+        | 'mailer_disabled'
+        | 'verdict_disqualified'
+        | 'verdict_inconclusive';
+    }
   | { readonly status: 'failed'; readonly reason: string };
 
 /**
@@ -128,6 +137,10 @@ export async function sendHandoffEmail(
   }
   if (payload.verdict === 'disqualified') {
     return { status: 'skipped', reason: 'verdict_disqualified' };
+  }
+  if (payload.verdict === 'inconclusive') {
+    // No email per HITL Q5 — same pattern as disqualified.
+    return { status: 'skipped', reason: 'verdict_inconclusive' };
   }
 
   const templateFilename =
@@ -184,6 +197,10 @@ function computeSubject(payload: HandoffPayload): string {
       // Unreachable under normal flow (we early-return above), but
       // exhaustive switch keeps the type checker honest.
       return `Swoop lead — disqualified (${payload.reason.code})`;
+    case 'inconclusive':
+      // Unreachable under normal flow (early-return above), but exhaustive
+      // switch keeps the type checker honest after the HITL Q5 extension.
+      return `Swoop lead — inconclusive (${payload.reason.code})`;
   }
 }
 
@@ -200,7 +217,9 @@ export function preparePayloadForTemplate(
   payload: HandoffPayloadQualified | HandoffPayloadReferredOut | HandoffPayload,
 ): Record<string, unknown> {
   const v = payload.verdict;
-  const contact = v === 'disqualified' ? null : payload.contact;
+  // No-contact verdicts: disqualified and inconclusive (per HITL Q5).
+  const contact =
+    v === 'disqualified' || v === 'inconclusive' ? null : payload.contact;
 
   return {
     ...payload,

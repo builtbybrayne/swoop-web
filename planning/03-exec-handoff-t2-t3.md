@@ -17,7 +17,7 @@ E.t1 (2026-04-24) shipped the handoff payload schema as the wire contract. E.t2 
 
 Two pragmatic choices shape the implementation:
 
-1. **`FsHandoffStore` as interim** in place of Firestore. Same `HandoffStore` interface; one new class swaps in when GCP IAM lands. Decision **E.12**.
+1. **`FsHandoffStore` as interim** in place of the durable backend (Cloud SQL Postgres per E.10 + C.18 + C.23 — the original Firestore target was dropped project-wide). Same `HandoffStore` interface; one new class swaps in when GCP IAM lands. Decision **E.12**.
 2. **Direct `POST /handoff/submit` HTTP endpoint** on the orchestrator over MCP-tool-call routing. Decision **E.13**.
 
 Plus a side decision (**E.14**) keeping payload enrichment server-side rather than pre-bundling on the client.
@@ -128,7 +128,7 @@ After a successful POST, the widget calls `props.addResult({ status: 'accepted',
 
 - **Visitor profile / wishlist enrichment** — defaults until a triage classifier or psych agent populates session state.
 - **`handoff_submit` MCP tool** — the agent doesn't call it as a tool; the side-effect is HTTP-driven. If a future MCP client wants to drive handoffs, expose `submitHandoff()` as a tool then.
-- **Firestore swap (E.t2 proper)** — interim FsHandoffStore is intentional; swap when GCP IAM lands.
+- **Cloud SQL Postgres swap (E.t2 proper)** — interim FsHandoffStore is intentional; swap when GCP IAM lands. Per E.10 + C.18 + C.23 (Firestore was the original target, dropped project-wide).
 - **Visitor-facing copy** — opening-screen, privacy-modal, lead-capture, in-conversation handoff phrasing all still placeholder. Belongs to chunk G + E.t5 (legal copy).
 - **Retention enforcement (E.t6)** — no cron, no sweeper. The `var/handoffs/` dir grows forever today.
 - **Data-deletion runbook (E.t7)** — not authored.
@@ -156,7 +156,7 @@ What's still required for E.t3 to be **production**-done:
 
 What's required for E.t2 to be **production**-done:
 - GCP IAM ("AI Pat Chat") lands.
-- Author `FirestoreHandoffStore implements HandoffStore`.
+- Author `PostgresHandoffStore implements HandoffStore` against the Cloud SQL `handoff` table per E.10 + C.18 (the original Firestore target was dropped project-wide in C.23).
 - Switch the boot wiring to instantiate it conditionally.
 
 ---

@@ -171,10 +171,14 @@ More: **"design tools as useful affordances"** — what content makes a great re
 
 Tool descriptions in prose (per-tool `cms/prompts/tools/<tool>/description.md`) carry chunks of WHY context — using the WHY/HOW/WHAT × User/Agent/Swoop matrix from PoC's PROMPT_ENGINEERING.md as code-comment scratchpad above the description string.
 
-The 5 sales-shaped tools per current chunk-C Tier 2 §2.2:
-- `stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`
+The 5 sales-shaped tools as drafted in the 2026-04-28 Tier 2 §2.2 — **superseded 2026-04-29 by the eight intent-named surface (decision C.25)**:
+- ~~`stoke_imagination`~~ → `find_inspiring`
+- ~~`offer_options`~~ + ~~`compare_paths`~~ → collapse into `find_options`
+- ~~`recall_someone_who`~~ → `find_someone_who` (live since 2026-04-30 per C.26)
+- ~~`build_confidence`~~ → `find_proof`
+- new: `lookup` for direct factual questions
 
-Roughly right but **not yet validated under the looser frame**. Need re-sketching: what does each return? What's the data shape that makes a great response possible? Postgres entities (`vibe_passage`, `customer_story`, `trust_proof`, `trip_card`) fall out of "what hydrates the output?".
+Roughly right but **not yet validated under the looser frame**. Need re-sketching: what does each return? What's the data shape that makes a great response possible? Postgres entities (`inspire_passage`, `customer_story`, `trust_proof`, `trip_card`, `inform_chunk`) fall out of "what hydrates the output?".
 
 ---
 
@@ -190,12 +194,12 @@ Roughly right but **not yet validated under the looser frame**. Need re-sketchin
 
 ### Open questions for next session
 
-1. **Re-sketch the 5 sales-shaped tools under the looser frame.** For each:
+1. **Re-sketch the eight intent-named tools under the looser frame** (superseded the 5 sales-shaped names per C.25 + C.27). For each:
    - Input shape (likely simpler than first sketches — mostly free-text seed strings + small filter objects).
    - Output shape (rich content payload that makes a great response possible).
    - WHY/HOW/WHAT × User/Agent/Swoop matrix for the tool description.
-   - Composer Haiku reasoning the tool needs internally (per chunk C §2.3).
-   Tools to walk: `stoke_imagination`, `offer_options`, `recall_someone_who`, `build_confidence`, `compare_paths`.
+   - **No composer layer** (C.24 supersedes C.22) — orchestrator-level Sonnet calls intent-named tools directly; cheap-Haiku-at-ETL is the only sub-LLM pass.
+   Tools to walk: `find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`, plus carry-forward `illustrate`, `handoff`, `handoff_submit`.
 
 2. **G.t1 WHY system prompt — first pass.** PoC's `aboutSwoop` + `salesMethodology` + `toneOfVoice` + `brandPillars` are the substrate. Patagonia equivalents authored from those + Luke's 20 Apr motivation segmentation + the strategic group-tour priority. Fits the G.10 two-file pattern (positive examples + style-avoid). Lane's sales-thinking doc (~May 4) will refine; first pass can land on PoC + meeting-derived placeholders.
 
@@ -204,7 +208,7 @@ Roughly right but **not yet validated under the looser frame**. Need re-sketchin
    - `group-tour-surfacing-for-solos` (Luke's strategic priority — load when solo + mid-budget + active)
    - `triage-to-referral-polite-redirect` (when low-fit signals reach threshold)
 
-4. **Customer-type signal — derivation mechanism.** Recommended: Haiku post-classifier fills `customerType` field at handoff submission time alongside reason code. Composer pattern at handoff time, not continuous classifier per-turn.
+4. **Customer-type signal — derivation mechanism.** ✅ **Closed by Q4 (2026-04-29)**: customer-type derivation lives in the main chat agent, not a Haiku post-classifier. The orchestrator is the most context-aware reasoner in the loop; the signal isn't worth a separate model call. ~~Earlier draft (now superseded): "Recommended: Haiku post-classifier fills `customerType` field at handoff submission time alongside reason code. Composer pattern at handoff time, not continuous classifier per-turn."~~
 
 5. **Inconclusive verdict — go-ahead?** Adding to `@swoop/common/handoff.ts` is small. Cheap because E.t1 schema is fresh.
 

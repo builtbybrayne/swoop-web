@@ -12,12 +12,13 @@ export { SampleStory } from "./story.sample.js";
 export { SampleImage } from "./image.sample.js";
 export { SampleSession } from "./session.sample.js";
 
-// Handoff fixtures — one per verdict + back-compat alias. See E.t1.
+// Handoff fixtures — one per verdict + back-compat alias. See E.t1 + Q5.
 export {
   SampleHandoff,
   SampleHandoffQualified,
   SampleHandoffReferredOut,
   SampleHandoffDisqualified,
+  SampleHandoffInconclusive,
 } from "./handoff.sample.js";
 
 // Event fixtures — one per event kind + back-compat alias. See F-a.
