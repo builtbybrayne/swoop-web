@@ -114,14 +114,41 @@ export class ClaudeLlm extends BaseLlm {
     const systemInstruction = resolveSystemInstruction(llmRequest, system);
     const tools = buildAnthropicTools(llmRequest.toolsDict ?? {});
 
+    // Perf-1 (2026-04-30 review): attach Anthropic prompt-cache breakpoints to
+    // the static prefix — the `system` block and the last `tools` entry.
+    // Anthropic caches the longest matching prefix up to a `cache_control`
+    // marker; placing one on the LAST tool covers tools+system together for a
+    // 5-minute ephemeral cache, since the API renders `tools` after `system`
+    // in the cacheable prefix. Marker on `system` keeps the system-only
+    // prefix cacheable on tool-less calls (e.g. functional classifier).
+    // See `shared/prompt-caching.md` and the addendum in
+    // `planning/03-exec-agent-runtime-t1.md` (Perf-1).
+    const systemWithCache = systemInstruction
+      ? [
+          {
+            type: 'text' as const,
+            text: systemInstruction,
+            cache_control: { type: 'ephemeral' as const },
+          },
+        ]
+      : undefined;
+    const toolsWithCache =
+      tools.length > 0
+        ? tools.map((t, i) =>
+            i === tools.length - 1
+              ? { ...t, cache_control: { type: 'ephemeral' as const } }
+              : t,
+          )
+        : undefined;
+
     const params: MessageCreateParamsStreaming = {
       model: llmRequest.model ?? this.model,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
       stream: true,
       messages,
-      ...(systemInstruction ? { system: systemInstruction } : {}),
-      ...(tools.length > 0 ? { tools } : {}),
+      ...(systemWithCache ? { system: systemWithCache } : {}),
+      ...(toolsWithCache ? { tools: toolsWithCache } : {}),
     };
 
     let stopReason: StopReason | null = null;
