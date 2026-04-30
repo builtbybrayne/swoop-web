@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DisqualifiedReasonCodeSchema,
+  HandoffContactSchema,
   HandoffPayloadDisqualifiedSchema,
   HandoffPayloadInconclusiveSchema,
   HandoffPayloadQualifiedSchema,
@@ -219,5 +220,141 @@ describe("HandoffSubmitConsentGate (type-level contract)", () => {
     // lives in E.t2 — this test only proves the type stays alive.
     expect(gate.conversationGranted).toBe(true);
     expect(gate.handoffGranted).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R3 — email-header injection vector. HandoffContactSchema string fields
+// must reject CR / LF / control characters. (2026-04-30 review.)
+// ---------------------------------------------------------------------------
+
+describe("HandoffContactSchema R3 control-character rejection", () => {
+  function cleanContact() {
+    return {
+      name: "Ada Ríos",
+      email: "ada.rios@example.com",
+      preferredMethod: "email" as const,
+      phone: "+44 20 7946 0000",
+      timeZoneHint: "Europe/London",
+    };
+  }
+
+  it("accepts a clean contact (positive baseline)", () => {
+    expect(HandoffContactSchema.parse(cleanContact())).toEqual(cleanContact());
+  });
+
+  it("rejects a name carrying CRLF (header-injection vector)", () => {
+    const bad = { ...cleanContact(), name: "Foo\r\nBcc: attacker@example.com" };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a name carrying a bare LF", () => {
+    const bad = { ...cleanContact(), name: "Foo\nBcc: attacker@example.com" };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a name carrying a bare CR", () => {
+    const bad = { ...cleanContact(), name: "Foo\rextra" };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a phone carrying CRLF", () => {
+    const bad = { ...cleanContact(), phone: "+44\r\nBcc: x@y.z" };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a timeZoneHint carrying CRLF", () => {
+    const bad = { ...cleanContact(), timeZoneHint: "Europe/London\r\nfoo" };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects an email carrying CRLF (defence-in-depth alongside .email())", () => {
+    // Most CRLF strings already fail .email(); explicit regex makes the
+    // intent unambiguous and survives any future loosening of .email().
+    const bad = { ...cleanContact(), email: "ada@example.com\r\nBcc: x@y.z" };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R4 — length caps on visitor-supplied fields. Storage / DoS defence.
+// (2026-04-30 review.)
+// ---------------------------------------------------------------------------
+
+describe("R4 length caps on contact fields, motivationAnchor, reason.text", () => {
+  function cleanContact() {
+    return {
+      name: "Ada Ríos",
+      email: "ada.rios@example.com",
+      preferredMethod: "email" as const,
+      phone: "+44 20 7946 0000",
+      timeZoneHint: "Europe/London",
+    };
+  }
+
+  it("rejects a contact name over 200 chars", () => {
+    const bad = { ...cleanContact(), name: "x".repeat(201) };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("accepts a contact name at exactly 200 chars", () => {
+    const ok = { ...cleanContact(), name: "x".repeat(200) };
+    expect(HandoffContactSchema.safeParse(ok).success).toBe(true);
+  });
+
+  it("rejects a contact phone over 200 chars", () => {
+    const bad = { ...cleanContact(), phone: "1".repeat(201) };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a contact timeZoneHint over 200 chars", () => {
+    const bad = { ...cleanContact(), timeZoneHint: "z".repeat(201) };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a contact email over 200 chars (long-local-part DoS)", () => {
+    // 195 chars in local-part + "@a.io" = 200; +1 to push past.
+    const overLong = `${"a".repeat(196)}@a.io`;
+    const bad = { ...cleanContact(), email: overLong };
+    expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("rejects a payload whose motivationAnchor is over 2_000 chars", () => {
+    const bad = {
+      ...SampleHandoffQualified,
+      motivationAnchor: "m".repeat(2_001),
+    };
+    expect(HandoffPayloadSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("accepts a payload whose motivationAnchor is exactly 2_000 chars", () => {
+    const ok = {
+      ...SampleHandoffQualified,
+      motivationAnchor: "m".repeat(2_000),
+    };
+    expect(HandoffPayloadSchema.safeParse(ok).success).toBe(true);
+  });
+
+  it("rejects a payload whose reason.text is over 500 chars", () => {
+    const bad = {
+      ...SampleHandoffQualified,
+      reason: { code: "ready_booking_named_trip", text: "r".repeat(501) },
+    };
+    expect(HandoffPayloadSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("accepts a payload whose reason.text is exactly 500 chars", () => {
+    const ok = {
+      ...SampleHandoffQualified,
+      reason: { code: "ready_booking_named_trip", text: "r".repeat(500) },
+    };
+    expect(HandoffPayloadSchema.safeParse(ok).success).toBe(true);
+  });
+
+  it("clean canonical fixture still parses (positive baseline)", () => {
+    expect(HandoffPayloadSchema.safeParse(SampleHandoffQualified).success).toBe(true);
+    expect(HandoffPayloadSchema.safeParse(SampleHandoffReferredOut).success).toBe(true);
+    expect(HandoffPayloadSchema.safeParse(SampleHandoffDisqualified).success).toBe(true);
+    expect(HandoffPayloadSchema.safeParse(SampleHandoffInconclusive).success).toBe(true);
   });
 });

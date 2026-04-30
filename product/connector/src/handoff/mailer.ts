@@ -185,22 +185,42 @@ export async function sendHandoffEmail(
 
 // ---------------------------------------------------------------------------
 // Subject line.
+//
+// R3 (defence-in-depth): strip CR / LF / control chars from any visitor-
+// supplied component before interpolating into the subject. The schema's
+// regex on `HandoffContactSchema.name` is the primary guard; this is the
+// belt-and-braces second line — if a future caller ever bypasses the
+// schema or passes us a partially-validated value, header-injection (`Foo
+// \r\nBcc: attacker@example.com`) still cannot reach nodemailer.
 // ---------------------------------------------------------------------------
+
+/**
+ * Strip ASCII control characters (CR, LF, NUL, DEL, etc.) from a string.
+ * Conservative: removes anything < 0x20 plus 0x7F.
+ */
+function stripControlChars(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\x00-\x1f\x7f]/g, '');
+}
 
 function computeSubject(payload: HandoffPayload): string {
   switch (payload.verdict) {
     case 'qualified':
-      return `Swoop lead — ${payload.contact.name} (qualified, ${payload.reason.code})`;
+      return stripControlChars(
+        `Swoop lead — ${payload.contact.name} (qualified, ${payload.reason.code})`,
+      );
     case 'referred_out':
-      return `Swoop referral — ${payload.contact.name} (referred_out, ${payload.reason.code})`;
+      return stripControlChars(
+        `Swoop referral — ${payload.contact.name} (referred_out, ${payload.reason.code})`,
+      );
     case 'disqualified':
       // Unreachable under normal flow (we early-return above), but
       // exhaustive switch keeps the type checker honest.
-      return `Swoop lead — disqualified (${payload.reason.code})`;
+      return stripControlChars(`Swoop lead — disqualified (${payload.reason.code})`);
     case 'inconclusive':
       // Unreachable under normal flow (early-return above), but exhaustive
       // switch keeps the type checker honest after the HITL Q5 extension.
-      return `Swoop lead — inconclusive (${payload.reason.code})`;
+      return stripControlChars(`Swoop lead — inconclusive (${payload.reason.code})`);
   }
 }
 
@@ -221,13 +241,39 @@ export function preparePayloadForTemplate(
   const contact =
     v === 'disqualified' || v === 'inconclusive' ? null : payload.contact;
 
+  // R3 (defence-in-depth): scrub control chars from visitor-influenced
+  // template-bound fields before substitution. Schema already enforces
+  // newline-free + length caps; this is the second line if a future
+  // caller bypasses validation. `motivationAnchor` and `reason.text` are
+  // freeform-narrative fields by design — they survive control-char
+  // scrubbing semantically but are no longer header-injection vectors
+  // when interpolated into email bodies.
+  const scrubbedContact = contact
+    ? {
+        ...contact,
+        name: stripControlChars(contact.name),
+        email: stripControlChars(contact.email),
+        phone: contact.phone ? stripControlChars(contact.phone) : contact.phone,
+        timeZoneHint: contact.timeZoneHint
+          ? stripControlChars(contact.timeZoneHint)
+          : contact.timeZoneHint,
+      }
+    : null;
+
+  // The base spread carries `payload.contact`, `payload.motivationAnchor`,
+  // `payload.reason` — overwrite the visitor-influenced ones with scrubbed
+  // forms so `{{contact.name}}`, `{{motivationAnchor}}`, `{{reason.text}}`
+  // get the safe values during template substitution.
   return {
     ...payload,
+    ...(scrubbedContact ? { contact: scrubbedContact } : {}),
+    motivationAnchor: stripControlChars(payload.motivationAnchor),
+    reason: { ...payload.reason, text: stripControlChars(payload.reason.text) },
 
     // ---- Contact fallbacks (disqualified has no contact field) -----------
-    contactPhoneOrDash: formatOptional(contact?.phone),
-    contactPreferredMethod: formatOptional(contact?.preferredMethod),
-    contactTimeZoneOrDash: formatOptional(contact?.timeZoneHint),
+    contactPhoneOrDash: formatOptional(scrubbedContact?.phone),
+    contactPreferredMethod: formatOptional(scrubbedContact?.preferredMethod),
+    contactTimeZoneOrDash: formatOptional(scrubbedContact?.timeZoneHint),
 
     // ---- Visitor profile -------------------------------------------------
     visitorIndependence: formatOptional(payload.visitorProfile.independenceLevel),

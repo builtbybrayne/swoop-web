@@ -274,3 +274,90 @@ describe('preparePayloadForTemplate', () => {
     expect(notAsked.marketingConsentLabel).toBe('not asked');
   });
 });
+
+// ---------------------------------------------------------------------------
+// R3 (defence-in-depth) — control-char stripping in subject + template-bound
+// fields. Schema-level newline rejection in @swoop/common is the primary
+// guard; these tests pin the second-line scrub the mailer applies in case
+// a future caller hands us partially-validated input.
+// ---------------------------------------------------------------------------
+
+describe('mailer R3 control-character defence-in-depth', () => {
+  it('subject has no raw CR / LF even when contact.name contains them', async () => {
+    const stub = makeStubTransport();
+    const tainted = {
+      ...SampleHandoffQualified,
+      contact: {
+        ...SampleHandoffQualified.contact,
+        // Bypass the schema by building the payload object directly — we're
+        // testing what the mailer does if it ever receives unsanitised input.
+        name: 'Foo\r\nBcc: attacker@example.com',
+      },
+    };
+    const result = await sendHandoffEmail(tainted, baseConfig(), {
+      createTransport: () => stub.transport,
+      readTemplate,
+    });
+    expect(result.status).toBe('sent');
+    const sent = stub.captured[0]!;
+    expect(sent.subject).toBeDefined();
+    // The header-injection vector is the literal CR / LF that would let an
+    // attacker terminate the Subject: header and start a new one. With those
+    // stripped the residual `Bcc: …` text is harmless plain content.
+    expect(sent.subject).not.toContain('\r');
+    expect(sent.subject).not.toContain('\n');
+    // Original visible name segment survives.
+    expect(sent.subject).toContain('Foo');
+  });
+
+  it('subject strips CR / LF for referred_out variant too', async () => {
+    const stub = makeStubTransport();
+    const tainted = {
+      ...SampleHandoffReferredOut,
+      contact: {
+        ...SampleHandoffReferredOut.contact,
+        name: 'Bruno\r\nX-Injected: yes',
+      },
+    };
+    const result = await sendHandoffEmail(tainted, baseConfig(), {
+      createTransport: () => stub.transport,
+      readTemplate,
+    });
+    expect(result.status).toBe('sent');
+    const sent = stub.captured[0]!;
+    expect(sent.subject).not.toMatch(/[\r\n]/);
+  });
+
+  it('preparePayloadForTemplate scrubs control chars from contact + motivationAnchor + reason.text', () => {
+    const tainted = {
+      ...SampleHandoffQualified,
+      contact: {
+        ...SampleHandoffQualified.contact,
+        name: 'Ada\r\nBcc: x@y.z',
+        phone: '+44\r\nfoo',
+      },
+      motivationAnchor: 'a\r\nb',
+      reason: { code: 'ready_booking_named_trip' as const, text: 'why\r\nlines' },
+    };
+    const data = preparePayloadForTemplate(tainted);
+    const contact = data.contact as { name: string; phone?: string };
+    expect(contact.name).not.toMatch(/[\r\n]/);
+    expect(contact.name).toBe('AdaBcc: x@y.z');
+    expect(contact.phone).not.toMatch(/[\r\n]/);
+    expect(data.motivationAnchor).not.toMatch(/[\r\n]/);
+    const reason = data.reason as { text: string };
+    expect(reason.text).not.toMatch(/[\r\n]/);
+    expect(data.contactPhoneOrDash).not.toMatch(/[\r\n]/);
+  });
+
+  it('clean canonical fixture survives the scrub unchanged', () => {
+    const data = preparePayloadForTemplate(SampleHandoffQualified);
+    expect((data.contact as { name: string }).name).toBe(
+      SampleHandoffQualified.contact.name,
+    );
+    expect(data.motivationAnchor).toBe(SampleHandoffQualified.motivationAnchor);
+    expect((data.reason as { text: string }).text).toBe(
+      SampleHandoffQualified.reason.text,
+    );
+  });
+});
