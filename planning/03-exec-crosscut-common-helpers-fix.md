@@ -86,7 +86,7 @@ Lives in `product/orchestrator/src/connector/tools.ts` (NOT in `@swoop/common` �
 
 **Verification**: orchestrator's existing tools.test.ts (13 cases) stays green; no behavioural change.
 
-**Commits**: _(landed: filled when done)_
+**Commits**: `9e4bfbd` (2026-04-30) — `fix(orchestrator): close H4 — parseToolResult helper`.
 
 ---
 
