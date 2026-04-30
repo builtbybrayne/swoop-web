@@ -283,7 +283,7 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Landed**: `HandoffContactSchema` strings (name, phone, timeZoneHint) carry the `^[^\r\n]{1,200}$` regex; `email` carries a `^[^\r\n]+$` regex on top of the existing `.email()` (defence-in-depth) plus a `.max(200)` long-local-part cap. `mailer.ts` got a `stripControlChars()` helper applied in both `computeSubject` and `preparePayloadForTemplate` for visitor-influenced template-bound fields (`contact.name/email/phone/timeZoneHint`, `motivationAnchor`, `reason.text`). 7 control-char-rejection cases added to `handoff-schema.test.ts`; 4 mailer-side defence-in-depth cases added to `mailer.test.ts`.
 
-**Commits**: _(filled at commit time)_
+**Commits**: `0bde8f4` (combined R3 + R4 — both touch handoff.ts; landed atomically)
 
 ### R4 (contact part) — no length caps on `HandoffContactSchema` strings or `motivationAnchor` — ✅
 
@@ -295,7 +295,7 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Landed**: 200-char cap on contact fields baked into the shared regex (`^[^\r\n]{1,200}$`); `email` got an explicit `.max(200)`. `motivationAnchor` carries `.max(2_000)` in `HandoffPayloadCommon`; per-verdict `reason.text` carries `.max(500)`. 7 length-cap cases added to `handoff-schema.test.ts` (one rejection + one boundary acceptance per field, plus a regression assertion that the four canonical fixtures still parse).
 
-**Commits**: _(filled at commit time)_
+**Commits**: `0bde8f4` (combined R3 + R4 — both touch handoff.ts; landed atomically)
 
 ### Theme-A.2 — Tighten `HandoffSubmitRequestSchema` to discriminated union — 🔲
 
