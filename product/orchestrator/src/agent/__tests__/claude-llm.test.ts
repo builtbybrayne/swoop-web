@@ -235,11 +235,110 @@ describe('ClaudeLlm.generateContentAsync', () => {
       toolsDict: { search: fakeTool as never },
     });
     await collect(llm.generateContentAsync(req));
-    expect(capture.params?.system).toBe('you are helpful');
+    // Perf-1 (2026-04-30 review): system is sent as a single text block with
+    // a `cache_control: ephemeral` marker so the static prefix is cached.
+    expect(capture.params?.system).toEqual([
+      {
+        type: 'text',
+        text: 'you are helpful',
+        cache_control: { type: 'ephemeral' },
+      },
+    ]);
     expect(capture.params?.messages).toEqual([
       { role: 'user', content: [{ type: 'text', text: 'hi' }] },
     ]);
     expect(capture.params?.tools).toBeDefined();
     expect(capture.params?.tools?.[0]?.name).toBe('search');
+  });
+
+  // Perf-1 (2026-04-30 review): explicit assertions that prompt-cache breakpoints
+  // land at the right positions. Anthropic charges full price for any byte
+  // beyond the last `cache_control` marker, so placement is the contract.
+  describe('Perf-1: prompt caching (cache_control placement)', () => {
+    it('attaches cache_control: ephemeral to the system text block', async () => {
+      const capture: { params?: MessageCreateParamsStreaming; signal?: AbortSignal } = {};
+      const llm = new ClaudeLlm({
+        model: 'claude-sonnet-4-5-20250929',
+        apiKey: 'test',
+        client: stubClient([{ type: 'message_stop' }], capture),
+      });
+      await collect(
+        llm.generateContentAsync(
+          baseRequest({
+            contents: [
+              { role: 'system', parts: [{ text: 'You are Puma.' }] },
+              { role: 'user', parts: [{ text: 'hi' }] },
+            ],
+          }),
+        ),
+      );
+      expect(Array.isArray(capture.params?.system)).toBe(true);
+      const sys = capture.params?.system as Array<{
+        type: string;
+        text: string;
+        cache_control?: { type: string };
+      }>;
+      expect(sys).toHaveLength(1);
+      expect(sys[0]?.cache_control).toEqual({ type: 'ephemeral' });
+      expect(sys[0]?.text).toBe('You are Puma.');
+    });
+
+    it('attaches cache_control: ephemeral to ONLY the last tool entry', async () => {
+      const capture: { params?: MessageCreateParamsStreaming; signal?: AbortSignal } = {};
+      const mkTool = (name: string) => ({
+        _getDeclaration: () => ({
+          name,
+          description: `Tool ${name}.`,
+          parameters: { properties: {}, required: [] },
+        }),
+      });
+      const llm = new ClaudeLlm({
+        model: 'claude-sonnet-4-5-20250929',
+        apiKey: 'test',
+        client: stubClient([{ type: 'message_stop' }], capture),
+      });
+      await collect(
+        llm.generateContentAsync(
+          baseRequest({
+            toolsDict: {
+              search: mkTool('search') as never,
+              find_someone_who: mkTool('find_someone_who') as never,
+              get_skill: mkTool('get_skill') as never,
+            },
+          }),
+        ),
+      );
+      const tools = capture.params?.tools as Array<{
+        name: string;
+        cache_control?: { type: string };
+      }>;
+      expect(tools).toHaveLength(3);
+      // Only the LAST tool carries the breakpoint — Anthropic caches the
+      // prefix up to and including the marker, so one breakpoint at the end
+      // covers the whole tool list (and the system block before it).
+      expect(tools[0]?.cache_control).toBeUndefined();
+      expect(tools[1]?.cache_control).toBeUndefined();
+      expect(tools[2]?.cache_control).toEqual({ type: 'ephemeral' });
+    });
+
+    it('omits system / tools cleanly when neither is supplied (no spurious cache_control)', async () => {
+      const capture: { params?: MessageCreateParamsStreaming; signal?: AbortSignal } = {};
+      const llm = new ClaudeLlm({
+        model: 'claude-sonnet-4-5-20250929',
+        apiKey: 'test',
+        client: stubClient([{ type: 'message_stop' }], capture),
+      });
+      await collect(
+        llm.generateContentAsync(
+          baseRequest({
+            contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+            toolsDict: {},
+          }),
+        ),
+      );
+      // No system instruction in the request => no `system` field on params.
+      expect(capture.params?.system).toBeUndefined();
+      expect(capture.params?.tools).toBeUndefined();
+    });
   });
 });

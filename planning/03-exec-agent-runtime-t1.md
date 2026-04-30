@@ -106,7 +106,7 @@ The SSE chat endpoint is B.t5. Don't add it here.
 
 Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
 
-### Perf-1 — Anthropic prompt caching on system + tools — 🔲
+### Perf-1 — Anthropic prompt caching on system + tools — ✅
 
 **Problem**: `claude-llm.ts:117-125` builds `MessageCreateParamsStreaming` on every call with no `cache_control`. ~2,500 static input tokens (system prompt + tool schemas) re-charged on every turn. Anthropic's 5-minute ephemeral cache is a near-perfect fit for multi-turn chat. Cost lens estimates 30–50% input-token reduction. The file's own opening comment at `:28-29` already names this as a "future optimisation task, not Puma-critical" — flagging here that it should land BEFORE G.t1 fills `00_why.md` and the CMS tool-loader (which together will materially inflate the static prefix and make caching essential, not optional).
 
