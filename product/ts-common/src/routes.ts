@@ -51,7 +51,13 @@ export type ConsentRequest = z.infer<typeof ConsentRequestSchema>;
 
 export const SessionBootstrapRequestSchema = z
   .object({
-    entryUrl: z.string().url().optional(),
+    entryUrl: z
+      .string()
+      .url()
+      .refine((u) => /^https?:\/\//i.test(u), {
+        message: "entryUrl must be http(s)",
+      })
+      .optional(),
     regionInterestHint: z.string().optional(),
   })
   .strict();
