@@ -1,0 +1,351 @@
+# 03 — Execution: C.t4 Tool implementations (eight handlers + data primitives)
+
+**Status**: **DRAFT — for HITL review. Not yet executable.**
+**Chunk**: C (retrieval & data).
+**Implements**: [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §2.2 (tool surface) + §2.3 (no-composer handler pattern) + §2.4 (data primitives) + §10 — the **C.t4** task. Operationalises decisions C.13, C.18, C.24, C.25, C.26, C.30, C.30b, C.34.
+**Depends on**: **C.t1 closed** (connector service skeleton + Postgres pool + MCP HTTP transport boot path); **C.t2 closed** (entity model + tool I/O Zod schemas + production-quality `description.md` for every intent-named tool — already shipped 2026-04-30); **C.t3 closed** (domain tables populated from the SQL dump + blog snapshot in `puma_dev`); **C.t3a closed** (embedding pass + Haiku ETL classifiers populate the five derived tables and write `embedding` / `tsv` / `content_hash` / `persona_summary` / `persona_embedding` columns end-to-end); E.t2/E.t3 already shipped (`submitHandoff()` is the wired side-effect under `handoff_submit`).
+**Blocks**: **B.t3a** (orchestrator's connector adapter rewrite — registers the eight intent-named tools against the new wire surface and drops `Search*` / `GetDetail*`); **D.t9** (chat-surface widget rewrite — renders the five new `*PublicSchema` outputs). These are *downstream consumers*; this plan only mentions them as the next dominoes.
+**Produces**:
+- A per-tool handler at `product/connector/src/tools/<tool>.ts` for each of the eight tools — `find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`, `illustrate`, `handoff`, `handoff_submit`.
+- A data-primitive layer at `product/connector/src/data/<primitive>.ts` — the SQL + vector helpers each handler composes over.
+- A small bootstrap module at `product/connector/src/tools/index.ts` that registers every handler with the connector's MCP server, **loading each tool's rich description from `cms/prompts/tools/<tool>/description.md` per C.34**.
+- Per-tool integration tests at `product/connector/src/tools/__tests__/<tool>.int.test.ts` against a populated `puma_dev` (or a per-test ephemeral Postgres if local convention prefers that).
+- A small handful of decision-log entries in `planning/decisions.md` for any C.t4-emergent calls (likely candidates: `ef_search` runtime knob, RRF constant, MCP-tool description-load failure mode).
+- An execution log appended to this Tier 3 plan summarising what landed.
+**Estimate**: ~2 days of focused work, in two halves — day 1 lands the data primitives + the four content tools (`find_inspiring` / `find_someone_who` / `find_proof` / `lookup`) end-to-end against `puma_dev`; day 2 lands `find_options` (TripCard internals are still settling per C.t2 §"Out of scope"), `illustrate` (placeholder hookup if C.t6 hasn't populated the image annotations), and the `handoff` / `handoff_submit` pair (the latter is mostly a thin wrapper over the already-shipped `submitHandoff()`). Plus integration tests + the description-load wiring.
+
+---
+
+## ★ Read this first — calibration before you touch a handler
+
+> Before writing a line of handler code, **re-read [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) "★ Read this first — the WHY of chunk C" end-to-end.** Then re-read [`03-exec-c-t2.md`](03-exec-c-t2.md) "★ Read this first" (its compressed reminder for contract authoring). The same discipline applies to handler authoring — perhaps even more so, because at this layer the temptation to think bottom-up is highest. Your hands will be on SQL strings; the database tables will feel like the universe.
+
+C.t4 is the moment where a Claude session is most likely to slip into bottom-up reasoning, because it implements the place where SQL meets the agent. The trap looks like this:
+
+> *"`find_inspiring` queries `inspire_passage`. So the handler runs a hybrid-search SQL against that table, optionally filters by region, sorts by RRF score, returns the top N rows. Done."*
+
+That's correct mechanically. It's also wrong as a starting point. Each handler is **a conversational move encoded as a SQL plan**. The starting point is the journey moment, not the table.
+
+Before authoring each handler, write a one-paragraph "why this tool exists in the conversation" in your own words. Reference the tool's `cms/prompts/tools/<tool>/description.md` and the four+1 jobs framing in the chunk-C ★ section. Only then look at the migrations to see which tables back the tool. If you find yourself saying *"the data lets us also expose X"* — stop. C.t2 settled the surface; C.t4 implements it; **don't add fields, don't add filters, don't expand inputs**. If C.t2's contract feels insufficient, that's a signal to revisit C.t2 *with Al present*, not to bolt on widening at C.t4.
+
+The other temptation worth pre-empting: **don't introduce a composer.** C.24 removed them deliberately. If you find yourself wanting an internal Haiku call inside a handler "to make the output feel right" — stop. That's the bottom-up trap returning. Sonnet at the orchestrator does the synthesis; the handler returns concrete row-shaped output. One LLM call per turn. Period.
+
+---
+
+## Outcomes
+
+When this task is done:
+
+- The connector service (post-C.t1) advertises **all eight intent-named tools** over MCP-HTTP. The orchestrator's tool discovery surfaces them with their full markdown descriptions loaded from `cms/prompts/tools/<tool>/description.md` (per C.34).
+- A Sonnet turn over the live agent can route into any of the five conversational tools (`find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`), receive a Zod-validated, row-shaped response, and weave it into `<utter>`. Verified end-to-end on a populated `puma_dev` (smoke test § below).
+- Each tool's handler runs as a **thin orchestration over data primitives** — input validation → 1–N primitive calls → output assembly → output validation → return. No composer code anywhere. No LLM in the request path beyond the orchestrator's Sonnet.
+- The data-primitive layer is **the connector's actual brain** — typed SQL + vector helpers under `product/connector/src/data/`. Each primitive is a function over the Postgres pool returning Zod-parsed rows. Reusable across tools (e.g. `findInspirePassageByEmbedding` lives once; `find_inspiring` and `illustrate` may both consume it under different filters).
+- `handoff` is a passthrough that returns `{ status: 'widget_triggered', widgetToken }` — opening the lead-capture widget over the assistant-ui tool-call lifecycle. **No durable side-effect at this surface** (decision E.13 — submission is a separate HTTP route).
+- `handoff_submit` is a **thin wrapper over the already-shipped `submitHandoff()` from `@swoop/connector/src/handoff/submit.ts`**. The MCP tool boundary exists for completeness (Sonnet shouldn't ever invoke it; the widget POSTs to `/handoff/submit` directly per E.13), but the wire surface ships so future surface-area changes are additive rather than schema-breaking. See §"`handoff_submit` boundary" below.
+- `illustrate` returns image sets matched against keywords + optional region, **with a graceful degradation path for the period before C.t6 has populated full annotation coverage**: handler returns whatever's available + a flag the widget can read; deferring full visual coverage to the post-C.t6 catalogue run is acceptable for M1.
+- All handlers emit an `tool.invoked` observability event per F-a (existing surface) with the tool name, input shape, output count, and elapsed-ms. No PII leaks (visitor inputs are `concern` / `signal` / `question` strings, treat as public; no contact details flow through these handlers — those go through the separate `/handoff/submit` HTTP route).
+- The connector workspace's test count grows by ~10–15 integration tests; the existing 46 pass unchanged. `npm test --workspace @swoop/connector` is green.
+- Errors are handled uniformly with a single shared helper (see §"Error handling" — pre-empts the 8x repeated try/catch anti-pattern flagged in the 2026-04-30 review's H4).
+
+**Not outcomes**:
+- **B.t3a** — orchestrator's connector adapter rewrite. Owned by chunk B; gated on this task closing.
+- **D.t9** — widget rewrite. Owned by chunk D; gated on this task closing.
+- **C.t6** — image annotation pipeline. Owned by C.t6; this task degrades gracefully if C.t6 hasn't run yet.
+- **Connector deploy infrastructure** — Cloud Run wiring belongs to C.t8 / M4. This task ships the in-process workspace dep + the MCP-HTTP boot path; production deploy is downstream.
+- **Tool description voice refinement** — already shipped at C.t2 ("production first-pass"); this task only *loads* the markdown, never *edits* it.
+
+---
+
+## Out of scope (name it so future agents don't drift)
+
+- No `src/composers/` directory. No internal Haiku LLM calls inside any handler. C.24 is load-bearing.
+- No new tool I/O Zod schemas. C.t2 settled the surface; if a field feels missing, that's an HITL conversation, not a handler-time addition.
+- No new domain or derived tables. C.t2 owns migrations; if a query needs a column that isn't there, **stop and re-anchor** — likely the wrong query.
+- No `Search*` / `GetDetail*` removal. They're still imported by the orchestrator until B.t3a; this task lives within the same `tools.ts` deprecation contract.
+- No widget rendering work. D.t9 picks up the new `*PublicSchema` outputs.
+- No SMTP wiring. `handoff_submit` reuses the already-wired `submitHandoff()` (E.t2/E.t3); the mailer flip-on is a Julie-blocked ops decision unrelated to this task.
+- No `find_options` deepening beyond the published `TripCardPublicSchema` surface. Trip-side internals are still settling (per C.t2 §"Out of scope" — *"leave the trip side alone until trips ingestion is genuinely understood"*); this handler ships against whatever `trip_card` rows C.t3a populates and treats their column set as the source of truth.
+
+---
+
+## Inputs (files to read before authoring)
+
+- [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) — especially §2.2 (tool surface), §2.3 (no-composer pattern), §2.4 (data primitives — the canonical primitive list).
+- [`03-exec-c-t2.md`](03-exec-c-t2.md) — the contract C.t4 implements. Read the schema sketches for `inspire_passage` / `customer_story` / `trust_proof` / `inform_chunk` / `trip_card` and the `*PublicSchema` projections — those are the row shapes your primitives produce and your handlers wrap.
+- `product/ts-common/src/tools.ts` + `derived.ts` — the I/O contract. Don't edit; consume.
+- `product/cms/prompts/tools/<tool>/description.md` — for each of the five intent-named tools. These are **production-quality first-pass** prose (per C.t2 closure); the handler-loader reads them at boot.
+- `product/connector/migrations/001_extensions.sql` → `006_customerreview_tables.sql` — the schema your SQL queries run against. Especially migration `004_indexes.sql` for what's actually indexed (HNSW on every `embedding` column with `vector_cosine_ops` and package defaults `m=16, ef_construction=64`; GIN on every `tsv`; pg_trgm GIN on the location-name columns; B-tree on the obvious query keys).
+- `product/connector/src/handoff/submit.ts` — the existing `submitHandoff()` your `handoff_submit` tool wraps.
+- `product/connector/src/handoff/store.ts` + `mailer.ts` + `template-renderer.ts` — read for context only; they're already wired.
+- `product/orchestrator/test-fixtures/stub-connector.ts` — the current stub that this task replaces in production. Read once for shape; don't carry it forward.
+- [`decisions.md`](decisions.md) — C.13 (golden thread), C.18 (Voyage-3 / 1024d / pgvector HNSW), C.24 (no composer), C.25 (eight tools), C.26 (find_someone_who live), C.30 (persona-summary natural-language shape — the Mirror tool's matching mechanism), C.30b (image_id is FK; public projection wraps the joined image record), C.34 (markdown owns prose; runtime loads it).
+- [`gotchas.md`](../gotchas.md) — Postgres connection (puma_dev URL), `dotenv({ override: true })` for env keys, the connector workspace's `zod` cross-package gotcha (cast-once-at-boundary discipline still applies).
+- [`progress.md`](progress.md) §"C.t2 contract layer + C.26 graduation" + the per-workspace test counts to know the baseline.
+
+---
+
+## Architectural principles
+
+These are the load-bearing rules. If a design choice violates one of them, it's almost certainly wrong.
+
+1. **Top-down from the conversation.** Each handler exists because it serves a moment in the visitor's journey. The data shapes serve the conversation, not the other way around. Re-read the calibration callout above before authoring any handler. Write the journey-moment paragraph first.
+2. **Thin handlers, brain-in-the-primitives.** A handler is ~30–80 lines. Input validation → 1–N primitive calls → output assembly → output validation → return. Anything more than that is a smell — usually a primitive trying to escape into the handler.
+3. **Reusable primitives.** A primitive is a single typed SQL/vector function returning Zod-parsed rows. Multiple handlers may compose the same primitive under different filters. The primitive layer is what survives the next architectural shift; handlers are dispensable scaffolding above it.
+4. **No LLM in the request path.** Sonnet at the orchestrator is the *only* request-path LLM. Composers are out (C.24); inline Haiku calls are out; the temptation to "make the output nicer" is the bottom-up trap returning.
+5. **Markdown owns prose; runtime loads it.** Tool descriptions live in `cms/prompts/tools/<tool>/description.md`; the handler-registration boot path reads them at startup and caches the result. The `TOOL_DESCRIPTIONS` map in `tools.ts` is *runtime-label-only* — never the surface Sonnet sees in production. Per C.34.
+6. **Embeddings stay server-side.** The `embedding` / `persona_embedding` / `tsv` / `content_hash` / `source_provenance` columns never appear in any tool I/O. The `*PublicSchema` projections are how this is enforced; the primitives are how it's authored.
+7. **One canonical error helper, not eight try/catches.** A single shared utility (see §"Error handling") wraps the handler-body fragment, surfaces typed errors, emits the F-a observability event, and returns the wire shape. Pre-empts the 4x → 8x repetition the 2026-04-30 code review flagged as H4.
+8. **Forward-only data assumptions.** Handlers assume the migrations are at HEAD and the derived tables are populated. They do *not* gracefully degrade when an embedding column is null (that's a C.t3a integrity issue, not a handler concern). Exception: `illustrate` does degrade gracefully against incomplete C.t6 annotation coverage — see §"`illustrate` and the C.t6 dependency".
+9. **Voyage-3 / 1024d everywhere.** Embedding vectors are always 1024-dimensional cosine-distance HNSW. The handler never knows the dimensionality directly — it just calls `embedTextForSearch(visitor_input)` from a shared helper that wraps the Voyage call. Pinning the dimensionality lives in C.t1's pool config, not in handler code. Per C.18.
+10. **`puma_dev` is the integration test surface.** Per-tool integration tests run against the live local Postgres, not mocks. Mocks at the unit level are fine for isolated primitive shape; the handler-level tests need real SQL plans. Per discoveries.md note that data tools are exactly the surface mocks fail to validate.
+
+---
+
+## Components, file paths, and signatures (sketch — not executable code)
+
+### `product/connector/src/data/` — the data primitive layer
+
+One file per primitive. Each function takes typed inputs and returns Zod-parsed rows. Pool dependency injected via the connector's already-shipped DB module (lands in C.t1).
+
+Recommended primitive set, mirroring §2.4 of the Tier 2 plan:
+
+| File | Purpose | Backs |
+|---|---|---|
+| `data/hybrid-search.ts` | Generic RRF (Reciprocal Rank Fusion) helper combining pgvector + tsvector ranks. Single implementation; specialised by table. | Multiple (the four content tools all hit it) |
+| `data/find-inspire-passages.ts` | `findInspirePassagesByText(text, { region?, mood?, limit })` → `InspirePassage[]` via hybrid retrieval over `inspire_passage`. Joins through `image_id` to assemble the `DerivedImage` companion record per C.30b. | `find_inspiring` + (light reuse from `illustrate`'s region path) |
+| `data/find-customer-stories.ts` | `findCustomerStoriesByPersonaSignal(signal, { region?, limit })` → `CustomerStory[]` via cosine similarity on `persona_embedding` (Mirror's only retrieval mechanism per C.30 — *not* hybrid; persona-shaped, not topic-shaped). | `find_someone_who` |
+| `data/find-trust-proofs.ts` | `findTrustProofsByConcern(concern, { topic?, limit })` → `TrustProof[]` via hybrid retrieval over `trust_proof`. Topic filter is a B-tree narrowing pre-RRF. | `find_proof` |
+| `data/find-inform-chunks.ts` | `findInformChunksByQuestion(question, { limit })` → `InformChunk[]` via hybrid retrieval over `inform_chunk`. | `lookup` |
+| `data/query-trips.ts` | `queryTripCardsByFilter({ region?, durationMin?, durationMax?, budgetBand?, activity?, accommodationStyle?, limit })` → `TripCard[]` via SQL filter over `trip_card`. **No vector retrieval here — structured filter only.** | `find_options` |
+| `data/resolve-image.ts` | `resolveImageById(id)` → `DerivedImage` (the joined imagery record). Used to assemble the public projection's `image` field per C.30b. | All five content tools (each row that has a non-null `image_id` resolves through here at projection time) |
+| `data/find-images-by-keywords.ts` | `findImagesByKeywords(keywords[], { regionSlug?, limit })` → `image[]` via hybrid (pgvector on `image.embedding` + GIN on `image.subject_tags` / `image.region_tags` / `image.mood_tags`). | `illustrate` |
+| `data/find-tags-by-utterance.ts` *(optional this pass)* | `findTagsByUtterance(utterance, { limit })` → `tag[]` via cosine over the 79-row embedded `ntag` taxonomy. Useful inside `find_inspiring` and `find_proof` when the input is too vague to query content directly; defer until the simpler hybrid path proves insufficient. | Internal, not advertised. Skip unless a handler genuinely needs it. |
+| `data/embed-query.ts` | `embedTextForSearch(text)` → `number[]` (length 1024) — Voyage-3 single-text embedding call. Caches identical inputs in-process for the connector lifetime (cheap; visitor utterances repeat within a session). | All vector retrieval |
+
+Each primitive enforces:
+- **Input validation** at the boundary (Zod parse).
+- **SQL parameterisation** — never string-interpolate visitor input into SQL. `pg`-driver `$1`-style throughout.
+- **Output validation** — every row run through the `*Schema` (full, not public) before returning.
+- **Single SQL call where possible.** Hybrid retrieval should ideally be a CTE-based single query (`WITH vec_ranked AS (… ORDER BY embedding <=> $1 LIMIT 50), text_ranked AS (… ORDER BY ts_rank(...) LIMIT 50) SELECT … FROM rrf(vec_ranked, text_ranked) LIMIT $limit`). Two roundtrips (one for vector, one for text) is fine if cleaner; revisit only if latency budget pinches.
+
+### `product/connector/src/tools/` — the eight handlers
+
+One file per tool. Each exports a single `handle<ToolName>(input: <InputType>, deps: HandlerDeps): Promise<<OutputType>>` function. `HandlerDeps` is a typed bag: `{ pool, embedQueryFn, observability }` etc. — injected at registration time so unit tests can swap.
+
+**The eight files:**
+
+| File | Sketch (≤80 lines target) |
+|---|---|
+| `tools/find_inspiring.ts` | (1) Validate `FindInspiringInputSchema`. (2) Call `findInspirePassagesByText(query, { region, mood, limit })`. (3) For each row with a non-null `image_id`, hydrate `DerivedImage` via `resolveImageById`. (4) Project to `InspirePassagePublicSchema`. (5) Return `{ passages, count }`. |
+| `tools/find_someone_who.ts` | (1) Validate `FindSomeoneWhoInputSchema`. (2) Call `findCustomerStoriesByPersonaSignal(signal, { region, limit })` — single primitive, persona-shaped match per C.30. (3) Resolve images. (4) Project to `CustomerStoryPublicSchema`. (5) Return `{ stories, count }`. |
+| `tools/find_proof.ts` | (1) Validate `FindProofInputSchema`. (2) Call `findTrustProofsByConcern(concern, { topic, limit })`. (3) Project to `TrustProofPublicSchema` (no image companion — Reassure rows don't carry imagery in C.t2's contract). (4) Return `{ proofs, count }`. |
+| `tools/lookup.ts` | (1) Validate `LookupInputSchema`. (2) Call `findInformChunksByQuestion(question, { limit })`. (3) Project to `InformChunkPublicSchema`. (4) Return `{ chunks, count }`. |
+| `tools/find_options.ts` | (1) Validate `FindOptionsInputSchema`. (2) Call `queryTripCardsByFilter({ ...filters, limit })` — pure SQL, no vector retrieval. (3) Hydrate `DerivedImage` via `resolveImageById`. (4) Project to `TripCardPublicSchema`. (5) Return `{ cards, count }`. **TripCard internals are still settling per C.t2's "Out of scope" — this handler reads whatever `trip_card` columns C.t3a populated; no defensive fallback for missing data, just typed-failure if a row doesn't pass the schema.** |
+| `tools/illustrate.ts` | (1) Validate `IllustrateInputSchema`. (2) Call `findImagesByKeywords(keywords, { regionSlug, limit: count ?? 4 })`. (3) Map to `IllustrateOutputSchema`. (4) Return. **Graceful degradation against incomplete C.t6 coverage** — see §"`illustrate` and the C.t6 dependency". |
+| `tools/handoff.ts` | (1) Validate `HandoffInputSchema`. (2) Generate a `widgetToken` (`crypto.randomUUID()`). (3) Return `{ status: 'widget_triggered', widgetToken }`. **No durable side-effect.** The widget consumes the token + the input args via the assistant-ui tool-call lifecycle; submission is a separate HTTP route per E.13. |
+| `tools/handoff_submit.ts` | (1) Validate `HandoffSubmitInputSchema`. (2) **Thin wrapper** — call `submitHandoff()` from `@swoop/connector/src/handoff/submit.ts`. (3) Map the result to `HandoffSubmitOutputSchema`. **See §"`handoff_submit` boundary" — Sonnet should not invoke this; the widget POSTs to `/handoff/submit` directly. The MCP surface exists for symmetry/future-proofing.** |
+
+### `product/connector/src/tools/index.ts` — registration boot path
+
+Single module that:
+1. **Reads each tool's `cms/prompts/tools/<tool>/description.md` once at startup** — paths resolved via the connector's CMS-root config (mirrors B.t1a's `SYSTEM_PROMPT_DIR` pattern; new env key `CMS_ROOT` or similar lands in C.t1's config schema). Caches the contents in-process for the connector lifetime. **Fails fast on missing description.md** for any of the five intent-named tools — one of those files missing means the contract Sonnet was authored against is drifting from runtime, and silent degradation is the worst possible outcome.
+2. **Loads `illustrate` / `handoff` / `handoff_submit` description.md files if present**; falls back to the short `TOOL_DESCRIPTIONS` runtime label if not (these three are utility-shaped and were already advertised by the PoC; degradation is acceptable here, unlike the five content tools).
+3. **Registers each handler** with the connector's MCP server (the registration shim lands in C.t1) — passes the rich loaded markdown as the description string, the input/output Zod schemas, and the handler function.
+4. **Wires the shared `HandlerDeps`** (pool, `embedTextForSearch`, observability sink) once and partial-applies it into each handler before registration.
+
+### Tool description load contract — clarifying C.34
+
+Per decision C.34, prose lives in markdown; the runtime loads it. Three load-time questions land here:
+
+| Question | This task's answer |
+|---|---|
+| **Cache or re-read per call?** | **Cache at startup**. Tool descriptions are static within a process lifetime; re-reading on every tool call is unnecessary I/O. Hot-reload (`NODE_ENV !== 'production'`) gets the same `withFileTypes` + lexicographic sort treatment as B.t1a's `prompt-loader.ts`, so authors editing markdown locally see changes after the next connector restart. **Pull-through cache is overkill.** |
+| **Failure mode when a description.md is missing?** | **Fail-fast at boot for the five intent-named tools** (`find_inspiring` / `find_someone_who` / `find_proof` / `lookup` / `find_options`); these are contract surfaces. **Fall back to short runtime labels for `illustrate` / `handoff` / `handoff_submit`** (utilities; PoC-style minimal descriptions are sufficient). |
+| **Is the loader generic across `cms/prompts/{system,skills,tools}/`?** | **No** — different load contracts per subdirectory (per G.11). System prompts concatenate; skills are ADK directories; tools are a flat one-file-per-tool read. This task ships its own `tools/<tool>/description.md` reader; doesn't piggyback on the system-prompt loader. |
+
+### Error handling — the shared helper (pre-empts H4)
+
+The 2026-04-30 code-level review flagged H4 — *"4× repeated try/catch in tool handlers; will become 8× when the new surface lands"*. Pre-empt that here.
+
+A single shared utility at `product/connector/src/tools/_handler-runtime.ts` (or `@swoop/common/streaming` if H4's `parseToolResult` cross-cut helper has landed by C.t4 execution time — **check `planning/03-exec-crosscut-common-helpers-fix.md` before authoring**). Shape:
+
+```text
+runHandler<I, O>(
+  toolName: string,
+  inputSchema: ZodSchema<I>,
+  outputSchema: ZodSchema<O>,
+  body: (input: I, deps: HandlerDeps) => Promise<O>,
+): MCPHandler
+```
+
+Behaviour:
+- Validates input against `inputSchema`. On failure → typed `tool_input_invalid` envelope.
+- Times `body()` and emits `tool.invoked` event (F-a) with `{ tool_name, input_shape, output_count, elapsed_ms, ok: true }`.
+- On thrown error inside `body()` → emits `{ ok: false, error_kind }` event, maps to the `{ ok: false, reason }` envelope MCP expects (matching the existing `safeParse()` envelope unwrapper in `widget-shell.tsx` per the 2026-04-24 discovery).
+- Validates output against `outputSchema`. On failure → typed `tool_output_invalid` envelope (this is a Should Never Happen — primitives validate already — but defence-in-depth is cheap).
+
+Each of the eight handlers is a one-liner: `export default runHandler('find_inspiring', FindInspiringInputSchema, FindInspiringOutputSchema, findInspiringBody)`. Eight try/catches collapse to one helper.
+
+**If H4's cross-cut helper has already landed in `@swoop/common`**, this task uses it directly — no parallel implementation. If it hasn't, this task ships a connector-local version with a TODO pointing back to the cross-cut for future consolidation.
+
+### `handoff_submit` boundary — clarifying the wrapper layer
+
+Decision E.13 (2026-04-28) settled that **the widget submits via a discrete HTTP route (`POST /handoff/submit`)**, not via an MCP tool call. So why ship a `handoff_submit` MCP tool at all?
+
+Three reasons it stays in the surface:
+
+1. **Symmetry with the eight-tool advertised contract** — every tool the orchestrator's tool-call lifecycle references has a corresponding MCP registration. Stripping `handoff_submit` from MCP means the assistant-ui's tool-result registry no longer has a registered shape to validate the success-marker against.
+2. **Future-proofing for an MCP-fronted submission path** — if the widget ever needs to flow through MCP rather than a discrete HTTP call (e.g. a future hosted-MCP architecture where the widget runs in a sandbox without HTTP-fetch privileges), the schema and handler are already in place.
+3. **The handler is genuinely thin** — three lines of code wrapping `submitHandoff()`. The cost of having it is essentially zero.
+
+**What this means for C.t4:** ship the handler as a thin wrapper. Document explicitly (in code comment + this plan) that **Sonnet should not invoke `handoff_submit`** — the widget owns the submission path. The MCP registration carries the description string `"Internal: called by the lead-capture widget when the visitor submits contact details + tier-2 consent. Not invoked by the model directly."` (already in `TOOL_DESCRIPTIONS` per C.t2; no `cms/prompts/tools/handoff_submit/description.md` needed since it's not a Sonnet-facing tool).
+
+If the registration test reveals Sonnet *does* try to invoke it, we add a CLAUDE-side gate at orchestrator-side tool-filtering — out of scope for this task; downstream of B.t3a if it manifests.
+
+### `illustrate` and the C.t6 dependency
+
+C.t6 (image annotation pipeline) populates `image.embedding`, `image.subject_tags`, `image.mood_tags`, `image.region_tags`, and `image.description` for the ~6.3K images that don't already have an `image.description` upstream (per the 2026-04-29 discovery — 47.5% of images already carry source-side descriptions, cutting C.t6's actual workload in half).
+
+C.t4 should be implementable **before C.t6 completes its full-catalogue run**. Strategy:
+
+- **Handler ships against whatever's annotated.** `findImagesByKeywords()` runs the hybrid retrieval over `image.embedding` + GIN-on-tag-arrays. Where annotation is absent, those rows simply don't match keyword embeddings and won't surface. No defensive fallback in the handler; the data layer is the source of truth.
+- **Pre-M1 starter sample** — per the Tier 2 plan §2.7, ~50 representative images get annotated pre-M1 to power the vertical slice's `illustrate` responses. C.t4 verifies against that starter sample (smoke test: `illustrate({ keywords: ['torres del paine'] })` returns ≥1 image).
+- **Full-catalogue run is a C.t6 milestone** — when C.t6 completes, `illustrate` quality silently improves with no handler changes.
+
+If C.t6 hasn't run *at all* by C.t4 execution time (no annotations, no embeddings on `image`), the handler still ships and integration tests skip with a clear `xtest` marker. Don't gate C.t4 closure on C.t6.
+
+---
+
+## Verification
+
+Task is done when:
+
+1. `cd product && npm run typecheck` is green across the workspace.
+2. `cd product && npm run lint` is green (pre-existing 34-problem baseline noted in C.t2 closure tolerated; this task adds zero new lint problems).
+3. `cd product && npm test --workspace @swoop/connector` is green — the 46 existing tests pass, plus ~10–15 new integration tests for the eight handlers.
+4. **Per-tool integration test** against a populated `puma_dev` (preconditions: C.t3 + C.t3a have run): each of the five conversational tools returns Zod-valid output for a representative input. Specifically:
+    - `find_inspiring({ query: "torres del paine in autumn" })` returns ≥1 InspirePassagePublic.
+    - `find_someone_who({ signal: "solo female traveller in her 40s" })` returns ≥1 CustomerStoryPublic.
+    - `find_proof({ concern: "is Swoop legitimate?" })` returns ≥1 TrustProofPublic.
+    - `lookup({ question: "how long is the W trek?" })` returns ≥1 InformChunkPublic.
+    - `find_options({ region: "patagonia", durationMax: 10 })` returns ≥1 TripCardPublic (or `count: 0` with explanation if `trip_card` isn't populated yet — flag it, don't fail it).
+    - `illustrate({ keywords: ["glacier"] })` returns ≥1 image (pre-M1 starter sample dependency — see §"`illustrate` and the C.t6 dependency").
+    - `handoff({ verdict: "qualified", reasonCode: "x", conversationSummary: "y", motivationAnchor: "z" })` returns `{ status: "widget_triggered", widgetToken: <uuid> }`.
+    - `handoff_submit(<valid payload>)` writes a record under `var/handoffs/` (verifying the `submitHandoff` wrap), returns `{ status: "accepted", handoffId: <uuid> }`.
+5. **Description-load contract test**: connector boot loads each of the five conversational tools' `description.md` into the registered description string; **fails fast at boot** if any of those files is missing (test verifies the failure mode). `illustrate` / `handoff` / `handoff_submit` boot succeeds either way.
+6. **End-to-end smoke test**: a real Sonnet turn through the orchestrator (`product/orchestrator`) selects one of the five intent-named tools given a representative visitor utterance ("Tell me about doing the W trek alone"), receives the connector's response, and weaves it into a final assistant message. **This is the load-bearing verification** — it's what makes the eight-tool surface "real" for downstream B.t3a / D.t9 work. Run manually against the dev orchestrator + connector via the existing mock-host harness; capture a screenshot or transcript fragment in the execution log.
+7. Decision-log entries added in `planning/decisions.md` for any C.t4-emergent calls (likely candidates: `ef_search` runtime knob if not default; RRF constant `k=60` standard; description-load failure-mode codification per §"Tool description load contract"; `handoff_submit`-not-invokable-by-Sonnet codification).
+8. Execution log section appended to this Tier 3 plan summarising what landed, what was deferred, what surfaced for downstream tasks (B.t3a + D.t9 specifically).
+
+---
+
+## Sub-step ordering (recommended sequence for a single execution agent)
+
+1. **Read the inputs end-to-end.** Including the chunk-C ★ section. Especially the chunk-C ★ section.
+2. **Confirm preconditions.** `puma_dev` is populated. Run a quick `\dt` + `SELECT count(*) FROM inspire_passage` etc. to sanity-check that C.t3 + C.t3a actually shipped before authoring against their output.
+3. **Author the data primitive layer first.** Start with `embedTextForSearch` + `hybrid-search.ts` (the RRF helper) since every content tool depends on them. Then `find-inspire-passages.ts`. Test it standalone against `puma_dev` with a `node --eval`-style smoke. Only once that's proven correct, fan out to the other primitives.
+4. **Author the shared `runHandler` helper** (or import the cross-cut helper if it's landed). This is the unit that prevents the 8x try/catch repetition. Get it right once.
+5. **Author handlers in dependency order**: `find_inspiring` first (it exercises the most plumbing — text + region + image hydration + RRF). Then `lookup` (similar shape, simpler). Then `find_someone_who` (different retrieval — persona-only, no hybrid). Then `find_proof`. Then `find_options` (no vector retrieval; SQL filter only). Then `illustrate`. Then `handoff` (passthrough). Then `handoff_submit` (thin wrapper).
+6. **Author the registration boot path** + the description-load contract. Wire it into C.t1's connector boot. Verify the fail-fast behaviour with a manual missing-file simulation.
+7. **Write integration tests** per tool. Run against `puma_dev`. Iterate on SQL queries until each returns sensible results for the representative inputs in §Verification.
+8. **End-to-end smoke** — boot orchestrator + connector, run a real Sonnet turn through the mock-host. Capture transcript.
+9. **Land decisions** in `decisions.md` for any C.t4-emergent calls.
+10. **Append the execution log** to this plan.
+11. **Run typecheck + lint + workspace tests** from `product/`. All green before stopping.
+
+---
+
+## Open questions
+
+(For HITL review — these are settled-as-recommendations but worth Al's eye before execution.)
+
+### 1. `illustrate` — implementable in C.t4 with placeholders, or hard-blocked on C.t6?
+
+**Recommendation**: implementable in C.t4 with whatever annotation coverage exists at execution time. Pre-M1 starter sample (~50 images) is enough for the integration test to pass. Full-catalogue annotation completes via C.t6 in parallel; quality silently improves post-C.6 with no handler changes.
+
+**Open consideration**: should the handler emit a `coverage_warning` flag in the output when fewer than `count` results are returned? Argues for transparency; argues against as schema noise. **HITL ask**: leave the schema alone, log the gap as an observability event, surface on the F-a dashboard once it exists.
+
+### 2. `handoff_submit` — keep as MCP tool, or strip entirely?
+
+**Recommendation**: **keep**, per §"`handoff_submit` boundary" above. Three reasons (symmetry / future-proof / near-zero cost). Document that Sonnet should not invoke it; gate at orchestrator-side tool-filtering only if it manifests as a real misbehaviour.
+
+**Open consideration**: an alternative is to register it under MCP but with a description that explicitly says *"DO NOT INVOKE — for widget callbacks only"* + an orchestrator-side filter that hides it from Sonnet's tool selection prompt. **HITL ask**: prefer the simpler path (keep + comment + observe) until/unless Sonnet misbehaves with it.
+
+### 3. Description-load failure mode — fail-fast vs degrade-gracefully?
+
+**Recommendation**: **fail-fast for the five conversational tools** (contract drift = silent quality regression — worst possible outcome); **degrade gracefully for the three utilities** (`illustrate`/`handoff`/`handoff_submit`). Per §"Tool description load contract".
+
+**Open consideration**: should there be a startup banner in connector logs listing every loaded description path + first 60 chars? Argues for ops visibility (does the deployed connector have the description Al just edited?). Trivial cost. **HITL ask**: yes, log it once at boot.
+
+### 4. RRF constant + `ef_search` — defaults or tuned?
+
+**Recommendation**: **package defaults at C.t4** — RRF `k=60` (standard literature default), pgvector HNSW `ef_search` left at install default (`hnsw.ef_search = 40`). No tuning at this stage; visit at C.t8 / post-launch when real query volume reveals the latency/recall envelope.
+
+**Open consideration**: should `ef_search` be set per-query via `SET LOCAL hnsw.ef_search = N` for tools that want recall over latency (`find_someone_who` argues for recall — small corpus, semantic match matters more than millis)? Defer to C.t8.
+
+### 5. Per-handler observability — separate event kind per tool, or one shared `tool.invoked`?
+
+**Recommendation**: **one shared `tool.invoked` event with `tool_name` discriminator**. F-a's existing schema already supports it; eight new event kinds is dilution.
+
+### 6. `handoff` widgetToken lifecycle — store-side, or stateless?
+
+**Recommendation**: **stateless for M1**. The widget echoes the token back via the assistant-ui tool-result lifecycle; no server-side validation needed because the submission path validates against session id + tier-1 consent regardless. Token is a debugging breadcrumb, not an auth surface.
+
+**HITL ask**: confirm. Adding a server-side store would mean a small Redis/Postgres write per `handoff` call — cheap but unnecessary if the security model doesn't require it.
+
+### 7. `find_options` — defensive against missing `trip_card` rows?
+
+**Recommendation**: **no defence**. Per C.t2 §"Out of scope", trip-side internals are still settling. `trip_card` is whatever C.t3a populates; if C.t3a hasn't fully populated the column set yet, the handler returns empty rather than synthesising data. This is correct behaviour — don't paper over a data integrity problem in handler code.
+
+**Open consideration**: should the integration test be `xtest`'d when `trip_card` is empty? Yes — flag the empty state, don't fail the suite.
+
+---
+
+## Risks
+
+These are the things most likely to bite during execution. Pre-empt where possible; flag the rest for HITL.
+
+### R1. Hybrid retrieval SQL is more nuanced than it looks
+RRF over pgvector + tsvector is well-trodden but easy to get subtly wrong (rank ties, score normalisation, `LIMIT` interaction with subquery selection). The first cut may need iteration. **Mitigation**: start with the simplest possible SQL (CTE union all + RRF score in outer SELECT); compare results against a manual `<=>` query and a manual `ts_rank` query; only optimise once correctness is proven on `puma_dev`.
+
+### R2. C.t3a's persona-summary prose may be too sparse for cosine matching to find good Mirror matches
+Per the 2026-04-30 customerreview corpus shape discovery, ~80% of rows are short snippets. The Phase 1 inspection landed the by-reviewer aggregation strategy for C.t3a's persona generation; if that hasn't shipped (or shipped but produced thin summaries), `find_someone_who`'s integration test may produce results that "match" by embedding but feel off-the-mark. **Mitigation**: don't let this block C.t4 closure. The handler is correct against whatever C.t3a produced. If matching quality is poor, that's a C.t3a iteration, not a handler iteration.
+
+### R3. `find_options` may have nothing to query against
+Trip-side ingestion is the most-deferred surface in chunk C (C.t2 explicitly flags it). If `trip_card` is empty or sparse at C.t4 execution, the handler ships against the schema but the integration test is effectively xtest'd. **Mitigation**: ship + flag. Trip-side population is a separate concern; downstream consumers (B.t3a, D.t9, the eventual M1 demo) need the handler interface, even if the data is thin at first integration.
+
+### R4. The `runHandler` helper / cross-cut H4 may collide
+If `planning/03-exec-crosscut-common-helpers-fix.md` has landed an H4 helper between this plan's authoring and execution, the connector-local version will conflict. **Mitigation**: pre-authoring step in §"Sub-step ordering" item 4 — *check the cross-cut*. Always.
+
+### R5. Description-load fail-fast could break dev workflows
+If Al edits `description.md` in a way that empties a file (e.g. an in-progress save), connector boot fails until the file is fixed. Fail-fast is correct in production; might frustrate locally. **Mitigation**: `NODE_ENV !== 'production'` could downgrade fail-fast to warn-and-fall-back. **HITL ask**: probably not worth the complexity; one-character-empty saves are rare and the error is loud + obvious.
+
+### R6. Sonnet may not pick the right tool from the markdown descriptions, even with C.t2's voice work
+The whole premise of the no-composer architecture is that tool descriptions encode the conversational moment well enough that Sonnet selects accurately. C.t2's first pass is "production first-pass — ship-ready as-is", not perfection. The end-to-end smoke test (Verification §6) is where this either works or surfaces a real gap. **Mitigation**: if smoke reveals systematic mis-selection (e.g. Sonnet always reaches for `lookup` when the visitor's energy is exploratory and `find_inspiring` would be right), that's a G.t1/G.t5 description-tuning iteration, not a handler iteration. Plan accordingly — surface the gap in the execution log; route to G.
+
+### R7. The Voyage-3 endpoint may be slow / rate-limited
+Single-call latency for Voyage-3 is typically 100–300ms. Five conversational tools each making one embedding call adds latency to every turn. Caching `embedTextForSearch` for identical inputs within a process lifetime (per primitive list above) helps for repeat queries within a session; doesn't help cold turns. **Mitigation**: monitor; optimise post-launch. Don't pre-optimise here.
+
+### R8. The connector's `pg` pool may not be sized for parallel primitive calls
+Some handlers will run primitives in parallel (e.g. `find_inspiring` may parallelise the embedding call + the region-tag resolution). Pool size from C.t1 needs to accommodate this. **Mitigation**: confirm pool config in C.t1's plan; flag if undersized. Default Postgres `max_connections=100`; pool of 10 is usually plenty for one connector.
+
+---
+
+## Coordination
+
+- **C.t1** — connector skeleton must have shipped: pool, MCP-HTTP boot, env config (including `CMS_ROOT` for the description loader), connector entrypoint. **C.t4 cannot start until C.t1 closes.**
+- **C.t2** — contract layer (the eight tool I/O Zod schemas, the five derived public projections, the production-quality `description.md` files). Already shipped 2026-04-30. **C.t4 consumes; never edits.**
+- **C.t3** — populates domain tables in `puma_dev`. **C.t4 cannot pass integration tests until C.t3 closes.**
+- **C.t3a** — populates derived tables (embeddings + persona summaries + classifier outputs). **C.t4 cannot pass integration tests until C.t3a closes** (or the verification step accepts xtest'd cases on partial population).
+- **C.t6** — image annotation pipeline. **Loose coupling**: `illustrate` ships against whatever annotation coverage exists; quality silently improves post-C.t6.
+- **B.t3a** — *downstream*. Once C.t4 closes, B.t3a rewrites `product/orchestrator/src/connector/tools.ts` to register ADK FunctionTool wrappers for the eight intent-named tools and drops the deprecated `Search*`/`GetDetail*`. Owned by chunk B.
+- **D.t9** — *downstream*. Once C.t4 closes, D.t9 adds widgets in `product/ui/src/widgets/*` for the five new `*PublicSchema` outputs. Owned by chunk D.
+- **H4 cross-cut** (`runHandler` / `parseToolResult` shared helper) — *check at execution time*. If landed in `@swoop/common`, consume; if not, ship a connector-local version with a TODO.
+- **G.t1 / G.t5** — *post-execution*. If the end-to-end smoke reveals Sonnet mis-selecting tools, surface for G iteration; don't block C.t4 closure on it.
+
+---
+
+## Execution log
+
+*(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
+
