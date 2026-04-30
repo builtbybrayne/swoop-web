@@ -20,6 +20,8 @@
  * need without re-parsing the SSE.
  */
 
+import { parseSseFrames } from '@swoop/common';
+
 const DEFAULT_BASE_URL = 'http://localhost:8080';
 
 export interface OrchestratorSession {
@@ -178,15 +180,16 @@ export class OrchestratorClient {
 //   `data: <MessagePart-json>\n\n`  for each part
 //   `event: done\ndata: {}\n\n`     when the turn finishes cleanly
 //   `event: error\ndata: {...}\n\n` for mid-stream faults
+//
+// Frame parsing is delegated to `@swoop/common`'s `parseSseFrames`
+// (canonicalised by H5, planning/03-exec-crosscut-shared-sse-parser-fix.md).
+// This loop keeps the harness-specific aggregation: utter-text concatenation,
+// per-part-type counts, tool-call extraction.
 // ---------------------------------------------------------------------------
 
 async function consumeSseStream(
   body: ReadableStream<Uint8Array>,
 ): Promise<AggregatedResponse> {
-  const decoder = new TextDecoder();
-  const reader = body.getReader();
-
-  let buffer = '';
   let utterText = '';
   let utterPartCount = 0;
   let fyiPartCount = 0;
@@ -195,76 +198,63 @@ async function consumeSseStream(
   const rawParts: unknown[] = [];
   let errored: string | null = null;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    let sep = buffer.indexOf('\n\n');
-    while (sep !== -1) {
-      const frame = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      sep = buffer.indexOf('\n\n');
-
-      const event = parseSseFrame(frame);
-      if (!event) continue;
-
-      if (event.event === 'done') {
-        // Clean end of turn.
-        return {
-          utterText,
-          toolCalls,
-          structure: {
-            utterPartCount,
-            fyiPartCount,
-            reasoningPartCount,
-            toolCallCount: toolCalls.length,
-          },
-          rawParts,
-        };
-      }
-      if (event.event === 'error') {
-        errored = event.data;
-        break;
-      }
-
-      // Default: `data:` line is a MessagePart JSON.
-      try {
-        const part = JSON.parse(event.data) as { type?: unknown };
-        rawParts.push(part);
-        if (
-          typeof part === 'object' &&
-          part !== null &&
-          typeof (part as { type?: unknown }).type === 'string'
-        ) {
-          const typed = part as {
-            type: string;
-            text?: unknown;
-            toolName?: unknown;
-            input?: unknown;
-          };
-          if (typed.type === 'text' && typeof typed.text === 'string') {
-            utterText += typed.text;
-            utterPartCount += 1;
-          } else if (typed.type === 'data-fyi') {
-            fyiPartCount += 1;
-          } else if (typed.type === 'reasoning') {
-            // Should never happen — B.t4 invariant. Counted so the
-            // `response_format` assertion can flag it loudly.
-            reasoningPartCount += 1;
-          } else if (typed.type === 'tool-call') {
-            toolCalls.push({
-              toolName: typeof typed.toolName === 'string' ? typed.toolName : '<unknown>',
-              input: typed.input,
-            });
-          }
-        }
-      } catch {
-        // Malformed JSON on the wire — ignore.
-      }
+  for await (const frame of parseSseFrames(body)) {
+    if (frame.event === 'done') {
+      // Clean end of turn.
+      return {
+        utterText,
+        toolCalls,
+        structure: {
+          utterPartCount,
+          fyiPartCount,
+          reasoningPartCount,
+          toolCallCount: toolCalls.length,
+        },
+        rawParts,
+      };
+    }
+    if (frame.event === 'error') {
+      errored = frame.data;
+      break;
     }
 
-    if (errored) break;
+    // Default: `data:` line is a MessagePart JSON. (Frames emitted by the
+    // canonical parser preserve null for the absent `event:` field; the
+    // orchestrator only emits `event:` for `done`/`error`.)
+    if (frame.data.length === 0) continue;
+    try {
+      const part = JSON.parse(frame.data) as { type?: unknown };
+      rawParts.push(part);
+      if (
+        typeof part === 'object' &&
+        part !== null &&
+        typeof (part as { type?: unknown }).type === 'string'
+      ) {
+        const typed = part as {
+          type: string;
+          text?: unknown;
+          toolName?: unknown;
+          input?: unknown;
+        };
+        if (typed.type === 'text' && typeof typed.text === 'string') {
+          utterText += typed.text;
+          utterPartCount += 1;
+        } else if (typed.type === 'data-fyi') {
+          fyiPartCount += 1;
+        } else if (typed.type === 'reasoning') {
+          // Should never happen — B.t4 invariant. Counted so the
+          // `response_format` assertion can flag it loudly.
+          reasoningPartCount += 1;
+        } else if (typed.type === 'tool-call') {
+          toolCalls.push({
+            toolName: typeof typed.toolName === 'string' ? typed.toolName : '<unknown>',
+            input: typed.input,
+          });
+        }
+      }
+    } catch {
+      // Malformed JSON on the wire — ignore.
+    }
   }
 
   if (errored) {
@@ -283,21 +273,6 @@ async function consumeSseStream(
     },
     rawParts,
   };
-}
-
-function parseSseFrame(frame: string): { event: string; data: string } | null {
-  const lines = frame.split('\n');
-  let eventName = 'message';
-  let data = '';
-  for (const line of lines) {
-    if (line.startsWith('event:')) {
-      eventName = line.slice('event:'.length).trim();
-    } else if (line.startsWith('data:')) {
-      data += line.slice('data:'.length).trim();
-    }
-  }
-  if (data.length === 0 && eventName === 'message') return null;
-  return { event: eventName, data };
 }
 
 async function safeBody(res: Response): Promise<string> {

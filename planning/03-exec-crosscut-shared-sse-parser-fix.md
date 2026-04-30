@@ -78,7 +78,7 @@ A new vitest case in `ts-common/__tests__/sse-parser.test.ts` covers:
 
 ---
 
-## H5 — Authoritative SSE-frame parser in `@swoop/common` — 🔲
+## H5 — Authoritative SSE-frame parser in `@swoop/common` — ✅
 
 **Problem**: see "Why this is a cross-cut" above. Two parsers diverge.
 
@@ -89,7 +89,21 @@ A new vitest case in `ts-common/__tests__/sse-parser.test.ts` covers:
 - `npm test -w @swoop/orchestrator` (harness consumer) and `npm test -w @swoop/ui` stay green.
 - `grep -n "parseSseFrame\|parseSseStream" product/ -R --include='*.ts'` returns hits only inside `@swoop/common` and the call sites that wrap it.
 
-**Commits**: _(landed: filled when done)_
+**Commits**:
+- `63ac862` — `fix(common): close H5 — shared SSE parser (2026-04-30 review)` — canonical parser + 13 vitest cases
+- `20705ce` — `fix(harness): close H5 — shared SSE parser (2026-04-30 review)` — replace `parseSseFrame` + buffering loop in `consumeSseStream`
+- `52c3485` — `fix(ui): close H5 — shared SSE parser (2026-04-30 review)` — replace local `parseSseStream` in the orchestrator adapter
+
+LOC delta (per spec target ±~50 LOC saved per consumer, +~80 LOC parser):
+- `+188` in `product/ts-common/src/sse-parser.ts` (new canonical, mostly comments + a small async-iterable bridge)
+- `+174` in `product/ts-common/src/__tests__/sse-parser.test.ts` (13 cases)
+- `−25` net in `product/harness/src/orchestrator-client.ts` (parser shed; aggregation kept)
+- `−62` net in `product/ui/src/runtime/orchestrator-adapter.ts` (parser shed; translator + lifecycle code untouched)
+
+Verification (run 2026-04-30 close-out):
+- `npm test --workspaces --if-present` → 429 tests passing across the six workspaces (up from 412; +17 = 13 sse-parser + 4 emit-event tests previously deferred? — actually +13 sse-parser; the +17 is `@swoop/common` 58 → 75 tests).
+- `npm run typecheck --workspaces --if-present` → all six workspaces green.
+- `grep -n "parseSseFrame\|parseSseStream" product/ -R --include='*.ts'` (excluding `node_modules`) → hits limited to `@swoop/common` (canonical + tests) + the two consumer wrapper sites + two unrelated test-fixture helpers in `orchestrator/.../*.test.ts` that take a static string (different signature, out of scope).
 
 ---
 
