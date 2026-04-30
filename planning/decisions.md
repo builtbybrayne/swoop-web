@@ -170,7 +170,7 @@ The E.t2 task in the planning doc described "Firestore default + a `ts-common` i
 
 **Rationale**: The `customer_story` table (Mirror job, conditional on C.26) needs a way to remember *who* each story is about so the visitor's persona signal can be matched to similar customers. Two shapes were considered: structured columns (`travel_style`, `age_band`, `motivation_tags`, …) vs JSONB blob. Both lock the persona taxonomy to schema time, before we've actually read enough customer reviews to know what dimensions matter.
 
-The chosen shape: **`persona_summary TEXT` + `persona_embedding vector(1536)`**. At ETL time, the Haiku classifier writes a 1–3 sentence natural-language description per row (e.g. *"Sarah, mid-40s, solo traveller, post-divorce reset trip. Intermediate hiker, drawn to wildlife photography and accessible glaciers. Wanted quiet trails over W-trail crowds."*). That text gets embedded. At query time the Mirror tool embeds the visitor's signal and finds matching customers via cosine similarity on the embedding.
+The chosen shape: **`persona_summary TEXT` + `persona_embedding vector(1024)`** (Voyage-3 dimensionality per C.18). At ETL time, the Haiku classifier writes a 1–3 sentence natural-language description per row (e.g. *"Sarah, mid-40s, solo traveller, post-divorce reset trip. Intermediate hiker, drawn to wildlife photography and accessible glaciers. Wanted quiet trails over W-trail crowds."*). That text gets embedded. At query time the Mirror tool embeds the visitor's signal and finds matching customers via cosine similarity on the embedding.
 
 Why this is right for Puma:
 - We already run Haiku at ETL (per C.24's "cheap LLM at ETL, embeddings + Sonnet at runtime"). Adding one more classifier prompt is near-zero cost.
@@ -372,7 +372,7 @@ Vertex genuinely wins for million-doc corpora, multimodal search, or out-of-the-
 - **Cloud SQL for Postgres** in Swoop's "AI Pat Chat" GCP project for prod (small instance: `db-f1-micro` or `db-g1-small`).
 - **Postgres 18 in Docker Compose** locally — same image, identical behaviour.
 - **Schema migrations**: `node-pg-migrate` (plain-SQL, lean; Prisma rejected as too heavy for our shape — sub-decision worth flagging if it bites us).
-- **Embedding model**: pending lock — leaning Voyage-3 per Anthropic's recommended pairing; swap cost is one column re-population.
+- **Embedding model**: **locked — Voyage-3 (`voyage-3`, 1024-dimensional) via the Voyage AI SaaS endpoint** (Al confirmed 2026-04-29, after C.t2 review). Anthropic's recommended pairing; chosen over OpenAI `text-embedding-3-small` (1536d). All `vector(...)` columns and the `EmbeddingSchema` Zod shape are sized 1024 to match. **Swap cost**: pgvector does not support `ALTER COLUMN TYPE` for vector width, so swapping providers means dropping + recreating every embedding column AND rebuilding all 9 HNSW indexes (`tag.embedding`, `image.embedding`, `faqitem.embedding`, `blog_chunk.embedding`, `inspire_passage.embedding`, `customer_story.persona_embedding`, `trust_proof.embedding`, `inform_chunk.embedding`, `trip_card.embedding`). Pre-launch (now) that's cheap because there's nothing to lose; post-launch it's a re-embed-everything migration. Lock is therefore "treat as load-bearing" — don't swap on a whim.
 
 **When we'd revisit Vertex** (named triggers, not vibes):
 - Document corpus grows past ~100K (current trajectory says no, even with Antarctica + Arctic expansion — agent reasoning scales, not document count).

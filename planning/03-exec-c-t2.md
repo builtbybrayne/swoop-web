@@ -202,7 +202,7 @@ Column-list-only sketches; full DDL written into `002_domain_tables.sql`.
 **`tag`** (derived from `ntag`):
 - `id` (PK, mirror of `ntag.id`)
 - `title`, `alias`, `type` (one of: `interest`, `area`, `activity`, `trip-type`, `style`)
-- `embedding` (vector(1536) — populated by C.t3a)
+- `embedding` (vector(1024) — populated by C.t3a)
 - `is_active` (filter `is_active=1` at ingest)
 
 **`image`** (per Al's 2026-04-29 spec):
@@ -211,7 +211,7 @@ Column-list-only sketches; full DDL written into `002_domain_tables.sql`.
 - `alt_text` (TEXT — from source if present, else populated by C.t6 annotation)
 - `description` (TEXT — populated by C.t6)
 - `tags` (TEXT[] — annotation tags from C.t6)
-- `embedding` (vector(1536) — populated by C.t6)
+- `embedding` (vector(1024) — populated by C.t6)
 - `subject_tags`, `mood_tags`, `region_tags` (denormalised arrays for filter narrowing)
 - `width`, `height`, `original_filename` (kept for debugging only; not exposed)
 
@@ -256,7 +256,7 @@ Column-list-only sketches; full DDL written into `002_domain_tables.sql`.
 - `region` (TEXT — derived from `ntag.area` overlap, denormalised for fast filter)
 - `mood` (TEXT — optional, derived from blog tags or page subheading where extractable)
 - `image_id` (FK to image; the hero/illustrative image to pair with this passage)
-- `embedding` (vector(1536))
+- `embedding` (vector(1024))
 - `tsv` (tsvector — for hybrid retrieval)
 - `content_hash` (for idempotent re-embedding)
 
@@ -268,7 +268,7 @@ Column-list-only sketches; full DDL written into `002_domain_tables.sql`.
 - `canonical_url` (where applicable; null if redacted)
 - `region` (TEXT — extracted; light filter for "show me solo travellers in Torres del Paine")
 - `persona_summary` (TEXT — Haiku-generated natural-language description of the customer, ~1–3 sentences. Example: *"Sarah, mid-40s, solo traveller, post-divorce reset trip. Intermediate hiker, drawn to wildlife photography and accessible glaciers. Wanted quiet trails over W-trail crowds."* This is what the Mirror tool MATCHES against. Per decision C.30.)
-- `persona_embedding` (vector(1536) — embedding of `persona_summary`. Cosine similarity against this is how `find_someone_who` finds matching customers.)
+- `persona_embedding` (vector(1024) — embedding of `persona_summary`. Cosine similarity against this is how `find_someone_who` finds matching customers.)
 - `image_id` (FK; optional)
 - `tsv` (full-text search on `text`, for keyword-matching topics across stories)
 - `content_hash`
@@ -283,7 +283,7 @@ Note: there's no separate `embedding` column for the story text. Mirror's primar
 - `claim` (TEXT — the assertion: "Swoop is a certified B-Corp")
 - `evidence` (TEXT — the supporting prose)
 - `canonical_url`
-- `embedding` (vector(1536))
+- `embedding` (vector(1024))
 - `tsv`
 - `content_hash`
 
@@ -295,7 +295,7 @@ Note: there's no separate `embedding` column for the story text. Mirror's primar
 - `text` (the prose answer)
 - `canonical_url`
 - `topic_tags` (TEXT[] — light categorisation: "transport", "weather", "packing", "money", "visa", etc.)
-- `embedding` (vector(1536))
+- `embedding` (vector(1024))
 - `tsv`
 - `content_hash`
 
@@ -312,7 +312,7 @@ Note: there's no separate `embedding` column for the story text. Mirror's primar
 - `accommodation_style` (TEXT)
 - `activity_tags` (TEXT[] — derived from `ntag.activity`)
 - `canonical_url`
-- `embedding` (vector(1536) — computed from `headline` + `vibe_line` + `description` for `find_options` filtering)
+- `embedding` (vector(1024) — computed from `headline` + `vibe_line` + `description` for `find_options` filtering)
 - `tsv`
 
 ### Indexes
@@ -331,7 +331,7 @@ Note: there's no separate `embedding` column for the story text. Mirror's primar
 ## Schema design — `ts-common` Zod
 
 Rules of thumb for Zod authoring at this layer:
-- Mirror Postgres column types closely. `int(11) unsigned` → `z.number().int().nonnegative()`. `vector(1536)` is **not** part of any tool's I/O — embeddings stay server-side.
+- Mirror Postgres column types closely. `int(11) unsigned` → `z.number().int().nonnegative()`. `vector(1024)` is **not** part of any tool's I/O — embeddings stay server-side.
 - Strict object schemas (`.strict()`) where the wire shape is closed; permissive (`.passthrough()`) only when necessary (e.g. fixture round-trip from raw API responses).
 - Every output schema has at least: `id`, `text` or equivalent, `canonical_url`, plus job-specific fields.
 - Never leak debug fields (`source_provenance`, `content_hash`, `embedding`) to tool outputs unless the agent has a use for them — they're internal.
