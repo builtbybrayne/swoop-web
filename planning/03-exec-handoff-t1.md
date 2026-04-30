@@ -271,7 +271,7 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Verification**: `npm test -w @swoop/common` includes a triage-state round-trip case for each verdict.
 
-**Commits**: _(landed: filled below)_
+**Commits**: `14630ebd43b851348e460ab0537d73a97fae2f9e`
 
 **Landed 2026-04-30** — schema-only fix per the addendum's primary spec: added `TriageStateInconclusiveSchema` (mirrors `TriageStateDisqualifiedSchema`) and included it in `TriageStateSchema`'s discriminated union. Fixture coverage added in `__tests__/fixtures.test.ts` as a parameterised triage-state round-trip block — one case per verdict (none, qualified, referred_out, disqualified, inconclusive). `triage-classifier.ts:postureToTriage` deliberately NOT touched: the classifier's prompt has no `inconclusive` posture (the four labels are `leaning_qualified / leaning_backpacker / leaning_low_value / unclear`), so adding a switch arm would be dead code until G.t0 lands the proper triage logic. The schema gap was the load-bearing issue; the persistence path is now safe whenever a future classifier emits the verdict. 421/421 tests green across 6 workspaces.
 
