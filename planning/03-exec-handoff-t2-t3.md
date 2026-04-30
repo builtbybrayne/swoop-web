@@ -169,3 +169,29 @@ What's required for E.t2 to be **production**-done:
 - `product/orchestrator/src/server/handoff-submit.ts` — the route handler.
 - `product/ui/src/runtime/handoff-client.ts` — the UI client helper.
 - `chatgpt_poc/product/mcp-ts/src/lib/mailer.ts` — the PoC original (reference only — moved on from the email-body shape).
+
+---
+
+## 2026-04-30 code-review fixes
+
+Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
+
+### Sec-1 — File-permission discipline on `FsHandoffStore` — 🔲
+
+**Problem**: `connector/src/handoff/store.ts:87` `mkdir(this.dirAbsolutePath, { recursive: true })` uses default umask. `writeFile(tmpPath, JSON.stringify(payload, null, 2))` at `:88` no `mode` — default 0o666 & umask. The directory contains visitor name, email, phone, motivationAnchor and full conversation summary text in cleartext JSON, world-readable on a shared host. GDPR Art. 32 ("appropriate technical measures") would frown.
+
+**Fix shape**: `mkdir(..., { mode: 0o700, recursive: true })` + `writeFile(..., 'utf8')` followed by `fs.chmod(tmpPath, 0o600)` before the rename, OR `writeFile(..., { mode: 0o600 })`. Verify the rename preserves mode bits on the target FS.
+
+**Verification**: store-test asserts `(stat.mode & 0o777) === 0o600` for written files and `0o700` for the dir.
+
+**Commits**: _(landed: filled when done)_
+
+### Test-2 — Mailer `inconclusive` skip-reason untested — 🔲
+
+**Problem**: `connector/src/handoff/mailer.ts:141-143` returns `{status:'skipped', reason:'verdict_inconclusive'}` for the new 4th verdict. `connector/src/handoff/__tests__/mailer.test.ts` has zero `inconclusive` references. A regression that re-routes inconclusive payloads to the qualified inbox — exactly the GDPR-sensitive bug E.t3 was created to prevent — would not be caught.
+
+**Fix shape**: add a mailer test case feeding `SampleHandoffInconclusive` and asserting `result.status === 'skipped' && result.reason === 'verdict_inconclusive'`. Also add a route-handler integration assertion that the wire response carries `emailReason: 'verdict_inconclusive'` for an inconclusive submit.
+
+**Verification**: `npm test -w @swoop/connector` and `npm test -w @swoop/orchestrator` both gain at least one inconclusive-verdict assertion each.
+
+**Commits**: _(landed: filled when done)_

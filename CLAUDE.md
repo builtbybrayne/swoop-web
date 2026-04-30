@@ -28,6 +28,8 @@ New session? Read these four files before touching anything — they're the dura
 - **[gotchas.md](gotchas.md)** — environmental / tooling traps that cost real time (dotenv override, model IDs, stuck Vite modules, etc.).
 - **[next-steps.md](next-steps.md)** — prioritised resume guide with specific files.
 
+Then check the most recent review under **[planning/reviews/](planning/reviews/)** — its checklist names what's in flight from the last sanity check. And `ls planning/03-exec-crosscut-*-fix.md` for any cross-cutting work that may collide with chunk-scoped tasks.
+
 These live at the project root. Keep them current — add entries as new discoveries / gotchas / progress land. Future sessions depend on them.
 
 ## Inbox & questions
@@ -55,14 +57,23 @@ Things Al needs Swoop-side input on before they can be closed. Organised by topi
 
 ## Planning structure
 
-Four tiers at different altitudes. See `planning/01-top-level.md` for full detail.
+Four tiers at different altitudes plus two side-channels (cross-cuts and reviews). See `planning/01-top-level.md` for full detail on the tier system.
 
-| Tier | Where | What |
+| Tier / kind | Where | What |
 |---|---|---|
 | 1 — Top-level | `planning/01-top-level.md` | Intent, JTBDs, themes, roadmap, parallelisation candidates. Principle-led, no component names. |
 | 2 — Implementation (per chunk) | `planning/02-impl-<chunk>.md` | Per roadmap chunk: outcomes, target functionalities, architectural principles, PoC reuse pointers. No code. |
 | 3 — Execution (per task) | `planning/03-exec-<chunk>-<task>.md` | Real components, file paths, interface signatures, verification steps. The brief a single Claude Code agent runs against. |
+| 3 — Cross-cut fix | `planning/03-exec-crosscut-<topic>-fix.md` | Tier 3 plan for review-driven work that genuinely spans chunks (e.g. extending `@swoop/common` with a shared helper used by 4 workspaces). Same shape as a regular Tier 3 plan; named `crosscut` because it has no chunk owner. **Always check these when starting work** — they describe shared-surface changes that may collide with chunk-scoped work. |
 | 4 — Swarm | Not a doc | The parallel/serial Claude Code agent sessions that build from Tier 3 plans. |
+| Review | `planning/reviews/<YYYY-MM-DD>-<topic>.md` | Periodic council-of-experts reviews (planning, code, etc.). Each review's "Recommended next moves" section is the master ledger linking to fix-tracking entries. **Always check the most recent review** before starting work — its checklist tells you what's currently in flight from the last sanity check. |
+
+**Review-driven fixes follow a strict convention** so future agents discover them naturally:
+- Items with a clear chunk home land as a `## YYYY-MM-DD <review-name> fixes` addendum at the bottom of the relevant `03-exec-<chunk>-<task>.md`.
+- Genuinely cross-cut items get their own `03-exec-crosscut-<topic>-fix.md`.
+- The review file's checklist forward-links to every addendum and cross-cut; each addendum/cross-cut back-links to the review.
+
+To find every open review-driven item: `grep "code-review fixes" planning/03-exec-*.md` for addenda + `ls planning/03-exec-crosscut-*-fix.md` for cross-cuts. Both are obvious from filename or grep.
 
 **Archive**: `planning/archive/` holds the pre-reset planning docs from the 20/21 Apr meetings onwards. They're valuable source material but no longer canonical. See `planning/archive/README.md`.
 

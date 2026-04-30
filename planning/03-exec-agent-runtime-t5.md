@@ -115,3 +115,76 @@ Session bootstrap can consume from the warm pool (B.t10). For B.t5, just allocat
 - Warm pool integration is B.t10.
 - CORS config must not be `*` in production; require explicit Swoop-owned origins.
 - Consent PATCH endpoint keeps tier-1 consent changes auditable — log the copy version so we know which consent language the user agreed to.
+
+---
+
+## 2026-04-30 code-review fixes
+
+Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
+
+### R2 — Race condition: `void appendToHistory(...)` writes mutate session concurrently — 🔲 [LATENT BUG]
+
+**Problem**: `chat.ts:213-219` (reasoning sink), `chat.ts:258` (`void persistPart(...)`) — multiple unawaited promises mutate session state concurrently via `store.update(sessionId, s => ({...s, conversationHistory: [...]}))`. Works today by accident: `InMemorySessionStore` happens to serialise via the JS event loop's microtask queue. Will silently break the moment B.t2's custom Postgres `SessionService` (B.22) lands — last-write-wins lost-update bug, history can drop entries, turn indices can collide, reasoning can persist *after* the next user message. The agent-loop tracer flagged this as the highest-confidence latent bug in the codebase.
+
+**Fix shape**: choose one of:
+- (a) **Per-session async mutex** wrapping `store.update`. Cheap, surgical, doesn't change the call sites. New `SessionMutex` map keyed by sessionId; methods acquire/release.
+- (b) **Batch-at-done**: accumulate parts in a turn-local buffer; single `store.update` at `event: done` with the full turn's worth of entries. Loses incremental durability if the orchestrator crashes mid-turn but matches the "B.t2 reasoning persists for agent memory" invariant.
+
+Recommend (a) — surgical, preserves incremental persistence, doesn't bake assumptions about turn boundaries.
+
+**Verification**: integration test that drives 2 concurrent `runAsync` calls on the same session and asserts `conversationHistory.length === expected` (no drops).
+
+**Commits**: _(landed: filled when done)_
+
+### R4 (chat body part) — `/chat` accepts unbounded `message` — 🔲
+
+**Problem**: `chat.ts:81-87` only checks `typeof message === 'string'` + non-empty. `express.json({ limit: '64kb' })` (`server/index.ts:89`) is the only ceiling. A 60kb "user message" lands in event payload sha256 inputs and in `runner.runAsync` history.
+
+**Fix shape**: `.max(8_000)` on `message` field of the new `ChatRequestSchema` (see Theme-A.1 below). Lower `express.json` limit to 16kb after.
+
+**Verification**: route test rejects an over-cap message with 400.
+
+**Commits**: _(landed: filled when done)_
+
+### Theme-A.1 — Replace hand-rolled body validation with Zod schemas — 🔲
+
+**Problem**: three HTTP routes hand-roll body validation instead of using Zod: `consent.ts:49-62`, `chat.ts:73-89`, `session-bootstrap.ts:63-67`. Only `/handoff/submit` Zod-parses (`handoff-submit.ts:64`). Inconsistent posture; UI clients can't typecheck against a shared schema; `entryUrl` reaches event payload + handoff record without URL validation (`session-bootstrap.ts:103,225` security finding #5).
+
+**Fix shape**: define `ChatRequestSchema`, `ConsentRequestSchema`, `SessionBootstrapRequestSchema` in `@swoop/common` (alongside `HandoffSubmitRequestSchema`). All `.strict()`. Each route's handler does `safeParse` + 400 with detail. Drop the typeof guards.
+
+**Verification**: route tests for each endpoint cover (a) happy path, (b) extra field rejected, (c) wrong-type field rejected, (d) over-length field rejected (where applicable).
+
+**Commits**: _(landed: filled when done)_
+
+### Sec-2 — Security headers (helmet) — 🔲
+
+**Problem**: `server/index.ts:84-97` only does `app.disable('x-powered-by')` + CORS. No CSP (especially `frame-ancestors` for the iframe-embedded surface), HSTS, Referrer-Policy, X-Frame-Options. Auditors will flag the absence on a public surface; legal counsel reviewing the compliance bundle will too.
+
+**Fix shape**: `helmet({ contentSecurityPolicy: { directives: { 'frame-ancestors': swoopOrigins, 'default-src': ["'self'"], ... } } })` registered in `buildServer` BEFORE other middleware. `swoopOrigins` derived from `config.CORS_ALLOWED_ORIGINS`. Document the CSP directives in the compliance bundle.
+
+**Verification**: route test asserts `Content-Security-Policy`, `Strict-Transport-Security`, `Referrer-Policy` headers present on every response.
+
+**Commits**: _(landed: filled when done)_
+
+### Test-1 — Integration tests for /chat error paths — 🔲
+
+**Problem**: `chat.ts:166,331-343` writes `event: error` frames with `errorType: triage_classifier_failed` / `chat_turn_failed`. `server/__tests__/server.test.ts:240-295` covers happy-path streaming + reasoning-leak + pre-stream gates only. No test queues a runner that throws mid-stream; no test exercises the `error.raised` event emission. Plus: `server.test.ts:21,65-89` has scaffolding for a "client disconnect aborts the turn" assertion but no `it(...)` block — false sense of coverage.
+
+**Fix shape**: add three integration cases:
+- mid-stream-throw: stub runner emits N parts then throws; assert SSE `event: error` frame; assert `error.raised` event emitted with correct `errorType`; assert no zombie writes.
+- client-disconnect: spawn supertest connection; abort mid-stream; assert `runner.lastAborted() === true`; assert the abort instrumentation actually fires.
+- connector-unreachable: stub MCP client throws on tool call; assert tool-call SSE part has error envelope; assert error.raised emission.
+
+**Verification**: `npm test -w @swoop/orchestrator` adds 3 cases. Existing 132 still pass.
+
+**Commits**: _(landed: filled when done)_
+
+### Sec-3 — `/session` `entryUrl` URL-validation gap — 🔲
+
+**Problem**: `session-bootstrap.ts:63` accepts any string as `entryUrl`. Schema declares `z.string().url().optional()` but the route does its own typeof-string parse and never Zod-parses the body. Arbitrary `javascript:`/`data:` URLs propagate into events (`session-bootstrap.ts:103`) and the handoff record (`handoff-submit.ts:225`).
+
+**Fix shape**: closed automatically by Theme-A.1 — `SessionBootstrapRequestSchema` does `.url()`-validation. Cross-reference here so the closure is traceable.
+
+**Verification**: covered by Theme-A.1 route test.
+
+**Commits**: _(landed alongside Theme-A.1)_

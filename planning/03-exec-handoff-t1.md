@@ -256,3 +256,79 @@ Both green → E.t1 is done.
 ## Handoff
 
 E.t2 consumes this finalised schema + the `HandoffSubmitConsentGate` type-only contract. E.t3 indexes email routing on `verdict` and (for qualified) on `reason.code`. G.t0's HITL output may rename codes — path for that is a `ts-common` PR, CI catches any fixture drift, downstream consumers update their `switch` statements with exhaustive-match support from the compiler.
+
+---
+
+## 2026-04-30 code-review fixes
+
+Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Items below close findings from the 12-expert code-level council. Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
+
+### R1 — `inconclusive` missing from `TriageStateSchema` — 🔲
+
+**Problem**: yesterday's Q5 propagation extended `HandoffVerdictSchema` (`product/ts-common/src/handoff.ts:39-44`) and `SessionEndedEvent.payload.finalTriageVerdict` (`events.ts:131-138`) but stopped at the session triage discriminator. `product/ts-common/src/session.ts:70-75` lists only `none / qualified / referred_out / disqualified`. An `inconclusive` verdict cannot be persisted into `SessionState.triage`; `chat.ts:148-159` reads `updated.triage.verdict !== 'none'` and parse will fail at runtime if the classifier ever returns inconclusive.
+
+**Fix shape**: add `TriageStateInconclusiveSchema` mirroring the disqualified variant and include in the discriminated union. Update `triage-classifier.ts:postureToTriage` to accept inconclusive when the LLM emits it. Add a fixture round-trip test.
+
+**Verification**: `npm test -w @swoop/common` includes a triage-state round-trip case for each verdict.
+
+**Commits**: _(landed: filled when done)_
+
+### R3 — `contact.name` / `email` / `phone` lack newline filter (email-header injection vector) — 🔲
+
+**Problem**: `connector/src/handoff/mailer.ts:193` builds `Swoop lead — ${payload.contact.name} (qualified, …)` and passes it as nodemailer `subject`. `ts-common/src/handoff.ts:172` defines `name: z.string()` with no `.regex()`, no `.max()`. A visitor entering `Foo\r\nBcc: attacker@example.com` may smuggle a header.
+
+**Fix shape**: apply `.regex(/^[^\r\n]{1,200}$/)` on every string field of `HandoffContactSchema` (name, email-readable form already enforced via `.email()`, phone, preferredMethod is enum, timeZoneHint). Strip control characters in `computeSubject` and email-bound template fields as defence-in-depth.
+
+**Verification**: add reject-path tests in `handoff-schema.test.ts` for `\r\n`-bearing names. Add a mailer test asserting subject doesn't contain raw newlines.
+
+**Commits**: _(landed: filled when done)_
+
+### R4 (contact part) — no length caps on `HandoffContactSchema` strings or `motivationAnchor` — 🔲
+
+**Problem**: schema has no `.max()` on name/email/phone/timeZoneHint. `enrichPayload` (`handoff-submit.ts:248-249`) leaves `motivationAnchor` unbounded. Visitor-supplied 60kb strings land in `var/handoffs/<id>.json`, in event sha256 inputs, and in the email body.
+
+**Fix shape**: `.max(200)` on contact fields, `.max(2_000)` on `motivationAnchor`, `.max(500)` on `reason.text`. (Chat message body cap lives in B.t5 — see that addendum.)
+
+**Verification**: reject-path tests for over-cap inputs; existing fixtures stay green (lengths are well under any cap).
+
+**Commits**: _(landed: filled when done)_
+
+### Theme-A.2 — Tighten `HandoffSubmitRequestSchema` to discriminated union — 🔲
+
+**Problem**: `HandoffSubmitRequestSchema.reasonCode` is `z.string().min(1)` (`handoff.ts:318`). Route handler casts `reqBody.reasonCode as never` 4 times (`handoff-submit.ts:272/284/293/302`) and relies on connector-side re-validation. User gets generic `invalid_request` instead of "this code isn't valid for this verdict".
+
+**Fix shape**: convert `HandoffSubmitRequestSchema` into a `z.discriminatedUnion('verdict', [...])` with per-verdict `reasonCode` enums. Drop the `as never` casts in `enrichPayload`.
+
+**Verification**: route-handler tests asserting per-verdict-mismatch codes return a 400 with the offending code in `detail`.
+
+**Commits**: _(landed: filled when done)_
+
+### Theme-A.3 — Dedup `VerdictEnum` in `events.ts` against `HandoffVerdictSchema` — 🔲
+
+**Problem**: `events.ts:43-48` defines a private `VerdictEnum` distinct from `HandoffVerdictSchema`. Both got `inconclusive` yesterday by hand; nothing prevents future drift.
+
+**Fix shape**: import + re-use `HandoffVerdictSchema` from `handoff.ts` in `events.ts`. Same for `finalTriageVerdict` (`events.ts:131-138`) — derive from `HandoffVerdictSchema.options` plus `'none'`.
+
+**Verification**: typecheck + tests stay green; remove the redundant literal lists.
+
+**Commits**: _(landed: filled when done)_
+
+### Theme-A.4 — Tool-name event-payload field should narrow to `TOOL_NAMES` — 🔲
+
+**Problem**: `ToolCalledEvent.payload.toolName` and `ToolReturnedEvent.payload.toolName` (`events.ts:89,99`) are `z.string()`. `tools.ts:342-358` already declares `TOOL_NAMES`. Tool-name typos in observability code currently go undetected.
+
+**Fix shape**: derive `z.enum([...Object.values(TOOL_NAMES)])` once and use across all tool-event payloads.
+
+**Verification**: typecheck flags any stray string literal in tool-event emitters.
+
+**Commits**: _(landed: filled when done)_
+
+### Theme-A.5 — Decide retain-or-delete on dead `HandoffReasonSchema` — 🔲
+
+**Problem**: `handoff.ts:133-139` exports a `z.union` of all four per-verdict reason schemas. No call site consumes it (`grep` clean). The plan's E.t1 §"file plan" comment said "simpler to delete". Today it's import-noise.
+
+**Fix shape**: delete the export and its inferred type. If a future consumer wants a "reason-shape regardless of verdict" signal, they can derive it from the discriminated union via `HandoffPayload['reason']`.
+
+**Verification**: `npm test` + typecheck clean after removal.
+
+**Commits**: _(landed: filled when done)_
