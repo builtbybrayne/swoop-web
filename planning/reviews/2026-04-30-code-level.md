@@ -7,6 +7,21 @@
 
 ---
 
+## How to work this checklist (for future agents)
+
+If you're an agent picking up this review for the first time:
+
+1. **Recommended order**: take the 🔴 R-class items in [next-steps.md](../../next-steps.md) "Pre-chunk-work close-out" section before starting any new chunk-C / chunk-G work. They're cheap, they're production blockers, and most of them touch the schema spine that downstream chunk work depends on.
+2. **Per-item dispatch**: pick a 🔲 row from the checklist below → follow the link to the addendum (in `planning/03-exec-<chunk>-<task>.md` "## 2026-04-30 code-review fixes" section) or cross-cut file (`planning/03-exec-crosscut-*-fix.md`). Each row carries problem (with file:line evidence), fix-shape, verification, and a `Commits:` slot. That's a complete dispatch brief.
+3. **On completion**:
+   - Tick the checkbox in this review's checklist (🔲 → ✅).
+   - Append the commit ref to the addendum's `Commits:` slot.
+   - Commit message format: `fix(<scope>): close <item-id> — <one-liner> (2026-04-30 review)`.
+4. **Cross-cut items**: H1–H5 should pair with whatever chunk-work is touching the same files (e.g. land H1 messageOf when next in `@swoop/common`). Don't create a "review fixes" sprint divorced from chunk work — interleave for maximum efficiency.
+5. **Deferred items** (Perf-2, plus the "not in this review" rows in the strategic table) are intentional non-actions. Don't second-guess; revisit at the inflection points named.
+
+---
+
 ## Headline verdict
 
 **The code is in unusually good shape for ~10 days of intensive build.** No structural problems. Architectural choices defensible. Plan↔code traceability is high — 30 sampled surfaces, ~3 silent additions, all small. Decision discipline strongly traceable (decision-log → code → test in <60 seconds for any anchor).

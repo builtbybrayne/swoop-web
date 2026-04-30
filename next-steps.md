@@ -15,6 +15,43 @@ M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated*
 
 ---
 
+## Pre-chunk-work close-out (2026-04-30 code review)
+
+The 2026-04-30 code-level review surfaced 4 🔴 ship-blockers + ~13 🟡 watch items. **Close R1–R4 BEFORE starting any new chunk-C / chunk-G work** — they're cheap (under 90 minutes total), they're production blockers, and most of them touch the schema spine that all the chunk-C work depends on. Master ledger + checklist: [planning/reviews/2026-04-30-code-level.md](planning/reviews/2026-04-30-code-level.md).
+
+**🔴 quick wins — sub-30 min each, do first:**
+
+- **R1** — add `inconclusive` to `TriageStateSchema`. Tracked at [03-exec-handoff-t1.md#R1](planning/03-exec-handoff-t1.md). 5 min.
+- **R3** — `.regex(/^[^\r\n]{1,200}$/)` on `HandoffContactSchema` strings (closes email-header injection). Tracked at [03-exec-handoff-t1.md#R3](planning/03-exec-handoff-t1.md). 10 min.
+- **R4** — `.max()` on contact / motivationAnchor / chat message; lower `express.json` to 16kb. Split across [03-exec-handoff-t1.md#R4](planning/03-exec-handoff-t1.md) + [03-exec-agent-runtime-t5.md#R4](planning/03-exec-agent-runtime-t5.md). 15 min.
+- **Sec-1** — `mkdir({mode:0o700})` + `writeFile({mode:0o600})` on `FsHandoffStore` (PII at rest). [03-exec-handoff-t2-t3.md#Sec-1](planning/03-exec-handoff-t2-t3.md). 5 min.
+
+**🔴 medium — 30–60 min each, do BEFORE B.22 lands:**
+
+- **R2** — per-session async mutex on `store.update` (closes the latent race condition that will silently break with B.22 Postgres SessionService). [03-exec-agent-runtime-t5.md#R2](planning/03-exec-agent-runtime-t5.md). 30 min.
+
+**🟡 cross-cut helpers — pair naturally with chunk-C work:**
+
+When you're next in `@swoop/common` (e.g. starting C.t1's connector skeleton), land these in the same session — they're shared utilities the chunk-C work will benefit from:
+
+- **H1 / H2 / H3** — `messageOf` helper, `emitErrorRaised` helper, `handoff.email.{sent,skipped,failed}` event kinds. [03-exec-crosscut-common-helpers-fix.md](planning/03-exec-crosscut-common-helpers-fix.md). ~60 min combined.
+- **H5** — lift SSE parser into `@swoop/common/streaming` (harness + UI both consume). [03-exec-crosscut-shared-sse-parser-fix.md](planning/03-exec-crosscut-shared-sse-parser-fix.md). ~60 min.
+
+**🟡 server-layer fixes — bundle when next touching `orchestrator/server/`:**
+
+- **Theme-A.1** — define `ChatRequestSchema`, `ConsentRequestSchema`, `SessionBootstrapRequestSchema` in `@swoop/common`; replace 3 hand-rolled validations. Closes Sec-3 too. [03-exec-agent-runtime-t5.md#Theme-A.1](planning/03-exec-agent-runtime-t5.md). ~60 min.
+- **Sec-2** — helmet middleware (CSP frame-ancestors). [03-exec-agent-runtime-t5.md#Sec-2](planning/03-exec-agent-runtime-t5.md). ~15 min.
+- **Test-1** — integration tests for `/chat` error paths (mid-stream throw, client-disconnect, connector-unreachable). [03-exec-agent-runtime-t5.md#Test-1](planning/03-exec-agent-runtime-t5.md). ~2 hours.
+
+**🟡 perf — pre-empts G.t1 cost cliff:**
+
+- **Perf-1** — Anthropic prompt caching on system + tools (30–50% input-token reduction). Land BEFORE G.t1 fills `00_why.md` and the CMS tool-loader, or per-turn cost spikes. [03-exec-agent-runtime-t1.md#Perf-1](planning/03-exec-agent-runtime-t1.md). ~30 min.
+- **Perf-3** — skip triage classifier on turn 1 (small interim win until Perf-2's parallel-not-serial design is taken). [03-exec-agent-runtime-t7.md#Perf-3](planning/03-exec-agent-runtime-t7.md). ~10 min.
+
+**Convention**: every fix commits as `fix(<scope>): close <item-id> — <one-liner> (2026-04-30 review)`. After landing, tick the checkbox in the review file's status table and append the commit ref to the addendum's `Commits:` slot.
+
+---
+
 ## Next up
 
 ### 0. Pick a Tier 3 plan to author + execute [first thing next session]
