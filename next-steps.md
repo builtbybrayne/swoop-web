@@ -4,53 +4,62 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-04-29 — overnight swarm landed)
-M1 live + chunk D closed + mock-host shipped. Tonight's parallel agent swarm landed (commits `060f3da` → `fdd5cff`): **C.t0** SQL inspection (852 trips not 111; 9 first-pass-overturning findings; 8 questions closed), **E.t8** compliance-bundle skeleton (12 files), **H.t7** living-evalset growth runbook, blog ingest confirmed implemented. **HITL Q4 + Q5 closed**; Q1 expanded to all 10 tools. **Mock-host shipped + W1/W2 unparked** after observing assistant-ui doesn't auto-rehydrate.
+## Status (2026-04-30 — C.t2 closed; C.26 graduated; chunk-C contract layer settled)
+M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated**. Today's session landed (commits `0340386` → `bda2b8d`, ~9 commits): the eight-tool intent-named contract layer, no-composer architecture, top-down-from-sales discipline elevated as theme 11, full code-quality review fix pass folding in C.18 lock to **Voyage-3 / 1024d**, customerreview supplementary dump ingested as new domain tables, `find_someone_who` graduated to live. See [progress.md](progress.md) for the full breakdown.
 
-**Tests**: 397/397 green across 6 workspaces — `@swoop/common` (43), `@swoop/orchestrator` (132), `@swoop/connector` (46), `@swoop/ui` (71), `@swoop/harness` (74), `@swoop/ingestion` (31).
+**Tests**: 412/412 green across 6 workspaces — `@swoop/common` (58 — was 43, +15 C.t2 fixture cases), `@swoop/orchestrator` (132), `@swoop/connector` (46), `@swoop/ui` (71), `@swoop/harness` (74), `@swoop/ingestion` (31).
 
-**SQL dump loaded** into local MariaDB via `al`/`pick-a-password`; left up for ongoing inspection. Chunk C now gated on continuing the **discovery design HITL** at [00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md), out of which C.t2 (sales-shaped tool I/O + Postgres entity model) and Tier 3 plans for C.t1 / C.t3 / C.t3a / C.t4 fall. **Method note (top-down, not bottom-up): tools + system prompts + guidance must be designed as one coherent ensemble — don't pick off the data layer first.** See [00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md) §5.
+**Postgres setup**: `puma_dev` is live at `postgresql://al:pick-a-password@localhost:5432/puma_dev` (PG 18 + pgvector 0.8.1 + pg_trgm 1.6 + tsvector). Migrations 001–006 at `product/connector/migrations/` apply cleanly to a fresh test DB; `puma_dev` deliberately untouched (that's C.t3's job to populate). MariaDB `swoop_patagonia` left up with both the original dump and the supplementary customerreview dump for ongoing inspection.
+
+**Method note (top-down, not bottom-up)** is now load-bearing in three places: (a) [planning/01-top-level.md](planning/01-top-level.md) §3.0 + theme 11; (b) [planning/02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md) "★ Read this first — the WHY of chunk C"; (c) [planning/03-exec-c-t2.md](planning/03-exec-c-t2.md) opening callout. Future agents picking up any of these hit the calibration layer before they touch a Zod schema or CREATE TABLE. *"We have data X, what tool would query it?"* is now the explicit anti-pattern theme 11 names. The original ensemble note in [00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md) §5 still holds; it's now reinforced upstream.
 
 ---
 
 ## Next up
 
-### 0. Corpus content analysis [first thing next session]
+### 0. Pick a Tier 3 plan to author + execute [first thing next session]
 
-Before any further chunk C tool-design work or sales-tag-taxonomy speculation, **inspect what the corpus actually contains**. Captured in detail at [inbox.md](inbox.md) 2026-04-30 entry. Headline targets:
+Chunk C's contract layer is closed. The eight-tool intent-named surface is settled. The five job-shaped derived tables are migrated. What remains is the *implementation* layer: SQL transform → embeddings + classifiers → tool handlers + adapters + widgets. None of these have Tier 3 plans yet.
 
-1. **Blog content** at `data/blog/raw/<latest>/posts.ndjson` (102 posts, already fetched by `@swoop/ingestion`). Sample 20–50 random posts. Question: how much is genuine customer-narrative vs Swoop-staff-authored marketing? Is there a `recall_someone_who` corpus or do we repurpose?
-2. **`trip.description` prose** in local MariaDB. Typical length, tone, content shape. Evocative or factual?
-3. **`contentblock_*` subtype triage** in MariaDB. Which of the 14 subtypes beyond `customertip`/`customerreview` (the latter's source tables missing) carry useful prose?
-4. **Image annotations** — random sample of the 47.5% with `image.description`. Quality check: alt-text-grade or rich enough to feed mood-filtered retrieval?
+Recommended next moves, in dependency order:
 
-Outputs: short "blog content shape" + "trip prose shape" + "contentblock triage" addendum (probably in [data-ontology.md](data-ontology.md) or a sibling), plus refined sales-tag taxonomy grounded in observed content. **The chunk C plan rewrite + Tier 3 plans for C.t1/t3/t3a/t4 wait on this.**
+1. **C.t1** (connector service skeleton + Postgres pool wiring) — foundational, smallest, fastest. Stub-replace work for `product/connector/`. Probably 0.5 day. Greenfield.
+2. **C.t3** (`export.sql` SQL-dump → Postgres transform) — the data-movement layer. Reads from MariaDB-format dump; applies declarative whitelists/flattens/denormalises/derived-column computes; writes domain tables in Postgres via `INSERT … ON CONFLICT DO UPDATE`. Filters out Profile pagetype + test pages at boundary. Tooling pick (e.g. `pgloader` + transform layer, or Node CLI translator) lands here. ~1.5–2 days.
+3. **C.t3a** (embedding pass + Haiku ETL classifiers) — semantic enrichment. Reads from populated domain tables + blog NDJSON snapshot; embeds via Voyage-3 (1024d, locked); runs Haiku classifiers (blog-post job classification, persona-summary aggregation by reviewer name per Phase 1 finding, image annotation, blog-tag normalisation against `ntag`); populates the five job-shaped derived tables. ~2 days; cost driven by content volume (back-of-envelope: ~12K embedding calls + ~200 Haiku classifier calls = cents).
+4. **C.t4** (eight-tool handlers over data primitives) — the runtime layer. Per-tool handler at `src/tools/<tool>.ts` calls 1–N data primitives (SQL/vector helpers); no composer code. Tool descriptions registered from `cms/prompts/tools/<tool>/description.md` per C.34. ~2 days. Triggers downstream B.t3a + D.t9 once landed.
+5. **C.t5** (image URL utility + page-as-hub resolver) — small `@swoop/common` utility. ~0.5 day.
+6. **C.t6** (image annotation pipeline) — parallel workstream. Claude Vision over the ~6.3K images that don't already have an `image.description` upstream (per the 2026-04-29 discovery). ~1 day setup + unattended runtime.
+7. **C.t8** (ETL + annotation runbooks) — handover docs for Swoop's internal team. ~0.5 day. Last.
 
-Method note (now in [00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md) §5): tool *bindings* come from corpus evidence, not assumption. Don't propagate up from the data shape, but don't propagate *into* the data layer without looking either.
+**Downstream augments triggered by C.t4** (live in their owning chunks):
+- **B.t3a** — orchestrator's connector adapter rewrite. Drop `@deprecated` `Search*` / `GetDetail*` schemas; register the eight intent-named tools. ~0.5–1 day, mostly mechanical.
+- **D.t9** — chat-surface widget rewrite. Add new widgets for the five intent-named tool outputs from `*PublicSchema` shapes; `inspiration` and `lead-capture` survive from D.t3 (rendering `illustrate` and `handoff`); `component-list` and `component-detail` deprecate alongside `search` / `get_detail`. ~1–2 days.
 
-### 1. Continue the discovery design HITL [active thread, post-inspection]
+**Method discipline**: every Tier 3 plan above gets a "★ Read this first" pointer that calibrates the executing agent against theme 11 (top-down from sales, not bottom-up from data) before they touch code. The chunk-C plan's anchor section in [02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md) is the canonical calibration text — refer to it from each Tier 3 brief.
 
-[planning/00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md) is the live HITL doc — it merges C.t2 (sales-shaped tool I/O + Postgres entity model) with G.t0 / G.t1 / G.t3 because those design questions are tangled. **Closed in §5 already**: Q5 (`inconclusive` 4th verdict approved), Q4 (main agent derives customer-type, NOT a Haiku post-classifier — the orchestrator is the most context-aware reasoner in the loop). **Q1 expanded** to walk all 10 tools (5 PoC carry-forward + 5 new sales-shaped) — the PoC tools have value (original thinking + UI widgets) but warrant refresh. **Method**: walk top-down from conversational arcs (visitor journeys, §3.2 path sketches, customer-type segmentation, motivation anchors). Tool I/O follows; Postgres entity model emerges last. Remaining outputs:
+### 1. Discovery design HITL [active thread; partly absorbed by C.t2 closure]
 
-- Re-sketched 10 tools as a coherent ensemble (input/output shapes; WHY/HOW/WHAT × User/Agent/Swoop matrix per tool; per-tool composer-Haiku reasoning where applicable)
-- First-pass G.t1 WHY system prompt at `cms/prompts/system/00_why.md`
-- ≥2 seeded skills under `cms/prompts/skills/<name>/SKILL.md`
-- Postgres entity model (falls out of "what hydrates each tool's output?")
-- E.t1 schema extension: add `inconclusive` 4th verdict + per-verdict reason enum from §3.2 Path 7 (`low_engagement` / `mixed_signals` / `extended_no_convergence` / `comparison_shopping` / `off_offer_in_region` / `drive_by` / `inconclusive_other`)
+[planning/00-discovery-design-thinking.md](planning/00-discovery-design-thinking.md) had merged C.t2 with G.t0 / G.t1 / G.t3 because those design questions were tangled. **C.t2's contract is now settled** outside the HITL doc — eight intent-named tools, five job-shaped derived tables, persona_summary natural-language shape, all in code at `product/ts-common/src/tools.ts` + `derived.ts` + production tool descriptions at `product/cms/prompts/tools/<tool>/description.md`. The HITL doc retains a 2026-04-29 supersession banner pointing readers at the new architecture. Remaining HITL outputs are now content-shaped, not contract-shaped:
 
-### 2. Chunk C — Retrieval & data [~5–7 days after #1]
+- **G.t0** — Patagonia conversational-architecture spec (triage inflections, user-type differentiation, motivation anchoring, handoff triggers). HITL session with Al. Output: `planning/patagonia-conversational-architecture.md`.
+- **G.t1** — first-pass WHY system prompt at `cms/prompts/system/00_why.md` (replacing the placeholder). Sibling style-avoid file already exists at `cms/prompts/system/10_style-avoid.md`.
+- **G.t3** — ≥2 seed skill directories under `cms/prompts/skills/<skill-name>/SKILL.md` (ADK 1.0 directory format).
+- **G.t5** — refinement pass when Luke + Lane's sales-thinking doc lands (~May 4).
+- **E.t1 schema extension**: add `inconclusive` 4th verdict + per-verdict reason enum from §3.2 Path 7 (`low_engagement` / `mixed_signals` / `extended_no_convergence` / `comparison_shopping` / `off_offer_in_region` / `drive_by` / `inconclusive_other`).
 
-- **C.t0** ✅ done 2026-04-29 — local MariaDB inspection + 9 first-pass-overturning findings + ontology rewrite + 8 questions closed + 3 new questions raised (`customerreview`/`customertip` source tables MISSING from dump is the most material gap; route to Thomas/Richard). Plan + execution log: [planning/03-exec-c-t0.md](planning/03-exec-c-t0.md).
-- **C.t1** — connector service skeleton + Postgres setup (Cloud SQL prod, Postgres.app dev — `al`/`pick-a-password` @ `:5432`).
-- **C.t2** — entity model + sales-shaped tool I/O schemas (lands as design HITL output; #1 is the gate).
-- **C.t3** — `export.sql` MariaDB → Postgres ETL (no LLM in the loop).
-- **C.t3a** — embedding pass + sales-shaped derived entity population (`vibe_passage` / `customer_story` / `trust_proof`).
-- **C.t4** — 10-tool implementations (5 PoC pass-through + 5 sales-shaped composer; composer prompts in `cms/prompts/tools/<tool>/composer.md`).
-- **C.t5** — image URL utility + page-as-hub resolver (`buildImgixUrl`, `resolveImagesViaPage` in `@swoop/common`).
-- **C.t6** — image annotation pipeline (parallelisable from C.t0; ~13K images via Claude Vision).
-- **C.t8** — ETL + annotation runbooks for Swoop's internal team.
-- **Blog ingest** — parallel stream per [planning/03-exec-blog-ingest.md](planning/03-exec-blog-ingest.md); independent of the SQL ETL, can run any time.
-- **Downstream augments**: B.t3a (connector adapter wrappers for new tools) + D.t9 (widgets for new tool outputs) fan out from C.t4.
+### 2. Chunk C — Retrieval & data implementation [post-#0 plan authoring]
+
+- **C.t0** ✅ done 2026-04-29 — local MariaDB inspection + 9 first-pass-overturning findings + ontology rewrite + 8 questions closed + 3 new questions raised. Plan + execution log: [planning/03-exec-c-t0.md](planning/03-exec-c-t0.md).
+- **C.t2** ✅ done 2026-04-30 — entity model + tool I/O schemas + migrations 001–006 + production-quality tool descriptions + fixtures. C.26 graduated alongside; `find_someone_who` live; 2,563 customer reviews + 163 trip junctions in domain layer; customertip pending separate Swoop delivery. Plan + execution log: [planning/03-exec-c-t2.md](planning/03-exec-c-t2.md).
+- **C.t1** — pending Tier 3 plan. See §0 above.
+- **C.t3** — pending Tier 3 plan.
+- **C.t3a** — pending Tier 3 plan. Carry forward Phase 1's load-bearing finding: aggregate by reviewer `name` before generating `persona_summary` (~80% of customerreview rows are short snippets that compose into coherent personas only when grouped by author).
+- **C.t4** — pending Tier 3 plan.
+- **C.t5** — pending Tier 3 plan (small).
+- **C.t6** — pending Tier 3 plan; Phase 0 cost estimate ~£30–£150 one-time at ~$0.005/image Claude Vision over the ~6.3K images without upstream `image.description`.
+- **C.t8** — pending Tier 3 plan; runbook authoring task.
+- **Blog ingest** ✅ implemented; running in `@swoop/ingestion`. Per-post-classification at C.t3a.
+- **Downstream augments**: B.t3a + D.t9 fan out from C.t4 in parallel.
 
 ### 3. Chunk G — Content (bulk) [~3–4 days incl. HITL session]
 
@@ -117,7 +126,10 @@ After observing in active mock-host use that **assistant-ui doesn't auto-rehydra
 
 Tracked in [questions.md](questions.md). Blockers:
 
-- **C.t0 follow-up** — 3 new questions from inspection routed to Thomas/Richard: (a) `customerreview`/`customertip` source tables MISSING from dump — intentional export filter or stale FKs? (b) confirm website renders `daybyday WHERE type='presale'`. (c) semantic confirmation of ~5 less-obvious `ntag` interest entries.
+- **C.t0 follow-up** — original 3 questions, status as of 2026-04-30:
+  - (a) ~~`customerreview`/`customertip` source tables MISSING from dump~~ ✅ **CLOSED for customerreview** — Swoop delivered `customerreview_tables_-_swoop-patagonia_prod.sql` on 2026-04-30 (2,563 reviews + 163 trip junctions; ingested in migration 006). **`customertip` remains pending** — separate Swoop ask outstanding; the 119 `contentblock_customertip` junction rows continue to dangle.
+  - (b) confirm website renders `daybyday WHERE type='presale'` — open, route to Thomas/Richard.
+  - (c) semantic confirmation of ~5 less-obvious `ntag` interest entries — open.
 - **Patagonia sales-thinking doc** (Luke + Lane, ~May 4) — shapes chunk G.
 - **GCP "AI Pat Chat" IAM** (Thomas) — required for M4 + the Firestore handoff-store swap.
 - **Claude account tier confirmation** (Julie → Tom) — affects scraper cost routing in C.

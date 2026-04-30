@@ -6,7 +6,85 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
-## 2026-04-29 — `customerreview` + `customertip` source tables MISSING from SQL dump
+## 2026-04-30 — Five-jobs / eight-tools / no-composer is the load-bearing substrate of chunk C
+
+After two architectural false starts (the 2026-04-22 Vertex-AI-Search + data-shaped tool surface; the 2026-04-28 Haiku-composer + ten-tool sales-shaped surface), the 2026-04-29 review reset chunk C around a **first-principles top-down derivation** that has held under stress and finally feels stable enough to call durable.
+
+**The substrate**: Puma's agent moves appropriate visitors through Awareness → Interest → Strong Consideration toward a warm specialist handoff (decision **C.13**). At every conversational moment, content does one of four+1 jobs *for the visitor*:
+
+| Job | What it does | Tool |
+|---|---|---|
+| Inspire | Turns vague interest into vivid anticipation | `find_inspiring` |
+| Mirror | Lets the visitor see themselves in someone who's been there | `find_someone_who` |
+| Reassure | Converts curiosity into confidence to talk to a human | `find_proof` |
+| Inform | Answers a concrete question | `lookup` |
+| Propose options | Offers concrete trips to consider | `find_options` |
+
+Plus three utilities (`illustrate`, `handoff`, `handoff_submit`) → **eight tools total** (decision **C.25**, supersedes C.19).
+
+**No composer layer in the request path** (decision **C.24**, supersedes C.22). The 2026-04-28 plan put a Haiku sub-agent inside each "vague" sales-shaped tool to translate intent into data calls. With intent-named tools whose outputs are concrete row shapes, Sonnet at the orchestrator handles synthesis directly. One LLM call per turn, lower latency, fewer failure modes. Cheap LLM (Haiku) earns its keep at ETL — blog-post job classification, persona-summary aggregation, image annotation, blog-tag normalisation against `ntag`. Done once, persisted to columns; never on the conversational path.
+
+**Five job-shaped derived tables match the five tools**: `inspire_passage`, `customer_story`, `trust_proof`, `inform_chunk`, `trip_card`. Each table holds rows shaped for the job, regardless of which source row they originally came from. A blog post can land in `inspire_passage` (if narrative) or `trust_proof` (if a B-Corp piece) or both.
+
+If you ever find yourself unsure whether to add a tool, a column, a table — ask: *"does it serve a job at a moment in the journey?"* If yes, build it. If you're justifying it from the data side ("we have this, so we should expose it"), that's bottom-up reasoning — the next discoveries.md entry covers why it's the recurring failure mode.
+
+The architecture is enshrined in code (`product/connector/migrations/`, `product/ts-common/src/{tools,derived}.ts`, `product/cms/prompts/tools/<tool>/description.md`) and in the planning suite (top-level §3.0 + theme 11; chunk-C ★ Read this first; C.t2 ★ Read this first). Decisions C.13, C.24, C.25, C.26, C.27, C.28, C.29 carry the rationale.
+
+---
+
+## 2026-04-30 — Top-down from the sales journey; bottom-up from the data is the recurring failure mode
+
+Three Claude sessions on this engagement have walked into the same trap before being caught: starting from the data (tables, columns, what's available) and asking *"what tool would query this?"* The result is always librarian-shaped tools (`search_pages`, `find_trips`, `query_tags`, `get_blog_post`) that are correct against the database but wrong against the conversation. Visitors get a search engine, not a knowledgeable friend.
+
+The 2026-04-28 plan tried to patch this by adding Haiku composers between the data and the agent — middlemen translating librarian-output into sales-output. That was a symptom, not a fix; it preserved the bottom-up tool boundaries while papering them over with extra LLM hops.
+
+The 2026-04-29 review's reset: **shape the tools by the job, not the data, in the first place.** Composers become unnecessary; Sonnet weaves directly. The five-jobs framing (previous discoveries entry) is what falls out of the right starting question.
+
+The discipline is now load-bearing in three places so future agents can't miss it:
+- [planning/01-top-level.md](planning/01-top-level.md) §3.0 (the substrate themes shape against) + theme 11 (the eleventh commitment, named explicitly).
+- [planning/02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md) "★ Read this first — the WHY of chunk C" — calibration layer for any agent touching this chunk.
+- [planning/03-exec-c-t2.md](planning/03-exec-c-t2.md) opening callout pointing back to the chunk-C anchor.
+
+**The anti-pattern signals** (from the chunk-C anchor section):
+- *"We have data X, what tool should query it?"* — Wrong direction. Always.
+- *"Let's design tools that mirror the database structure."* — That's CRUD, not conversation.
+- *"More tools means more flexibility."* — Usually wrong. Eight is enough at our scale; more dilutes Sonnet's selection accuracy.
+- *"The data tells us what's possible."* — Yes, but doesn't tell us what's *useful in the conversation*.
+- *"Just expose the entities, the agent can figure out what to do."* — That's how you get a librarian, not a knowledgeable friend.
+
+**The right question, always**: *"Whose journey am I serving, and at what point in their journey? What conversational move does this enable?"* — if you can't answer concretely from the conversational arc, you're reasoning bottom-up. Stop. Re-anchor.
+
+This entry exists to make the failure mode legible enough to prevent the fourth occurrence. If a future session ends up re-litigating the tool surface or proposing a composer layer to "make tools feel right", that's the bottom-up trap returning. Recognise it and re-read the anchor sections before changing anything.
+
+---
+
+## 2026-04-30 — Customerreview corpus shape: 80/20 short-snippet vs long-form; aggregate-by-reviewer for persona generation
+
+Phase 1 inspection of the 2026-04-30 supplementary `customerreview_tables_-_swoop-patagonia_prod.sql` dump (2,563 rows + 163 trip junctions) surfaced findings that materially shape how C.t3a's persona-summary classifier should run.
+
+**The 80/20 split**:
+- ~80% of rows are short snippet fragments (≤200 chars, often single sentences like *"Carys was great"* or *"Plan early to get the best flights"*). These look like extracted feedback fragments harvested from a longer questionnaire — likely the rows that link via `feedbacksnippet_id` (target table not in dump). Many reviewers have 9–12 such snippet rows under the same `name`.
+- ~20% are substantive 300–1000-char first-person testimonials. Real customer voice, named guides, named hotels, sometimes practical tips, sometimes emotional travelogue.
+
+**Implication for C.t3a**: per-row persona generation produces thin summaries (*"customer who liked their guide"*). Per-reviewer aggregation (group by `name` first, concatenate prose, then classify) produces real personas (*"mid-50s couple, post-retirement, valued quiet trails over crowds"*). C.t3a's Haiku classifier prompt should aggregate before generating.
+
+**Geographic anchors are STRONG**: regional features and named treks are preserved richly in the prose (Torres del Paine, El Chaltén, Perito Moreno, Fitz Roy, Cape Horn, Tierra Patagonia hotel, Explora, EcoCamp, named tour names). Mirror's *"someone who did exactly what you're considering"* job is well-served.
+
+**Trip linking is sparse**: only 6% of reviews are structurally `customerreview_trip`-tagged (158 rows → 56 distinct trips). Region/season retrieval for `find_someone_who` will lean on **prose embedding**, not structured trip joins. That's already how the Mirror tool works (cosine similarity on `persona_embedding`).
+
+**Date coverage is solid** (99.9%) — supports seasonal filtering if a future use case wants it.
+
+**Image associations are sparse** (5.8%, ~150 rows). `customer_story.image_id` populates for ~6% of derived rows.
+
+**PII is a non-issue**: per Al 2026-04-30, *"these reviews are all public domain — they're literally public customer reviews on the website."* Names, locations, inline specialist mentions all preserved through the domain layer (`customerreview` + `customerreview_trip`) into `customer_story` derivation. No NER scrubbing, no name/location column drops, no regex flagging. The privacy fence around the prose itself is much smaller than the privacy fence around the customer record they came from.
+
+**Customertip remains pending**. The 2026-04-30 dump didn't include `customertip` (119 expected) or `pressreview`. Separate Swoop ask outstanding; the 119 `contentblock_customertip` junction rows continue to dangle until then. ETL ignores them.
+
+---
+
+## 2026-04-29 — `customerreview` + `customertip` source tables MISSING from SQL dump *(superseded 2026-04-30 — see top entries)*
+
+> **Update 2026-04-30**: Swoop delivered the supplementary `customerreview_tables_-_swoop-patagonia_prod.sql` dump (2,563 reviews + 163 trip junctions). The 2,390 dangling junction rows in `contentblock_customerreview` now resolve cleanly. `find_someone_who` graduated to live (decision C.26). **`customertip` and `pressreview` source tables are still absent**; the 119 `contentblock_customertip` junction rows continue to dangle. See the 2026-04-30 entries above for the corpus-shape finding and the architectural reframe.
 
 The 2026-04-27 SQL export contains junction tables `contentblock_customerreview` (2,390 rows) and `contentblock_customertip` (119 rows) — both carry FK constraints to source tables `customerreview.id` and `customertip.id`, but **those source tables don't exist in the dump**. The 2,390 + 119 junction rows are dangling.
 
