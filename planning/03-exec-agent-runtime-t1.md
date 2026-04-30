@@ -114,4 +114,4 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Verification**: integration test asserts `cache_read_input_tokens > 0` on the second turn of a hello-world conversation. Cost-per-turn ledger updated in `discoveries.md`.
 
-**Commits**: _(landed: filled when done)_
+**Commits**: `ae6dd72` (production: cache_control on system + last tool in `claude-llm.ts:117-145`) · `a9884bd` (tests: 3 placement assertions in `claude-llm.test.ts` + addendum tick).
