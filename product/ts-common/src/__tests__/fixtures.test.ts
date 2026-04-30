@@ -36,6 +36,8 @@ import {
   LookupOutputSchema,
   RegionSchema,
   SessionStateSchema,
+  TriageStateSchema,
+  type TriageState,
   StorySchema,
   TourSchema,
   TripSchema,
@@ -114,6 +116,56 @@ describe("fixtures round-trip through their Zod schemas", () => {
 
   it("SampleSession parses against SessionStateSchema", () => {
     expect(SessionStateSchema.parse(SampleSession)).toEqual(SampleSession);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Triage state — one round-trip case per verdict (R1 fix, 2026-04-30).
+  // `inconclusive` was added per HITL Q5 propagation; this guards against
+  // future re-introduction of the discriminator gap.
+  // ---------------------------------------------------------------------------
+
+  const TRIAGE_FIXTURES: Array<[string, TriageState]> = [
+    ["none", { verdict: "none" }],
+    [
+      "qualified",
+      {
+        verdict: "qualified",
+        reasonCode: "triage_classifier_placeholder",
+        reasonText: "advisory:leaning_qualified — placeholder",
+        decidedAt: "2026-04-30T09:00:00.000Z",
+      },
+    ],
+    [
+      "referred_out",
+      {
+        verdict: "referred_out",
+        reasonCode: "triage_classifier_placeholder",
+        reasonText: "advisory:leaning_backpacker — placeholder",
+        decidedAt: "2026-04-30T09:00:00.000Z",
+      },
+    ],
+    [
+      "disqualified",
+      {
+        verdict: "disqualified",
+        reasonCode: "triage_classifier_placeholder",
+        reasonText: "advisory:leaning_low_value — placeholder",
+        decidedAt: "2026-04-30T09:00:00.000Z",
+      },
+    ],
+    [
+      "inconclusive",
+      {
+        verdict: "inconclusive",
+        reasonCode: "triage_classifier_placeholder",
+        reasonText: "advisory:inconclusive — placeholder",
+        decidedAt: "2026-04-30T09:00:00.000Z",
+      },
+    ],
+  ];
+
+  it.each(TRIAGE_FIXTURES)("TriageState verdict=%s parses against TriageStateSchema", (_label, fixture) => {
+    expect(TriageStateSchema.parse(fixture)).toEqual(fixture);
   });
 
   // ---------------------------------------------------------------------------
