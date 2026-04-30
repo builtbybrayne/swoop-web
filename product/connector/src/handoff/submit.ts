@@ -17,6 +17,9 @@
  *   4. Send the verdict-aware email via the mailer. Mailer handles the
  *      "disqualified → no email" + "disabled → skip" branches internally;
  *      this layer just forwards the result.
+ *   5. Emit a `handoff.email.{sent|skipped|failed}` event so SMTP outages,
+ *      template-read failures and verdict-skips leave a structured signal
+ *      in the observability stream (H3, 2026-04-30 review).
  *
  * If consent is missing we do **not** persist the record. The audit trail
  * for rejected attempts lives in chunk F's event log, not the durable
@@ -32,8 +35,11 @@
  *   `@swoop/connector`.
  */
 
+import { createHash } from 'node:crypto';
+
 import {
   HandoffPayloadSchema,
+  emitEvent,
   type HandoffPayload,
   type HandoffSubmitConsentGate,
 } from '@swoop/common';
@@ -71,6 +77,9 @@ export interface SubmitDeps {
   /** Optional mailer deps — surfaced here so tests can inject a stub
    *  transporter / template reader without re-plumbing every layer. */
   readonly mailerDeps?: MailerDeps;
+  /** Optional clock — injected so tests can pin the event timestamp.
+   *  Defaults to `() => new Date()`. */
+  readonly now?: () => Date;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,10 +136,85 @@ export async function submitHandoff(
     deps.mailerDeps,
   );
 
+  // ---- 5. Email lifecycle event (H3) ----------------------------------
+  // One `handoff.email.*` envelope per send attempt. Closes the documented-
+  // but-phantom event family referenced in mailer.ts. SessionId is the
+  // handoff's own id — submitHandoff has no orchestrator session context;
+  // routes that need session correlation should emit alongside.
+  emitEmailEvent(validated, emailResult, deps.now ?? (() => new Date()));
+
   return {
     ok: true,
     handoffId: saveResult.handoffId,
     storedAt: saveResult.absolutePath,
     emailResult,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Email-event emission (H3, 2026-04-30 review).
+// ---------------------------------------------------------------------------
+
+function emitEmailEvent(
+  payload: HandoffPayload,
+  result: SendResult,
+  now: () => Date,
+): void {
+  const baseEnvelope = {
+    eventVersion: 1,
+    timestamp: now().toISOString(),
+    sessionId: payload.session.sessionId,
+    turnIndex: null,
+    actor: 'connector' as const,
+  };
+
+  switch (result.status) {
+    case 'sent':
+      emitEvent({
+        eventType: 'handoff.email.sent',
+        ...baseEnvelope,
+        payload: {
+          handoffId: payload.handoffId,
+          verdict: payload.verdict,
+          toAddress: result.toAddress,
+          subjectHash: hashSubject(result.subject),
+        },
+      });
+      return;
+    case 'skipped':
+      emitEvent({
+        eventType: 'handoff.email.skipped',
+        ...baseEnvelope,
+        payload: {
+          handoffId: payload.handoffId,
+          verdict: payload.verdict,
+          reason: result.reason,
+        },
+      });
+      return;
+    case 'failed':
+      emitEvent({
+        eventType: 'handoff.email.failed',
+        ...baseEnvelope,
+        payload: {
+          handoffId: payload.handoffId,
+          verdict: payload.verdict,
+          errorCategory: classifyFailure(result.reason),
+          sanitisedContext: result.reason.slice(0, 500),
+        },
+      });
+      return;
+  }
+}
+
+function hashSubject(subject: string): string {
+  return createHash('sha256').update(subject, 'utf8').digest('hex');
+}
+
+function classifyFailure(
+  reason: string,
+): 'template_read' | 'smtp' | 'unknown' {
+  if (reason.startsWith('template_read_failed')) return 'template_read';
+  if (reason.startsWith('smtp_send_failed')) return 'smtp';
+  return 'unknown';
 }

@@ -332,6 +332,18 @@ describe('POST /handoff/submit — failure modes', () => {
     expect(eventLine?.[0]).toContain('"verdict":"qualified"');
     expect(eventLine?.[0]).toContain('"emailDeliveryStatus":"skipped"');
 
+    // H3 (2026-04-30 review): a handoff.email.* event lands alongside
+    // handoff.submitted. With the mailer disabled, that's email.skipped
+    // reason mailer_disabled.
+    const emailEventLine = logSpy.mock.calls.find(
+      (args) =>
+        typeof args[0] === 'string' &&
+        args[0].includes('"eventType":"handoff.email.skipped"'),
+    );
+    expect(emailEventLine).toBeDefined();
+    expect(emailEventLine?.[0]).toContain('"reason":"mailer_disabled"');
+    expect(emailEventLine?.[0]).toContain('"verdict":"qualified"');
+
     logSpy.mockRestore();
   });
 });

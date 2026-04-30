@@ -205,6 +205,51 @@ export const HandoffTriggeredEventSchema = z.object({
   }),
 });
 
+// -----------------------------------------------------------------------------
+// Handoff email lifecycle (H3, 2026-04-30 code review).
+//
+// Emitted by `submitHandoff` immediately after `sendHandoffEmail` so an SMTP
+// outage / template-read failure / verdict-skip leaves a structured signal in
+// the observability stream. Closes the documented-but-phantom event family
+// referenced by `connector/handoff/mailer.ts:43-44`.
+// -----------------------------------------------------------------------------
+
+export const HandoffEmailSentEventSchema = z.object({
+  eventType: z.literal("handoff.email.sent"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    handoffId: z.string(),
+    verdict: VerdictEnum,
+    toAddress: z.string(),
+    subjectHash: z.string(),
+  }),
+});
+
+export const HandoffEmailSkippedEventSchema = z.object({
+  eventType: z.literal("handoff.email.skipped"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    handoffId: z.string(),
+    verdict: VerdictEnum,
+    reason: z.enum([
+      "mailer_disabled",
+      "verdict_disqualified",
+      "verdict_inconclusive",
+    ]),
+  }),
+});
+
+export const HandoffEmailFailedEventSchema = z.object({
+  eventType: z.literal("handoff.email.failed"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    handoffId: z.string(),
+    verdict: VerdictEnum,
+    errorCategory: z.enum(["template_read", "smtp", "unknown"]),
+    sanitisedContext: z.string().max(500),
+  }),
+});
+
 /**
  * Emitted when the ADK skill primitive loads a skill file. B.t9 territory —
  * deferred — but the schema slot lands now so G's skill authors can write
@@ -292,6 +337,9 @@ export const EventSchema = z.discriminatedUnion("eventType", [
   ConsentDeclinedEventSchema,
   ToolFailedEventSchema,
   HandoffTriggeredEventSchema,
+  HandoffEmailSentEventSchema,
+  HandoffEmailSkippedEventSchema,
+  HandoffEmailFailedEventSchema,
   SkillLoadedEventSchema,
   UiWidgetRenderedEventSchema,
   UiConversationOpenedEventSchema,
@@ -316,6 +364,9 @@ export type ConsentGrantedEvent = z.infer<typeof ConsentGrantedEventSchema>;
 export type ConsentDeclinedEvent = z.infer<typeof ConsentDeclinedEventSchema>;
 export type ToolFailedEvent = z.infer<typeof ToolFailedEventSchema>;
 export type HandoffTriggeredEvent = z.infer<typeof HandoffTriggeredEventSchema>;
+export type HandoffEmailSentEvent = z.infer<typeof HandoffEmailSentEventSchema>;
+export type HandoffEmailSkippedEvent = z.infer<typeof HandoffEmailSkippedEventSchema>;
+export type HandoffEmailFailedEvent = z.infer<typeof HandoffEmailFailedEventSchema>;
 export type SkillLoadedEvent = z.infer<typeof SkillLoadedEventSchema>;
 export type UiWidgetRenderedEvent = z.infer<typeof UiWidgetRenderedEventSchema>;
 export type UiConversationOpenedEvent = z.infer<typeof UiConversationOpenedEventSchema>;
