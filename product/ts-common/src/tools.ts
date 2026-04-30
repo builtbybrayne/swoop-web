@@ -6,7 +6,7 @@
 // conversational jobs (decisions C.24 + C.25):
 //
 //   find_inspiring   → Inspire
-//   find_someone_who → Mirror   (conditional on C.26 — see CONDITIONAL_TOOLS)
+//   find_someone_who → Mirror   (live; graduated 2026-04-30 per decision C.26)
 //   find_proof       → Reassure
 //   lookup           → Inform
 //   find_options     → Propose options
@@ -211,7 +211,7 @@ export const FindInspiringOutputSchema = z
 export type FindInspiringOutput = z.infer<typeof FindInspiringOutputSchema>;
 
 // -----------------------------------------------------------------------------
-// find_someone_who — Mirror job (conditional on C.26).
+// find_someone_who — Mirror job. Live since 2026-04-30 (decision C.26 closed).
 //
 // Used when the visitor reveals a persona signal ("I'm going alone",
 // "we're retiring next year", "I'm into wildlife photography"). Returns
@@ -352,21 +352,6 @@ export type ToolNameKey = keyof typeof TOOL_NAMES;
 export type ToolNameValue = (typeof TOOL_NAMES)[ToolNameKey];
 
 // =============================================================================
-// CONDITIONAL_TOOLS — tools whose live registration depends on a runtime
-// signal. Per decision C.26: `find_someone_who` only registers in
-// TOOL_DESCRIPTIONS as live IF Swoop releases a redacted customerreview /
-// customertip export. Tracked in questions.md "Data pipeline" section.
-// =============================================================================
-
-export const CONDITIONAL_TOOLS = [
-  {
-    name: TOOL_NAMES.FindSomeoneWho,
-    blocker: "C.26 — awaits Swoop redacted customerreview/customertip export",
-    seeQuestionsMd: "Data pipeline section",
-  },
-] as const;
-
-// =============================================================================
 // TOOL_DESCRIPTIONS — short labels for runtime tool registration.
 //
 // THE AUTHORITATIVE TOOL DESCRIPTIONS LIVE AT
@@ -399,8 +384,7 @@ export const TOOL_DESCRIPTIONS = {
     "Surface a customer story about someone with a similar persona to the " +
     "visitor — solo traveller, post-retirement, photographer, etc. Reach " +
     "for this when the visitor reveals a persona signal. See " +
-    "cms/prompts/tools/find_someone_who/description.md. " +
-    "(Conditional on C.26 — see CONDITIONAL_TOOLS.)",
+    "cms/prompts/tools/find_someone_who/description.md.",
   find_proof:
     "Surface trust evidence — sustainability credentials, B-Corp status, " +
     "expertise, conservation work, satisfaction signals. Reach for this " +
