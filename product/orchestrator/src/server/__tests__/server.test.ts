@@ -303,6 +303,45 @@ describe('GET /healthz', () => {
   });
 });
 
+describe('Security headers (helmet)', () => {
+  it('sets CSP, HSTS, Referrer-Policy on a normal response', async () => {
+    const { app } = buildTestApp();
+    const res = await request(app).get('/healthz');
+    expect(res.status).toBe(200);
+
+    const csp = res.headers['content-security-policy'];
+    expect(csp).toBeDefined();
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain('frame-ancestors http://localhost:5173');
+
+    const hsts = res.headers['strict-transport-security'];
+    expect(hsts).toBeDefined();
+    expect(hsts).toMatch(/max-age=\d+/);
+    expect(hsts).toContain('includeSubDomains');
+
+    expect(res.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+  });
+
+  it('does not set X-Frame-Options (CSP frame-ancestors supersedes it)', async () => {
+    const { app } = buildTestApp();
+    const res = await request(app).get('/healthz');
+    expect(res.headers['x-frame-options']).toBeUndefined();
+  });
+
+  it('falls back to frame-ancestors none when no origins configured', async () => {
+    const store = new InMemorySessionStore();
+    const stub = makeStubRunner();
+    const app = buildServer({
+      sessionStore: store,
+      runner: stub.runner,
+      corsAllowedOrigins: [],
+      version: 'test',
+    });
+    const res = await request(app).get('/healthz');
+    expect(res.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+  });
+});
+
 describe('CORS', () => {
   it('echoes allowed origin on preflight', async () => {
     const { app } = buildTestApp();
