@@ -37,7 +37,7 @@ Pull 5–10 candidate sessions from last week. Two sources:
 
 ### 1a. Handoff records (the rich source)
 
-Every conversation that ended in a handoff (`qualified`, `referred_out`, or `disqualified`) writes a JSON record. Today these live on the orchestrator filesystem; post-Firestore swap (E.t2) the location moves but the schema is identical.
+Every conversation that ended in a handoff (`qualified`, `referred_out`, `disqualified`, or `inconclusive`) writes a JSON record. Today these live on the orchestrator filesystem; post-Postgres swap (E.t2 proper, per E.10 + C.23 — Firestore was the original target but is dropped) the location moves but the schema is identical.
 
 ```bash
 # From the orchestrator host (or a recent local dev run):
@@ -49,7 +49,7 @@ cat product/orchestrator/var/handoffs/handoff_<id>.json | jq '.'
 
 Each record carries the verdict, the visitor's wishlist, the consent snapshot, the contact details (on `qualified` / `referred_out`), and the freeform `reason.text` from the agent's triage. The full conversation transcript is not in the record — see 1b for that — but the record tells you what kind of behaviour the conversation produced.
 
-Sample evenly across verdicts when possible: 2–3 `qualified`, 2–3 `referred_out`, 1–2 `disqualified`. If a verdict band has nothing interesting, sample lighter — don't pad.
+Sample evenly across verdicts when possible: 2–3 `qualified`, 2–3 `referred_out`, 1–2 `disqualified`, 1–2 `inconclusive`. If a verdict band has nothing interesting, sample lighter — don't pad.
 
 ### 1b. Cloud Logging (events by session id)
 
@@ -281,7 +281,7 @@ Not a step today. Flag for a future Tier 3 task; revisit when the suite count cr
 These stay visible at the bottom of the runbook so each weekly read keeps them in front of the operator until resolved.
 
 1. **Conversation transcripts not logged at launch.** Events carry hashes; messages do not. The ritual works cleanly only for sessions with a handoff record, plus dev-time reproduction. Decision pending: schema-change to log final `<utter>` text (with PII review) vs. keeping logs hash-only. Open in `questions.md` under "Observability — message text in logs".
-2. **Handoff record location moves at E.t2.** Today the records are filesystem JSON under `product/orchestrator/var/handoffs/`. Once the Firestore swap lands, Step 1a needs a one-line update.
+2. **Handoff record location moves at E.t2 proper.** Today the records are filesystem JSON under `product/orchestrator/var/handoffs/`. Once the Postgres swap lands (per E.10 + C.23 — Firestore was the original target but is dropped), Step 1a needs a one-line update.
 3. **Cadence and ownership at handover.** "The harness owner — Thomas / Richard at handover; until then, Al" stays accurate only as long as that's true. Update on handover sign-off. Open in `questions.md` under "Post-handover ops ownership for evals".
 4. **Sanitisation tooling threshold.** Manual + grep is honest at <50 scenarios. If the suite passes 50 or a leak slips through grep, revisit a scripted sanitiser as a Tier 3 task.
 

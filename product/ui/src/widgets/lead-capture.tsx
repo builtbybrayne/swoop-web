@@ -45,6 +45,13 @@ const VERDICT_INTRO: Record<HandoffInput["verdict"], string> = {
     "Your plans are a better fit for a partner we know well. Share a contact detail and we'll introduce you.",
   disqualified:
     "This particular trip isn't the right match today, but we'd still love to hear from you if anything changes.",
+  // Inconclusive: agent never reached confidence; no contact requested.
+  // Same operational pattern as disqualified per HITL Q5 — the widget is not
+  // expected to render this branch (the agent typically doesn't surface the
+  // lead-capture widget on inconclusive outcomes), but the type-checker
+  // requires the entry.
+  inconclusive:
+    "We weren't quite able to find the right match in this conversation, but the door's open whenever you'd like to come back.",
 };
 
 /** Pattern matches HTML5 `type=email` — keep the regex minimal / permissive. */

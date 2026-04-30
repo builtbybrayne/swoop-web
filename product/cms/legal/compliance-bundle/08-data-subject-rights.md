@@ -78,7 +78,7 @@ Puma processes personal data under **explicit consent** (GDPR Art. 6(1)(a), two-
 
 **Policy**: Art. 22 protections apply when an automated decision produces "legal effects" or "similarly significant effects" on the individual.
 
-**Puma posture**: Puma's triage classifier categorises visitors (qualified / referred_out / disqualified), but this is **not** an Art. 22 decision because:
+**Puma posture**: Puma's triage classifier categorises visitors (qualified / referred_out / disqualified / inconclusive), but this is **not** an Art. 22 decision because:
 
 - The classifier output is a routing signal, not a binding decision affecting the visitor's legal status or substantive rights.
 - Sales follow-up is **human-led** — a qualified visitor receives a human specialist's call; a disqualified visitor receives no call but is not denied service in any binding sense (they can still browse Swoop's site, contact via existing channels, etc.).

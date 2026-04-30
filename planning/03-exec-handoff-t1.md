@@ -19,11 +19,13 @@
 
 The A.t2 stub reserves the shape; E.t1 commits to **the finite enum of verdict/reason pairs** that downstream chunks can depend on without further churn. Concretely:
 
-- **Verdict** is already a three-state discriminator (`qualified` / `referred_out` / `disqualified`). Keep it.
+- **Verdict** is a four-state discriminator (`qualified` / `referred_out` / `disqualified` / `inconclusive` per HITL Q5). The first three were the original starter set; `inconclusive` was added 2026-04-30 for Path 7 visitors.
 - **Reason code** is currently a freeform `z.string()`. That slip is the single thing blocking E.t2 and E.t3 from treating the durable record as machine-readable. E.t1 replaces it with a **per-verdict `z.enum` of structured codes** plus the existing freeform `text` for specialist-facing context.
 - **Wire the backstop type** the connector's E.t2 code will implement — a `consent.conversationGranted && consent.handoffGranted` guard. E.t1 surfaces the contract; E.t2 lands the runtime check.
 
-The taxonomy is a **starter set**. G.t0 (HITL flow mapping with Al + Luke's sales-thinking doc) will refine. This plan names the three shapes the schema needs to support so G.t0 can rename or reweight codes without touching call sites outside `ts-common`.
+The taxonomy is a **starter set**. G.t0 (HITL flow mapping with Al + Luke's sales-thinking doc) will refine. This plan names the four shapes the schema needs to support so G.t0 can rename or reweight codes without touching call sites outside `ts-common`.
+
+**2026-04-30 update (HITL Q5)**: a fourth verdict `inconclusive` was added for Path 7 visitors — agent never reaches confidence to qualify, refer-out, or disqualify. Same downstream consequences as `disqualified`: no email (E.3 pattern), 90-day retention (E.7 pattern), no contact field on the durable record. The seven reason codes are listed in the new `Inconclusive` table below.
 
 Out of scope:
 - Connector runtime guard (lands in E.t2's plan).
@@ -73,7 +75,21 @@ Clearly not a lead. No email; durable record for analytics. Per E.3 decision.
 | `proxy_to_claude` | Visitor using the chat as a proxy to Claude (coding help, unrelated research). | None. | Detect + close politely. |
 | `disqualified_other` | Catch-all. | None. | Narrative. |
 
-**Total: 14 codes across three verdicts.** The catch-all per verdict is deliberate — real-world agent decisions won't always fit. G.t0 either (a) grows the taxonomy with patterns that emerge from the HITL flow, or (b) weights the catch-all down by strengthening the named codes' descriptions. The wire shape survives either case.
+### `inconclusive` (7 codes — added 2026-04-30 per HITL Q5)
+
+Agent never reaches confidence to qualify, refer-out, or disqualify. Path 7 in `planning/00-discovery-design-thinking.md` §3.2. No email; durable record for analytics. Same downstream pattern as `disqualified` (no contact field on durable record; 90-day retention).
+
+| Code | Trigger | Sales treatment | Text expected |
+|---|---|---|---|
+| `low_engagement` | Visitor sent very few turns; no signal to act on. | None. | One-line summary of how the conversation petered out. |
+| `mixed_signals` | Visitor sent contradictory cues (high budget + backpacker register; bespoke ask + browser-tier urgency). | None. | Quote the contradiction. |
+| `extended_no_convergence` | Long conversation that never narrowed to a region/style/budget the agent could act on. | None. | Summarise the breadth of exploration. |
+| `comparison_shopping` | Visitor admitted they're comparing other operators / using Puma to research before booking elsewhere. | None. | Note the comparison framing. |
+| `off_offer_in_region` | Visitor wants Patagonia but in a way Puma can't help (specific obscure trek not in catalogue, niche logistics question). | None. | What they asked for. |
+| `drive_by` | Visitor curious / clicked the chat button speculatively; never engaged with the experience. | None. | One-line. |
+| `inconclusive_other` | Catch-all. | None. | Narrative. |
+
+**Total: 21 codes across four verdicts.** The catch-all per verdict is deliberate — real-world agent decisions won't always fit. G.t0 either (a) grows the taxonomy with patterns that emerge from the HITL flow, or (b) weights the catch-all down by strengthening the named codes' descriptions. The wire shape survives either case.
 
 **Rationale for "distinct per verdict"**: a shared code like `out_of_scope` applied to both `referred_out` and `disqualified` would force analytics queries to project on `(verdict, reason.code)` pairs instead of `reason.code` alone. Splitting prevents that; nothing costs us.
 

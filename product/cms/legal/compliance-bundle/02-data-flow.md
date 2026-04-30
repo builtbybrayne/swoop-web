@@ -123,6 +123,7 @@ Each edge labelled `(N)` below corresponds to a numbered step of the visitor jou
 - **Qualified**: full email to `HANDOFF_EMAIL_TO_QUALIFIED`. Includes visitor name + email + conversation summary + motivation anchor.
 - **Referred-out**: lighter email to `HANDOFF_EMAIL_TO_REFERRED_OUT` (or qualified inbox with subject prefix per E.2).
 - **Disqualified**: no email. Durable record only (decision **E.3**).
+- **Inconclusive**: no email. Durable record only (E.3 pattern, per HITL Q5).
 
 ### (12) Mailer → Sales inbox
 

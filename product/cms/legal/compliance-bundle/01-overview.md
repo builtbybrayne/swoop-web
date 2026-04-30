@@ -38,7 +38,7 @@ Categorised by when in the visitor's journey the data enters the system.
 
 ### Derived
 
-- **Triage verdict**: `qualified` / `referred_out` / `disqualified` + structured reason code (per the verdict/reason taxonomy in [planning/03-exec-handoff-t1.md](../../../../planning/03-exec-handoff-t1.md)).
+- **Triage verdict**: `qualified` / `referred_out` / `disqualified` / `inconclusive` + structured reason code (per the verdict/reason taxonomy in [planning/03-exec-handoff-t1.md](../../../../planning/03-exec-handoff-t1.md)). The `inconclusive` verdict (HITL Q5) covers visitors where the agent never reached confidence to qualify, refer-out, or disqualify — same downstream consequences as `disqualified` (no email, 90-day retention, no contact field on the durable record).
 - **Visitor profile sketch**: independence level, budget band, activity inclination, region interest — derived from the conversation by the agent.
 - **Wishlist**: trips/tours/regions the visitor gravitated to.
 - **Motivation anchor**: the "why" — bucket list, photography, etc.

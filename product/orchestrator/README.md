@@ -89,7 +89,12 @@ src/
   connector/            # MCP-over-HTTP client + ADK FunctionTool adapters.
   functional-agents/    # Layer-2 agents (B.t7: triage-classifier.ts).
   session/              # SessionStore interface + in-memory / ADK-native /
-                        # Vertex AI / Firestore adapters.
+                        # Vertex AI / Firestore adapters (the latter two
+                        # are stubs — post-M4 the durable session backend
+                        # is a custom Postgres SessionService per B.22 +
+                        # C.18; Firestore was dropped project-wide in C.23
+                        # and the adapter file rename pairs with the
+                        # post-M4 implementation).
   translator/           # ADK event stream → @swoop/common MessagePart parts.
   server/               # Express handlers: /session, /consent, /chat (SSE).
   index.ts              # Startup wiring.

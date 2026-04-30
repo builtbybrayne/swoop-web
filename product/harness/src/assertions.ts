@@ -78,7 +78,11 @@ export interface TurnStructure {
  * H.t3 declares the contract; later wiring populates it.
  */
 export interface FinalTriage {
-  readonly verdict: 'qualified' | 'referred_out' | 'disqualified';
+  readonly verdict:
+    | 'qualified'
+    | 'referred_out'
+    | 'disqualified'
+    | 'inconclusive';
   readonly reasonCode?: string;
 }
 

@@ -133,7 +133,12 @@ export type IllustrateOutput = z.infer<typeof IllustrateOutputSchema>;
 // -----------------------------------------------------------------------------
 
 export const HandoffInputSchema = z.object({
-  verdict: z.enum(["qualified", "referred_out", "disqualified"]),
+  verdict: z.enum([
+    "qualified",
+    "referred_out",
+    "disqualified",
+    "inconclusive",
+  ]),
   reasonCode: z.string(),
   conversationSummary: z.string(),
   motivationAnchor: z.string(),
@@ -404,8 +409,9 @@ export const TOOL_DESCRIPTIONS = {
     "cms/prompts/tools/illustrate/description.md.",
   handoff:
     "Trigger the lead-capture widget with a verdict (qualified / referred_out / " +
-    "disqualified), reason, and conversation summary. Tier-2 consent is " +
-    "captured inside the widget. See cms/prompts/tools/handoff/description.md.",
+    "disqualified / inconclusive), reason, and conversation summary. Tier-2 " +
+    "consent is captured inside the widget. See " +
+    "cms/prompts/tools/handoff/description.md.",
   handoff_submit:
     "Internal: called by the lead-capture widget when the visitor submits " +
     "contact details + tier-2 consent. Not invoked by the model directly.",

@@ -29,12 +29,18 @@ import { z } from "zod";
 
 // -----------------------------------------------------------------------------
 // Verdict — the top-level discriminator.
+//
+// `inconclusive` was added per HITL Q5 (planning/00-discovery-design-thinking.md
+// §3.4) for Path 7 visitors — agent never reaches confidence. Treated like
+// `disqualified` for downstream consequences: no email (E.3 pattern), 90-day
+// retention (E.7 pattern), no contact field on the durable record.
 // -----------------------------------------------------------------------------
 
 export const HandoffVerdictSchema = z.enum([
   "qualified",
   "referred_out",
   "disqualified",
+  "inconclusive",
 ]);
 export type HandoffVerdict = z.infer<typeof HandoffVerdictSchema>;
 
@@ -72,6 +78,23 @@ export const DisqualifiedReasonCodeSchema = z.enum([
 ]);
 export type DisqualifiedReasonCode = z.infer<typeof DisqualifiedReasonCodeSchema>;
 
+/**
+ * Inconclusive = agent never reached confidence to qualify / refer-out /
+ * disqualify. Path 7 in planning/00-discovery-design-thinking.md §3.2.
+ * Durable record for analytics; no email (E.3 pattern); 90-day retention
+ * (E.7 pattern).
+ */
+export const InconclusiveReasonCodeSchema = z.enum([
+  "low_engagement",
+  "mixed_signals",
+  "extended_no_convergence",
+  "comparison_shopping",
+  "off_offer_in_region",
+  "drive_by",
+  "inconclusive_other",
+]);
+export type InconclusiveReasonCode = z.infer<typeof InconclusiveReasonCodeSchema>;
+
 // -----------------------------------------------------------------------------
 // Per-verdict reason object: { code, text }.
 //
@@ -97,14 +120,21 @@ export const DisqualifiedReasonSchema = z.object({
 });
 export type DisqualifiedReason = z.infer<typeof DisqualifiedReasonSchema>;
 
+export const InconclusiveReasonSchema = z.object({
+  code: InconclusiveReasonCodeSchema,
+  text: z.string().min(1),
+});
+export type InconclusiveReason = z.infer<typeof InconclusiveReasonSchema>;
+
 /**
- * Union of all three variant-specific reasons. Use when a consumer wants to
+ * Union of all four variant-specific reasons. Use when a consumer wants to
  * accept any reason shape without discriminating on verdict.
  */
 export const HandoffReasonSchema = z.union([
   QualifiedReasonSchema,
   ReferredOutReasonSchema,
   DisqualifiedReasonSchema,
+  InconclusiveReasonSchema,
 ]);
 export type HandoffReason = z.infer<typeof HandoffReasonSchema>;
 
@@ -225,10 +255,23 @@ export const HandoffPayloadDisqualifiedSchema = z
   .strict();
 export type HandoffPayloadDisqualified = z.infer<typeof HandoffPayloadDisqualifiedSchema>;
 
+export const HandoffPayloadInconclusiveSchema = z
+  .object({
+    verdict: z.literal("inconclusive"),
+    // No contact field on inconclusive — agent never surfaced the
+    // lead-capture widget because it never reached confidence. Same shape
+    // as disqualified per HITL Q5.
+    reason: InconclusiveReasonSchema,
+    ...HandoffPayloadCommon,
+  })
+  .strict();
+export type HandoffPayloadInconclusive = z.infer<typeof HandoffPayloadInconclusiveSchema>;
+
 export const HandoffPayloadSchema = z.discriminatedUnion("verdict", [
   HandoffPayloadQualifiedSchema,
   HandoffPayloadReferredOutSchema,
   HandoffPayloadDisqualifiedSchema,
+  HandoffPayloadInconclusiveSchema,
 ]);
 export type HandoffPayload = z.infer<typeof HandoffPayloadSchema>;
 

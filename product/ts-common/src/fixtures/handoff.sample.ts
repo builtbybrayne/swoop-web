@@ -10,6 +10,7 @@
 
 import type {
   HandoffPayloadDisqualified,
+  HandoffPayloadInconclusive,
   HandoffPayloadQualified,
   HandoffPayloadReferredOut,
 } from "../handoff.js";
@@ -144,6 +145,42 @@ export const SampleHandoffDisqualified: HandoffPayloadDisqualified = {
     handoffSubmittedAt: "2026-04-22T11:06:18.000Z",
     turnCount: 2,
     rawConversationRef: "conversation_sess_puma_demo_disqualified_001",
+  },
+};
+
+export const SampleHandoffInconclusive: HandoffPayloadInconclusive = {
+  verdict: "inconclusive",
+  handoffId: "handoff_puma_demo_inconclusive_001",
+  reason: {
+    code: "extended_no_convergence",
+    text:
+      "Visitor browsed across Patagonia + the Arctic + Iceland over twelve turns; never " +
+      "settled on a region or budget band. Agent kept the door open warmly without forcing " +
+      "a triage call.",
+  },
+  visitorProfile: {
+    independenceLevel: undefined,
+    budgetBand: "unknown",
+    activityInclination: ["dreaming"],
+    regionInterest: ["patagonia", "arctic", "iceland"],
+  },
+  wishlist: [],
+  motivationAnchor: "Comparing very different trip shapes — exploration mode, no commitment cues.",
+  consent: {
+    conversationGranted: true,
+    conversationTimestamp: "2026-04-22T14:00:00.000Z",
+    // Inconclusive records carry handoff-consent state snapshot like
+    // disqualified — the flag is false because the agent never surfaced
+    // the lead-capture widget (no confidence reached).
+    handoffGranted: false,
+    handoffTimestamp: "2026-04-22T14:18:42.000Z",
+  },
+  session: {
+    sessionId: "sess_puma_demo_inconclusive_001",
+    conversationStartedAt: "2026-04-22T14:00:08.000Z",
+    handoffSubmittedAt: "2026-04-22T14:18:48.000Z",
+    turnCount: 12,
+    rawConversationRef: "conversation_sess_puma_demo_inconclusive_001",
   },
 };
 

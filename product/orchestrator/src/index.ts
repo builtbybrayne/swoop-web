@@ -117,9 +117,11 @@ async function main(): Promise<void> {
 
   // E.t3 — handoff store + mailer config. The store is currently
   // file-backed under <packageRoot>/var/handoffs/ as an interim until
-  // chunk E.t2 settles a real backend (Firestore default per E.1). The
-  // mailer is shaped from env vars; the master `enabled` switch defaults
-  // off until Julie confirms sales-inbox + SMTP creds.
+  // chunk E.t2 proper settles the durable backend — Cloud SQL Postgres
+  // per E.10 + C.18 + C.23 (Firestore was the original target but is
+  // dropped project-wide). The mailer is shaped from env vars; the
+  // master `enabled` switch defaults off until Julie confirms sales-
+  // inbox + SMTP creds.
   const handoffStoreDir = path.join(config.packageRoot, 'var', 'handoffs');
   const handoffStore = new FsHandoffStore(handoffStoreDir);
   const mailerConfig: MailerConfig = {
@@ -169,7 +171,7 @@ async function main(): Promise<void> {
     console.log(`[orchestrator] cors allowed origins: [${config.CORS_ALLOWED_ORIGINS.join(', ')}]`);
     console.log(
       `[orchestrator] handoff store: file-backed at ${handoffStoreDir} ` +
-        `(interim — Firestore swap targeted in chunk E.t2)`,
+        `(interim — Cloud SQL Postgres swap targeted in chunk E.t2 per E.10 + C.18)`,
     );
     console.log(
       `[orchestrator] handoff mailer: ${

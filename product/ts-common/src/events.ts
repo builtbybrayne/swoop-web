@@ -40,7 +40,12 @@ const EventEnvelopeBase = {
 };
 
 // Shared verdict enum, reused by several event payloads.
-const VerdictEnum = z.enum(["qualified", "referred_out", "disqualified"]);
+const VerdictEnum = z.enum([
+  "qualified",
+  "referred_out",
+  "disqualified",
+  "inconclusive",
+]);
 
 // -----------------------------------------------------------------------------
 // Per-event-type schemas — A.t2 stubs (keep unchanged).
@@ -128,7 +133,13 @@ export const SessionEndedEventSchema = z.object({
   payload: z.object({
     durationMs: z.number().int().nonnegative(),
     turnCount: z.number().int().nonnegative(),
-    finalTriageVerdict: z.enum(["none", "qualified", "referred_out", "disqualified"]),
+    finalTriageVerdict: z.enum([
+      "none",
+      "qualified",
+      "referred_out",
+      "disqualified",
+      "inconclusive",
+    ]),
     terminationReason: z.enum(["user_closed", "idle_timeout", "error"]),
   }),
 });

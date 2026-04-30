@@ -14,6 +14,7 @@
 | In-progress session (archived) | +7 days then deleted | as above | E.8 | Archive TTL via session sweeper (planned) |
 | Submitted handoff — qualified / referred_out | 12 months OR until CRM ingestion (whichever sooner) | Art. 6(1)(a) consent + sales lifecycle necessity | E.6 | Scheduled job (planned, post-Postgres swap) |
 | Submitted handoff — disqualified | 90 days | Art. 6(1)(f) legitimate interest in product analytics, post-purpose-served | E.7 | Scheduled job (planned, post-Postgres swap) |
+| Submitted handoff — inconclusive | 90 days | Art. 6(1)(f) legitimate interest in product analytics, agent-never-reached-confidence | E.7 pattern (per HITL Q5) | Scheduled job (planned, post-Postgres swap) |
 | Tier-1 / Tier-2 consent records | Lifetime of underlying handoff record | Bundled with handoff record (audit trail) | implicit in E.6/E.7 | as above |
 | Cloud Logging events (handoff.submitted etc.) | 30 days | Art. 6(1)(f) legitimate interest in observability | F-a / F-b | Cloud Logging default |
 
@@ -39,6 +40,12 @@
 - **90 days**: enough time for product analytics — checking the agent's disqualification accuracy, identifying patterns of misclassification, calibrating the triage classifier. After 90 days the analytics value plateaus.
 - **No email sent**: the record exists for analytics, not sales. Hard delete at 90 days satisfies storage minimisation.
 - **Lawful basis Art. 6(1)(f)**: legitimate interest in product analytics. Balancing test: the data has minimal reidentification risk (no contact persisted past disqualification — visitor never submitted contact for disqualified outcomes) and the analytics purpose is necessary for product quality. Counsel should confirm this framing.
+
+### Submitted handoffs — inconclusive (E.7 pattern, per HITL Q5)
+
+- **90 days** — same as disqualified. The agent never reached confidence to qualify, refer-out, or disqualify; the durable record exists for analytics (understanding which visitor patterns produce inconclusive outcomes) and post-launch prompt iteration.
+- **No email sent**: same as disqualified. The record exists for analytics, not sales.
+- **Lawful basis Art. 6(1)(f)**: legitimate interest in product analytics. Same balancing test as disqualified: no contact field is ever persisted on an inconclusive record (the agent never surfaced the lead-capture widget). Counsel should confirm this framing applies equally.
 
 ### Cloud Logging events (F-a / F-b)
 

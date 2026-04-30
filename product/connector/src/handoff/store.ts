@@ -2,15 +2,16 @@
  * Durable handoff store — interface + file-backed reference implementation.
  *
  * STATUS: ad-hoc / interim. The whole `FsHandoffStore` is throwaway code we
- * keep until chunk E.t2 lands a proper backend (Firestore is the default
- * per planning/02-impl-handoff-and-compliance.md §2.4 + decision E.1).
+ * keep until chunk E.t2 proper lands the durable backend — Cloud SQL Postgres
+ * per decisions E.10 + C.18 + C.23 (the original Firestore target was dropped
+ * project-wide in C.23). See planning/02-impl-handoff-and-compliance.md §2.4.
  *
  * Why we still build a real interface for the throwaway impl:
  *   - The orchestrator (and future MCP `handoff_submit` tool) only needs
  *     to know about `HandoffStore`. Swapping the implementation later is
  *     one constructor injection, no caller changes.
  *   - The tests in this module exercise the interface contract; the
- *     Firestore impl will inherit those tests when it lands.
+ *     `PostgresHandoffStore` will inherit those tests when it lands.
  *
  * File layout (one record per handoff):
  *   <dir>/<handoffId>.json
