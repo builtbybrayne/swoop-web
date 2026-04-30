@@ -12,7 +12,7 @@
 --   - text (chunk content, agent-ready)
 --   - canonical_url (deep-link target)
 --   - ntag_ids (int[] — for filtering)
---   - embedding (vector(1536), populated by C.t3a)
+--   - embedding (vector(1024), populated by C.t3a)
 --   - tsv (tsvector for hybrid retrieval; populated by C.t3a)
 --   - content_hash (idempotent re-embedding lookups)
 -- plus job-specific fields.
@@ -26,6 +26,14 @@
 --
 -- Mirror retrieval is persona-shaped (C.30), so customer_story has
 -- persona_summary + persona_embedding instead of a content embedding.
+--
+-- ETL teardown order (full rebuild):
+--   Tear down derived tables BEFORE domain tables. Otherwise the FK
+--   references on `image_id` (now ON DELETE SET NULL across the optional
+--   image FKs in this file) and the implicit FK on `trip_card.id REFERENCES
+--   trip(id)` (NO ACTION — intentional, deletion of a trip should block
+--   the trip_card deletion until the cascade is explicit) will block
+--   `TRUNCATE` on the domain side.
 -- ----------------------------------------------------------------------------
 
 -- ----------------------------------------------------------------------------
@@ -40,14 +48,14 @@ CREATE TABLE IF NOT EXISTS inspire_passage (
       'blog_chunk', 'chunk'
     )
   ),
-  source_id         TEXT NOT NULL,            -- TEXT to accommodate UUID blog chunk ids alongside int domain ids
+  source_id         TEXT NOT NULL,            -- TEXT because source ids span integer (page, blog_post, blog_chunk, contentblock, chunk, faqitem) and string sources (e.g. external_certification refs)
   text              TEXT NOT NULL,
   canonical_url     TEXT NOT NULL,
   ntag_ids          INTEGER[] DEFAULT '{}',
   region            TEXT,                     -- denormalised from ntag.area overlap
   mood              TEXT,                     -- optional, derived where extractable
-  image_id          INTEGER REFERENCES image(id),
-  embedding         vector(1536),
+  image_id          INTEGER REFERENCES image(id) ON DELETE SET NULL,
+  embedding         vector(1024),
   tsv               tsvector,
   content_hash      TEXT NOT NULL,
   created_at        TIMESTAMPTZ DEFAULT NOW(),
@@ -78,8 +86,8 @@ CREATE TABLE IF NOT EXISTS customer_story (
   canonical_url      TEXT,
   region             TEXT,
   persona_summary    TEXT NOT NULL,
-  persona_embedding  vector(1536),
-  image_id           INTEGER REFERENCES image(id),
+  persona_embedding  vector(1024),
+  image_id           INTEGER REFERENCES image(id) ON DELETE SET NULL,
   tsv                tsvector,
   content_hash       TEXT NOT NULL,
   created_at         TIMESTAMPTZ DEFAULT NOW(),
@@ -108,7 +116,7 @@ CREATE TABLE IF NOT EXISTS trust_proof (
   claim             TEXT NOT NULL,
   evidence          TEXT NOT NULL,
   canonical_url     TEXT,
-  embedding         vector(1536),
+  embedding         vector(1024),
   tsv               tsvector,
   content_hash      TEXT NOT NULL,
   created_at        TIMESTAMPTZ DEFAULT NOW(),
@@ -132,7 +140,7 @@ CREATE TABLE IF NOT EXISTS inform_chunk (
   text              TEXT NOT NULL,
   canonical_url     TEXT,
   topic_tags        TEXT[] DEFAULT '{}',
-  embedding         vector(1536),
+  embedding         vector(1024),
   tsv               tsvector,
   content_hash      TEXT NOT NULL,
   created_at        TIMESTAMPTZ DEFAULT NOW(),
@@ -149,20 +157,33 @@ CREATE TABLE IF NOT EXISTS inform_chunk (
 
 CREATE TABLE IF NOT EXISTS trip_card (
   id                  INTEGER PRIMARY KEY REFERENCES trip(id),
-  slug                TEXT,
+  slug                TEXT UNIQUE,
   headline            TEXT NOT NULL,
   vibe_line           TEXT,
   region              TEXT,
   duration_days       INTEGER,
   from_price          DECIMAL(10, 2),
   currency_code       TEXT,
-  image_id            INTEGER REFERENCES image(id),
+  image_id            INTEGER REFERENCES image(id) ON DELETE SET NULL,
   accommodation_style TEXT,
   activity_tags       TEXT[] DEFAULT '{}',
   canonical_url       TEXT NOT NULL,
-  embedding           vector(1536),
+  embedding           vector(1024),
   tsv                 tsvector,
   content_hash        TEXT NOT NULL,
   created_at          TIMESTAMPTZ DEFAULT NOW(),
   modified_at         TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ----------------------------------------------------------------------------
+-- Column comments — the why where it isn't obvious from name + type
+-- ----------------------------------------------------------------------------
+
+COMMENT ON COLUMN customer_story.persona_summary IS
+  'Haiku-generated 1-3 sentence natural-language description of the customer (decision C.30). The Mirror tool MATCHES against persona_embedding.';
+COMMENT ON COLUMN customer_story.persona_embedding IS
+  'Cosine similarity against this is how find_someone_who finds matching customers.';
+COMMENT ON COLUMN trip_card.vibe_line IS
+  'One-line evocative pitch, computed at ETL from headline + description.';
+COMMENT ON COLUMN inspire_passage.mood IS
+  'Optional descriptor extracted from blog tags or page subheading where available.';

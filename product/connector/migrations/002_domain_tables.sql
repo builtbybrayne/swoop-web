@@ -10,8 +10,11 @@
 -- Conventions:
 --   - INTEGER ids match source ids where 1:1 with a source row (trip, page,
 --     contentblock, image, blog_post, faqitem, ntag-derived `tag`).
---   - TEXT for free-form prose; vector(1536) for embedding columns (Voyage-3
---     dimensionality; column re-population is the swap cost if model changes).
+--   - TEXT for free-form prose; vector(1024) for embedding columns — locked
+--     to Voyage-3 (1024d) per decision C.18. pgvector cannot ALTER COLUMN
+--     TYPE for vector width, so a model swap means dropping + recreating
+--     every embedding column AND rebuilding all 9 HNSW indexes. Pre-launch
+--     that's cheap; post-launch it's a re-embed-everything migration.
 --   - DECIMAL for currency-priced fields (no floats for money).
 --   - canonical_url stored as TEXT; populated at ETL via canonical_url() (005)
 --     for rows that carry override_url + alias directly. For trips, populated
@@ -82,10 +85,10 @@ CREATE TABLE IF NOT EXISTS activity (
 CREATE TABLE IF NOT EXISTS tag (
   id           INTEGER PRIMARY KEY,
   title        TEXT NOT NULL,
-  alias        TEXT,
+  alias        TEXT UNIQUE,
   type         TEXT NOT NULL CHECK (type IN ('interest', 'area', 'activity', 'trip-type', 'style')),
   is_active    BOOLEAN NOT NULL DEFAULT TRUE,
-  embedding    vector(1536),
+  embedding    vector(1024),
   created_at   TIMESTAMPTZ DEFAULT NOW(),
   modified_at  TIMESTAMPTZ DEFAULT NOW()
 );
@@ -107,7 +110,7 @@ CREATE TABLE IF NOT EXISTS image (
   width              INTEGER,
   height             INTEGER,
   original_filename  TEXT,
-  embedding          vector(1536),
+  embedding          vector(1024),
   created_at         TIMESTAMPTZ DEFAULT NOW(),
   modified_at        TIMESTAMPTZ DEFAULT NOW()
 );
@@ -129,11 +132,11 @@ CREATE TABLE IF NOT EXISTS page (
   title           TEXT NOT NULL,
   alias           TEXT,
   override_url    TEXT,
-  canonical_url   TEXT NOT NULL,
+  canonical_url   TEXT NOT NULL UNIQUE,
   intro_text      TEXT,
   summary         TEXT,
-  image_id        INTEGER REFERENCES image(id),
-  bannerimage_id  INTEGER REFERENCES image(id),
+  image_id        INTEGER REFERENCES image(id) ON DELETE SET NULL,
+  bannerimage_id  INTEGER REFERENCES image(id) ON DELETE SET NULL,
   ntag_ids        INTEGER[] DEFAULT '{}',
   parent_id       INTEGER REFERENCES page(id),
   created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -160,7 +163,7 @@ CREATE TABLE IF NOT EXISTS contentblock (
   title        TEXT,
   subheading   TEXT,
   text         TEXT,
-  image_id     INTEGER REFERENCES image(id),
+  image_id     INTEGER REFERENCES image(id) ON DELETE SET NULL,
   cta_text     TEXT,
   cta_url      TEXT,
   created_at   TIMESTAMPTZ DEFAULT NOW(),
@@ -194,7 +197,7 @@ CREATE TABLE IF NOT EXISTS faqitem (
   content      TEXT NOT NULL,        -- the answer
   faqset_id    INTEGER,
   position     INTEGER,
-  embedding    vector(1536),
+  embedding    vector(1024),
   created_at   TIMESTAMPTZ DEFAULT NOW(),
   modified_at  TIMESTAMPTZ DEFAULT NOW()
 );
@@ -207,7 +210,7 @@ CREATE TABLE IF NOT EXISTS faqitem (
 
 CREATE TABLE IF NOT EXISTS trip (
   id                    INTEGER PRIMARY KEY,
-  slug                  TEXT,
+  slug                  TEXT UNIQUE,
   title                 TEXT NOT NULL,
   subtitle              TEXT,
   region_id             INTEGER REFERENCES area(id),
@@ -220,7 +223,7 @@ CREATE TABLE IF NOT EXISTS trip (
   excludes              TEXT,
   accommodation_style   TEXT,
   ntag_ids              INTEGER[] DEFAULT '{}',
-  image_id              INTEGER REFERENCES image(id),
+  image_id              INTEGER REFERENCES image(id) ON DELETE SET NULL,
   canonical_url         TEXT,
   page_id               INTEGER REFERENCES page(id),
   created_at            TIMESTAMPTZ DEFAULT NOW(),
@@ -234,7 +237,7 @@ CREATE TABLE IF NOT EXISTS trip (
 
 CREATE TABLE IF NOT EXISTS tour (
   id                  INTEGER PRIMARY KEY,
-  slug                TEXT,
+  slug                TEXT UNIQUE,
   title               TEXT NOT NULL,
   subtitle            TEXT,
   duration_days       INTEGER,
@@ -244,7 +247,7 @@ CREATE TABLE IF NOT EXISTS tour (
   description         TEXT,
   region_id           INTEGER REFERENCES area(id),
   ntag_ids            INTEGER[] DEFAULT '{}',
-  image_id            INTEGER REFERENCES image(id),
+  image_id            INTEGER REFERENCES image(id) ON DELETE SET NULL,
   canonical_url       TEXT,
   page_id             INTEGER REFERENCES page(id),
   created_at          TIMESTAMPTZ DEFAULT NOW(),
@@ -267,7 +270,7 @@ CREATE TABLE IF NOT EXISTS tour_item (
 
 CREATE TABLE IF NOT EXISTS hotel (
   id            INTEGER PRIMARY KEY,
-  slug          TEXT,
+  slug          TEXT UNIQUE,
   name          TEXT NOT NULL,
   description   TEXT,
   location_id   INTEGER REFERENCES location(id),
@@ -303,7 +306,7 @@ CREATE TABLE IF NOT EXISTS hotel_pricing (
 
 CREATE TABLE IF NOT EXISTS vessel (
   id            INTEGER PRIMARY KEY,
-  slug          TEXT,
+  slug          TEXT UNIQUE,
   name          TEXT NOT NULL,
   description   TEXT,
   page_id       INTEGER REFERENCES page(id),
@@ -337,7 +340,7 @@ CREATE TABLE IF NOT EXISTS cabin (
 
 CREATE TABLE IF NOT EXISTS blog_post (
   id                  INTEGER PRIMARY KEY,
-  slug                TEXT NOT NULL,
+  slug                TEXT NOT NULL UNIQUE,
   title               TEXT NOT NULL,
   excerpt             TEXT,
   content             TEXT,
@@ -358,7 +361,30 @@ CREATE TABLE IF NOT EXISTS blog_chunk (
   blog_post_id  INTEGER NOT NULL REFERENCES blog_post(id),
   chunk_index   INTEGER NOT NULL,
   text          TEXT NOT NULL,
-  embedding     vector(1536),
+  embedding     vector(1024),
   content_hash  TEXT NOT NULL,
   UNIQUE (blog_post_id, chunk_index)
 );
+
+-- Note: blog_chunk.id is a generated identity, so it is not stable across
+-- full reloads. Derived rows referencing blog_chunk should use
+-- (blog_post_id, chunk_index) as the cross-reload-stable key when re-
+-- resolution is needed (or rely on content_hash for idempotency, which is
+-- what C.t3a does).
+
+-- ----------------------------------------------------------------------------
+-- Column comments — the why where it isn't obvious from name + type
+-- ----------------------------------------------------------------------------
+
+COMMENT ON COLUMN image.canonical_url IS
+  'Source-of-truth-agnostic image URL; provider-agnostic per 2026-04-29 spec (decision C.15).';
+COMMENT ON COLUMN image.subject_tags IS
+  'Annotation tag array (subjects: glacier, wildlife, etc.); populated by C.t6 image annotation pipeline.';
+COMMENT ON COLUMN image.mood_tags IS
+  'Annotation tag array (atmosphere: serene, dramatic, etc.); populated by C.t6 image annotation pipeline.';
+COMMENT ON COLUMN image.region_tags IS
+  'Annotation tag array (region slugs: torres-del-paine, etc.); populated by C.t6 image annotation pipeline.';
+COMMENT ON COLUMN blog_post.primary_job IS
+  'Job classification (Inspire/Mirror/Reassure/Inform/multi/none); populated by Haiku classifier in C.t3a.';
+COMMENT ON COLUMN tag.type IS
+  'ntag dimension: interest / area / activity / trip-type / style. 79 active tags total (decision C.17).';
