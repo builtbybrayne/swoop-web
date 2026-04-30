@@ -16,9 +16,9 @@
 //   keeps the fields a tool's caller (orchestrator → Sonnet → widget) needs.
 //   Tool output schemas in `tools.ts` compose around the public projection.
 //
-// `vector(1536)` columns are server-side only — never part of any tool's I/O.
-// They appear here so ETL writes can validate against the same shape; tool
-// outputs strip them.
+// `vector(1024)` columns (Voyage-3 dimensionality, per decision C.18) are
+// server-side only — never part of any tool's I/O. They appear here so ETL
+// writes can validate against the same shape; tool outputs strip them.
 //
 // Pattern mirrors the page-as-hub philosophy (decision C.16): the public
 // projection is "what the visitor's journey needs"; the full schema is "what
@@ -33,9 +33,10 @@ import { z } from "zod";
 
 /**
  * Embedding column shape. Used for ETL-side validation only. Stripped from
- * every public projection.
+ * every public projection. Locked to Voyage-3 (1024-dimensional) per
+ * decision C.18; rejects NaN / Infinity via `.finite()`.
  */
-const EmbeddingSchema = z.array(z.number()).length(1536);
+const EmbeddingSchema = z.array(z.number().finite()).length(1024);
 
 /**
  * tsvector column. Postgres serialises this to TEXT on the wire. We store the

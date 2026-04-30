@@ -376,6 +376,17 @@ export const CONDITIONAL_TOOLS = [
 // labels for tool registration where a description string is required by the
 // SDK shape but the rich Sonnet-facing prose comes from the markdown. They're
 // short on purpose — duplication across two surfaces invites drift.
+//
+// TODO(C.t4): The placeholder strings below contain pointers like
+// "See cms/prompts/tools/<tool>/description.md" but no actual loading
+// happens here. C.t4 (tool registration in the connector boot path) is
+// responsible for: (1) reading the markdown at startup from
+// `product/cms/prompts/tools/<tool>/description.md`, (2) substituting the
+// rich prose into the MCP tool registration before the connector advertises
+// the tool surface, and (3) failing fast if any expected description.md is
+// missing. Until that wiring lands, Sonnet sees the short labels here, not
+// the full markdown. This comment is the breadcrumb so the loading step
+// doesn't get missed during C.t4.
 // =============================================================================
 
 export const TOOL_DESCRIPTIONS = {
