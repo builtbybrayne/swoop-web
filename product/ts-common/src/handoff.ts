@@ -102,27 +102,32 @@ export type InconclusiveReasonCode = z.infer<typeof InconclusiveReasonCodeSchema
 // summary of the qualifying signals. `min(1)` enforces non-empty.
 // -----------------------------------------------------------------------------
 
+// `text` is the freeform sales-specialist context. R4 caps at 500 chars —
+// covers the longest plausible "narrative summary of qualifying signals"
+// while preventing a 60kb visitor-supplied string from landing in
+// `var/handoffs/<id>.json` + email body + sha256 inputs.
+
 export const QualifiedReasonSchema = z.object({
   code: QualifiedReasonCodeSchema,
-  text: z.string().min(1),
+  text: z.string().min(1).max(500),
 });
 export type QualifiedReason = z.infer<typeof QualifiedReasonSchema>;
 
 export const ReferredOutReasonSchema = z.object({
   code: ReferredOutReasonCodeSchema,
-  text: z.string().min(1),
+  text: z.string().min(1).max(500),
 });
 export type ReferredOutReason = z.infer<typeof ReferredOutReasonSchema>;
 
 export const DisqualifiedReasonSchema = z.object({
   code: DisqualifiedReasonCodeSchema,
-  text: z.string().min(1),
+  text: z.string().min(1).max(500),
 });
 export type DisqualifiedReason = z.infer<typeof DisqualifiedReasonSchema>;
 
 export const InconclusiveReasonSchema = z.object({
   code: InconclusiveReasonCodeSchema,
-  text: z.string().min(1),
+  text: z.string().min(1).max(500),
 });
 export type InconclusiveReason = z.infer<typeof InconclusiveReasonSchema>;
 
@@ -166,14 +171,24 @@ export type HandoffWishlistEntry = z.infer<typeof HandoffWishlistEntrySchema>;
 
 // -----------------------------------------------------------------------------
 // Contact — required on qualified / referred_out.
+//
+// Each string field carries a `.regex(/^[^\r\n]{1,200}$/)` constraint to close
+// R3 (email-header injection vector — visitor-supplied newlines flowing into
+// nodemailer's `subject` / template-bound fields) and R4 (length cap — visitor
+// strings end up in `var/handoffs/<id>.json`, sha256 inputs and the email
+// body, so a 200-char cap is defence-in-depth against storage-abuse / DoS).
+// 200 chars matches the reasonable upper bound for any contact field; clean
+// fixtures sit well under it.
 // -----------------------------------------------------------------------------
 
+const ContactStringSchema = z.string().regex(/^[^\r\n]{1,200}$/);
+
 export const HandoffContactSchema = z.object({
-  name: z.string(),
-  email: z.string().email(),
+  name: ContactStringSchema,
+  email: z.string().email().max(200).regex(/^[^\r\n]+$/),
   preferredMethod: z.enum(["email", "phone", "either"]).optional(),
-  phone: z.string().optional(),
-  timeZoneHint: z.string().optional(),
+  phone: ContactStringSchema.optional(),
+  timeZoneHint: ContactStringSchema.optional(),
 });
 export type HandoffContact = z.infer<typeof HandoffContactSchema>;
 
@@ -219,7 +234,10 @@ const HandoffPayloadCommon = {
   handoffId: z.string(),
   visitorProfile: VisitorProfileSchema,
   wishlist: z.array(HandoffWishlistEntrySchema),
-  motivationAnchor: z.string(),
+  // R4 cap: visitor-influenced free text. 2_000 chars covers a multi-sentence
+  // motivation summary; prevents unbounded payloads landing in durable store +
+  // sha256 inputs + email body.
+  motivationAnchor: z.string().max(2_000),
   consent: HandoffConsentSchema,
   session: HandoffSessionMetadataSchema,
 };

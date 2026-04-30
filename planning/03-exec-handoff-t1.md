@@ -273,7 +273,7 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Commits**: _(landed: filled when done)_
 
-### R3 — `contact.name` / `email` / `phone` lack newline filter (email-header injection vector) — 🔲
+### R3 — `contact.name` / `email` / `phone` lack newline filter (email-header injection vector) — ✅
 
 **Problem**: `connector/src/handoff/mailer.ts:193` builds `Swoop lead — ${payload.contact.name} (qualified, …)` and passes it as nodemailer `subject`. `ts-common/src/handoff.ts:172` defines `name: z.string()` with no `.regex()`, no `.max()`. A visitor entering `Foo\r\nBcc: attacker@example.com` may smuggle a header.
 
@@ -281,9 +281,11 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Verification**: add reject-path tests in `handoff-schema.test.ts` for `\r\n`-bearing names. Add a mailer test asserting subject doesn't contain raw newlines.
 
-**Commits**: _(landed: filled when done)_
+**Landed**: `HandoffContactSchema` strings (name, phone, timeZoneHint) carry the `^[^\r\n]{1,200}$` regex; `email` carries a `^[^\r\n]+$` regex on top of the existing `.email()` (defence-in-depth) plus a `.max(200)` long-local-part cap. `mailer.ts` got a `stripControlChars()` helper applied in both `computeSubject` and `preparePayloadForTemplate` for visitor-influenced template-bound fields (`contact.name/email/phone/timeZoneHint`, `motivationAnchor`, `reason.text`). 7 control-char-rejection cases added to `handoff-schema.test.ts`; 4 mailer-side defence-in-depth cases added to `mailer.test.ts`.
 
-### R4 (contact part) — no length caps on `HandoffContactSchema` strings or `motivationAnchor` — 🔲
+**Commits**: _(filled at commit time)_
+
+### R4 (contact part) — no length caps on `HandoffContactSchema` strings or `motivationAnchor` — ✅
 
 **Problem**: schema has no `.max()` on name/email/phone/timeZoneHint. `enrichPayload` (`handoff-submit.ts:248-249`) leaves `motivationAnchor` unbounded. Visitor-supplied 60kb strings land in `var/handoffs/<id>.json`, in event sha256 inputs, and in the email body.
 
@@ -291,7 +293,9 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Verification**: reject-path tests for over-cap inputs; existing fixtures stay green (lengths are well under any cap).
 
-**Commits**: _(landed: filled when done)_
+**Landed**: 200-char cap on contact fields baked into the shared regex (`^[^\r\n]{1,200}$`); `email` got an explicit `.max(200)`. `motivationAnchor` carries `.max(2_000)` in `HandoffPayloadCommon`; per-verdict `reason.text` carries `.max(500)`. 7 length-cap cases added to `handoff-schema.test.ts` (one rejection + one boundary acceptance per field, plus a regression assertion that the four canonical fixtures still parse).
+
+**Commits**: _(filled at commit time)_
 
 ### Theme-A.2 — Tighten `HandoffSubmitRequestSchema` to discriminated union — 🔲
 
