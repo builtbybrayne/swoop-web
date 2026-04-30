@@ -263,7 +263,7 @@ E.t2 consumes this finalised schema + the `HandoffSubmitConsentGate` type-only c
 
 Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Items below close findings from the 12-expert code-level council. Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
 
-### R1 — `inconclusive` missing from `TriageStateSchema` — 🔲
+### R1 — `inconclusive` missing from `TriageStateSchema` — ✅
 
 **Problem**: yesterday's Q5 propagation extended `HandoffVerdictSchema` (`product/ts-common/src/handoff.ts:39-44`) and `SessionEndedEvent.payload.finalTriageVerdict` (`events.ts:131-138`) but stopped at the session triage discriminator. `product/ts-common/src/session.ts:70-75` lists only `none / qualified / referred_out / disqualified`. An `inconclusive` verdict cannot be persisted into `SessionState.triage`; `chat.ts:148-159` reads `updated.triage.verdict !== 'none'` and parse will fail at runtime if the classifier ever returns inconclusive.
 
@@ -271,7 +271,9 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Verification**: `npm test -w @swoop/common` includes a triage-state round-trip case for each verdict.
 
-**Commits**: _(landed: filled when done)_
+**Commits**: `14630ebd43b851348e460ab0537d73a97fae2f9e`
+
+**Landed 2026-04-30** — schema-only fix per the addendum's primary spec: added `TriageStateInconclusiveSchema` (mirrors `TriageStateDisqualifiedSchema`) and included it in `TriageStateSchema`'s discriminated union. Fixture coverage added in `__tests__/fixtures.test.ts` as a parameterised triage-state round-trip block — one case per verdict (none, qualified, referred_out, disqualified, inconclusive). `triage-classifier.ts:postureToTriage` deliberately NOT touched: the classifier's prompt has no `inconclusive` posture (the four labels are `leaning_qualified / leaning_backpacker / leaning_low_value / unclear`), so adding a switch arm would be dead code until G.t0 lands the proper triage logic. The schema gap was the load-bearing issue; the persistence path is now safe whenever a future classifier emits the verdict. 421/421 tests green across 6 workspaces.
 
 ### R3 — `contact.name` / `email` / `phone` lack newline filter (email-header injection vector) — 🔲
 

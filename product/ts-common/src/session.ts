@@ -67,11 +67,25 @@ export const TriageStateDisqualifiedSchema = z.object({
   decidedAt: z.string().datetime(),
 });
 
+// `inconclusive` (HITL Q5, 2026-04-30): Path 7 visitors — agent never reaches
+// confidence to qualify, refer-out, or disqualify. Mirrors the disqualified
+// variant; downstream consequences (no email, 90-day retention) are the same
+// per E.3 / E.7 patterns. Final reason-code taxonomy lives in
+// HandoffPayload.reason.code (per-verdict enum); session-side stays freeform
+// per the decoupling rationale in planning/03-exec-handoff-t1.md.
+export const TriageStateInconclusiveSchema = z.object({
+  verdict: z.literal("inconclusive"),
+  reasonCode: z.string(),
+  reasonText: z.string(),
+  decidedAt: z.string().datetime(),
+});
+
 export const TriageStateSchema = z.discriminatedUnion("verdict", [
   TriageStateNoneSchema,
   TriageStateQualifiedSchema,
   TriageStateReferredOutSchema,
   TriageStateDisqualifiedSchema,
+  TriageStateInconclusiveSchema,
 ]);
 export type TriageState = z.infer<typeof TriageStateSchema>;
 
