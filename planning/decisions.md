@@ -168,7 +168,7 @@ The E.t2 task in the planning doc described "Firestore default + a `ts-common` i
 **Decided**: 2026-04-29
 **Owner**: Al
 
-**Rationale**: The `customer_story` table (Mirror job, conditional on C.26) needs a way to remember *who* each story is about so the visitor's persona signal can be matched to similar customers. Two shapes were considered: structured columns (`travel_style`, `age_band`, `motivation_tags`, …) vs JSONB blob. Both lock the persona taxonomy to schema time, before we've actually read enough customer reviews to know what dimensions matter.
+**Rationale**: The `customer_story` table (Mirror job, now live since C.26 graduated 2026-04-30) needs a way to remember *who* each story is about so the visitor's persona signal can be matched to similar customers. Two shapes were considered: structured columns (`travel_style`, `age_band`, `motivation_tags`, …) vs JSONB blob. Both lock the persona taxonomy to schema time, before we've actually read enough customer reviews to know what dimensions matter.
 
 The chosen shape: **`persona_summary TEXT` + `persona_embedding vector(1024)`** (Voyage-3 dimensionality per C.18). At ETL time, the Haiku classifier writes a 1–3 sentence natural-language description per row (e.g. *"Sarah, mid-40s, solo traveller, post-divorce reset trip. Intermediate hiker, drawn to wildlife photography and accessible glaciers. Wanted quiet trails over W-trail crowds."*). That text gets embedded. At query time the Mirror tool embeds the visitor's signal and finds matching customers via cosine similarity on the embedding.
 
@@ -212,18 +212,20 @@ The pagetype → job mapping is documented in [planning/02-impl-retrieval-and-da
 
 **Swap cost**: Trivial. One `WHERE pagetype_id != 20` clause in the export. Reversed in the same one-line edit.
 
-## C.26 — Customer-review supply is dangling in the dump; `find_someone_who` is conditional
+## C.26 — Customer-review supply granted; `find_someone_who` graduated to live
 
-**Decided**: 2026-04-29
+**Decided**: 2026-04-29 (raised) → **2026-04-30 (graduated)**
 **Owner**: Al
 
-**Rationale**: The 2026-04-28 chunk-C plan committed to feeding the Mirror tool (`recall_someone_who` then, `find_someone_who` now per C.25) from `contentblock_customerreview` (2,390 rows) + `contentblock_customertip` (119) + relevant blog posts. The 2026-04-29 dump inspection revealed those `contentblock_*` tables are **pure junctions** — they hold FK references to `customerreview` / `customertip` source tables that don't exist in the dump. PII redaction at export time is the most likely cause. Same for `contentblock_pressreview` (0 rows alive but the source `pressreview` table is also missing).
+**Status (2026-04-30)**: **GRANTED.** Swoop delivered `customerreview_tables_-_swoop-patagonia_prod.sql` containing 2,563 customer reviews + 163 `customerreview_trip` junction rows. `find_someone_who` graduated from `CONDITIONAL_TOOLS` to live `TOOL_DESCRIPTIONS`; the schema and tool description prose authored at C.t2 carry forward unchanged. The 2,390 `contentblock_customerreview` junction rows now resolve cleanly (100%, zero dangling).
 
-Net: **2,390 dangling FK references with no prose attached.** The Mirror tool's intended supply is reduced to ~15 first-person blog posts.
+**PII stance**: These reviews are public domain — already published on Swoop's customer-facing website. **Ingest as-is**: no NER scrubbing, no name/location column drops, no regex flagging. Names, locations, and inline specialist mentions all preserved through the domain layer (`customerreview` + `customerreview_trip`) into `customer_story` derivation at C.t3a. Per Al 2026-04-30: *"these reviews are all public domain anyway — they're literally public customer reviews on the website."*
 
-Action: Al asks Swoop for a separate redacted export of `customerreview` + `customertip` tables (names stripped, PII removed). If granted, `find_someone_who` ships with the original supply level; the persona-signal extraction pass at ETL (per C.t3a) handles structuring. If not granted, **`find_someone_who` is dropped from Puma's tool surface**, and the Mirror job is filled inadequately by the blog alone — a known gap to revisit post-launch (potentially via Trustpilot scrape or a Swoop-curated story library). Swoop ask captured in `questions.md`.
+**Customertip remains pending.** The 2026-04-30 dump did not include `customertip` (119 expected) or `pressreview`. Al has a separate ask outstanding to Swoop. Until delivered, the 119 `contentblock_customertip` junction rows continue to dangle; ETL ignores them. Tracked in `questions.md`.
 
-**Swap cost**: Low if granted (one new ETL source table, mechanical). If dropped: removing one tool from the eight-tool surface, the corresponding Zod schemas, and the matching widget — ~half a day total. The architecture supports re-adding the tool when supply improves.
+**Original rationale (preserved for context)**: The 2026-04-28 chunk-C plan committed to feeding the Mirror tool (`recall_someone_who` then, `find_someone_who` now per C.25) from `contentblock_customerreview` (2,390 rows) + `contentblock_customertip` (119) + relevant blog posts. The 2026-04-29 dump inspection revealed those `contentblock_*` tables were **pure junctions** — they held FK references to `customerreview` / `customertip` source tables that didn't exist in the original dump. The 2026-04-30 supplementary export resolved this for customer reviews. Action taken (now closed): Al asked Swoop for a separate export; granted with a one-day turnaround.
+
+**Swap cost**: Low. The graduation was a one-line move in `tools.ts` (`CONDITIONAL_TOOLS` → `TOOL_DESCRIPTIONS`) plus a forward-only migration (`006_customerreview_tables.sql`) adding the two domain tables. If customertip is delivered later, it's an additive migration on the same pattern.
 
 ## C.25 — Five-jobs / eight-tools intent-named surface (replaces C.19)
 

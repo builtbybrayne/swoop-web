@@ -546,3 +546,36 @@ One soft over-execution worth flagging (surfaced by the spec-compliance reviewer
 - C.t4 — tool handlers validate against the Zod schemas in `tools.ts`. Tool descriptions to register with MCP should be loaded from `cms/prompts/tools/<tool>/description.md` (per C.34); the runtime label strings in `TOOL_DESCRIPTIONS` are not the rich prose.
 - B.t3a — when rewriting the orchestrator's connector adapter, drop the `@deprecated` `Search*` and `GetDetail*` schemas; cascade through `product/ui/src/widgets/search-results.tsx` and `item-detail.tsx`.
 - D.t9 — widgets render `find_inspiring` / `find_someone_who` / `find_proof` / `lookup` / `find_options` outputs from `*PublicSchema` shapes; `DerivedImageSchema` is the nested image record where applicable.
+
+---
+
+### Execution log addendum — 2026-04-30 — C.26 graduation
+
+**Trigger**: Swoop delivered the supplementary `customerreview_tables_-_swoop-patagonia_prod.sql` dump on 2026-04-30, unblocking the conditional `find_someone_who` tool. Phase 1 (subagent-led source inspection) ran first and surfaced two decisions for Al; Phase 2 (this addendum) executes the graduation.
+
+**Phase 1 inspection findings (verbatim summary)**:
+- 2,563 `customerreview` rows (all published-flag mixed; ETL filters `is_published = TRUE`).
+- 163 `customerreview_trip` junction rows linking 158 reviews to 56 distinct trips.
+- No `customertip`, no `pressreview` in this delivery — separate Swoop ask outstanding.
+- 100% of the 2,390 `contentblock_customerreview` junction rows now resolve cleanly (no dangling FKs).
+- Length distribution: median 153 chars, max 1064; ~80% short snippets (≤200 chars), ~20% substantive 300–1000-char first-person testimonials. Implication for C.t3a: aggregate by reviewer `name` before generating `persona_summary` — same person often has 9–12 short snippet rows that compose into a coherent persona only when joined.
+- Geographic anchors are STRONG (Torres del Paine, Fitz Roy, EcoCamp, named treks all preserved); date coverage 99.9%; image associations sparse (5.8%).
+
+**Decisions taken by Al on Phase 1**:
+- **PII**: ingest as-is. Reviews are public domain (already on Swoop's website). No NER scrubbing, no `name`/`location` column drops, no regex flagging.
+- **Customertip**: ship reviews-only now; tips become a follow-up delivery if/when Swoop sends them.
+
+**Phase 2 changes (this addendum)**:
+- New migration `product/connector/migrations/006_customerreview_tables.sql` — adds `customerreview` (12 columns + 2 indexes) and `customerreview_trip` (junction with composite UNIQUE) domain tables. Forward-only per C.31; FK columns dropped where targets aren't in the dump (`created_by_id`, `modified_by_id`, `deleted_by_id`); `feedbacksnippet_id` retained but commented as dangling.
+- `product/ts-common/src/tools.ts` — `find_someone_who` graduated from `CONDITIONAL_TOOLS` to live `TOOL_DESCRIPTIONS`. The `CONDITIONAL_TOOLS` const removed entirely (now empty); description label cleaned of conditional caveats; module-header comment updated.
+- `planning/decisions.md` — C.26 status reframed from "conditional / Swoop ask outstanding" to "GRANTED 2026-04-30 / find_someone_who live"; C.30 footnote updated from "conditional on C.26" to "now live since C.26 graduated".
+
+**Customertip status**: 119 `contentblock_customertip` junction rows continue to dangle. ETL ignores them. C.26 entry in decisions.md notes the open ask.
+
+**Verification (Phase 2)**:
+- Workspace `typecheck` — green.
+- Workspace `npm test --workspace @swoop/common` — green (existing C.t2 tests still pass; no new tests added since the graduation is a config move, not a schema change).
+- Migration 006 verified to apply cleanly to a fresh Postgres alongside 001–005 (test DB created and dropped).
+- `puma_dev` not touched — that's C.t3's job to populate.
+
+**Net state at C.26 closure**: `find_someone_who` is shippable. The 2,563-row supply is in the domain layer; C.t3 will read it; C.t3a will populate `customer_story` with persona summaries via the Haiku classifier (aggregating-by-reviewer per the Phase 1 finding). The Mirror tool is no longer the architectural risk it was 24 hours ago.
