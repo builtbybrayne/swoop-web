@@ -27,12 +27,28 @@
  * to escape the store directory.
  */
 
-import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   HandoffPayloadSchema,
   type HandoffPayload,
 } from '@swoop/common';
+
+// ---------------------------------------------------------------------------
+// File-mode discipline (Sec-1, 2026-04-30 code review).
+//
+// Visitor PII (name, email, phone, motivationAnchor, full conversation
+// summary) lands here in cleartext JSON. Default umask + recursive-mkdir
+// would leave records world-readable on a shared host. GDPR Art. 32 wants
+// "appropriate technical measures"; least-privilege file modes are the
+// cheapest such measure.
+//
+// Directory: 0o700 — owner only.
+// File:      0o600 — owner only.
+// ---------------------------------------------------------------------------
+
+const HANDOFF_DIR_MODE = 0o700;
+const HANDOFF_FILE_MODE = 0o600;
 
 // ---------------------------------------------------------------------------
 // Public types.
@@ -84,8 +100,15 @@ export class FsHandoffStore implements HandoffStore {
     const tmpPath = `${finalPath}.tmp`;
 
     try {
-      await mkdir(this.dirAbsolutePath, { recursive: true });
-      await writeFile(tmpPath, JSON.stringify(payload, null, 2), { encoding: 'utf8' });
+      await mkdir(this.dirAbsolutePath, { mode: HANDOFF_DIR_MODE, recursive: true });
+      await writeFile(tmpPath, JSON.stringify(payload, null, 2), {
+        encoding: 'utf8',
+        mode: HANDOFF_FILE_MODE,
+      });
+      // Belt-and-braces: writeFile honours `mode` only when creating; an
+      // existing tmp file would inherit prior bits. Force the mode before
+      // the rename so the final inode lands at 0o600 either way.
+      await chmod(tmpPath, HANDOFF_FILE_MODE);
       await rename(tmpPath, finalPath);
       return { ok: true, handoffId: payload.handoffId, absolutePath: finalPath };
     } catch (err) {

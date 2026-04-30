@@ -6,7 +6,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -108,6 +108,23 @@ describe('FsHandoffStore.save', () => {
     expect(result.ok).toBe(true);
     const reread = await store.get(SampleHandoffDisqualified.handoffId);
     expect(reread).toEqual(SampleHandoffDisqualified);
+  });
+
+  // Sec-1 (2026-04-30 code review): visitor PII at rest must be 0o600 in a
+  // 0o700 directory.
+  it('writes the record file at 0o600 inside a 0o700 directory (PII discipline)', async () => {
+    const dir = makeTempDir();
+    const nested = path.join(dir, 'handoffs');
+    const store = new FsHandoffStore(nested);
+    const result = await store.save(SampleHandoffQualified);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const fileStat = statSync(result.absolutePath);
+    expect(fileStat.mode & 0o777).toBe(0o600);
+
+    const dirStat = statSync(nested);
+    expect(dirStat.mode & 0o777).toBe(0o700);
   });
 });
 

@@ -176,7 +176,7 @@ What's required for E.t2 to be **production**-done:
 
 Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
 
-### Sec-1 — File-permission discipline on `FsHandoffStore` — 🔲
+### Sec-1 — File-permission discipline on `FsHandoffStore` — ✅
 
 **Problem**: `connector/src/handoff/store.ts:87` `mkdir(this.dirAbsolutePath, { recursive: true })` uses default umask. `writeFile(tmpPath, JSON.stringify(payload, null, 2))` at `:88` no `mode` — default 0o666 & umask. The directory contains visitor name, email, phone, motivationAnchor and full conversation summary text in cleartext JSON, world-readable on a shared host. GDPR Art. 32 ("appropriate technical measures") would frown.
 
@@ -184,7 +184,7 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 **Verification**: store-test asserts `(stat.mode & 0o777) === 0o600` for written files and `0o700` for the dir.
 
-**Commits**: _(landed: filled when done)_
+**Commits**: landed 2026-04-30 — `mkdir({ mode: 0o700, recursive: true })` + `writeFile({ mode: 0o600 })` + belt-and-braces `chmod(tmpPath, 0o600)` before rename. New file-mode test in `store.test.ts` asserts both bits via `fs.statSync`.
 
 ### Test-2 — Mailer `inconclusive` skip-reason untested — 🔲
 

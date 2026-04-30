@@ -8,18 +8,40 @@
  * orchestration contract.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SampleHandoffQualified,
   SampleHandoffReferredOut,
   SampleHandoffDisqualified,
 } from '@swoop/common/fixtures';
-import type { HandoffPayload } from '@swoop/common';
+import {
+  resetEventSink,
+  setEventSink,
+  type Event,
+  type HandoffPayload,
+} from '@swoop/common';
 import type { Transporter } from 'nodemailer';
 
 import { submitHandoff, type SubmitDeps } from '../submit.js';
 import type { HandoffStore, SaveResult } from '../store.js';
 import type { MailerConfig } from '../mailer.js';
+
+// ---------------------------------------------------------------------------
+// Event-sink capture (shared across H3 cases below).
+// ---------------------------------------------------------------------------
+
+let captured: Event[] = [];
+
+beforeEach(() => {
+  captured = [];
+  setEventSink((e) => {
+    captured.push(e);
+  });
+});
+
+afterEach(() => {
+  resetEventSink();
+});
 
 // ---------------------------------------------------------------------------
 // Stubs.
@@ -302,5 +324,146 @@ describe('submitHandoff — failure modes', () => {
     }
     expect(saved.length).toBe(1);
     expect(mailer.captured.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H3 (2026-04-30 review): handoff.email.{sent,skipped,failed} event emission.
+// One assertion per `submitHandoff` branch — sent / skipped-mailer-disabled /
+// skipped-disqualified / skipped-inconclusive / failed.
+// ---------------------------------------------------------------------------
+
+async function importInconclusiveFixture(): Promise<HandoffPayload> {
+  const mod = (await import('@swoop/common/fixtures')) as {
+    SampleHandoffInconclusive: HandoffPayload;
+  };
+  // Backstop runs before the mailer; the inconclusive fixture has handoff
+  // consent declined by default. Re-grant for this branch test so the email
+  // skip is reached.
+  return {
+    ...mod.SampleHandoffInconclusive,
+    consent: {
+      ...mod.SampleHandoffInconclusive.consent,
+      handoffGranted: true,
+      handoffTimestamp: '2026-04-22T11:08:30.000Z',
+    },
+  };
+}
+
+describe('submitHandoff — handoff.email.* event emission (H3)', () => {
+  it('sent: emits handoff.email.sent with toAddress + subjectHash', async () => {
+    const { store } = inMemoryStore();
+    const mailer = makeStubMailerDeps();
+    const result = await submitHandoff(SampleHandoffQualified, {
+      store,
+      mailerConfig: baseMailerConfig(),
+      mailerDeps: mailer.deps,
+    });
+    expect(result.ok).toBe(true);
+
+    const evt = captured.find((e) => e.eventType === 'handoff.email.sent');
+    expect(evt).toBeDefined();
+    if (evt && evt.eventType === 'handoff.email.sent') {
+      expect(evt.payload.handoffId).toBe(SampleHandoffQualified.handoffId);
+      expect(evt.payload.verdict).toBe('qualified');
+      expect(evt.payload.toAddress).toBe('qualified@swoop-adventures.com');
+      expect(evt.payload.subjectHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(evt.actor).toBe('connector');
+      expect(evt.sessionId).toBe(SampleHandoffQualified.session.sessionId);
+    }
+  });
+
+  it('skipped-mailer-disabled: emits handoff.email.skipped with reason', async () => {
+    const { store } = inMemoryStore();
+    const mailer = makeStubMailerDeps();
+    const result = await submitHandoff(SampleHandoffQualified, {
+      store,
+      mailerConfig: baseMailerConfig({ enabled: false }),
+      mailerDeps: mailer.deps,
+    });
+    expect(result.ok).toBe(true);
+
+    const evt = captured.find((e) => e.eventType === 'handoff.email.skipped');
+    expect(evt).toBeDefined();
+    if (evt && evt.eventType === 'handoff.email.skipped') {
+      expect(evt.payload.reason).toBe('mailer_disabled');
+      expect(evt.payload.verdict).toBe('qualified');
+      expect(evt.payload.handoffId).toBe(SampleHandoffQualified.handoffId);
+    }
+  });
+
+  it('skipped-disqualified: emits handoff.email.skipped reason verdict_disqualified', async () => {
+    const { store } = inMemoryStore();
+    const mailer = makeStubMailerDeps();
+    const grantedDisqualified: HandoffPayload = {
+      ...SampleHandoffDisqualified,
+      consent: {
+        ...SampleHandoffDisqualified.consent,
+        handoffGranted: true,
+        handoffTimestamp: '2026-04-22T11:06:12.000Z',
+      },
+    };
+    const result = await submitHandoff(grantedDisqualified, {
+      store,
+      mailerConfig: baseMailerConfig(),
+      mailerDeps: mailer.deps,
+    });
+    expect(result.ok).toBe(true);
+
+    const evt = captured.find((e) => e.eventType === 'handoff.email.skipped');
+    expect(evt).toBeDefined();
+    if (evt && evt.eventType === 'handoff.email.skipped') {
+      expect(evt.payload.reason).toBe('verdict_disqualified');
+      expect(evt.payload.verdict).toBe('disqualified');
+    }
+  });
+
+  it('skipped-inconclusive: emits handoff.email.skipped reason verdict_inconclusive', async () => {
+    const inconclusive = await importInconclusiveFixture();
+    const { store } = inMemoryStore();
+    const mailer = makeStubMailerDeps();
+    const result = await submitHandoff(inconclusive, {
+      store,
+      mailerConfig: baseMailerConfig(),
+      mailerDeps: mailer.deps,
+    });
+    expect(result.ok).toBe(true);
+
+    const evt = captured.find((e) => e.eventType === 'handoff.email.skipped');
+    expect(evt).toBeDefined();
+    if (evt && evt.eventType === 'handoff.email.skipped') {
+      expect(evt.payload.reason).toBe('verdict_inconclusive');
+      expect(evt.payload.verdict).toBe('inconclusive');
+    }
+  });
+
+  it('failed: emits handoff.email.failed with errorCategory + truncated context', async () => {
+    const { store } = inMemoryStore();
+    // Force a template-read failure by injecting a readTemplate that throws
+    // a long message — exercises both the failed-status branch and the 500
+    // sanitisedContext truncation cap.
+    const longError = 'x'.repeat(700);
+    const failingDeps: SubmitDeps['mailerDeps'] = {
+      readTemplate: () => {
+        throw new Error(longError);
+      },
+      createTransport: () => ({
+        sendMail: vi.fn(async () => ({}) as never),
+      }),
+    };
+    const result = await submitHandoff(SampleHandoffQualified, {
+      store,
+      mailerConfig: baseMailerConfig(),
+      mailerDeps: failingDeps,
+    });
+    expect(result.ok).toBe(true); // store succeeded; mailer failure is non-fatal
+
+    const evt = captured.find((e) => e.eventType === 'handoff.email.failed');
+    expect(evt).toBeDefined();
+    if (evt && evt.eventType === 'handoff.email.failed') {
+      expect(evt.payload.errorCategory).toBe('template_read');
+      expect(evt.payload.sanitisedContext.length).toBeLessThanOrEqual(500);
+      expect(evt.payload.handoffId).toBe(SampleHandoffQualified.handoffId);
+    }
   });
 });

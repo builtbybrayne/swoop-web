@@ -54,7 +54,7 @@ Internally calls `emitEvent({ eventType: 'error.raised', ... })` with `sanitised
 
 ---
 
-## H3 — Add `handoff.email.{sent,skipped,failed}` event kinds — 🔲
+## H3 — Add `handoff.email.{sent,skipped,failed}` event kinds — ✅
 
 **Problem**: `connector/handoff/mailer.ts:43-44` documents a `handoff.email.{sent,skipped,failed}` event family in code comments. Grep of `events.ts` and `emit-event.ts` returns zero matches — the event schema doesn't carry these. SMTP outage today produces zero structured signal in observability stream; the documented event family is a phantom.
 
@@ -72,7 +72,7 @@ Note for the mailer.ts comment-vs-code drift: once the schema lands, the comment
 
 **Verification**: handoff-submit route test asserts the email event is emitted in addition to `handoff.submitted`, with the right payload shape. Connector test asserts `submitHandoff` calls `emitEvent` with a `handoff.email.*` envelope.
 
-**Commits**: _(landed: filled when done)_
+**Commits**: landed 2026-04-30 — three new schemas in `events.ts` (`HandoffEmailSentEventSchema`/`HandoffEmailSkippedEventSchema`/`HandoffEmailFailedEventSchema`); `submitHandoff` emits one envelope per send result via a new `emitEmailEvent` helper (sha256 over subject for sent, error-reason classifier for failed, ≤500ch sanitisedContext). Five new connector tests assert one emission per branch; the orchestrator route test asserts `handoff.email.skipped` lands alongside `handoff.submitted`.
 
 ---
 
