@@ -221,37 +221,76 @@ export async function invokeTool(
     };
   }
 
-  if (raw.isError === true) {
-    return {
-      ok: false,
-      error: {
-        kind: 'connector_error',
-        toolName: spec.name,
-        message: extractTextContent(raw) ?? `Connector returned an error for tool "${spec.name}".`,
-        details: raw.structuredContent,
-      },
-    };
-  }
-
-  // 3. Output validation (after network). Prefer `structuredContent` — the
-  //    MCP SDK populates it when the tool declared an `outputSchema`. Fall
-  //    back to parsing the first JSON text block, which is how the PoC
-  //    connector shapes its responses.
-  const payload = extractPayload(raw);
-  const parsedOutput = spec.outputSchema.safeParse(payload);
-  if (!parsedOutput.success) {
+  // 3. Parse the connector envelope: distinguish tool-level errors
+  //    (`isError: true`) from shape mismatches (safeParse fails) via
+  //    `parseToolResult`.
+  const parsed = parseToolResult(spec.name, spec.outputSchema, raw);
+  if (!parsed.ok) {
+    if (parsed.code === 'tool_error') {
+      return {
+        ok: false,
+        error: {
+          kind: 'connector_error',
+          toolName: spec.name,
+          message: parsed.detail,
+          details: raw.structuredContent,
+        },
+      };
+    }
+    // Re-run safeParse on the same payload to surface the structured Zod
+    // issues array as `details`. The helper returns `detail: string` per its
+    // public contract; `ToolAdapterError.details` keeps the richer shape for
+    // log + agent consumption.
+    const issues = spec.outputSchema.safeParse(extractPayload(raw));
     return {
       ok: false,
       error: {
         kind: 'output_validation',
         toolName: spec.name,
         message: 'Connector response did not match the expected schema.',
-        details: parsedOutput.error.issues,
+        details: issues.success ? undefined : issues.error.issues,
       },
     };
   }
 
-  return { ok: true, value: parsedOutput.data };
+  return { ok: true, value: parsed.value };
+}
+
+/**
+ * Parse one connector tool result against its output schema.
+ *
+ * Folds the two failure modes — connector-side `isError: true` envelopes
+ * (`tool_error`) and schema mismatches against the output schema
+ * (`shape_invalid`) — behind a single helper. Lives here (not in
+ * `@swoop/common`) because it assumes the connector's specific
+ * `CallToolRawResult` envelope shape; lifting it would over-couple the
+ * shared package to MCP transport details.
+ *
+ * Returns the parsed value on success; structured `{ok: false, code, detail}`
+ * on failure. Callers in `invokeTool` map `code` onto the richer
+ * `ToolAdapterError` taxonomy.
+ *
+ * Cross-cut helper closed under H4 (planning/03-exec-crosscut-common-helpers-fix.md).
+ */
+export function parseToolResult<T>(
+  toolName: string,
+  schema: z.ZodType<T>,
+  raw: unknown,
+): { ok: true; value: T } | { ok: false; code: 'shape_invalid' | 'tool_error'; detail: string } {
+  const envelope = raw as CallToolRawResult;
+  if (envelope.isError === true) {
+    return {
+      ok: false,
+      code: 'tool_error',
+      detail: extractTextContent(envelope) ?? `Connector returned an error for tool "${toolName}".`,
+    };
+  }
+  const payload = extractPayload(envelope);
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) {
+    return { ok: false, code: 'shape_invalid', detail: JSON.stringify(parsed.error.issues) };
+  }
+  return { ok: true, value: parsed.data };
 }
 
 function extractPayload(raw: CallToolRawResult): unknown {

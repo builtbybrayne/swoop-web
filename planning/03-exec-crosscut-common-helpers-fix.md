@@ -76,7 +76,7 @@ Note for the mailer.ts comment-vs-code drift: once the schema lands, the comment
 
 ---
 
-## H4 — `parseToolResult(name, schema, raw)` helper for connector adapter — 🔲
+## H4 — `parseToolResult(name, schema, raw)` helper for connector adapter — ✅
 
 **Problem**: `orchestrator/connector/tools.ts:197-254` repeats four nearly identical try/catch blocks — one per tool — each parsing a tool result with `safeParse`, then constructing `{ok: false, code: 'shape_invalid' | 'tool_error', ...}`. Will balloon to 8 sites once chunks C/E ship more tools.
 
