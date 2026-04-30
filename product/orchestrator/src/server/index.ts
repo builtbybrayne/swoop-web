@@ -20,6 +20,7 @@
  */
 
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import helmet from 'helmet';
 import type { Runner } from '@google/adk';
 import type { HandoffStore, MailerConfig } from '@swoop/connector';
 
@@ -84,6 +85,38 @@ export function buildServer(deps: BuildServerDeps): Express {
   const app = express();
   app.disable('x-powered-by');
 
+  // Security headers (Sec-2). Registered BEFORE all other middleware so every
+  // response — including CORS preflights and error replies — carries them.
+  // The surface is iframe-embedded by Swoop's host page, so:
+  //   - `frame-ancestors` is the load-bearing CSP directive (allow embedding
+  //     from the configured allow-list, deny everything else).
+  //   - X-Frame-Options is explicitly NOT set: CSP frame-ancestors supersedes
+  //     it, and X-Frame-Options can't express a multi-origin allow-list, so
+  //     keeping it on would silently override the CSP on legacy browsers.
+  // Tight config: only the directives the compliance bundle calls for; default
+  // helmet kitchen-sink is intentionally not enabled to keep the surface
+  // boring and reviewable.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          'default-src': ["'self'"],
+          'frame-ancestors': frameAncestorsFor(deps.corsAllowedOrigins),
+        },
+      },
+      strictTransportSecurity: {
+        maxAge: 15552000, // 180 days, no preload — conservative
+        includeSubDomains: true,
+      },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      // CSP frame-ancestors covers iframe policy; X-Frame-Options would
+      // conflict on legacy browsers because it can't express a multi-origin
+      // allow-list. See note above.
+      frameguard: false,
+    }),
+  );
+
   // JSON body parser — applies to /session, /consent; /chat is also JSON
   // (no multipart). Size cap keeps the surface boring.
   app.use(express.json({ limit: '64kb' }));
@@ -94,6 +127,17 @@ export function buildServer(deps: BuildServerDeps): Express {
 
   registerRoutes(app, deps);
   return app;
+}
+
+/**
+ * Build the CSP `frame-ancestors` source list from the CORS allow-list. Falls
+ * back to `'none'` if nothing is configured (no host page may embed) — the
+ * orchestrator is iframe-embedded by Swoop's host, so an empty list is a
+ * deploy-time misconfiguration, not a legitimate state.
+ */
+function frameAncestorsFor(origins: readonly string[]): string[] {
+  if (origins.length === 0) return ["'none'"];
+  return [...origins];
 }
 
 export function registerRoutes(app: Express, deps: BuildServerDeps): void {
