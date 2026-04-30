@@ -14,5 +14,6 @@ export * from "./tools.js";
 export * from "./streaming.js";
 export * from "./session.js";
 export * from "./handoff.js";
+export * from "./routes.js";
 export * from "./events.js";
 export * from "./emit-event.js";

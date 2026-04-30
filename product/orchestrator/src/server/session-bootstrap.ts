@@ -19,7 +19,7 @@
  */
 
 import type { Request, Response } from 'express';
-import { emitEvent } from '@swoop/common';
+import { SessionBootstrapRequestSchema, emitEvent } from '@swoop/common';
 import type { SessionStore, SessionAllocator } from '../session/index.js';
 import { DISCLOSURE_COPY_VERSION, sendError } from './errors.js';
 
@@ -59,13 +59,21 @@ export function createSessionBootstrapHandler(
 ): (req: Request, res: Response) => Promise<void> {
   const copyVersion = deps.disclosureCopyVersion ?? DISCLOSURE_COPY_VERSION;
   return async function handleSessionBootstrap(req, res) {
-    try {
-      const entryUrl = typeof req.body?.entryUrl === 'string' ? req.body.entryUrl : undefined;
-      const regionInterestHint =
-        typeof req.body?.regionInterestHint === 'string'
-          ? req.body.regionInterestHint
-          : undefined;
+    // `req.body` is `{}` when no body is sent (Express + express.json default).
+    // Theme-A.1: Zod-validate. `entryUrl` is `.url()`-checked, closing Sec-3
+    // (arbitrary `javascript:`/`data:` URLs no longer reach session metadata
+    // or downstream events / handoff records).
+    const parsed = SessionBootstrapRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      const detail = parsed.error.issues
+        .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+        .join('; ');
+      sendError(res, 400, 'invalid_request', detail);
+      return;
+    }
+    const { entryUrl, regionInterestHint } = parsed.data;
 
+    try {
       const initial = {
         metadata: {
           ...(entryUrl ? { entryUrl } : {}),

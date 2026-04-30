@@ -146,6 +146,32 @@ describe('POST /session', () => {
       disclosureCopyVersion: expect.any(String),
     });
   });
+
+  it('accepts a valid entryUrl and persists it onto session metadata', async () => {
+    const { app, store } = buildTestApp();
+    const res = await request(app)
+      .post('/session')
+      .send({ entryUrl: 'https://www.swoop-patagonia.com/trips/w-trek' });
+    expect(res.status).toBe(201);
+    const state = await store.get(res.body.sessionId);
+    expect(state?.metadata.entryUrl).toBe('https://www.swoop-patagonia.com/trips/w-trek');
+  });
+
+  it('returns 400 when entryUrl is not a valid URL (Theme-A.1 / Sec-3)', async () => {
+    const { app } = buildTestApp();
+    const res = await request(app)
+      .post('/session')
+      .send({ entryUrl: 'javascript:alert(1)' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
+  });
+
+  it('returns 400 when extra fields are sent (strict schema)', async () => {
+    const { app } = buildTestApp();
+    const res = await request(app).post('/session').send({ unexpected: true });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
+  });
 });
 
 describe('PATCH /session/:id/consent', () => {
@@ -189,6 +215,26 @@ describe('PATCH /session/:id/consent', () => {
       .patch(`/session/${sessionId}/consent`)
       .send({ granted: 'yes' });
     expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when copyVersion is missing (Theme-A.1)', async () => {
+    const { app } = buildTestApp();
+    const sessionId = await bootstrapSession(app);
+    const res = await request(app)
+      .patch(`/session/${sessionId}/consent`)
+      .send({ granted: true });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
+  });
+
+  it('returns 400 when extra fields are sent (strict schema)', async () => {
+    const { app } = buildTestApp();
+    const sessionId = await bootstrapSession(app);
+    const res = await request(app)
+      .patch(`/session/${sessionId}/consent`)
+      .send({ granted: true, copyVersion: 'v1', extra: 'no' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
   });
 });
 
@@ -234,6 +280,24 @@ describe('POST /chat — pre-stream gates', () => {
     const res = await request(app).post('/chat').send({ sessionId, message: 'hi' });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('consent_required');
+  });
+
+  it('returns 400 when message is not a string (Theme-A.1)', async () => {
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    const res = await request(app).post('/chat').send({ sessionId, message: 42 });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
+  });
+
+  it('returns 400 when extra fields are sent (strict schema)', async () => {
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    const res = await request(app)
+      .post('/chat')
+      .send({ sessionId, message: 'hi', extra: true });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
   });
 });
 
