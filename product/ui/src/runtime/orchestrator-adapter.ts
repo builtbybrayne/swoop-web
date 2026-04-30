@@ -38,7 +38,7 @@
 //   - planning/03-exec-chat-surface-t4.md §"Continue triggers bootstrap"
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
-import { emitEvent } from "@swoop/common";
+import { emitEvent, parseSseFrames } from "@swoop/common";
 
 /** Key used to persist the session id in tab-scoped storage. */
 export const SESSION_STORAGE_KEY = "swoop.session.id";
@@ -230,68 +230,6 @@ function extractLatestUserMessage<TMessage extends UIMessage>(
     return text.length > 0 ? text : null;
   }
   return null;
-}
-
-/**
- * Minimal SSE parser: splits the incoming byte stream on `\n\n` event
- * boundaries and yields `{event, data}` records. Strictly line-oriented per
- * RFC-ish SSE; we only care about `event:` and `data:` lines (the
- * orchestrator doesn't emit `id:` or `retry:`).
- *
- * Kept local rather than pulling in `eventsource-parser` — one producer, one
- * consumer, both under our control. A dependency is overkill.
- */
-async function* parseSseStream(
-  stream: ReadableStream<Uint8Array>,
-): AsyncGenerator<{ event: string; data: string }, void, void> {
-  const decoder = new TextDecoder("utf-8");
-  const reader = stream.getReader();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let boundary = buffer.indexOf("\n\n");
-      while (boundary !== -1) {
-        const raw = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-
-        let event = "message";
-        const dataLines: string[] = [];
-        for (const line of raw.split("\n")) {
-          if (line.startsWith("event:")) {
-            event = line.slice(6).trim();
-          } else if (line.startsWith("data:")) {
-            dataLines.push(line.slice(5).trimStart());
-          }
-          // Ignore comments (`:heartbeat`) and anything else.
-        }
-        if (dataLines.length > 0 || event !== "message") {
-          yield { event, data: dataLines.join("\n") };
-        }
-
-        boundary = buffer.indexOf("\n\n");
-      }
-    }
-    // Flush tail — not expected from a well-formed stream but defensive.
-    const tail = buffer.trim();
-    if (tail.length > 0) {
-      let event = "message";
-      const dataLines: string[] = [];
-      for (const line of tail.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
-      }
-      if (dataLines.length > 0 || event !== "message") {
-        yield { event, data: dataLines.join("\n") };
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
 }
 
 /**
@@ -563,7 +501,7 @@ export function createOrchestratorTransport<
             controller.enqueue({ type: "start" });
             controller.enqueue({ type: "start-step" });
 
-            for await (const evt of parseSseStream(sseStream)) {
+            for await (const evt of parseSseFrames(sseStream)) {
               if (evt.event === "done") {
                 // Normal end-of-turn. Close any in-flight text run and fall
                 // through to the `finish` frames below.
