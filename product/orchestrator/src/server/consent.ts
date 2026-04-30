@@ -22,7 +22,7 @@
 
 import type { Request, Response } from 'express';
 import type { SessionStore } from '../session/index.js';
-import { emitEvent } from '@swoop/common';
+import { ConsentRequestSchema, emitEvent } from '@swoop/common';
 import type { ConsentState, SessionState } from '@swoop/common';
 import { sendError } from './errors.js';
 
@@ -46,20 +46,15 @@ export function createConsentHandler(
       return;
     }
 
-    const body = req.body as
-      | { granted?: unknown; copyVersion?: unknown }
-      | undefined;
-    const granted = body?.granted;
-    const copyVersion = body?.copyVersion;
-
-    if (typeof granted !== 'boolean') {
-      sendError(res, 400, 'invalid_request', '`granted` must be a boolean.');
+    const parsed = ConsentRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues
+        .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+        .join('; ');
+      sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    if (typeof copyVersion !== 'string' || copyVersion.length === 0) {
-      sendError(res, 400, 'invalid_request', '`copyVersion` must be a non-empty string.');
-      return;
-    }
+    const { granted, copyVersion } = parsed.data;
 
     const existing = await deps.sessionStore.get(sessionId);
     if (!existing) {

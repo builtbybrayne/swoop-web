@@ -24,7 +24,7 @@ import type { Request, Response } from 'express';
 import { createHash } from 'node:crypto';
 import type { Content } from '@google/genai';
 import type { Runner, Event as AdkEvent } from '@google/adk';
-import { emitEvent } from '@swoop/common';
+import { ChatRequestSchema, emitEvent } from '@swoop/common';
 import type {
   MessagePart,
   ReasoningPart,
@@ -70,18 +70,15 @@ export function createChatHandler(
   const now = deps.now ?? (() => new Date());
 
   return async function handleChat(req, res) {
-    const body = req.body as { sessionId?: unknown; message?: unknown } | undefined;
-    const sessionId = body?.sessionId;
-    const message = body?.message;
-
-    if (typeof sessionId !== 'string' || sessionId.length === 0) {
-      sendError(res, 400, 'invalid_request', '`sessionId` is required.');
+    const parsed = ChatRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const detail = parsed.error.issues
+        .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+        .join('; ');
+      sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    if (typeof message !== 'string') {
-      sendError(res, 400, 'invalid_request', '`message` must be a string.');
-      return;
-    }
+    const { sessionId, message } = parsed.data;
     if (message.trim().length === 0) {
       sendError(res, 400, 'message_empty', 'message cannot be empty.');
       return;
