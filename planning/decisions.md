@@ -8,6 +8,32 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.37 — Connector pool tunables: `max:10 / idle:30s / statement_timeout:10s` as the calibration starting point; surfaced as tunable
+
+**Decided**: 2026-05-01
+**Owner**: C.t1 execution + 2026-05-01 HITL ratification
+**Rationale**: Per the C.t1 plan's HITL Q1 ratification: accept the recommended defaults as the calibration starting point with no specific load profile yet (Cloud Run + Cloud SQL are M4-and-later concerns). All three are env-tunable (`PG_POOL_MAX`, `PG_POOL_IDLE_MS`, `PG_STATEMENT_TIMEOUT_MS`) so revisiting at C.t8 runbook authoring + first M4 load test doesn't require a code change. Document call-out in `connector/src/data/pool.ts` header comment notes ETL paths may want larger `max` or different `statement_timeout`; ETL paths override per-connection inside their batch transactions (`SET LOCAL statement_timeout`).
+
+**Swap cost**: None. Pure env-var change.
+
+## C.36 — Connector binds `:3002` until the orchestrator stub at `:3001` retires (B.t3a)
+
+**Decided**: 2026-05-01
+**Owner**: C.t1 execution + 2026-05-01 HITL ratification
+**Rationale**: Per the C.t1 plan's HITL Q6: the new connector and the existing stub coexist in dev during the C.t1 → C.t4 transition. Stub stays at `:3001` (the orchestrator's `CONNECTOR_URL` default) and continues to serve the orchestrator with `@swoop/common/fixtures`-backed responses; new connector boots independently on `:3002` for `mcp inspect` probes and the eventual C.t4 swap. After B.t3a (which lives in chunk B because it's an orchestrator-side rewrite), `:3001` retires and the stub at `product/orchestrator/test-fixtures/stub-connector.ts` can be deleted. Two services on two ports for ~1 week is cheaper than coordinating a cutover during a non-cutover task.
+
+**Swap cost**: Low. B.t3a flips the orchestrator's `CONNECTOR_URL` config default and the stub workspace can be deleted in one commit.
+
+## C.35 — Connector statement_timeout is set via libpq `options` startup parameter, not `pool.on('connect')`
+
+**Decided**: 2026-05-01
+**Owner**: C.t1 execution
+**Rationale**: Live-smoke testing of the connector surfaced a `pg` deprecation warning: `Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0`. The on-connect handler that ran `SET statement_timeout` raced with pg's internal driver-init queries (e.g. type-parser metadata reads). Two fixes considered: (a) refactor the handler to await the init queue before issuing the `SET`; (b) pass `statement_timeout` via the libpq `options` startup parameter (`-c statement_timeout=<ms>`) so Postgres applies it before the very first query runs. Picked **(b)**. Rationale: (i) (a) requires reaching into pg internals to discover when init is complete — fragile across pg versions; (ii) (b) is the documented mechanism for per-connection startup state, supported by Cloud SQL, on-prem, and Postgres.app; (iii) ETL paths still get the per-connection override they need via `client.query("SET LOCAL statement_timeout = ${ms}")` inside their `withPgClient` transactions — that override happens inside an already-borrowed connection, no race. Pattern logged in `discoveries.md` + `gotchas.md` so future pool tunables (lock_timeout, idle_in_transaction_session_timeout, etc.) follow the same shape.
+
+**Swap cost**: None. The `options` field is a string; adding more `-c key=value` pairs is mechanical.
+
+---
+
 ## C.34 — Tool description prose lives in `cms/prompts/tools/<tool>/description.md`; `TOOL_DESCRIPTIONS` map carries short labels only
 
 **Decided**: 2026-04-29

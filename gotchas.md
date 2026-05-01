@@ -6,6 +6,59 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## `pg.Pool` `on('connect')` queries warn about `client.query() while already executing`
+
+Symptom: connector boot logs include the deprecation warning `Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0.` even though no user code looks like it's calling `client.query()` twice.
+
+Cause: pg runs an internal driver-init query (e.g. `SELECT typname, typtype, oid FROM pg_type`) immediately on every new connection. Any user-supplied `pool.on('connect', client => client.query(...))` callback fires before that init query completes. pg correctly diagnoses the second `client.query` as overlapping the first.
+
+Fix: prefer the libpq startup-option route for anything you used to set in `on('connect')`. For `statement_timeout`:
+
+```ts
+const poolConfig: pg.PoolConfig = {
+  // ...other fields
+  options: `-c statement_timeout=${ms}`,
+};
+```
+
+`-c key=value` is libpq's escape syntax for "apply this `SET` at session start". Postgres applies before pg's internal queries run; no race. Cloud SQL honours it. On-prem + Postgres.app likewise. See `discoveries.md` 2026-05-01 entry for the full pattern.
+
+Don't fix this by `await`ing inside the `on('connect')` callback — the handler is sync; awaiting just defers the second query, which is what pg is warning about.
+
+Use `on('connect')` only for sync metadata setup (e.g. `client.setTypeParser`).
+
+---
+
+## npm shell wrapper doesn't propagate SIGTERM cleanly to its tsx child
+
+Symptom: `npm start` boots a connector / orchestrator under `tsx`, you `kill -TERM <npm-pid>`, the npm process exits but the tsx child survives — port stays occupied; `dropdb` fails with "database is being accessed by other users".
+
+Cause: npm spawns the script as a child process and does not always propagate signals. The tsx child gets orphaned; the OS reparents it to PID 1.
+
+Local-dev workaround: send SIGTERM directly to the tsx process (`ps aux | grep tsx`, then `kill -TERM <tsx-pid>`), or invoke tsx directly bypassing npm: `node --import tsx ./src/server/index.ts`. The graceful shutdown handler in the service does work — it's just receiving SIGTERM via the right path.
+
+Production isn't affected: Cloud Run (and Docker, k8s, etc.) sends SIGTERM to PID 1, which is `node` or `tsx` directly — there's no npm wrapper between PID 1 and the app. Don't paper over the local-dev case in code.
+
+---
+
+## `node-pg-migrate` emits "Can't determine timestamp for NNN" warnings — they're benign
+
+Symptom: `npm run migrate:up` prints
+
+```
+Can't determine timestamp for 002
+Can't determine timestamp for 003
+...
+```
+
+once per migration file. Migrations still apply correctly.
+
+Cause: `node-pg-migrate` looks for timestamp-prefixed names (`1709123456789_create_users.sql`) by default. Per decision C.31 our migrations use a zero-padded sequence prefix (`002_domain_tables.sql`) so they're naturally orderable and filename-stable across rebases. Without a parseable timestamp, the runner can't suggest the "skip already-newer migrations" optimisation — hence the message.
+
+Action: ignore the warnings. Document in C.t8 runbook so an operator who reads them doesn't panic.
+
+---
+
 ## Local Postgres is Postgres.app v18, not 16 — and `psql` may not be on `$PATH`
 
 The plan originally specified Postgres 16; local dev is **Postgres 18** via Postgres.app. C.18 was updated 2026-04-29 to reflect this — no functional difference, pgvector / tsvector / pg_trgm all behave identically. Cloud SQL prod will follow.

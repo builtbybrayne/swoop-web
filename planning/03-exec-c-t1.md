@@ -361,7 +361,69 @@ If any of those creep into the PR diff, the reviewer rejects the change with a p
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks. Pattern matches `03-exec-c-t2.md` and `03-exec-c-t0.md`.)*
 
-— *(empty pending execution)*
+### 2026-05-01 — C.t1 implemented (agent `ab7c6b07294907b14`)
+
+Worktree branch: `worktree-agent-ab7c6b07294907b14`. Base: `92c99245` (HITL-ratified C.t1 plan). Four atomic commits landed:
+
+| Commit | Scope | Tests delta |
+|---|---|---|
+| `735c585` | Postgres pool + DATABASE_URL config + stricter URL validation | connector +19 (56→75) |
+| `5bab8c4` | MCP-HTTP surface skeleton with no-op ping tool | connector +6 (75→81) |
+| `1f7ade8` | `node-pg-migrate` runner + `migrate:up` script | connector +2 (81→83) |
+| `3d42175` | Live-smoke fix: `statement_timeout` via libpq startup options (no race) | connector +1 (83→84) |
+
+**Final state**:
+- All 6 workspaces green on fresh `npm install`. Total: 519 tests passing (was 492; +27 from C.t1's 28 new tests including 1 DB-gated bonus).
+- Per-workspace: `@swoop/common` 102 (unchanged) / `@swoop/orchestrator` 158 (unchanged — orchestrator unaffected confirmed) / `@swoop/connector` **84** (was 56; +28 from C.t1, with 3 DB-gated tests skipped without `DATABASE_URL`) / `@swoop/ui` 71 (unchanged) / `@swoop/ingestion` 31 (unchanged) / `@swoop/harness` 74 (unchanged).
+- Typecheck clean across all 6 workspaces.
+
+**End-to-end smoke verification** (per plan §"Verification"):
+- Service boots from `npm start`. `[connector] ready on http://localhost:3099`.
+- `/healthz` returns `{"status":"ok","service":"swoop-connector"}` (no DB call — verified by test passing a throw-on-touch pool proxy).
+- `/readyz` returns `{"status":"ready","db":"ok"}` against a live DB (real `SELECT 1` round-trip).
+- MCP discovery returns exactly the `ping` tool. Calling `ping` returns `{ok: true, version: '0.1.0'}` (verified via real `StreamableHTTPClientTransport` test).
+- `npm run migrate:up` against a fresh test DB applies all 6 migrations (001–006); re-running reports "No migrations to run!" (idempotent forward-only per C.31). `pgmigrations` table records each migration name. 26 user tables present post-migrate (21 domain + 5 derived + customerreview + customerreview_trip).
+- SIGTERM produces `[connector] SIGTERM received, shutting down.` and exits cleanly (graceful pool close → HTTP close → process exit).
+- Orchestrator continues to talk to the existing stub at `:3001` — untouched.
+
+**HITL Q resolutions verified in code**:
+- Q1: pool defaults `max:10 / idle:30s / statement_timeout:10s` documented in code header + tunable via `PG_POOL_MAX` / `PG_POOL_IDLE_MS` / `PG_STATEMENT_TIMEOUT_MS`.
+- Q2: manual `npm run migrate:up` only; runs against `migrations/`. Default `pgmigrations` table name. Boot-time auto-migration explicitly *not* implemented; `down` direction emits a steering warning.
+- Q3: `src/data/README.md` codifies the per-primitive convention (one file per derived/domain entity, `withPgClient`, no LLM, real-pool tests).
+- Q4 (option α + ping): MCP-over-HTTP server stands up at `:3002` empty save for the no-op `ping` tool.
+- Q5 (stricter URL validation): `DATABASE_URL` Zod schema validates URL parse + scheme allowlist (`postgres://` or `postgresql://`) + non-empty single-segment database name. Test asserts `https://example.com`, `javascript:alert(1)`, multi-segment paths, and missing db name all reject at boot. Same shape as the Sec-3 fix at `be9ca95` for `entryUrl`.
+- Q6: `:3002` claimed for the new connector; `:3001` stub stays running until B.t3a.
+- Q7: `FsHandoffStore` left untouched (deferred to E.t2 proper).
+
+**Out-of-scope discipline preserved** (per plan §"Out of scope" + §"Anti-pattern guard"):
+- No tools registered beyond the no-op ping. Tool registration is C.t4.
+- No primitives. `src/data/` contains only `pool.ts` + `README.md` + tests.
+- No `export.sql`. C.t3.
+- No embedding pass / Haiku classifiers. C.t3a.
+- No CMS reads. C.t4 wires the loader.
+- No orchestrator-side rewiring — `product/orchestrator/test-fixtures/stub-connector.ts` and `product/orchestrator/src/connector/tools.ts` *unchanged*.
+- No Cloud SQL / Cloud Run / Docker Compose work. M4.
+- No `Postgres SessionService` work. B.2 post-M4.
+- No `PostgresHandoffStore` swap. E.t2 proper.
+- No deprecated `Search*` / `GetDetail*` schema removal. B.t3a.
+
+**Notable findings during execution**:
+
+1. **`pg`'s `client.query()` deprecation when used in `on('connect')` handler is real.** Live-smoke testing surfaced the warning the unit tests didn't catch: setting `statement_timeout` via `pool.on('connect', client => client.query('SET ...'))` races with pg's internal driver-init queries. Fix: pass `statement_timeout` via the libpq `options` startup parameter (`-c statement_timeout=<ms>`) — applied by Postgres before any user query runs, no race. Worth noting for any future pool tunable: prefer the libpq startup option over `on('connect')`. C.t8's runbook should reference this if it covers pool tunables.
+
+2. **`node-pg-migrate` accepts plain SQL files but emits informational `"Can't determine timestamp for NNN"` warnings** when migrations don't carry timestamp prefixes. Our zero-padded prefix convention (per C.31) is the durable choice; the warnings are benign — node-pg-migrate just can't infer when to suggest a "skip already-newer migrations" optimisation. Mention in C.t8 if operators look at the warnings and worry.
+
+3. **npm shell wrapper doesn't propagate SIGTERM cleanly to its tsx child.** When a shell-spawned `npm start` is sent SIGTERM, npm sometimes survives and the tsx child becomes orphaned holding the port. The `tsx` process directly is the right SIGTERM target in production (Cloud Run sends SIGTERM to PID 1, which would be `node` or `tsx` directly, not npm). Local-dev workaround: invoke via `node --import tsx ./src/server/index.ts` (or just kill `tsx` directly). Not a code bug; runbook concern for C.t8.
+
+4. **Worktree-base race avoided cleanly.** Initial `git rev-parse HEAD` showed `5c9534fd` (worktree branched off main, not the C.t1 base); the gate's auto-recovery (`git cat-file -e` followed by `git reset --hard`) restored to `92c99245` because the SHA exists in the shared object store. Pattern from the 2026-04-29 swarm notes held.
+
+**Downstream what's now possible**:
+- **C.t3** can begin. The CLI in `@swoop/ingestion` imports `getPool` / `withPgClient` from `@swoop/connector` (or constructs its own pg client — its design call). The migration runner is callable from outside; C.t3's "before each ETL run, ensure migrations applied" guard can `npm run migrate:up` the connector's package.
+- **C.t3a** can begin in parallel with C.t3 once C.t3's transform shape is settled — same pool, batch UPDATE pattern through `withPgClient`.
+- **C.t4** can begin once C.t3 + C.t3a have populated rows. Tool handlers register on the existing `createConnectorMcpServer`. The no-op `ping` tool is removed there.
+- **C.t8** documents the operating shape stood up here; the three "Notable findings" above belong in its runbook content.
+
+**Coordination point for the next chunk-C agent**: H1 (`messageOf` helper) and H2 (`emitErrorRaised` helper) — pair these into the *first* commit of whichever C.t* agent next touches the 16-site sweep. They're consumed by the new tool handlers' error envelopes per the 2026-04-30 review's strategic table. C.t1 didn't touch the 16 sites so didn't pick them up.
 
 ---
 

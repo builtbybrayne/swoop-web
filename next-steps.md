@@ -4,10 +4,12 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-05-01 — review fix-wave fully landed; chunk-C tier-3 plan drafts ready)
-M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated** + **2026-04-30 review fix-wave fully merged**. 2026-05-01 work landed across 14 agent branches + 2 integration fixes (1 schema-tightening, 1 cluster-bundle): all fourteen pre-chunk-work items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new chunk-C tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for HITL review. See [progress.md](progress.md) §"Review fix-wave + chunk-C plan drafts (2026-05-01)" for the full breakdown including notable findings (agent self-verification false-green pattern, worktree-base race, background-await turn-budget death, latent Express 5 `req.on('close')` bug).
+## Status (2026-05-01 — review fix-wave fully landed; chunk-C tier-3 plans HITL-ratified; **C.t1 implemented**)
+M1 live + chunk D closed + mock-host shipped + **C.t1 done + C.t2 done** + **C.26 graduated** + **2026-04-30 review fix-wave fully merged**. **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits — `@swoop/connector` is now a runnable service at `:3002` (Postgres pool + Express + MCP-HTTP transport + health endpoints + migration runner + no-op `ping` tool). Boots clean against `puma_dev`; SIGTERM closes pool gracefully; orchestrator-stub-connector at `:3001` continues to back the orchestrator until B.t3a swaps it post-C.t4. See [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) §"Execution log" + [progress.md](progress.md) §"C.t1 implemented (2026-05-01)" for the full breakdown.
 
-**Tests**: 492/492 green across 6 workspaces — `@swoop/common` (102), `@swoop/orchestrator` (158), `@swoop/connector` (56), `@swoop/ui` (71), `@swoop/harness` (74), `@swoop/ingestion` (31).
+2026-05-01 (earlier) work landed across 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new chunk-C tier-3 plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored + HITL-ratified.
+
+**Tests**: 519/519 green across 6 workspaces — `@swoop/common` (102), `@swoop/orchestrator` (158), `@swoop/connector` (84 — was 56; +28 from C.t1 with 3 DB-gated tests skipped without `DATABASE_URL`), `@swoop/ui` (71), `@swoop/harness` (74), `@swoop/ingestion` (31).
 
 **Postgres setup**: `puma_dev` is live at `postgresql://al:pick-a-password@localhost:5432/puma_dev` (PG 18 + pgvector 0.8.1 + pg_trgm 1.6 + tsvector). Migrations 001–006 at `product/connector/migrations/` apply cleanly to a fresh test DB; `puma_dev` deliberately untouched (that's C.t3's job to populate). MariaDB `swoop_patagonia` left up with both the original dump and the supplementary customerreview dump for ongoing inspection.
 
@@ -49,17 +51,17 @@ Master ledger + checklist: [planning/reviews/2026-04-30-code-level.md](planning/
 
 ### 0. Dispatch chunk-C implementation [first thing next session]
 
-The 2026-05-01 swarm authored seven new tier-3 plans covering the chunk-C implementation spine. **All seven are HITL-ratified 2026-05-01 — ready for execution.** Each plan has a `## 2026-05-01 HITL ratification` addendum at the bottom resolving every open question.
+The 2026-05-01 swarm authored seven new tier-3 plans covering the chunk-C implementation spine. **All seven are HITL-ratified 2026-05-01.** **C.t1 is now done** (commits `735c585`, `5bab8c4`, `1f7ade8`, `3d42175`); the remaining six are ready for execution. Each plan has a `## 2026-05-01 HITL ratification` addendum at the bottom resolving every open question.
 
-Dispatch order (hard dependency: C.t1 first; C.t3, C.t3a, C.t4 chain off it; C.t5/C.t6/C.t8 parallelisable side-streams):
+Dispatch order (C.t3 / C.t3a / C.t4 chain in sequence; C.t5 / C.t6 / C.t8 parallelisable side-streams off the others):
 
-1. **C.t1** — [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) — connector skeleton + Postgres pool wiring. ~0.5 day. Foundational; smallest; fastest. 7 numbered open questions (pg pool config, migration runner placement, data primitives directory, MCP-HTTP surface timing, secret hygiene, port assignment, Postgres handoff-store swap timing).
-2. **C.t3** — [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) — SQL-dump → Postgres transform. ~1.5–2 days. Tooling-pick recommendation: **Option B (Node CLI translator in `@swoop/ingestion`)** with 6 reasons articulated. 8 numbered open questions including `daybyday` shape (concatenate to `trip.description` vs adding `trip_day` table requiring tiny C.t2 amendment).
-3. **C.t3a** — [planning/03-exec-c-t3a.md](planning/03-exec-c-t3a.md) — Voyage-3 embeddings + Haiku ETL classifiers. ~2 days. Recommended `ENRICH_BUDGET_GBP=10` dev / £15 prod with batch-boundary kill-switch. 12 numbered open questions; persona-aggregation grouping is load-bearing.
-4. **C.t4** — [planning/03-exec-c-t4.md](planning/03-exec-c-t4.md) — eight intent-named tool handlers over data primitives. ~2 days. 7 numbered open questions including `illustrate`-vs-C.t6 dependency (recommend ship against whatever annotation coverage exists at execution time) and `handoff_submit` boundary (recommend MCP tool as thin wrapper over E.t2/E.t3-shipped HTTP endpoint).
+1. ~~**C.t1** — connector skeleton + Postgres pool wiring~~ ✅ **done 2026-05-01.** Service runs at `:3002`; `getPool` / `withPgClient` / migration runner all available to downstream tasks. Execution log in [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) §"Execution log".
+2. **C.t3** — [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) — SQL-dump → Postgres transform. ~1.5–2 days. **Next up.** Tooling-pick recommendation: **Option B (Node CLI translator in `@swoop/ingestion`)** with 6 reasons articulated. CLI imports `getPool` / `withPgClient` from `@swoop/connector` (now exported), or constructs its own pg client (design call). The migration runner is callable via `npm run migrate:up --workspace @swoop/connector` for any "ensure migrations applied before ETL" guard. 8 numbered open questions.
+3. **C.t3a** — [planning/03-exec-c-t3a.md](planning/03-exec-c-t3a.md) — Voyage-3 embeddings + Haiku ETL classifiers. ~2 days. Can begin in parallel with C.t3 once C.t3's transform shape is settled. 12 numbered open questions; persona-aggregation grouping is load-bearing.
+4. **C.t4** — [planning/03-exec-c-t4.md](planning/03-exec-c-t4.md) — eight intent-named tool handlers over data primitives. ~2 days. **Removes the no-op `ping` tool** stood up by C.t1 and registers the eight real tools on the existing `createConnectorMcpServer` factory. 7 numbered open questions.
 5. **C.t5** — [planning/03-exec-c-t5.md](planning/03-exec-c-t5.md) — `@swoop/common` image URL utility + page-as-hub resolver. ~0.5 day. 5 open questions.
-6. **C.t6** — [planning/03-exec-c-t6.md](planning/03-exec-c-t6.md) — Claude Vision annotation pipeline over ~6.3K images. ~1 day setup. 6 open questions including journey-shaped vs generic annotation prompt + cost-cap design + write-back column choice (`image.description` vs derived).
-7. **C.t8** — [planning/03-exec-c-t8.md](planning/03-exec-c-t8.md) — ETL + annotation runbooks at `product/cms/ops/`. ~0.5 day. Last task in chunk-C. 7 open questions including audience (operator vs Swoop ops) + monitoring location.
+6. **C.t6** — [planning/03-exec-c-t6.md](planning/03-exec-c-t6.md) — Claude Vision annotation pipeline over ~6.3K images. ~1 day setup. 6 open questions.
+7. **C.t8** — [planning/03-exec-c-t8.md](planning/03-exec-c-t8.md) — ETL + annotation runbooks at `product/cms/ops/`. ~0.5 day. Last task in chunk-C. **Should reference the 3 C.t1 execution-log notable findings** (libpq options for pool tunables, node-pg-migrate "Can't determine timestamp" warnings are benign, npm-doesn't-propagate-SIGTERM-to-tsx local-dev concern). 7 numbered open questions.
 
 **Downstream augments triggered by C.t4** (live in their owning chunks; not authored as tier-3 plans yet):
 - **B.t3a** — orchestrator's connector adapter rewrite. Drop `@deprecated` `Search*` / `GetDetail*` schemas; register the eight intent-named tools. ~0.5–1 day, mostly mechanical.
@@ -87,13 +89,13 @@ Dispatch order (hard dependency: C.t1 first; C.t3, C.t3a, C.t4 chain off it; C.t
 
 - **C.t0** ✅ done 2026-04-29 — local MariaDB inspection + 9 first-pass-overturning findings + ontology rewrite + 8 questions closed + 3 new questions raised. Plan + execution log: [planning/03-exec-c-t0.md](planning/03-exec-c-t0.md).
 - **C.t2** ✅ done 2026-04-30 — entity model + tool I/O schemas + migrations 001–006 + production-quality tool descriptions + fixtures. C.26 graduated alongside; `find_someone_who` live; 2,563 customer reviews + 163 trip junctions in domain layer; customertip pending separate Swoop delivery. Plan + execution log: [planning/03-exec-c-t2.md](planning/03-exec-c-t2.md).
-- **C.t1** — pending Tier 3 plan. See §0 above.
-- **C.t3** — pending Tier 3 plan.
-- **C.t3a** — pending Tier 3 plan. Carry forward Phase 1's load-bearing finding: aggregate by reviewer `name` before generating `persona_summary` (~80% of customerreview rows are short snippets that compose into coherent personas only when grouped by author).
-- **C.t4** — pending Tier 3 plan.
-- **C.t5** — pending Tier 3 plan (small).
-- **C.t6** — pending Tier 3 plan; Phase 0 cost estimate ~£30–£150 one-time at ~$0.005/image Claude Vision over the ~6.3K images without upstream `image.description`.
-- **C.t8** — pending Tier 3 plan; runbook authoring task.
+- **C.t1** ✅ done 2026-05-01 — connector skeleton + Postgres pool + MCP-HTTP transport + health endpoints + migration runner + no-op `ping` tool. Plan + execution log: [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md).
+- **C.t3** — HITL-ratified plan ready. **Next up.**
+- **C.t3a** — HITL-ratified plan ready. Carry forward Phase 1's load-bearing finding: aggregate by reviewer `name` before generating `persona_summary` (~80% of customerreview rows are short snippets that compose into coherent personas only when grouped by author).
+- **C.t4** — HITL-ratified plan ready. Removes the no-op `ping` tool stood up by C.t1.
+- **C.t5** — HITL-ratified plan ready (small).
+- **C.t6** — HITL-ratified plan ready; Phase 0 cost estimate ~£30–£150 one-time at ~$0.005/image Claude Vision over the ~6.3K images without upstream `image.description`.
+- **C.t8** — HITL-ratified plan ready; runbook authoring task. Should reference the 3 C.t1 execution-log notable findings (libpq pool tunables / node-pg-migrate timestamp warnings / npm SIGTERM propagation).
 - **Blog ingest** ✅ implemented; running in `@swoop/ingestion`. Per-post-classification at C.t3a.
 - **Downstream augments**: B.t3a + D.t9 fan out from C.t4 in parallel.
 

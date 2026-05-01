@@ -6,6 +6,45 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-01 — pg `client.query()` deprecation in `on('connect')` is real; libpq startup options are the cleanest fix
+
+`pg.Pool` exposes an `on('connect', client => ...)` lifecycle hook that callers (including the original C.t1 implementation) commonly use to set per-connection state like `statement_timeout`. Live-smoke testing of the new connector surfaced a runtime warning that unit tests didn't catch:
+
+> `(node:39106) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0.`
+
+The cause: pg runs an internal driver-init query (e.g. `SELECT typname, typtype, oid FROM pg_type` for type parsing) immediately on connection. The user-supplied `on('connect')` callback fires before that init query completes; queueing a second `client.query` while the first is still in flight is what pg is now warning about.
+
+The clean fix is to skip the on('connect') round-trip entirely and pass the per-connection state via the libpq `options` startup parameter:
+
+```ts
+const poolConfig: pg.PoolConfig = {
+  // ...
+  options: `-c statement_timeout=${PG_STATEMENT_TIMEOUT_MS}`,
+};
+```
+
+`-c key=value` is libpq's escape syntax for "apply this `SET` at session start". Postgres applies it before the very first user query, so there's no race against pg's internal init. Cloud SQL honours startup options (verified empirically; documented at https://cloud.google.com/sql/docs/postgres). On-prem and Postgres.app likewise.
+
+ETL paths (C.t3 / C.t3a) that need a longer ceiling than the service-wide default still override per-connection via `client.query("SET LOCAL statement_timeout = ${ms}")` inside their batch transactions — that's running inside a transaction borrowed via `withPgClient`, no race against driver init. Override stays per-call, not service-wide.
+
+Pattern to remember: **prefer libpq startup options over `on('connect')` for any per-connection state that should apply from query #1**. Use `on('connect')` only for *state that must be observed* by user code (e.g. registering a custom type parser via `client.setTypeParser` — that one's safe because it's synchronous metadata, not a query).
+
+The same pattern applies to other pool tunables that may show up in C.t8 runbook content — `lock_timeout`, `idle_in_transaction_session_timeout`, etc. All of them go via `options` if at all possible. Captured in `gotchas.md` too.
+
+---
+
+## 2026-05-01 — Connector is now a runnable service; orchestrator continues to talk to the stub until B.t3a
+
+C.t1 turned `@swoop/connector` from "a workspace that exports handoff helpers as in-process imports" into a service: Express + MCP-over-HTTP at `:3002`, Postgres pool, health endpoints, migration runner. **But the orchestrator still talks to the stub at `:3001`** because the new connector boots with one no-op `ping` tool — the eight intent-named tools register in C.t4.
+
+This is the right transition shape but it has one operational consequence: during the C.t1 → C.t4 window, *both* services run side-by-side in dev. The stub continues to deliver `search` / `get_detail` / `illustrate` / `handoff` / `handoff_submit` to the orchestrator from `@swoop/common/fixtures`; the new connector serves `ping` to anyone curious enough to point `mcp inspect` at `:3002`. After B.t3a's swap (which lives in chunk B because it's an orchestrator-side rewrite), `:3001` retires entirely and the stub at `product/orchestrator/test-fixtures/stub-connector.ts` can be deleted.
+
+Architectural reason this is correct: standing up the empty MCP server early means C.t4's diff is purely "register N tools" — no transport stand-up, no Express wiring, no port choice. The 30 minutes of glue paid forward dominates the cost of running an empty MCP server in dev for a few days. The Tier 2 plan §"Verification" item 1 ("data-connector service starts, registers the eight tools over MCP, responds to a discovery ping") is now half-satisfied.
+
+Pattern to remember: **for transports that have a non-trivial "stand the surface up" step, decouple it from "register the actual handlers" so the surface and the handlers can ship in different commits**. The same shape applies if we later add a second transport (e.g. a private gRPC endpoint for ETL only) — surface in one task, handlers in another.
+
+---
+
 ## 2026-04-30 — Five-jobs / eight-tools / no-composer is the load-bearing substrate of chunk C
 
 After two architectural false starts (the 2026-04-22 Vertex-AI-Search + data-shaped tool surface; the 2026-04-28 Haiku-composer + ten-tool sales-shaped surface), the 2026-04-29 review reset chunk C around a **first-principles top-down derivation** that has held under stress and finally feels stable enough to call durable.
