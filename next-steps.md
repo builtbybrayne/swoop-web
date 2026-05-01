@@ -4,10 +4,10 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-05-01 — review fix-wave landed; chunk-C tier-3 plan drafts ready)
-M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated** + **2026-04-30 review fix-wave merged**. 2026-05-01 13-agent swarm + 1 integration fix landed: ten review items closed (R1, R3, R4-handoff, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1) + seven new chunk-C tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for HITL review. See [progress.md](progress.md) §"Review fix-wave + chunk-C plan drafts (2026-05-01)" for the full breakdown including notable findings (agent self-verification false-green pattern, worktree-base race, background-await turn-budget death).
+## Status (2026-05-01 — review fix-wave fully landed; chunk-C tier-3 plan drafts ready)
+M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated** + **2026-04-30 review fix-wave fully merged**. 2026-05-01 work landed across 14 agent branches + 2 integration fixes (1 schema-tightening, 1 cluster-bundle): all fourteen pre-chunk-work items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new chunk-C tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for HITL review. See [progress.md](progress.md) §"Review fix-wave + chunk-C plan drafts (2026-05-01)" for the full breakdown including notable findings (agent self-verification false-green pattern, worktree-base race, background-await turn-budget death, latent Express 5 `req.on('close')` bug).
 
-**Tests**: 474/474 green across 6 workspaces — `@swoop/common` (97), `@swoop/orchestrator` (145), `@swoop/connector` (56), `@swoop/ui` (71), `@swoop/harness` (74), `@swoop/ingestion` (31).
+**Tests**: 492/492 green across 6 workspaces — `@swoop/common` (102), `@swoop/orchestrator` (158), `@swoop/connector` (56), `@swoop/ui` (71), `@swoop/harness` (74), `@swoop/ingestion` (31).
 
 **Postgres setup**: `puma_dev` is live at `postgresql://al:pick-a-password@localhost:5432/puma_dev` (PG 18 + pgvector 0.8.1 + pg_trgm 1.6 + tsvector). Migrations 001–006 at `product/connector/migrations/` apply cleanly to a fresh test DB; `puma_dev` deliberately untouched (that's C.t3's job to populate). MariaDB `swoop_patagonia` left up with both the original dump and the supplementary customerreview dump for ongoing inspection.
 
@@ -30,10 +30,10 @@ M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated*
 | **H4** — `parseToolResult` helper | ✅ landed | `worktree-agent-a6e1814…` `9e4bfbd` + `48621f5` |
 | **H5** — shared SSE parser in `@swoop/common/streaming` | ✅ landed | `worktree-agent-acd7eb9…` 4 commits |
 | **Perf-1** — Anthropic prompt caching | ✅ landed | `worktree-agent-a2f3b90…` `ae6dd72` + `a9884bd` + `fcd7366` |
-| **R2** — per-session async mutex on `store.update` | 🟡 in flight | dispatched 2026-05-01 (chat.ts cluster bundle) |
-| **R4-server** — `express.json` 64kb→16kb + max() on chat message | 🟡 in flight | (same bundle) |
-| **Perf-3** — skip triage classifier on turn 1 | 🟡 in flight | (same bundle) |
-| **Test-1** — `/chat` error-path integration tests | 🟡 in flight | (same bundle) |
+| **R2** — per-session async mutex on `store.update` | ✅ landed | `worktree-agent-a075681…` `dc2af42` |
+| **R4-server** — `express.json` 64kb→16kb + max(8000) on chat message | ✅ landed | (same bundle) `a9ede99` |
+| **Perf-3** — skip triage classifier on turn 1 | ✅ landed | (same bundle) `7c505ab` |
+| **Test-1** — `/chat` error-path integration tests | ✅ landed | (same bundle) `6e2731a` — surfaced + fixed an Express 5 latent bug (req.on('close') → res.on('close')) |
 | **H1** — `messageOf(err)` helper in `@swoop/common` | ⏸ deferred | pair with next chunk-C agent that touches the 16-site sweep |
 | **H2** — `emitErrorRaised` helper | ⏸ deferred | (same — depends on H1) |
 | **Theme-A.2/3/4/5** — small Zod hygiene tightenings | ⏸ deferred | not in pre-chunk-work scope |
