@@ -540,3 +540,227 @@ describe('POST /chat — Perf-3 turn-1 triage skip', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Test-1 (2026-04-30 review) — /chat error-path coverage.
+//
+// Three scenarios:
+//   (a) mid-stream throw inside the runner — `event: error` SSE frame
+//       emitted, `error.raised` event captured, history not corrupted.
+//   (b) client disconnect — request socket closed mid-stream; runner
+//       observes the abort signal; no zombie writes follow.
+//   (c) connector-unreachable — modelled as a thrown error before any
+//       events stream (the surface emerging from `runAsync` is identical
+//       whether the runner blew up or the connector did); SSE error frame
+//       + `error.raised` event captured, session state remains intact.
+//
+// (b) is exercised against a real `http.Server` because supertest's
+// transport doesn't expose a clean way to close the request socket
+// mid-flight. (a) and (c) work fine through supertest because the runner
+// throws synchronously inside `for await`.
+// ---------------------------------------------------------------------------
+
+describe('POST /chat — error path coverage (Test-1)', () => {
+  let captured: Event[] = [];
+
+  beforeEach(() => {
+    captured = [];
+    setEventSink((e) => {
+      captured.push(e);
+    });
+  });
+
+  afterEach(() => {
+    resetEventSink();
+  });
+
+  it('mid-stream runner throw → event:error frame and error.raised event (a)', async () => {
+    // Runner yields one good text event, then throws. The translator's
+    // `for await` surfaces the throw to the chat handler's catch arm,
+    // which writes `event: error` and emits the structured event.
+    const store = new InMemorySessionStore();
+    const runner = {
+      async *runAsync(): AsyncGenerator<AdkEvent, void, undefined> {
+        yield mkEvent({ content: { role: 'model', parts: [{ text: 'partial ' }] } });
+        throw new Error('runner exploded mid-stream');
+      },
+    } as unknown as Runner;
+    const app = buildServer({
+      sessionStore: store,
+      runner,
+      corsAllowedOrigins: ['http://localhost:5173'],
+      version: 'test',
+    });
+
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+
+    const res = await request(app).post('/chat').send({ sessionId, message: 'hi' });
+    expect(res.status).toBe(200);
+    const frames = parseSseFrames(res.text);
+    const errorFrame = frames.find((f) => f.event === 'error');
+    expect(errorFrame).toBeDefined();
+    const parsed = JSON.parse(errorFrame!.data);
+    // SSE error frame shape: flat `{code, message}` per writeSseError.
+    expect(parsed.code).toBe('internal_error');
+    expect(parsed.message).toContain('runner exploded');
+
+    const errorRaised = captured.find(
+      (e): e is Event & { eventType: 'error.raised' } => e.eventType === 'error.raised',
+    );
+    expect(errorRaised).toBeDefined();
+    expect((errorRaised!.payload as { errorType: string }).errorType).toBe(
+      'chat_turn_failed',
+    );
+
+    // Session state stays valid — the user message persisted, runner failure
+    // didn't corrupt history.
+    const state = await store.get(sessionId);
+    expect(state).not.toBeNull();
+    expect(state!.conversationHistory.some((e) => e.role === 'user')).toBe(true);
+  });
+
+  it('client disconnect aborts the runner cleanly (b)', async () => {
+    // Spin up a real http.Server so we can close the request socket
+    // mid-stream — supertest's transport buffers responses and doesn't
+    // expose a portable mid-flight abort.
+    const { createServer } = await import('node:http');
+    const aborted = { fired: false };
+    const release = { pending: null as null | (() => void) };
+
+    const store = new InMemorySessionStore();
+    const runner = {
+      async *runAsync(params: { abortSignal?: AbortSignal }): AsyncGenerator<AdkEvent, void, undefined> {
+        // Attach the abort listener up front — before the first yield —
+        // so the listener exists by the time the chat handler's
+        // `res.on('close')` fires the controller. (Earlier iterations of
+        // this test caught a real bug here: the chat handler was
+        // listening on `req.on('close')`, which Express 5 fires before
+        // the handler runs because the body parser has already drained
+        // the request stream. Switching to `res.on('close')` gave us a
+        // signal that fires when the *response* socket actually closes —
+        // which is what we care about for mid-stream cancel.)
+        const sig = params.abortSignal;
+        if (sig) {
+          if (sig.aborted) aborted.fired = true;
+          sig.addEventListener('abort', () => {
+            aborted.fired = true;
+            release.pending?.();
+          });
+        }
+        yield mkEvent({ content: { role: 'model', parts: [{ text: 'streaming ' }] } });
+        await new Promise<void>((resolve) => {
+          release.pending = resolve;
+        });
+      },
+    } as unknown as Runner;
+
+    const app = buildServer({
+      sessionStore: store,
+      runner,
+      corsAllowedOrigins: ['http://localhost:5173'],
+      version: 'test',
+    });
+
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+
+    const server = createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, () => resolve()));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('no port bound');
+    const port = address.port;
+
+    // Fire a real HTTP POST against the listening server. Once the SSE
+    // stream is open we destroy the client socket — that sends FIN, which
+    // Express surfaces as `req.on('close')`. The chat handler's
+    // `onClientClose` then aborts the controller, which the runner's
+    // listener observes.
+    const http = await import('node:http');
+    const reqClose = new Promise<void>((resolve) => {
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: '/chat',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        },
+        (res) => {
+          res.once('data', () => {
+            // Destroying the socket directly forces an immediate close —
+            // `req.destroy()` alone can leave the FIN queued.
+            req.socket?.destroy();
+            resolve();
+          });
+          res.on('end', () => resolve());
+          res.on('error', () => resolve());
+        },
+      );
+      req.on('error', () => resolve());
+      req.end(JSON.stringify({ sessionId, message: 'hi' }));
+    });
+
+    await reqClose;
+    // Allow the server's `req.on('close')` handler + abortController to
+    // propagate through the runner's signal listener.
+    await new Promise((r) => setTimeout(r, 250));
+    // Release any lingering deferred so the generator can settle and the
+    // test doesn't leak a Promise.
+    release.pending?.();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(aborted.fired).toBe(true);
+    // Session is still readable — disconnect doesn't corrupt state.
+    const state = await store.get(sessionId);
+    expect(state).not.toBeNull();
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }, 10_000);
+
+  it('connector-unreachable surfaces as event:error + error.raised (c)', async () => {
+    // Model the "MCP connector throws on tool call" failure as a thrown
+    // error inside the runner — the orchestrator's translator path is the
+    // same surface for any thrown exception emerging from `runAsync`. The
+    // assertion is that the user-facing wire shape matches: SSE error
+    // frame plus a structured `error.raised` event with the right type.
+    const store = new InMemorySessionStore();
+    const runner = {
+      async *runAsync(): AsyncGenerator<AdkEvent, void, undefined> {
+        // Yield zero events; immediately throw a connector-shaped error.
+        if (false as boolean) yield mkEvent({});
+        throw new Error('ECONNREFUSED 127.0.0.1:3001 (connector unreachable)');
+      },
+    } as unknown as Runner;
+    const app = buildServer({
+      sessionStore: store,
+      runner,
+      corsAllowedOrigins: ['http://localhost:5173'],
+      version: 'test',
+    });
+
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+
+    const res = await request(app)
+      .post('/chat')
+      .send({ sessionId, message: 'find me a w-trek' });
+    expect(res.status).toBe(200);
+    const frames = parseSseFrames(res.text);
+    const errorFrame = frames.find((f) => f.event === 'error');
+    expect(errorFrame).toBeDefined();
+    const parsed = JSON.parse(errorFrame!.data);
+    expect(parsed.code).toBe('internal_error');
+    expect(parsed.message).toContain('ECONNREFUSED');
+
+    const errorRaised = captured.find(
+      (e): e is Event & { eventType: 'error.raised' } => e.eventType === 'error.raised',
+    );
+    expect(errorRaised).toBeDefined();
+    expect((errorRaised!.payload as { errorType: string }).errorType).toBe(
+      'chat_turn_failed',
+    );
+
+    const state = await store.get(sessionId);
+    expect(state).not.toBeNull();
+  });
+});

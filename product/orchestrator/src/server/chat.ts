@@ -8,8 +8,12 @@
  *     become `event: error`.
  *   - Consent gate runs BEFORE any agent work starts (canAcceptTurn from
  *     B.t2). 403 with `consent_required` if tier-1 is unset.
- *   - Client disconnect: `req.on('close')` aborts the agent turn via an
- *     `AbortController` threaded through the Runner.
+ *   - Client disconnect: `res.on('close')` aborts the agent turn via an
+ *     `AbortController` threaded through the Runner. (Express 5 emits
+ *     `close` on the `req` immediately after the body parser drains the
+ *     incoming stream — which happens before this handler runs — so
+ *     listening on `res` is the only reliable way to observe the
+ *     downstream socket actually going away mid-stream.)
  *   - Reasoning parts: stripped from the SSE wire by the translator's
  *     `filterReasoning`, persisted to session history via `onFiltered`
  *     (chunk B §2.6 invariant).
@@ -196,6 +200,13 @@ export function createChatHandler(
     const stopHeartbeat = startHeartbeat(res);
 
     // Abort plumbing: client disconnect cancels the agent turn cleanly.
+    // Listen on `res.on('close')` rather than `req.on('close')`. Under
+    // Express 5 + Node 20, `req` emits `close` as soon as the body parser
+    // drains the request stream — which happens before this handler is
+    // entered. Attaching the listener to `req` after that point would
+    // therefore *never* fire on a real mid-stream disconnect. `res.close`
+    // fires when the response socket actually goes away, which is the
+    // signal we want.
     const abortController = new AbortController();
     let closed = false;
     const onClientClose = (): void => {
@@ -203,7 +214,7 @@ export function createChatHandler(
       closed = true;
       abortController.abort();
     };
-    req.on('close', onClientClose);
+    res.on('close', onClientClose);
 
     // Turn-index for history entries: start at the current conversationHistory
     // length (user message just landed).
@@ -352,7 +363,7 @@ export function createChatHandler(
       });
     } finally {
       stopHeartbeat();
-      req.off('close', onClientClose);
+      res.off('close', onClientClose);
       if (!res.writableEnded) {
         res.end();
       }
