@@ -21,13 +21,15 @@
  *       - Client disconnect aborts the turn (no zombie writes).
  */
 
-import { describe, expect, it, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import type { Runner, Event as AdkEvent } from '@google/adk';
+import { CHAT_MESSAGE_MAX, setEventSink, resetEventSink, type Event } from '@swoop/common';
 
 import { buildServer } from '../index.js';
 import { InMemorySessionStore, type SessionStore } from '../../session/index.js';
+import type { TriageClassifier } from '../../functional-agents/triage-classifier.js';
 
 /**
  * Minimal ADK event factory matching the Event-extends-LlmResponse shape the
@@ -88,7 +90,11 @@ function makeStubRunner(): StubRunner {
   };
 }
 
-function buildTestApp(store?: SessionStore, runner?: Runner): { app: Express; store: SessionStore; runner: StubRunner } {
+function buildTestApp(
+  store?: SessionStore,
+  runner?: Runner,
+  triageClassifier?: TriageClassifier,
+): { app: Express; store: SessionStore; runner: StubRunner } {
   const store_ = store ?? new InMemorySessionStore();
   const stub = runner
     ? { runner, emit: () => {}, lastAborted: () => false }
@@ -98,6 +104,7 @@ function buildTestApp(store?: SessionStore, runner?: Runner): { app: Express; st
     runner: stub.runner,
     corsAllowedOrigins: ['http://localhost:5173'],
     version: 'test',
+    triageClassifier,
   });
   return { app, store: store_, runner: stub };
 }
@@ -425,3 +432,53 @@ describe('CORS', () => {
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// R4-server (2026-04-30 review) — body-limit + per-message length cap.
+// Body cap was lowered from 64kb → 16kb; field cap added at 8 000 chars on
+// `ChatRequestSchema.message`. The two checks compose: oversized JSON
+// bodies bounce at the parser, oversized message text bounces at Zod.
+// ---------------------------------------------------------------------------
+
+describe('POST /chat — body and message limits (R4-server)', () => {
+  it('returns 413 when the request body exceeds the 16kb limit', async () => {
+    const { app } = buildTestApp();
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    // 18 KB raw — well above the 16 KB body limit, well below the
+    // theoretical Express default. The serialiser pads with the JSON
+    // envelope; raw payload size is what trips the parser.
+    const oversized = 'a'.repeat(18 * 1024);
+    const res = await request(app)
+      .post('/chat')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ sessionId, message: oversized }));
+    expect(res.status).toBe(413);
+  });
+
+  it('returns 400 when the message field exceeds CHAT_MESSAGE_MAX', async () => {
+    const { app } = buildTestApp();
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    // CHAT_MESSAGE_MAX + 1 chars, but inside the 16 KB body cap so we hit
+    // the schema layer rather than the parser.
+    const overCap = 'b'.repeat(CHAT_MESSAGE_MAX + 1);
+    const res = await request(app).post('/chat').send({ sessionId, message: overCap });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
+    // The field path narrows down the offending key for the UI.
+    expect(JSON.stringify(res.body)).toContain('message');
+  });
+
+  it('accepts a message at exactly CHAT_MESSAGE_MAX', async () => {
+    const { app, runner } = buildTestApp();
+    runner.emit([mkEvent({ turnComplete: true })]);
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    const res = await request(app)
+      .post('/chat')
+      .send({ sessionId, message: 'c'.repeat(CHAT_MESSAGE_MAX) });
+    expect(res.status).toBe(200);
+  });
+});
+

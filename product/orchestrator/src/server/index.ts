@@ -118,8 +118,12 @@ export function buildServer(deps: BuildServerDeps): Express {
   );
 
   // JSON body parser — applies to /session, /consent; /chat is also JSON
-  // (no multipart). Size cap keeps the surface boring.
-  app.use(express.json({ limit: '64kb' }));
+  // (no multipart). Size cap keeps the surface boring. Lowered from 64kb
+  // to 16kb (R4-server, 2026-04-30 review) — paired with the per-field
+  // CHAT_MESSAGE_MAX cap on `ChatRequestSchema.message` (8_000 chars) so
+  // the body limit comfortably exceeds the field limit while still
+  // rejecting any vaguely abusive payload before parsing.
+  app.use(express.json({ limit: '16kb' }));
 
   // Minimal hand-rolled CORS. We avoid the `cors` npm package to keep the
   // dep surface small; the logic is short enough to own.
