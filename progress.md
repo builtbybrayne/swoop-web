@@ -1,6 +1,6 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-01 (full review fix-wave landed; chunk-C tier-3 plans HITL-ratified; **C.t1 implemented + verified end-to-end**)
+**Snapshot date**: 2026-05-02 (**C.t3 implemented + verified end-to-end**; full review fix-wave landed; chunk-C tier-3 plans HITL-ratified; C.t1 implemented + verified end-to-end)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
 **Status**: **M1 live + chunks D + mock-host shipped; C.t1 + C.t2 closed; C.26 graduated; 2026-04-30 review wave fully landed; chunk-C tier-3 plans HITL-ratified; chunks B/E/F/G/H advancing.** **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits (pool + config + URL validation, MCP-HTTP skeleton + ping tool, migration runner, libpq statement_timeout fix). Connector boots cleanly against `puma_dev`; `/healthz` + `/readyz` + `/mcp` (with no-op `ping`) all verified live; SIGTERM closes pool gracefully. Total tests now 519/519 (was 492; +27 for C.t1). 2026-05-01 (earlier) landed via 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work review items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for chunk-C implementation. Sec-3 (`javascript:`/`data:` URL scheme rejection) was originally claimed-closed by Theme-A.1 but only validated against stale node_modules — actually closed by `be9ca95` adding a refine() check on top of `.url()`. The chat.ts-cluster agent (R2 + R4-server + Perf-3 + Test-1) also surfaced and fixed a latent Express 5 + Node 20 bug — `req.on('close')` fires synchronously after `express.json` drains, so the chat handler's mid-stream-disconnect listener never propagated to `abortController.abort()`; switched to `res.on('close')`. **Test count: 412 → 492 (+80)**. Earlier (2026-04-30): **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables); **C.26 graduated** with the customerreview supplementary dump (2,563 rows + 163 trip junctions); composer pattern removed (decision C.24); top-down-from-sales discipline elevated as theme 11. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
 
@@ -36,6 +36,83 @@ The three services are all running (`:5173` UI, `:8080` orchestrator, `:3001` st
 - ✅ **Multi-file prompt loader** (B.t1a): `prompt-loader.ts` reads the directory, filters by pattern, sorts lexicographically, joins. Hot-reload preserved in dev. Sub-directories silently skipped via `withFileTypes`. Config rename: `SYSTEM_PROMPT_PATH` → `SYSTEM_PROMPT_DIR`. New unit tests cover concatenation, filtering, prod cache vs dev re-read, missing/empty dir, single file, sub-dir skip.
 - ✅ **Files relocated**: `cms/prompts/why.md` → `cms/prompts/system/00_why.md`; `cms/prompts/style-avoid.md` → `cms/prompts/system/10_style-avoid.md`. `cms/prompts/skills/` and `cms/prompts/tools/` created with `.gitkeep`.
 - ✅ **Authoring guide**: [product/cms/README.md](product/cms/README.md) rewritten as the day-to-day rules for non-engineers (layout + load contracts + naming + "what goes where" decision tree). Pointer added in [product/CLAUDE.md](product/CLAUDE.md).
+
+## C.t3 implemented (2026-05-02 — second chunk-C executor agent, ~0.5 day; under estimate)
+
+Second chunk-C tier-3 plan executed. SQL-dump → Postgres transform end-to-end. The 2026-04-27 main dump + 2026-04-30 supplementary customerreview dump now flow into `puma_dev`'s 19 domain tables in ~10s wall-clock. Idempotent re-run produces zero row-count delta. See [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) §"Execution log" for the full breakdown.
+
+### Four atomic commits
+
+| Commit | Scope | Tests delta |
+|---|---|---|
+| `7eb8f34` | MariaDB SQL-dump parser (Option B per HITL Q1) — streaming, ~617K rows in ~4s | +16 (31→47) |
+| `043ad66` | Domain-table upsert helper with ON CONFLICT DO UPDATE + non-clobbering noUpdateColumns | +5 (47→52) |
+| `474575c` | Per-source-table transformations + lookup-builder — 19 transforms | +32 (52→84) |
+| `5041d48` | Pipeline runner + CLI + daybyday concat (HITL Q2) + README + package.json | (no new tests; live-smoked) |
+
+### End-to-end verification (per plan §"Verification" + the false-green lesson)
+
+- All 6 workspaces green on fresh `npm install` + `DATABASE_URL=…puma_dev npm test --workspaces --if-present`. **Total: 576/576** (was 523; +53 from C.t3, all in @swoop/ingestion: 31→84).
+- Per-workspace: `@swoop/common` 102 / `@swoop/orchestrator` 158 / `@swoop/connector` 87 / `@swoop/ui` 71 / `@swoop/ingestion` **84** / `@swoop/harness` 74.
+- Typecheck clean across all 6 workspaces.
+- ETL CLI runs end-to-end against the real dumps in 9.61s wall-clock (target was ≤10 minutes — beating it 60×).
+
+### Live row counts (fresh `puma_dev`)
+
+```
+country: 239   area: 16   location: 764   activity: 751
+tag: 79                        [matches plan: 79 ✓]
+image: 13012/13261             [matches ~13K ✓]
+page: 636/684                  [40 Profile + 7 test + 1 dup_canonical filtered]
+contentblock: 2212/10110       [7,898 navigationcard/settings/etc. filtered]
+chunk: 46                      [matches plan: 46 ✓]
+faqitem: 906/928               [matches ~928 ✓]
+trip: 852                      [matches plan: 852 ✓]
+tour: 0/15                     [source `tours` rows mostly NULL-titled]
+hotel: 44   vessel: 25   cabintype: 108   cabin: 98
+customerreview: 2160/2563      [403 unpublished filtered]
+customerreview_trip: 145/163   [matches ~163 ✓]
+```
+
+### HITL Q resolutions verified in code
+
+Q1 Option B (Node CLI translator) — chosen and shipped. Q2 daybyday concatenated to `trip.description` with "Day N: " prefixes. Q3 no tombstone pass. Q4 trip image `image_trip` first then `image_page` fallback (proposed C.39 in decisions log; renumbered from the plan's "C.36" because that was already taken). Q5 ship-without-publishstate-filter — flagged in execution log as still pending Thomas/Richard. Q6 stay in `@swoop/ingestion`. Q7 `pagetype_title` denormalised onto `page`. Q8 filter shape A (transform code, not Postgres views) (proposed C.38 in decisions log; renumbered from the plan's "C.35" because that was already taken).
+
+### Smoke checks (W-Trek trip 369)
+
+- `canonical_url` = `https://www.swoop-patagonia.com/chile/torres-del-paine/hiking/w-trek` ✓
+- `from_price` = 2900.00 USD ✓
+- `image_id` resolves via `image_trip` first per HITL Q4 ✓
+- `ntag_ids` = 5 tags via the aggregator ✓
+- `description` starts with "Day 1: …" confirming daybyday concatenation ✓
+- ntag area filter `ntag_ids @> ARRAY[(SELECT id FROM tag WHERE alias='torres-del-paine')]` returns the W-Trek + 4 sibling Torres del Paine trips ✓
+
+### Notable findings during execution
+
+1. **Page self-FK requires a two-pass write.** `page.parent_id REFERENCES page(id)` is non-deferrable. Multi-row INSERT lands child rows before parents in the batch — Postgres rejects on the missing target. Two-pass: INSERT with `parent_id=NULL`, then UPDATE … CASE … END to wire ids. Same pattern would apply to any future self-FK at our scale.
+2. **Source `override_url || alias` collisions.** A handful of source page rows have colliding canonical URLs (legacy alt versions). Within-batch dedupe by canonical_url required before INSERT to satisfy `page.canonical_url UNIQUE`; lowest-id winner. Same generic dedupe applied to `tag.alias`, `trip.slug`, `tour.slug`, `hotel.slug`, `vessel.slug`.
+3. **FK-nullify vs FK-drop boundary policy.** Source rows reference filtered targets (Profile pages, soft-deleted images). Soft FKs (page.image_id, contentblock.page_id, trip.page_id, etc.) → null at write; hard FKs (cabin.vessel_id, customerreview_trip.{customerreview_id, trip_id}, tour_item.tour_id) → drop the row. Generic `FkRule` shape in `run.ts` makes the boundary explicit per table.
+
+### Open questions surfaced for HITL (not blocking C.t3a)
+
+1. **Source `tours` is content-empty** — 15 rows, almost all NULL-titled. The 36 `tour_items` can't anchor without a parent. Question for Thomas/Richard: do we expect `tour` to carry rows, or is multi-region/tour content rendered via `contentblock_tour` rows referencing trips directly? Won't block C.t3a; flagged for C.t4 / B.t3a tool-handler design.
+2. **`area` / `location` hierarchy** — source columns don't carry `country_id` / `parent_area_id`; hierarchy is via the page parent_id chain. Left null. C.t3a can derive via a page-walk if `find_locations` retrieval needs it.
+3. **`activity` (751 rows)** populated as first-class but with title-only — the source `activity` is per-trip-per-area data, mostly NULL secondary fields. Worth checking whether `find_activities` semantics are better served by the `tag` taxonomy + `inspire_passage` retrieval; if so, the `activity` domain table is dead weight.
+
+### Decisions logged
+
+- **C.38** — Filter shape A (filters in transform code, not Postgres views) — HITL Q8.
+- **C.39** — Trip image resolution: `image_trip` first, `image_page` fallback, single `trip.image_id` — HITL Q4.
+
+### Downstream what's now possible
+
+- **C.t3a** can begin. Domain tables populated end-to-end; embedding pass + Haiku ETL classifiers all have data to read.
+- **C.t6** can begin. ~6.3K images already carry source `description` (~47.5%); ~6.7K need vision annotation — primed by the source data, less than the plan's £30–£150 estimate suggested.
+- **C.t4** still gated on C.t3a's derived job-shaped tables before it can register the eight intent-named tool handlers.
+
+**Coordination point for C.t3a**: column ownership convention is enforced by `noUpdateColumns` in the upsert helper. C.t3 owns: `id`, `canonical_url`, `intro_text`, `summary`, `description`, `width`, `height`, etc. C.t3a owns: `embedding`, `subject_tags`, `mood_tags`, `region_tags`, `alt_text`, `persona_summary`, `persona_embedding`, `primary_job`, `secondary_jobs`. Re-running C.t3's CLI never clobbers C.t3a's columns because they're explicitly excluded from the `ON CONFLICT DO UPDATE SET` clause via the COLS map in `run.ts`.
+
+---
 
 ## C.t1 implemented (2026-05-01 — first chunk-C executor agent, ~0.5 day)
 

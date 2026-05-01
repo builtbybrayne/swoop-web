@@ -8,6 +8,26 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.39 — Trip image resolution: `image_trip` first, `image_page` fallback, single `trip.image_id`
+
+**Decided**: 2026-05-01
+**Owner**: C.t3 execution + 2026-05-01 HITL ratification (Q4)
+**Rationale**: C.t2 left this open — `trip.image_id` is a single FK column but trips reach images via two paths: direct `image_trip` (3,361 rows in the 2026-04-27 dump) AND via `trip.page_id → image_page` (453 rows). HITL ratification picks `image_trip` first ordered by position, `image_page` of the joined page as fallback. Single populated `trip.image_id`; alternative shape (carrying both columns on `trip_card`) left for future if downstream needs both.
+
+The HITL ratification proposed naming this C.36, but C.36 was taken by the parallel C.t1 execution log earlier on 2026-05-01 — landed as C.39 to keep the log monotone.
+
+**Swap cost**: Low. Re-running the ETL with a different preference order is one-line in `transformations.ts`. If `trip_card` later needs both images, that's a C.t3a derivation step working off the populated `image_trip` + `image_page` tables, not a C.t3 schema change.
+
+## C.38 — Filter shape A: filters live in transform code, not Postgres views
+
+**Decided**: 2026-05-01
+**Owner**: C.t3 execution + 2026-05-01 HITL ratification (Q8)
+**Rationale**: Two viable shapes for "Profile pagetype out, test pages out, ntags_lookup-by-entity-type filter, etc.": Shape A (filters as `if/return null` in transform TS) or Shape B (Postgres views layered over fully-loaded tables). Shape A picked. Reasoning: (a) C.t2 settled the schema as "filtered, no Profile, no test pages, no PII" — Shape B would have to load it all then filter at query, that's data we explicitly chose not to carry (C.27 + C.28). (b) C.t4 tool handlers query domain tables directly; introducing a view layer adds SQL surface to maintain. (c) The `daybyday` filter (`type='presale' AND trip_id IS NOT NULL`) collapses 88K source rows to ~12K kept; running that as a view forever scans 88K on every read.
+
+The HITL ratification proposed naming this C.35, but C.35 was taken by the parallel C.t1 execution log earlier on 2026-05-01 — landed as C.38 to keep the log monotone.
+
+**Swap cost**: Low. Filters are localised to transform functions; flipping to a view layer post-hoc is a C.t8 runbook change.
+
 ## C.37 — Connector pool tunables: `max:10 / idle:30s / statement_timeout:10s` as the calibration starting point; surfaced as tunable
 
 **Decided**: 2026-05-01

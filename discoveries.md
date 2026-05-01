@@ -6,6 +6,34 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-02 — Self-referencing FKs need two-pass writes; soft FK orphans want nullify, hard FK orphans want drop
+
+C.t3 surfaced two FK-management patterns worth pinning for any future ETL touching this kind of legacy CMS schema.
+
+**Self-referencing FKs in multi-row INSERTs.** `page.parent_id REFERENCES page(id)` is non-deferrable. When you build a single multi-row INSERT statement with hundreds of pages, child rows can land in the VALUES list before their parents — Postgres rejects the row whose target id isn't yet inserted. The fix is two-pass:
+
+1. Insert all rows with `parent_id = NULL`.
+2. Run a second pass: `UPDATE page SET parent_id = CASE WHEN id = $1 THEN $2 WHEN id = $3 THEN $4 … END WHERE id IN (…)` in batches.
+
+That's not idempotent-friendly with ON CONFLICT semantics — but here the second pass is a pure UPDATE, no upsert. On re-runs the WHERE-id-IN clause matches the same set; the CASE produces the same parent_id values; the update is a no-op for rows whose parent_id already matches. Same pattern would work for any future self-FK at our scale (hierarchical content types, threaded comments, etc.).
+
+Alternative we didn't take: declare the FK `INITIALLY DEFERRED` so PG only checks at end of transaction. That works but requires migration changes; the two-pass approach is a pure ETL-side fix and the migration's existing `REFERENCES page(id)` constraint stays restrictive in production reads.
+
+**FK orphans: nullify or drop.** Source dumps reference targets we filter out (Profile pagetype pages, soft-deleted images, etc.). Two policy choices:
+
+- **Nullify** for soft FKs (`page.image_id`, `contentblock.page_id`, `trip.page_id`, `customerreview.image_id`). Downstream tools handle missing image_id / page_id gracefully — D.t9's widget code degrades cleanly to "no image" or "no deep-link". The ON DELETE SET NULL semantics in the migration encode this preference; we apply the same shape at insert time so we don't have to land an orphan that ON DELETE eventually nulls anyway.
+- **Drop** for hard NOT NULL FKs (`cabin.vessel_id`, `customerreview_trip.{customerreview_id, trip_id}`, `tour_item.tour_id`). Inserting a row with a missing required FK is impossible; the only viable boundary policy is "don't load this row".
+
+C.t3's `flushBuffer` takes an array of FkRule entries (`{column, validIds, mode: 'nullify' | 'drop'}`) per table. Each rule is bundle-able and explicit. The skip-reason tally surfaces `fk_nulled_<col>` / `fk_drop_<col>` counts so an operator can see at a glance how much got dropped versus how much got soft-loaded with FK=null.
+
+Pattern to remember: **for any FK whose target might be filtered, name the policy at the boundary, count the affected rows, and surface the count in the operator-facing tally.** Letting Postgres reject the insert without recording how many rows you lost is the wrong default.
+
+**Within-batch dedupe by UNIQUE secondary keys.** Source dumps occasionally carry multiple rows with colliding values for what's a UNIQUE column on our derived schema (`page.canonical_url`, `tag.alias`, `trip.slug`, etc. — legacy alt versions of the same content). Multi-row INSERT then fails not on the first conflict-targeted row but on the *batch* (the within-batch values violate UNIQUE before ON CONFLICT can resolve). Fix: dedupe in code keyed by the UNIQUE column, lowest-id winner. Generic `SECONDARY_UNIQUE_KEY` map in `flushBuffer` covers all the affected tables uniformly.
+
+These three patterns are why ETL transforms are not just SQL — Postgres's strictness on FK + UNIQUE within-batch needs explicit code-side handling that pgloader's CAST DSL can't naturally express. Argument for the HITL Q1 Option-B pick all over again.
+
+---
+
 ## 2026-05-01 — pg `client.query()` deprecation in `on('connect')` is real; libpq startup options are the cleanest fix
 
 `pg.Pool` exposes an `on('connect', client => ...)` lifecycle hook that callers (including the original C.t1 implementation) commonly use to set per-connection state like `statement_timeout`. Live-smoke testing of the new connector surfaced a runtime warning that unit tests didn't catch:
