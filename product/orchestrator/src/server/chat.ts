@@ -131,7 +131,15 @@ export function createChatHandler(
     // orchestrator's prompt can read the verdict but makes its own call.
     // Failures are logged and swallowed; classification is non-critical
     // infra and must never block the user's turn.
-    if (deps.triageClassifier) {
+    //
+    // Perf-3 (2026-04-30 review) — skip the classifier on turn 1
+    // (`userTurnIndex === 0`). Turn-1 messages are typically one-line
+    // greetings; the placeholder classifier produces no behaviour change
+    // but pays Haiku TTFB on every first impression. The verdict from turn
+    // N is still written into `session.triage` and remains available on
+    // turn N+1 — we just stop paying the latency cost when there is no
+    // prior turn to weigh against.
+    if (deps.triageClassifier && userTurnIndex > 0) {
       try {
         const sessionAfterUser = await deps.sessionStore.get(sessionId);
         if (sessionAfterUser) {

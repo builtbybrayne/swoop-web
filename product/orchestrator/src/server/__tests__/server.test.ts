@@ -482,3 +482,61 @@ describe('POST /chat — body and message limits (R4-server)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Perf-3 (2026-04-30 review) — skip the triage classifier on turn 1; still
+// fire on turn 2+. The verdict from turn N is read on turn N+1.
+// ---------------------------------------------------------------------------
+
+interface CountingClassifier extends TriageClassifier {
+  callCount: number;
+}
+
+function makeCountingClassifier(): CountingClassifier {
+  let calls = 0;
+  const classifier: CountingClassifier = {
+    modelId: 'stub-haiku',
+    callCount: 0,
+    async classify() {
+      calls += 1;
+      classifier.callCount = calls;
+      return {
+        posture: 'unclear',
+        rationale: 'stub',
+        modelUsed: 'stub-haiku',
+      };
+    },
+  };
+  return classifier;
+}
+
+describe('POST /chat — Perf-3 turn-1 triage skip', () => {
+  it('skips the classifier on turn 1', async () => {
+    const classifier = makeCountingClassifier();
+    const { app, runner } = buildTestApp(undefined, undefined, classifier);
+    runner.emit([
+      mkEvent({ content: { role: 'model', parts: [{ text: 'hi' }] } }),
+      mkEvent({ turnComplete: true }),
+    ]);
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    const res = await request(app).post('/chat').send({ sessionId, message: 'hello' });
+    expect(res.status).toBe(200);
+    expect(classifier.callCount).toBe(0);
+  });
+
+  it('runs the classifier on turn 2', async () => {
+    const classifier = makeCountingClassifier();
+    const { app, runner } = buildTestApp(undefined, undefined, classifier);
+    runner.emit([mkEvent({ turnComplete: true })]);
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    // Turn 1 — skipped.
+    await request(app).post('/chat').send({ sessionId, message: 'hello' });
+    expect(classifier.callCount).toBe(0);
+    // Turn 2 — classifier fires.
+    runner.emit([mkEvent({ turnComplete: true })]);
+    await request(app).post('/chat').send({ sessionId, message: 'tell me more' });
+    expect(classifier.callCount).toBe(1);
+  });
+});
+
