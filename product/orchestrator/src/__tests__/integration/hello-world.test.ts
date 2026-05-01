@@ -279,6 +279,13 @@ describe('M1 hello-world end-to-end (B.t7 vertical slice)', () => {
 
     // 3. Send a user message. Message is intent-laden so the classifier
     // stub's canned response ("leaning_qualified") is a plausible verdict.
+    //
+    // Two turns are sent: turn 1 is a warm-up (Perf-3 skips the classifier
+    // on the first turn — first-impression latency), turn 2 is the
+    // assertion-bearing turn the rest of this test inspects. The stub
+    // runner replays the same canned stream on each `runAsync` call so
+    // both turns flow through the SSE wire identically.
+    await request(app).post('/chat').send({ sessionId, message: 'hi there' });
     const chat = await request(app)
       .post('/chat')
       .send({
@@ -332,10 +339,11 @@ describe('M1 hello-world end-to-end (B.t7 vertical slice)', () => {
     const finalState = await store.get(sessionId);
     expect(finalState).not.toBeNull();
 
-    // User turn in history.
+    // User turn in history. Two turns ran (Perf-3 warm-up + assertion);
+    // the assertion-bearing utterance is the most recent user entry.
     const userEntries = finalState!.conversationHistory.filter((e) => e.role === 'user');
-    expect(userEntries.length).toBeGreaterThanOrEqual(1);
-    expect(userEntries[0]!.text).toContain('Patagonia honeymoon');
+    expect(userEntries.length).toBeGreaterThanOrEqual(2);
+    expect(userEntries[userEntries.length - 1]!.text).toContain('Patagonia honeymoon');
 
     // Agent utterance in history (at least one `utter` block).
     const agentUtter = finalState!.conversationHistory.filter(
@@ -382,7 +390,12 @@ describe('M1 hello-world end-to-end (B.t7 vertical slice)', () => {
       .patch(`/session/${sessionId}/consent`)
       .send({ granted: true, copyVersion: 'v1' });
 
-    const chat = await request(app).post('/chat').send({ sessionId, message: 'hi' });
+    // Turn 1 is the warm-up that Perf-3 skips; turn 2 is where the
+    // classifier actually runs and we observe the fallback path.
+    await request(app).post('/chat').send({ sessionId, message: 'hi' });
+    const chat = await request(app)
+      .post('/chat')
+      .send({ sessionId, message: 'tell me about Patagonia' });
     expect(chat.status).toBe(200);
 
     const finalState = await store.get(sessionId);

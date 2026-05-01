@@ -21,13 +21,15 @@
  *       - Client disconnect aborts the turn (no zombie writes).
  */
 
-import { describe, expect, it, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import type { Runner, Event as AdkEvent } from '@google/adk';
+import { CHAT_MESSAGE_MAX, setEventSink, resetEventSink, type Event } from '@swoop/common';
 
 import { buildServer } from '../index.js';
 import { InMemorySessionStore, type SessionStore } from '../../session/index.js';
+import type { TriageClassifier } from '../../functional-agents/triage-classifier.js';
 
 /**
  * Minimal ADK event factory matching the Event-extends-LlmResponse shape the
@@ -88,7 +90,11 @@ function makeStubRunner(): StubRunner {
   };
 }
 
-function buildTestApp(store?: SessionStore, runner?: Runner): { app: Express; store: SessionStore; runner: StubRunner } {
+function buildTestApp(
+  store?: SessionStore,
+  runner?: Runner,
+  triageClassifier?: TriageClassifier,
+): { app: Express; store: SessionStore; runner: StubRunner } {
   const store_ = store ?? new InMemorySessionStore();
   const stub = runner
     ? { runner, emit: () => {}, lastAborted: () => false }
@@ -98,6 +104,7 @@ function buildTestApp(store?: SessionStore, runner?: Runner): { app: Express; st
     runner: stub.runner,
     corsAllowedOrigins: ['http://localhost:5173'],
     version: 'test',
+    triageClassifier,
   });
   return { app, store: store_, runner: stub };
 }
@@ -423,5 +430,337 @@ describe('CORS', () => {
       .set('Origin', 'https://evil.example')
       .send({});
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R4-server (2026-04-30 review) — body-limit + per-message length cap.
+// Body cap was lowered from 64kb → 16kb; field cap added at 8 000 chars on
+// `ChatRequestSchema.message`. The two checks compose: oversized JSON
+// bodies bounce at the parser, oversized message text bounces at Zod.
+// ---------------------------------------------------------------------------
+
+describe('POST /chat — body and message limits (R4-server)', () => {
+  it('returns 413 when the request body exceeds the 16kb limit', async () => {
+    const { app } = buildTestApp();
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    // 18 KB raw — well above the 16 KB body limit, well below the
+    // theoretical Express default. The serialiser pads with the JSON
+    // envelope; raw payload size is what trips the parser.
+    const oversized = 'a'.repeat(18 * 1024);
+    const res = await request(app)
+      .post('/chat')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ sessionId, message: oversized }));
+    expect(res.status).toBe(413);
+  });
+
+  it('returns 400 when the message field exceeds CHAT_MESSAGE_MAX', async () => {
+    const { app } = buildTestApp();
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    // CHAT_MESSAGE_MAX + 1 chars, but inside the 16 KB body cap so we hit
+    // the schema layer rather than the parser.
+    const overCap = 'b'.repeat(CHAT_MESSAGE_MAX + 1);
+    const res = await request(app).post('/chat').send({ sessionId, message: overCap });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
+    // The field path narrows down the offending key for the UI.
+    expect(JSON.stringify(res.body)).toContain('message');
+  });
+
+  it('accepts a message at exactly CHAT_MESSAGE_MAX', async () => {
+    const { app, runner } = buildTestApp();
+    runner.emit([mkEvent({ turnComplete: true })]);
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    const res = await request(app)
+      .post('/chat')
+      .send({ sessionId, message: 'c'.repeat(CHAT_MESSAGE_MAX) });
+    expect(res.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Perf-3 (2026-04-30 review) — skip the triage classifier on turn 1; still
+// fire on turn 2+. The verdict from turn N is read on turn N+1.
+// ---------------------------------------------------------------------------
+
+interface CountingClassifier extends TriageClassifier {
+  callCount: number;
+}
+
+function makeCountingClassifier(): CountingClassifier {
+  let calls = 0;
+  const classifier: CountingClassifier = {
+    modelId: 'stub-haiku',
+    callCount: 0,
+    async classify() {
+      calls += 1;
+      classifier.callCount = calls;
+      return {
+        posture: 'unclear',
+        rationale: 'stub',
+        modelUsed: 'stub-haiku',
+      };
+    },
+  };
+  return classifier;
+}
+
+describe('POST /chat — Perf-3 turn-1 triage skip', () => {
+  it('skips the classifier on turn 1', async () => {
+    const classifier = makeCountingClassifier();
+    const { app, runner } = buildTestApp(undefined, undefined, classifier);
+    runner.emit([
+      mkEvent({ content: { role: 'model', parts: [{ text: 'hi' }] } }),
+      mkEvent({ turnComplete: true }),
+    ]);
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    const res = await request(app).post('/chat').send({ sessionId, message: 'hello' });
+    expect(res.status).toBe(200);
+    expect(classifier.callCount).toBe(0);
+  });
+
+  it('runs the classifier on turn 2', async () => {
+    const classifier = makeCountingClassifier();
+    const { app, runner } = buildTestApp(undefined, undefined, classifier);
+    runner.emit([mkEvent({ turnComplete: true })]);
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+    // Turn 1 — skipped.
+    await request(app).post('/chat').send({ sessionId, message: 'hello' });
+    expect(classifier.callCount).toBe(0);
+    // Turn 2 — classifier fires.
+    runner.emit([mkEvent({ turnComplete: true })]);
+    await request(app).post('/chat').send({ sessionId, message: 'tell me more' });
+    expect(classifier.callCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test-1 (2026-04-30 review) — /chat error-path coverage.
+//
+// Three scenarios:
+//   (a) mid-stream throw inside the runner — `event: error` SSE frame
+//       emitted, `error.raised` event captured, history not corrupted.
+//   (b) client disconnect — request socket closed mid-stream; runner
+//       observes the abort signal; no zombie writes follow.
+//   (c) connector-unreachable — modelled as a thrown error before any
+//       events stream (the surface emerging from `runAsync` is identical
+//       whether the runner blew up or the connector did); SSE error frame
+//       + `error.raised` event captured, session state remains intact.
+//
+// (b) is exercised against a real `http.Server` because supertest's
+// transport doesn't expose a clean way to close the request socket
+// mid-flight. (a) and (c) work fine through supertest because the runner
+// throws synchronously inside `for await`.
+// ---------------------------------------------------------------------------
+
+describe('POST /chat — error path coverage (Test-1)', () => {
+  let captured: Event[] = [];
+
+  beforeEach(() => {
+    captured = [];
+    setEventSink((e) => {
+      captured.push(e);
+    });
+  });
+
+  afterEach(() => {
+    resetEventSink();
+  });
+
+  it('mid-stream runner throw → event:error frame and error.raised event (a)', async () => {
+    // Runner yields one good text event, then throws. The translator's
+    // `for await` surfaces the throw to the chat handler's catch arm,
+    // which writes `event: error` and emits the structured event.
+    const store = new InMemorySessionStore();
+    const runner = {
+      async *runAsync(): AsyncGenerator<AdkEvent, void, undefined> {
+        yield mkEvent({ content: { role: 'model', parts: [{ text: 'partial ' }] } });
+        throw new Error('runner exploded mid-stream');
+      },
+    } as unknown as Runner;
+    const app = buildServer({
+      sessionStore: store,
+      runner,
+      corsAllowedOrigins: ['http://localhost:5173'],
+      version: 'test',
+    });
+
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+
+    const res = await request(app).post('/chat').send({ sessionId, message: 'hi' });
+    expect(res.status).toBe(200);
+    const frames = parseSseFrames(res.text);
+    const errorFrame = frames.find((f) => f.event === 'error');
+    expect(errorFrame).toBeDefined();
+    const parsed = JSON.parse(errorFrame!.data);
+    // SSE error frame shape: flat `{code, message}` per writeSseError.
+    expect(parsed.code).toBe('internal_error');
+    expect(parsed.message).toContain('runner exploded');
+
+    const errorRaised = captured.find(
+      (e): e is Event & { eventType: 'error.raised' } => e.eventType === 'error.raised',
+    );
+    expect(errorRaised).toBeDefined();
+    expect((errorRaised!.payload as { errorType: string }).errorType).toBe(
+      'chat_turn_failed',
+    );
+
+    // Session state stays valid — the user message persisted, runner failure
+    // didn't corrupt history.
+    const state = await store.get(sessionId);
+    expect(state).not.toBeNull();
+    expect(state!.conversationHistory.some((e) => e.role === 'user')).toBe(true);
+  });
+
+  it('client disconnect aborts the runner cleanly (b)', async () => {
+    // Spin up a real http.Server so we can close the request socket
+    // mid-stream — supertest's transport buffers responses and doesn't
+    // expose a portable mid-flight abort.
+    const { createServer } = await import('node:http');
+    const aborted = { fired: false };
+    const release = { pending: null as null | (() => void) };
+
+    const store = new InMemorySessionStore();
+    const runner = {
+      async *runAsync(params: { abortSignal?: AbortSignal }): AsyncGenerator<AdkEvent, void, undefined> {
+        // Attach the abort listener up front — before the first yield —
+        // so the listener exists by the time the chat handler's
+        // `res.on('close')` fires the controller. (Earlier iterations of
+        // this test caught a real bug here: the chat handler was
+        // listening on `req.on('close')`, which Express 5 fires before
+        // the handler runs because the body parser has already drained
+        // the request stream. Switching to `res.on('close')` gave us a
+        // signal that fires when the *response* socket actually closes —
+        // which is what we care about for mid-stream cancel.)
+        const sig = params.abortSignal;
+        if (sig) {
+          if (sig.aborted) aborted.fired = true;
+          sig.addEventListener('abort', () => {
+            aborted.fired = true;
+            release.pending?.();
+          });
+        }
+        yield mkEvent({ content: { role: 'model', parts: [{ text: 'streaming ' }] } });
+        await new Promise<void>((resolve) => {
+          release.pending = resolve;
+        });
+      },
+    } as unknown as Runner;
+
+    const app = buildServer({
+      sessionStore: store,
+      runner,
+      corsAllowedOrigins: ['http://localhost:5173'],
+      version: 'test',
+    });
+
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+
+    const server = createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, () => resolve()));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('no port bound');
+    const port = address.port;
+
+    // Fire a real HTTP POST against the listening server. Once the SSE
+    // stream is open we destroy the client socket — that sends FIN, which
+    // Express surfaces as `req.on('close')`. The chat handler's
+    // `onClientClose` then aborts the controller, which the runner's
+    // listener observes.
+    const http = await import('node:http');
+    const reqClose = new Promise<void>((resolve) => {
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: '/chat',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        },
+        (res) => {
+          res.once('data', () => {
+            // Destroying the socket directly forces an immediate close —
+            // `req.destroy()` alone can leave the FIN queued.
+            req.socket?.destroy();
+            resolve();
+          });
+          res.on('end', () => resolve());
+          res.on('error', () => resolve());
+        },
+      );
+      req.on('error', () => resolve());
+      req.end(JSON.stringify({ sessionId, message: 'hi' }));
+    });
+
+    await reqClose;
+    // Allow the server's `req.on('close')` handler + abortController to
+    // propagate through the runner's signal listener.
+    await new Promise((r) => setTimeout(r, 250));
+    // Release any lingering deferred so the generator can settle and the
+    // test doesn't leak a Promise.
+    release.pending?.();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(aborted.fired).toBe(true);
+    // Session is still readable — disconnect doesn't corrupt state.
+    const state = await store.get(sessionId);
+    expect(state).not.toBeNull();
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }, 10_000);
+
+  it('connector-unreachable surfaces as event:error + error.raised (c)', async () => {
+    // Model the "MCP connector throws on tool call" failure as a thrown
+    // error inside the runner — the orchestrator's translator path is the
+    // same surface for any thrown exception emerging from `runAsync`. The
+    // assertion is that the user-facing wire shape matches: SSE error
+    // frame plus a structured `error.raised` event with the right type.
+    const store = new InMemorySessionStore();
+    const runner = {
+      async *runAsync(): AsyncGenerator<AdkEvent, void, undefined> {
+        // Yield zero events; immediately throw a connector-shaped error.
+        if (false as boolean) yield mkEvent({});
+        throw new Error('ECONNREFUSED 127.0.0.1:3001 (connector unreachable)');
+      },
+    } as unknown as Runner;
+    const app = buildServer({
+      sessionStore: store,
+      runner,
+      corsAllowedOrigins: ['http://localhost:5173'],
+      version: 'test',
+    });
+
+    const sessionId = await bootstrapSession(app);
+    await grantConsent(app, sessionId);
+
+    const res = await request(app)
+      .post('/chat')
+      .send({ sessionId, message: 'find me a w-trek' });
+    expect(res.status).toBe(200);
+    const frames = parseSseFrames(res.text);
+    const errorFrame = frames.find((f) => f.event === 'error');
+    expect(errorFrame).toBeDefined();
+    const parsed = JSON.parse(errorFrame!.data);
+    expect(parsed.code).toBe('internal_error');
+    expect(parsed.message).toContain('ECONNREFUSED');
+
+    const errorRaised = captured.find(
+      (e): e is Event & { eventType: 'error.raised' } => e.eventType === 'error.raised',
+    );
+    expect(errorRaised).toBeDefined();
+    expect((errorRaised!.payload as { errorType: string }).errorType).toBe(
+      'chat_turn_failed',
+    );
+
+    const state = await store.get(sessionId);
+    expect(state).not.toBeNull();
   });
 });

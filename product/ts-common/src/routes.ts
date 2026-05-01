@@ -21,10 +21,19 @@ import { z } from "zod";
 // POST /chat
 // -----------------------------------------------------------------------------
 
+/**
+ * Per-message length cap (R4-server, 2026-04-30 code review). 8 000 chars
+ * is comfortably above any plausible visitor utterance and well below the
+ * `express.json` body limit, so the field cap and the body cap close the
+ * unbounded-input vector together. Rejection at this layer means the
+ * oversize never reaches event payload sha256 inputs or runner history.
+ */
+export const CHAT_MESSAGE_MAX = 8_000;
+
 export const ChatRequestSchema = z
   .object({
     sessionId: z.string().min(1),
-    message: z.string().min(1),
+    message: z.string().min(1).max(CHAT_MESSAGE_MAX),
   })
   .strict();
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;

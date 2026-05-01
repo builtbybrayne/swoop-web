@@ -8,8 +8,12 @@
  *     become `event: error`.
  *   - Consent gate runs BEFORE any agent work starts (canAcceptTurn from
  *     B.t2). 403 with `consent_required` if tier-1 is unset.
- *   - Client disconnect: `req.on('close')` aborts the agent turn via an
- *     `AbortController` threaded through the Runner.
+ *   - Client disconnect: `res.on('close')` aborts the agent turn via an
+ *     `AbortController` threaded through the Runner. (Express 5 emits
+ *     `close` on the `req` immediately after the body parser drains the
+ *     incoming stream — which happens before this handler runs — so
+ *     listening on `res` is the only reliable way to observe the
+ *     downstream socket actually going away mid-stream.)
  *   - Reasoning parts: stripped from the SSE wire by the translator's
  *     `filterReasoning`, persisted to session history via `onFiltered`
  *     (chunk B §2.6 invariant).
@@ -131,7 +135,15 @@ export function createChatHandler(
     // orchestrator's prompt can read the verdict but makes its own call.
     // Failures are logged and swallowed; classification is non-critical
     // infra and must never block the user's turn.
-    if (deps.triageClassifier) {
+    //
+    // Perf-3 (2026-04-30 review) — skip the classifier on turn 1
+    // (`userTurnIndex === 0`). Turn-1 messages are typically one-line
+    // greetings; the placeholder classifier produces no behaviour change
+    // but pays Haiku TTFB on every first impression. The verdict from turn
+    // N is still written into `session.triage` and remains available on
+    // turn N+1 — we just stop paying the latency cost when there is no
+    // prior turn to weigh against.
+    if (deps.triageClassifier && userTurnIndex > 0) {
       try {
         const sessionAfterUser = await deps.sessionStore.get(sessionId);
         if (sessionAfterUser) {
@@ -188,6 +200,13 @@ export function createChatHandler(
     const stopHeartbeat = startHeartbeat(res);
 
     // Abort plumbing: client disconnect cancels the agent turn cleanly.
+    // Listen on `res.on('close')` rather than `req.on('close')`. Under
+    // Express 5 + Node 20, `req` emits `close` as soon as the body parser
+    // drains the request stream — which happens before this handler is
+    // entered. Attaching the listener to `req` after that point would
+    // therefore *never* fire on a real mid-stream disconnect. `res.close`
+    // fires when the response socket actually goes away, which is the
+    // signal we want.
     const abortController = new AbortController();
     let closed = false;
     const onClientClose = (): void => {
@@ -195,7 +214,7 @@ export function createChatHandler(
       closed = true;
       abortController.abort();
     };
-    req.on('close', onClientClose);
+    res.on('close', onClientClose);
 
     // Turn-index for history entries: start at the current conversationHistory
     // length (user message just landed).
@@ -344,7 +363,7 @@ export function createChatHandler(
       });
     } finally {
       stopHeartbeat();
-      req.off('close', onClientClose);
+      res.off('close', onClientClose);
       if (!res.writableEnded) {
         res.end();
       }

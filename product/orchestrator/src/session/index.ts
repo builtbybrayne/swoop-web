@@ -29,6 +29,7 @@ export {
 } from './adk-native.js';
 export { VertexAiSessionStore } from './vertex-ai.js';
 export { FirestoreSessionStore } from './firestore.js';
+export { MutexSessionStore } from './mutex-store.js';
 export {
   DirectAllocator,
   WarmSessionPool,
@@ -42,6 +43,7 @@ import { InMemorySessionStore } from './in-memory.js';
 import { AdkNativeSessionStore } from './adk-native.js';
 import { VertexAiSessionStore } from './vertex-ai.js';
 import { FirestoreSessionStore } from './firestore.js';
+import { MutexSessionStore } from './mutex-store.js';
 
 /**
  * The four valid `SESSION_BACKEND` values. `in-memory` is the default.
@@ -107,6 +109,23 @@ function resolveBackend(input: string | undefined): SessionBackend {
  */
 export function createSessionStore(opts: CreateSessionStoreOptions = {}): SessionStore {
   const backend = resolveBackend(opts.backend);
+  const inner = buildBackend(backend, opts);
+  // R2 (2026-04-30 review) — wrap every backend in a per-session async mutex
+  // around `update`. Closes the latent lost-update race in chat.ts where
+  // multiple unawaited promises mutate the same session concurrently. Today
+  // `InMemorySessionStore` happens to serialise via the JS event loop's
+  // microtask queue (mutator never awaits); the moment any backend goes
+  // async (Firestore stub, planned Postgres `SessionService` per B.22) the
+  // race becomes a real lost-write. Wrapping at the factory means every
+  // backend benefits — including unit-test in-memory stores spun up via
+  // `createSessionStore()`.
+  return new MutexSessionStore(inner);
+}
+
+function buildBackend(
+  backend: SessionBackend,
+  opts: CreateSessionStoreOptions,
+): SessionStore {
   switch (backend) {
     case 'in-memory':
       return new InMemorySessionStore({
