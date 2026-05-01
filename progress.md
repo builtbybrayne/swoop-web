@@ -1,10 +1,10 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-04-30 (C.t2 contract layer closed; C.26 graduated; eight-tool intent-named surface settled with no-composer architecture)
+**Snapshot date**: 2026-05-01 (review fix-wave landed; ten of fourteen review items merged; seven new chunk-C tier-3 plan drafts ready for HITL review)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
-**Status**: **M1 live + chunks D + mock-host shipped; C.t2 closed; C.26 graduated; chunks B/E/F/G/H advancing.** 2026-04-30 landed: **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables; production-quality tool descriptions; full review-fix pass folding in Voyage-3 / 1024d lock per C.18 update, ON DELETE SET NULL on optional FKs, UNIQUE constraints on slugs/aliases, EmbeddingSchema `.finite()` + 1024d, voice tweaks); **C.26 graduated** with the supplementary `customerreview_tables_-_swoop-patagonia_prod.sql` dump — `customerreview` (2,563 rows) + `customerreview_trip` (163 rows) added as domain tables in migration 006; `find_someone_who` moved from `CONDITIONAL_TOOLS` to live `TOOL_DESCRIPTIONS`; PII non-issue (public-domain reviews, ingest as-is); customertip remains pending Swoop's separate delivery. **The chunk-C plan rewrite removed the composer pattern** (decision C.24): tools call data primitives directly, Sonnet at orchestrator handles synthesis, Haiku-style cheap LLM moves to ETL classifier passes. **Top-down-from-sales discipline** elevated as theme 11 in the top-level plan + dedicated "Read this first" anchor sections in both the chunk-C and C.t2 plans. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
+**Status**: **M1 live + chunks D + mock-host shipped; C.t2 closed; C.26 graduated; 2026-04-30 review wave landed; chunk-C tier-3 plans drafted; chunks B/E/F/G/H advancing.** 2026-05-01 landed via 13-agent swarm + 1 integration fix: ten review items closed (R1, R3, R4-handoff, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1) + seven new tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for chunk-C implementation. Sec-3 (`javascript:`/`data:` URL scheme rejection) was originally claimed-closed by Theme-A.1 but only validated against stale node_modules — actually closed by `be9ca95` adding a refine() check on top of `.url()`. **Test count: 412 → 474 (+62)**. Earlier (2026-04-30): **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables); **C.26 graduated** with the customerreview supplementary dump (2,563 rows + 163 trip junctions); composer pattern removed (decision C.24); top-down-from-sales discipline elevated as theme 11. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
 
-**Review-fix backlog (2026-04-30 code review)**: 4 🔴 + 13 🟡 + 5 deferred close-out items. Close R1–R4 before starting new chunk-C / chunk-G work. Master ledger: [planning/reviews/2026-04-30-code-level.md](planning/reviews/2026-04-30-code-level.md). Pre-chunk-work close-out section in [next-steps.md](next-steps.md) lists priority order.
+**Review-fix status (2026-04-30 code review)**: 10 of 14 closed (R1, R3, R4-handoff, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1). Remaining in flight: R2 (mutex), R4-server, Perf-3, Test-1 — all chat.ts cluster, dispatched as a single bundled agent 2026-05-01. Cross-cuts H1+H2 (messageOf + emitErrorRaised helpers) deferred to pair with next chunk-C work. Master ledger: [planning/reviews/2026-04-30-code-level.md](planning/reviews/2026-04-30-code-level.md).
 
 ---
 
@@ -36,6 +36,62 @@ The three services are all running (`:5173` UI, `:8080` orchestrator, `:3001` st
 - ✅ **Multi-file prompt loader** (B.t1a): `prompt-loader.ts` reads the directory, filters by pattern, sorts lexicographically, joins. Hot-reload preserved in dev. Sub-directories silently skipped via `withFileTypes`. Config rename: `SYSTEM_PROMPT_PATH` → `SYSTEM_PROMPT_DIR`. New unit tests cover concatenation, filtering, prod cache vs dev re-read, missing/empty dir, single file, sub-dir skip.
 - ✅ **Files relocated**: `cms/prompts/why.md` → `cms/prompts/system/00_why.md`; `cms/prompts/style-avoid.md` → `cms/prompts/system/10_style-avoid.md`. `cms/prompts/skills/` and `cms/prompts/tools/` created with `.gitkeep`.
 - ✅ **Authoring guide**: [product/cms/README.md](product/cms/README.md) rewritten as the day-to-day rules for non-engineers (layout + load contracts + naming + "what goes where" decision tree). Pointer added in [product/CLAUDE.md](product/CLAUDE.md).
+
+## Review fix-wave + chunk-C plan drafts (2026-05-01 — 13-agent swarm + integration fix)
+
+Day after C.t2 closed. Worktree-isolation swarm executed the 2026-04-30 code-review close-out + authored seven new chunk-C tier-3 plan drafts in parallel. Final state on `claude/magical-johnson-3b07a1` at `be9ca95`: 14 merge commits + 1 integration fix; 474/474 tests; typecheck clean across all 6 workspaces.
+
+### Review items closed (10)
+
+| Item | Branch | Commits |
+|---|---|---|
+| **R1** — `inconclusive` on TriageStateSchema | `worktree-agent-a1bb7720bed547731` | `14630eb`, `77ecfbd` |
+| **R3** — `^[^\r\n]{1,200}$` regex + control-char strip on handoff contact | `worktree-agent-a13de24569bedc8b0` | `0bde8f4`, `1d743f6` |
+| **R4-handoff** — `.max()` on contact / motivationAnchor / reason.text | (same as R3) | (bundled) |
+| **Sec-1** — `mkdir 0o700` + `writeFile 0o600` on `FsHandoffStore` | `worktree-agent-ae6c289a8c36cc538` | `d3398d2` |
+| **Sec-2** — helmet middleware (CSP frame-ancestors + HSTS + Referrer-Policy) | `worktree-agent-a58565657e7fb1a67` | `d9181ea` |
+| **Sec-3** — entryUrl scheme allowlist (closed retroactively by `be9ca95` after stale-node_modules false-green) | (orchestration worktree) | `be9ca95` |
+| **Theme-A.1** — `ChatRequestSchema` / `ConsentRequestSchema` / `SessionBootstrapRequestSchema` Zod-validated at HTTP boundary | `worktree-agent-ad31149bedd696ab3` | `4539053` |
+| **H3** — `handoff.email.{sent,skipped,failed}` event kinds + emission | (Sec-1 branch) | `ac296e4` |
+| **H4** — `parseToolResult` helper for connector adapter | `worktree-agent-a6e1814507a383626` | `9e4bfbd`, `48621f5` |
+| **H5** — shared SSE parser in `@swoop/common/streaming` (harness + UI both consume) | `worktree-agent-acd7eb95881306e3e` | `63ac862`, `20705ce`, `52c3485`, `a55ba1f` |
+| **Perf-1** — Anthropic prompt caching `cache_control: { type: 'ephemeral' }` on system + last tool entry | `worktree-agent-a2f3b90fb5ba02bd4` | `ae6dd72`, `a9884bd`, `fcd7366` |
+
+Remaining 2026-04-30 review items in flight as a single bundled chat.ts agent (dispatched 2026-05-01): **R2** (per-session async mutex), **R4-server** (16kb body limit + chat-message max), **Perf-3** (skip triage on turn 1), **Test-1** (`/chat` error-path integration tests).
+
+### Tier 3 plan drafts authored (7) — all marked `Status: DRAFT — for HITL review. Not yet executable.`
+
+| Plan | Lines | Worktree | What |
+|---|---:|---|---|
+| [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) | 364 | `worktree-agent-a35a0dc595c2d3aed` | Connector skeleton + Postgres pool wiring (foundational, smallest, fastest in chunk-C) |
+| [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) | 706 | `worktree-agent-a78713f2effc14bcb` | SQL-dump → Postgres transform; recommends **Option B (Node CLI translator in `@swoop/ingestion`)** with 6 reasons |
+| [planning/03-exec-c-t3a.md](planning/03-exec-c-t3a.md) | 466 | `worktree-agent-acdc531b9b01f0a00` | Voyage-3 embeddings + Haiku ETL classifiers (blog-post job, persona-summary aggregation by reviewer name, image annotation, blog-tag normalisation); recommended `ENRICH_BUDGET_GBP=10` dev / £15 prod with batch-boundary kill-switch |
+| [planning/03-exec-c-t4.md](planning/03-exec-c-t4.md) | 351 | `worktree-agent-a669aa78a0995b554` | Eight intent-named tool handlers over data primitives; `handoff_submit` thin-wrapper over E.t2/E.t3-shipped endpoint; description-load fail-fast for the five conversational tools |
+| [planning/03-exec-c-t5.md](planning/03-exec-c-t5.md) | 190 | `worktree-agent-adcea2f64a87b63bb` | `@swoop/common` image URL utility + page-as-hub resolver |
+| [planning/03-exec-c-t6.md](planning/03-exec-c-t6.md) | 233 | (same) | Claude Vision annotation pipeline over the ~6.3K images without upstream `image.description`; ~£30–£150 cost estimate |
+| [planning/03-exec-c-t8.md](planning/03-exec-c-t8.md) | 235 | (same) | ETL + annotation handover runbooks at `product/cms/ops/` |
+
+All plans carry the ★ Read this first calibration callout pointing at chunk-C anchor + theme 11 (top-down-from-sales). Open-question lists numbered for HITL adjudication; tooling picks made with explicit reasoning.
+
+### Tests + typecheck
+
+- `@swoop/common`: 58 → 97 (+39 — fixtures, sse-parser, handoff-schema, route-schema, others)
+- `@swoop/orchestrator`: 132 → 145 (+13 — Perf-1 placement + Theme-A.1 routes + helmet + handoff-submit event)
+- `@swoop/connector`: 46 → 56 (+10 — Sec-1 perms + H3 email-event branches + R3+R4 mailer scrub)
+- `@swoop/ui`: 71 → 71 (H5 consumer rewire only)
+- `@swoop/ingestion`: 31 → 31
+- `@swoop/harness`: 74 → 74
+- **Total: 412 → 474 (+62)**
+
+Typecheck clean across all 6 workspaces.
+
+### Notable findings from this wave
+
+1. **The agent self-verification false-green pattern.** The Theme-A.1 agent reported "6/6 workspaces green" on its branch, but the Sec-3 test (rejecting `javascript:alert(1)` in `entryUrl`) actually returns 201 against a fresh `npm install` — Zod's `.url()` accepts non-http schemes. The agent's branch passed tests against stale node_modules. Caught at integration. Lesson: agent test-pass reports are necessary but not sufficient — fresh-install verification at merge time is non-negotiable.
+2. **Worktree-base race in agent dispatch.** First wave of 12 agents: 8 of 12 worktrees branched from main (`a1a9fe3`); 4 landed on stale older commits. The over-strict initial hash gate halted the 4 cleanly without damage; the improved gate (`git cat-file -e <SHA> && git reset --hard <SHA>`) auto-recovered subsequent dispatches because worktrees share the `.git` object store. Pattern documented for future swarm dispatches.
+3. **Background-await turn-budget death.** Multiple agents hit turn limits while waiting on `run_in_background` npm/test notifications that didn't arrive in time. Fix in agent briefs: explicitly mandate foreground/blocking npm/test commands.
+
+---
 
 ## C.t2 contract layer + C.26 graduation (2026-04-30 — full session)
 

@@ -4,10 +4,10 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-04-30 — C.t2 closed; C.26 graduated; chunk-C contract layer settled)
-M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated**. Today's session landed (commits `0340386` → `bda2b8d`, ~9 commits): the eight-tool intent-named contract layer, no-composer architecture, top-down-from-sales discipline elevated as theme 11, full code-quality review fix pass folding in C.18 lock to **Voyage-3 / 1024d**, customerreview supplementary dump ingested as new domain tables, `find_someone_who` graduated to live. See [progress.md](progress.md) for the full breakdown.
+## Status (2026-05-01 — review fix-wave landed; chunk-C tier-3 plan drafts ready)
+M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated** + **2026-04-30 review fix-wave merged**. 2026-05-01 13-agent swarm + 1 integration fix landed: ten review items closed (R1, R3, R4-handoff, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1) + seven new chunk-C tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for HITL review. See [progress.md](progress.md) §"Review fix-wave + chunk-C plan drafts (2026-05-01)" for the full breakdown including notable findings (agent self-verification false-green pattern, worktree-base race, background-await turn-budget death).
 
-**Tests**: 412/412 green across 6 workspaces — `@swoop/common` (58 — was 43, +15 C.t2 fixture cases), `@swoop/orchestrator` (132), `@swoop/connector` (46), `@swoop/ui` (71), `@swoop/harness` (74), `@swoop/ingestion` (31).
+**Tests**: 474/474 green across 6 workspaces — `@swoop/common` (97), `@swoop/orchestrator` (145), `@swoop/connector` (56), `@swoop/ui` (71), `@swoop/harness` (74), `@swoop/ingestion` (31).
 
 **Postgres setup**: `puma_dev` is live at `postgresql://al:pick-a-password@localhost:5432/puma_dev` (PG 18 + pgvector 0.8.1 + pg_trgm 1.6 + tsvector). Migrations 001–006 at `product/connector/migrations/` apply cleanly to a fresh test DB; `puma_dev` deliberately untouched (that's C.t3's job to populate). MariaDB `swoop_patagonia` left up with both the original dump and the supplementary customerreview dump for ongoing inspection.
 
@@ -15,58 +15,57 @@ M1 live + chunk D closed + mock-host shipped + **C.t2 done** + **C.26 graduated*
 
 ---
 
-## Pre-chunk-work close-out (2026-04-30 code review)
+## 2026-04-30 review close-out — status
 
-The 2026-04-30 code-level review surfaced 4 🔴 ship-blockers + ~13 🟡 watch items. **Close R1–R4 BEFORE starting any new chunk-C / chunk-G work** — they're cheap (under 90 minutes total), they're production blockers, and most of them touch the schema spine that all the chunk-C work depends on. Master ledger + checklist: [planning/reviews/2026-04-30-code-level.md](planning/reviews/2026-04-30-code-level.md).
+| Item | Status | Branch / commit |
+|---|---|---|
+| **R1** — inconclusive on TriageStateSchema | ✅ landed | `worktree-agent-a1bb7720…` `14630eb` + `77ecfbd` |
+| **R3** — handoff contact regex + control-char strip | ✅ landed | `worktree-agent-a13de24…` `0bde8f4` + `1d743f6` |
+| **R4-handoff** — `.max()` on contact + motivationAnchor + reason.text | ✅ landed | (bundled w/ R3) |
+| **Sec-1** — `FsHandoffStore` perms `0o700`/`0o600` | ✅ landed | `worktree-agent-ae6c289…` `d3398d2` |
+| **Sec-2** — helmet middleware (CSP frame-ancestors + HSTS + Referrer-Policy) | ✅ landed | `worktree-agent-a585656…` `d9181ea` |
+| **Sec-3** — entryUrl scheme allowlist | ✅ landed (integration fix on top of Theme-A.1) | `be9ca95` |
+| **Theme-A.1** — Zod schemas at HTTP boundary | ✅ landed | `worktree-agent-ad31149…` `4539053` |
+| **H3** — `handoff.email.{sent,skipped,failed}` event kinds | ✅ landed | (bundled w/ Sec-1) `ac296e4` |
+| **H4** — `parseToolResult` helper | ✅ landed | `worktree-agent-a6e1814…` `9e4bfbd` + `48621f5` |
+| **H5** — shared SSE parser in `@swoop/common/streaming` | ✅ landed | `worktree-agent-acd7eb9…` 4 commits |
+| **Perf-1** — Anthropic prompt caching | ✅ landed | `worktree-agent-a2f3b90…` `ae6dd72` + `a9884bd` + `fcd7366` |
+| **R2** — per-session async mutex on `store.update` | 🟡 in flight | dispatched 2026-05-01 (chat.ts cluster bundle) |
+| **R4-server** — `express.json` 64kb→16kb + max() on chat message | 🟡 in flight | (same bundle) |
+| **Perf-3** — skip triage classifier on turn 1 | 🟡 in flight | (same bundle) |
+| **Test-1** — `/chat` error-path integration tests | 🟡 in flight | (same bundle) |
+| **H1** — `messageOf(err)` helper in `@swoop/common` | ⏸ deferred | pair with next chunk-C agent that touches the 16-site sweep |
+| **H2** — `emitErrorRaised` helper | ⏸ deferred | (same — depends on H1) |
+| **Theme-A.2/3/4/5** — small Zod hygiene tightenings | ⏸ deferred | not in pre-chunk-work scope |
+| **Perf-2** — parallel-not-serial triage classifier | ⏸ deferred | needs design work post-G.t0 |
 
-**🔴 quick wins — sub-30 min each, do first:**
+Master ledger + checklist: [planning/reviews/2026-04-30-code-level.md](planning/reviews/2026-04-30-code-level.md).
 
-- **R1** — add `inconclusive` to `TriageStateSchema`. Tracked at [03-exec-handoff-t1.md#R1](planning/03-exec-handoff-t1.md). 5 min.
-- **R3** — `.regex(/^[^\r\n]{1,200}$/)` on `HandoffContactSchema` strings (closes email-header injection). Tracked at [03-exec-handoff-t1.md#R3](planning/03-exec-handoff-t1.md). 10 min.
-- **R4** — `.max()` on contact / motivationAnchor / chat message; lower `express.json` to 16kb. Split across [03-exec-handoff-t1.md#R4](planning/03-exec-handoff-t1.md) + [03-exec-agent-runtime-t5.md#R4](planning/03-exec-agent-runtime-t5.md). 15 min.
-- **Sec-1** — `mkdir({mode:0o700})` + `writeFile({mode:0o600})` on `FsHandoffStore` (PII at rest). [03-exec-handoff-t2-t3.md#Sec-1](planning/03-exec-handoff-t2-t3.md). 5 min.
-
-**🔴 medium — 30–60 min each, do BEFORE B.22 lands:**
-
-- **R2** — per-session async mutex on `store.update` (closes the latent race condition that will silently break with B.22 Postgres SessionService). [03-exec-agent-runtime-t5.md#R2](planning/03-exec-agent-runtime-t5.md). 30 min.
-
-**🟡 cross-cut helpers — pair naturally with chunk-C work:**
-
-When you're next in `@swoop/common` (e.g. starting C.t1's connector skeleton), land these in the same session — they're shared utilities the chunk-C work will benefit from:
-
-- **H1 / H2 / H3** — `messageOf` helper, `emitErrorRaised` helper, `handoff.email.{sent,skipped,failed}` event kinds. [03-exec-crosscut-common-helpers-fix.md](planning/03-exec-crosscut-common-helpers-fix.md). ~60 min combined.
-- **H5** — lift SSE parser into `@swoop/common/streaming` (harness + UI both consume). [03-exec-crosscut-shared-sse-parser-fix.md](planning/03-exec-crosscut-shared-sse-parser-fix.md). ~60 min.
-
-**🟡 server-layer fixes — bundle when next touching `orchestrator/server/`:**
-
-- **Theme-A.1** — define `ChatRequestSchema`, `ConsentRequestSchema`, `SessionBootstrapRequestSchema` in `@swoop/common`; replace 3 hand-rolled validations. Closes Sec-3 too. [03-exec-agent-runtime-t5.md#Theme-A.1](planning/03-exec-agent-runtime-t5.md). ~60 min.
-- **Sec-2** — helmet middleware (CSP frame-ancestors). [03-exec-agent-runtime-t5.md#Sec-2](planning/03-exec-agent-runtime-t5.md). ~15 min.
-- **Test-1** — integration tests for `/chat` error paths (mid-stream throw, client-disconnect, connector-unreachable). [03-exec-agent-runtime-t5.md#Test-1](planning/03-exec-agent-runtime-t5.md). ~2 hours.
-
-**🟡 perf — pre-empts G.t1 cost cliff:**
-
-- **Perf-1** — Anthropic prompt caching on system + tools (30–50% input-token reduction). Land BEFORE G.t1 fills `00_why.md` and the CMS tool-loader, or per-turn cost spikes. [03-exec-agent-runtime-t1.md#Perf-1](planning/03-exec-agent-runtime-t1.md). ~30 min.
-- **Perf-3** — skip triage classifier on turn 1 (small interim win until Perf-2's parallel-not-serial design is taken). [03-exec-agent-runtime-t7.md#Perf-3](planning/03-exec-agent-runtime-t7.md). ~10 min.
-
-**Convention**: every fix commits as `fix(<scope>): close <item-id> — <one-liner> (2026-04-30 review)`. After landing, tick the checkbox in the review file's status table and append the commit ref to the addendum's `Commits:` slot.
+**Convention**: each fix commits as `fix(<scope>): close <item-id> — <one-liner> (2026-04-30 review)`. After landing, tick the checkbox in the review file's status table and append the commit ref to the addendum's `Commits:` slot.
 
 ---
 
 ## Next up
 
-### 0. Pick a Tier 3 plan to author + execute [first thing next session]
+### 0. Review the 7 chunk-C tier-3 plan DRAFTS, then dispatch implementation [first thing next session]
 
-Chunk C's contract layer is closed. The eight-tool intent-named surface is settled. The five job-shaped derived tables are migrated. What remains is the *implementation* layer: SQL transform → embeddings + classifiers → tool handlers + adapters + widgets. None of these have Tier 3 plans yet.
+The 2026-05-01 swarm authored seven new tier-3 plan drafts covering the chunk-C implementation spine. **All carry `Status: DRAFT — for HITL review. Not yet executable.`** — they need your eyes before any implementation agent runs against them.
 
-Recommended next moves, in dependency order:
+Recommended review order (dependency order; chunk-C anchor calibration applies to every plan):
 
-1. **C.t1** (connector service skeleton + Postgres pool wiring) — foundational, smallest, fastest. Stub-replace work for `product/connector/`. Probably 0.5 day. Greenfield.
-2. **C.t3** (`export.sql` SQL-dump → Postgres transform) — the data-movement layer. Reads from MariaDB-format dump; applies declarative whitelists/flattens/denormalises/derived-column computes; writes domain tables in Postgres via `INSERT … ON CONFLICT DO UPDATE`. Filters out Profile pagetype + test pages at boundary. Tooling pick (e.g. `pgloader` + transform layer, or Node CLI translator) lands here. ~1.5–2 days.
-3. **C.t3a** (embedding pass + Haiku ETL classifiers) — semantic enrichment. Reads from populated domain tables + blog NDJSON snapshot; embeds via Voyage-3 (1024d, locked); runs Haiku classifiers (blog-post job classification, persona-summary aggregation by reviewer name per Phase 1 finding, image annotation, blog-tag normalisation against `ntag`); populates the five job-shaped derived tables. ~2 days; cost driven by content volume (back-of-envelope: ~12K embedding calls + ~200 Haiku classifier calls = cents).
-4. **C.t4** (eight-tool handlers over data primitives) — the runtime layer. Per-tool handler at `src/tools/<tool>.ts` calls 1–N data primitives (SQL/vector helpers); no composer code. Tool descriptions registered from `cms/prompts/tools/<tool>/description.md` per C.34. ~2 days. Triggers downstream B.t3a + D.t9 once landed.
-5. **C.t5** (image URL utility + page-as-hub resolver) — small `@swoop/common` utility. ~0.5 day.
-6. **C.t6** (image annotation pipeline) — parallel workstream. Claude Vision over the ~6.3K images that don't already have an `image.description` upstream (per the 2026-04-29 discovery). ~1 day setup + unattended runtime.
-7. **C.t8** (ETL + annotation runbooks) — handover docs for Swoop's internal team. ~0.5 day. Last.
+1. **C.t1** — [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) — connector skeleton + Postgres pool wiring. ~0.5 day. Foundational; smallest; fastest. 7 numbered open questions (pg pool config, migration runner placement, data primitives directory, MCP-HTTP surface timing, secret hygiene, port assignment, Postgres handoff-store swap timing).
+2. **C.t3** — [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) — SQL-dump → Postgres transform. ~1.5–2 days. Tooling-pick recommendation: **Option B (Node CLI translator in `@swoop/ingestion`)** with 6 reasons articulated. 8 numbered open questions including `daybyday` shape (concatenate to `trip.description` vs adding `trip_day` table requiring tiny C.t2 amendment).
+3. **C.t3a** — [planning/03-exec-c-t3a.md](planning/03-exec-c-t3a.md) — Voyage-3 embeddings + Haiku ETL classifiers. ~2 days. Recommended `ENRICH_BUDGET_GBP=10` dev / £15 prod with batch-boundary kill-switch. 12 numbered open questions; persona-aggregation grouping is load-bearing.
+4. **C.t4** — [planning/03-exec-c-t4.md](planning/03-exec-c-t4.md) — eight intent-named tool handlers over data primitives. ~2 days. 7 numbered open questions including `illustrate`-vs-C.t6 dependency (recommend ship against whatever annotation coverage exists at execution time) and `handoff_submit` boundary (recommend MCP tool as thin wrapper over E.t2/E.t3-shipped HTTP endpoint).
+5. **C.t5** — [planning/03-exec-c-t5.md](planning/03-exec-c-t5.md) — `@swoop/common` image URL utility + page-as-hub resolver. ~0.5 day. 5 open questions.
+6. **C.t6** — [planning/03-exec-c-t6.md](planning/03-exec-c-t6.md) — Claude Vision annotation pipeline over ~6.3K images. ~1 day setup. 6 open questions including journey-shaped vs generic annotation prompt + cost-cap design + write-back column choice (`image.description` vs derived).
+7. **C.t8** — [planning/03-exec-c-t8.md](planning/03-exec-c-t8.md) — ETL + annotation runbooks at `product/cms/ops/`. ~0.5 day. Last task in chunk-C. 7 open questions including audience (operator vs Swoop ops) + monitoring location.
+
+**Downstream augments triggered by C.t4** (live in their owning chunks; not authored as tier-3 plans yet):
+- **B.t3a** — orchestrator's connector adapter rewrite. Drop `@deprecated` `Search*` / `GetDetail*` schemas; register the eight intent-named tools. ~0.5–1 day, mostly mechanical.
+- **D.t9** — chat-surface widget rewrite. Add new widgets for the five intent-named tool outputs from `*PublicSchema` shapes; `inspiration` and `lead-capture` survive from D.t3 (rendering `illustrate` and `handoff`); `component-list` and `component-detail` deprecate alongside `search` / `get_detail`. ~1–2 days.
+
+**Coordination point with cross-cuts**: H1 (`messageOf` helper) and H2 (`emitErrorRaised` helper) are deferred until they pair with chunk-C work. Whoever picks up C.t4 first should land H1 + H2 in `@swoop/common` as the same agent's first commits — they're consumed by the new tool handlers' error envelopes anyway.
 
 **Downstream augments triggered by C.t4** (live in their owning chunks):
 - **B.t3a** — orchestrator's connector adapter rewrite. Drop `@deprecated` `Search*` / `GetDetail*` schemas; register the eight intent-named tools. ~0.5–1 day, mostly mechanical.
