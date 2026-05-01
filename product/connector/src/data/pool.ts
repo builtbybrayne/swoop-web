@@ -37,6 +37,14 @@ let cachedPool: pg.Pool | undefined;
 /**
  * Build the pool config from the validated Config object.
  * Exported for testability.
+ *
+ * `statement_timeout` is set via the libpq `options` startup param so it
+ * applies from the very first query on each connection — no race against
+ * the on('connect') handler queueing a SET, which produced a pg
+ * `client.query() while already executing a query` deprecation warning
+ * during smoke testing. ETL paths that need a longer ceiling override
+ * per-connection via `client.query("SET LOCAL statement_timeout = ${ms}")`
+ * inside their batch transactions.
  */
 export function buildPoolConfig(config: Config): pg.PoolConfig {
   return {
@@ -47,6 +55,11 @@ export function buildPoolConfig(config: Config): pg.PoolConfig {
     // (Cloud SQL Insights, manual pgAdmin sessions) when one of N services
     // is the one holding a long query.
     application_name: 'swoop-connector',
+    // Pass statement_timeout as a libpq startup option so Postgres applies
+    // it before pg's internal driver-init queries run, side-stepping the
+    // on('connect') race. `-c key=value` is the libpq escape syntax.
+    // Cloud SQL honours startup options; on-prem and Postgres.app likewise.
+    options: `-c statement_timeout=${config.PG_STATEMENT_TIMEOUT_MS}`,
   };
 }
 
@@ -58,26 +71,6 @@ export function getPool(config: Config): pg.Pool {
   if (cachedPool) return cachedPool;
 
   const pool = new pg.Pool(buildPoolConfig(config));
-
-  // Apply statement_timeout per connection. Cloud SQL Postgres does not
-  // honour statement_timeout passed via connection options, so we set it
-  // SQL-side once per checkout. The backstop is "something is very wrong;
-  // kill the query" — typical agent-facing tool calls should respond in
-  // <500ms via HNSW + GIN. ETL paths can override per-connection via
-  // `client.query("SET LOCAL statement_timeout = ${ms}")` inside their
-  // batch transactions.
-  pool.on('connect', (client) => {
-    client.query(`SET statement_timeout = ${config.PG_STATEMENT_TIMEOUT_MS}`).catch((err) => {
-      // We can't refuse the connection from a 'connect' handler — pg has
-      // already added it to the pool. Log and let the next query surface the
-      // real issue if statement_timeout actually matters here.
-      console.warn(
-        `[connector] failed to set statement_timeout on new connection: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    });
-  });
 
   // Surface unexpected idle-client errors. Without this listener pg throws
   // them as `uncaughtException`, which crashes the process. We log + swallow

@@ -57,6 +57,15 @@ describe('buildPoolConfig', () => {
     const out = buildPoolConfig(cfg);
     expect(out.application_name).toBe('swoop-connector');
   });
+
+  it('passes statement_timeout via libpq startup options', () => {
+    // The on('connect') handler that USED to do this raced with pg's
+    // internal driver init queries. The libpq -c options approach applies
+    // the timeout before the first user query runs, no race.
+    const cfg = makeConfig({ PG_STATEMENT_TIMEOUT_MS: 7_500 });
+    const out = buildPoolConfig(cfg);
+    expect(out.options).toContain('statement_timeout=7500');
+  });
 });
 
 // ---------------------------------------------------------------------------
