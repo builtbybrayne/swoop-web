@@ -1,6 +1,6 @@
 # 03 — Execution: C.t4 Tool implementations (eight handlers + data primitives)
 
-**Status**: **DRAFT — for HITL review. Not yet executable.**
+**Status**: **HITL-ratified 2026-05-01 — ready for execution.**
 **Chunk**: C (retrieval & data).
 **Implements**: [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §2.2 (tool surface) + §2.3 (no-composer handler pattern) + §2.4 (data primitives) + §10 — the **C.t4** task. Operationalises decisions C.13, C.18, C.24, C.25, C.26, C.30, C.30b, C.34.
 **Depends on**: **C.t1 closed** (connector service skeleton + Postgres pool + MCP HTTP transport boot path); **C.t2 closed** (entity model + tool I/O Zod schemas + production-quality `description.md` for every intent-named tool — already shipped 2026-04-30); **C.t3 closed** (domain tables populated from the SQL dump + blog snapshot in `puma_dev`); **C.t3a closed** (embedding pass + Haiku ETL classifiers populate the five derived tables and write `embedding` / `tsv` / `content_hash` / `persona_summary` / `persona_embedding` columns end-to-end); E.t2/E.t3 already shipped (`submitHandoff()` is the wired side-effect under `handoff_submit`).
@@ -349,3 +349,24 @@ Some handlers will run primitives in parallel (e.g. `find_inspiring` may paralle
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
 
+
+---
+
+## 2026-05-01 HITL ratification
+
+Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DRAFT to ready-for-execution.
+
+### Resolutions
+
+1. **`illustrate` and the C.t6 dependency** (Q1): as recommended. Ship in C.t4 against whatever annotation coverage exists at execution time. No `coverage_warning` schema field; log as F-a observability event instead.
+2. **`handoff_submit` boundary** (Q2): as recommended. MCP tool as thin wrapper over `submitHandoff()` (E.t2/E.t3-shipped HTTP endpoint). Sonnet does not invoke it; widget owns submission via `POST /handoff/submit` per E.13.
+3. **Description-load failure mode** (Q3): **fail-fast on ALL 8 tools** (not just the 5 conversational ones). Al wants visibility during development; better to see breakage early than to have utilities silently degrade.
+4. **RRF constant + `ef_search`** (Q4): as recommended. Package defaults (RRF `k=60`, HNSW `ef_search=40`) at C.t4; per-query `SET LOCAL hnsw.ef_search` deferred to C.t8.
+5. **Per-handler observability** (Q5): one shared `tool.invoked` event with a `tool_name` discriminator. As recommended.
+6. **`handoff` widgetToken lifecycle** (Q6): stateless for M1. As recommended.
+7. **`find_options` defensiveness** (Q7): no defence against missing `trip_card` rows. As recommended.
+
+### Notes for the executing agent
+
+- **H1 + H2 cross-cut helpers should land FIRST in this agent's commits.** Pair with the chunk-C work as documented in next-steps.md. The new tool handlers' error envelopes will use `messageOf()` and `emitErrorRaised()` from day one. See `planning/03-exec-crosscut-common-helpers-fix.md` §H1 + §H2 for the helper specs.
+- Q3's "fail-fast on ALL 8" supersedes the agent's recommendation that the 3 utilities (`illustrate` / `handoff` / `handoff_submit`) degrade gracefully on description-load failure. Reason: development-time visibility. If a utility's description goes missing, we want a hard failure at boot.

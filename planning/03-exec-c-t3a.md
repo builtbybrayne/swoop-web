@@ -1,6 +1,6 @@
 # 03 — Execution: C.t3a Embedding pass + Haiku ETL classifiers + derived-table population
 
-**Status**: **DRAFT — for HITL review. Not yet executable.**
+**Status**: **HITL-ratified 2026-05-01 — ready for execution.**
 **Chunk**: C (retrieval & data).
 **Implements**: [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §10 — the **C.t3a** task ("Embedding pass + blog post-processing + ETL classifiers"). Operationalises decisions C.18 (Voyage-3 / 1024d), C.24 (cheap-LLM-at-ETL, no composers in request path), C.25 (eight-tool intent-named surface), C.26 (customerreview supply granted; `find_someone_who` live), C.30 (persona-summary natural-language shape), C.30b (image FK, not denormalised), and the 2026-04-30 finding on aggregate-by-reviewer for persona generation.
 **Depends on**: C.t2 closed (migrations 001–006 in place; Zod schemas authored; `puma_dev` provisioned). C.t3 closed or in lock-step (domain tables populated from the SQL dump). Blog ingest snapshot exists (`data/blog/raw/<latest>/posts.ndjson` per [03-exec-blog-ingest.md](03-exec-blog-ingest.md); ingestion package shipped).
@@ -464,3 +464,25 @@ Every column maps to a tool moment. If a future addition can't make this pass, t
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced as a question for downstream tasks.)*
 
 *(Empty — this is a DRAFT awaiting HITL review.)*
+
+---
+
+## 2026-05-01 HITL ratification
+
+Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DRAFT to ready-for-execution.
+
+### Resolutions
+
+1. **Cost-cap default** (Q1): **`ENRICH_BUDGET_GBP=10` dev / £15 prod** with batch-boundary kill-switch. As recommended ("sane default" per Al). Soft warning at £5.
+2. **Persona aggregation key** (Q2): **`name` only**. Drop email from the aggregation key entirely.
+3. **Anonymous customerreview rows** (Q3): **keep in corpus**, do NOT aggregate into a persona. Each anonymous row lands in `customer_story` as an individual with `persona_summary = null` (or a synthetic `"anonymous traveller — [region]"` string when geographic anchors are present). Prose still useful for Mirror retrieval; just no coherent persona blob.
+4. **`trust_proof.topic` classifier** (Q4): **Haiku via Anthropic Message Batches API**. Batch mode for ALL classifier passes (blog-post job classification, persona-summary generation, blog-tag normalisation, image annotation). 50% cost reduction; up to 24h latency acceptable for ETL.
+5. **Sub-classifier for first-person blog rows** (Q5): part of the Haiku batch pass — let the classifier judge persona shape from prose.
+6. **Region column extraction** (Q6): rule-based via `ntag.area` overlap as recommended.
+7. **Other classifier and HTML-stripping decisions** (Q7–Q12): accept the agent's recommendations as documented in the plan body.
+
+### Notes for the executing agent
+
+- **Anthropic Message Batches API**: docs at https://docs.anthropic.com/en/docs/build-with-claude/batch-processing. Up to 100K requests per batch; results back within 24h; ~50% of standard message cost. Use for all classifier passes (`prompts/etl/<classifier>/...`).
+- Anonymous customerreview rows still get embedded for vector retrieval — only the persona aggregation step is skipped.
+- The `ENRICH_BUDGET_GBP` budget guard kills the run at the next batch boundary if cumulative spend exceeds the cap.

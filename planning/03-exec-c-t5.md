@@ -1,6 +1,6 @@
 # 03 — Execution: C.t5 Image URL utility + page-as-hub resolver
 
-**Status**: **DRAFT — for HITL review. Not yet executable.**
+**Status**: **HITL-ratified 2026-05-01 — ready for execution.**
 **Chunk**: C (retrieval & data).
 **Implements**: [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §10 — the **C.t5** task ("Image URL utility + page-as-hub resolver"). Operationalises decisions C.15 (URL + image construction rules) and C.16 (page-as-hub pattern), and packages two pieces of logic that would otherwise be re-implemented inconsistently across C.t3 (ETL), C.t3a (embedding pass), C.t4 (tool handlers), and any future widget-side rendering.
 **Depends on**: C.t2 closed (entity model + tool I/O schemas + migrations 001–006); A.t1–A.t5 (workspace, `ts-common` scaffold).
@@ -188,3 +188,21 @@ Numbered for tracking. Items 1 + 2 should be closed by Al before the executing a
 ## Execution log
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
+
+---
+
+## 2026-05-01 HITL ratification
+
+Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DRAFT to ready-for-execution.
+
+### Resolutions
+
+1. **imgix render-param defaults** (Q1): as recommended. `auto=format,enhance,compress&fit=crop&q=80` baseline; configurable per-call.
+2. **Hostname constant location** (Q2): constant in `@swoop/common/image.ts`. As recommended.
+3. **`pageUrl` necessity** (Q3): ship as thin wrapper. As recommended.
+4. **Schema validation** (Q4): TypeScript-only contract. As recommended.
+5. **Short-circuit semantics** (Q5): JSDoc the direct-vs-page image join precedence. As recommended.
+
+### Notes for the executing agent
+
+- All five resolutions accept the agent's recommendations from the plan body. Implement as drafted.

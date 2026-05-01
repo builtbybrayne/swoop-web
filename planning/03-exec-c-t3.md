@@ -1,6 +1,6 @@
 # 03 — Execution: C.t3 SQL dump → Postgres transform (data movement)
 
-**Status**: **DRAFT — for HITL review. Not yet executable.** Authored 2026-04-30.
+**Status**: **HITL-ratified 2026-05-01 — ready for execution.** Authored 2026-04-30; ratified 2026-05-01.
 **Chunk**: C (retrieval & data).
 **Implements**: [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §2.1 (data ingestion: SQL dump → transform → Postgres) + §10's **C.t3** task ("ETL: SQL dump → Postgres transform"). Pure data-movement layer. The first task downstream of C.t2's contract layer that actually puts rows in `puma_dev`.
 **Depends on**:
@@ -704,3 +704,25 @@ If a transformation in the implementation file doesn't have a row in this table 
 ## Execution log
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
+
+---
+
+## 2026-05-01 HITL ratification
+
+Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DRAFT to ready-for-execution.
+
+### Resolutions
+
+1. **Tooling pick** (Q1): **Option B** — Node CLI translator in `@swoop/ingestion`. As recommended. No pgloader dep, no config-DSL learning curve.
+2. **`daybyday` shape** (Q2): concatenate to `trip.description` (default). No `trip_day` derived table. Fine-grained per-day surfacing is not a current job-shaped requirement.
+3. **Tombstone pass for source-deleted rows** (Q3): no for Puma. As recommended.
+4. **Trip image resolution preference** (Q4): `image_trip` first, then `image_page` fallback. As recommended. Add as proposed C.36 to the decision log.
+5. **`publishstate_id = 3` filter** (Q5): ship with code-comment flag, don't block. Pending Thomas/Richard from C.t0; resolve at execution time if they've replied.
+6. **Workspace placement** (Q6): stay in `@swoop/ingestion`. As recommended.
+7. **`pagetype` lookup** (Q7): denormalise `pagetype_title` onto `page` (no separate domain table). As recommended.
+8. **Filter shape** (Q8): Shape A (filters in transform code, not Postgres views). As recommended. Add as proposed C.35 to the decision log.
+
+### Notes for the executing agent
+
+- C.t1's connector skeleton (and Postgres pool) must be live before this plan can run. Hard dependency.
+- The "Calibration check — every transformation traces to a job" table in this plan's body is the design-discipline test: re-run it post-implementation and call out anything that drifted.

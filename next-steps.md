@@ -47,11 +47,11 @@ Master ledger + checklist: [planning/reviews/2026-04-30-code-level.md](planning/
 
 ## Next up
 
-### 0. Review the 7 chunk-C tier-3 plan DRAFTS, then dispatch implementation [first thing next session]
+### 0. Dispatch chunk-C implementation [first thing next session]
 
-The 2026-05-01 swarm authored seven new tier-3 plan drafts covering the chunk-C implementation spine. **All carry `Status: DRAFT — for HITL review. Not yet executable.`** — they need your eyes before any implementation agent runs against them.
+The 2026-05-01 swarm authored seven new tier-3 plans covering the chunk-C implementation spine. **All seven are HITL-ratified 2026-05-01 — ready for execution.** Each plan has a `## 2026-05-01 HITL ratification` addendum at the bottom resolving every open question.
 
-Recommended review order (dependency order; chunk-C anchor calibration applies to every plan):
+Dispatch order (hard dependency: C.t1 first; C.t3, C.t3a, C.t4 chain off it; C.t5/C.t6/C.t8 parallelisable side-streams):
 
 1. **C.t1** — [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) — connector skeleton + Postgres pool wiring. ~0.5 day. Foundational; smallest; fastest. 7 numbered open questions (pg pool config, migration runner placement, data primitives directory, MCP-HTTP surface timing, secret hygiene, port assignment, Postgres handoff-store swap timing).
 2. **C.t3** — [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) — SQL-dump → Postgres transform. ~1.5–2 days. Tooling-pick recommendation: **Option B (Node CLI translator in `@swoop/ingestion`)** with 6 reasons articulated. 8 numbered open questions including `daybyday` shape (concatenate to `trip.description` vs adding `trip_day` table requiring tiny C.t2 amendment).

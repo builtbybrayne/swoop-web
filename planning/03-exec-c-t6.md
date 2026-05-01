@@ -1,6 +1,6 @@
 # 03 — Execution: C.t6 Image annotation pipeline (Claude Vision)
 
-**Status**: **DRAFT — for HITL review. Not yet executable.**
+**Status**: **HITL-ratified 2026-05-01 — ready for execution.**
 **Chunk**: C (retrieval & data).
 **Implements**: [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §10 — the **C.t6** task ("Image annotation pipeline"). Operationalises decision C.10 (image annotation pipeline) and §2.7 (image annotation pipeline as a parallel workstream from day one). Cost shape revised by the 2026-04-29 discovery that `image.description` is already 47.5% populated upstream — the pipeline runs only over the ~6.3K images without a usable upstream description, not the full 13.3K catalogue.
 **Depends on**: C.t2 closed (entity model — `image` table has `description` / `alt_text` / `tags` / `embedding` columns); C.t3 (SQL-dump → Postgres ETL — `image` table populated with filenames + upstream `description` where present); C.t5 (image URL utility — pipeline calls `imgixUrl` for any per-call rendering during inspection runs). C.t6 can start once C.t3 has loaded the `image` table; doesn't strictly need C.t3a embedding pass to have run.
@@ -231,3 +231,25 @@ Numbered for tracking. Items 1 + 2 are content-shaped (Al's calls); 3 + 4 are op
 ## Execution log
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
+
+---
+
+## 2026-05-01 HITL ratification
+
+Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DRAFT to ready-for-execution.
+
+### Resolutions
+
+1. **Annotation prompt shape** (Q1): **do both**. Generate journey-shaped + generic descriptive output from the same classifier call. AI handles the dual-output cleanly; the cost of producing both in one call is minimal.
+2. **Write-back column choice** (Q2): **keep both `image.description` AND a new `image_annotation` column**, two separate columns, both searchable via tsvector. Annotation is an augmentation; never overwrites upstream `description`. Requires forward-only migration-007 adding `annotation TEXT` column to `image` domain table + tsvector index.
+3. **Cost cap mechanism** (Q3): `--dry-run` default + `--max-budget=N` required flag. As recommended.
+4. **Mapping to journey moments** (Q4): no direct populate of `inspire_passage.illustration_image_id` from C.t6. C.t3a's vector-similarity pass owns that linkage.
+5. **Concurrency** (Q5): 5-up with backoff. As recommended.
+6. **Output structure** (Q6): structured JSON via prompt + Zod-validated schema. As recommended.
+
+### Notes for the executing agent
+
+- **Migration 007 ships as part of this plan.** Add `annotation TEXT` column + GIN tsvector index to `image` table. Forward-only per C.31. Single SQL file at `product/connector/migrations/007_image_annotation.sql`.
+- Q1's "do both" means a single Claude Vision call with a structured-output prompt that returns `{description: "...", annotation: "..."}` — `description` is the journey-shaped paragraph (what we'd want for an `inspire_passage`), `annotation` is the generic descriptive text (what we'd want for tsvector search). Both populate, both index, both consume.
+- `description_source` provenance enum NOT needed (Al doesn't care about provenance distinction).
+- Use Anthropic Message Batches API for the annotation pass (per C.t3a ratification §4) — same 50%-cost / 24h-latency tradeoff applies.

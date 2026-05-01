@@ -1,6 +1,6 @@
 # 03 — Execution: C.t8 ETL + annotation runbooks
 
-**Status**: **DRAFT — for HITL review. Not yet executable.**
+**Status**: **HITL-ratified 2026-05-01 — ready for execution.**
 **Chunk**: C (retrieval & data).
 **Implements**: [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §10 — the **C.t8** task ("ETL + annotation runbooks for Swoop"). Operationalises the "hand-off clarity" architectural principle (the connector + Postgres is the operational surface Swoop's team will eventually own; clean boundary, clear ops handbook). Companion runbook to the existing `evalset-growth.md` (per H.t7) — same `product/cms/ops/` home, same operator-facing tone.
 **Depends on**: C.t1 closed (connector + Postgres pool), C.t3 closed (`export.sql` SQL-dump → Postgres transform), C.t3a closed (embedding pass + Haiku ETL classifiers), C.t4 closed (eight-tool handlers), C.t5 closed (image URL utility), C.t6 closed (image annotation pipeline). C.t8 is the *last* chunk-C task because it documents the operational surface those tasks ship.
@@ -233,3 +233,24 @@ Numbered for tracking. Items 1 + 2 are HITL calls Al should close before the exe
 ## Execution log
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
+
+---
+
+## 2026-05-01 HITL ratification
+
+Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DRAFT to ready-for-execution.
+
+### Resolutions
+
+1. **Audience** (Q1): **role-based**. Use generic role labels ("ETL operator" / "harness owner") rather than named individuals. Ages better when staffing changes.
+2. **Monitoring location** (Q2): Cloud Logging post-M4, stdout in dev. As recommended.
+3. **Cost-preview placement** (Q3): CLI flag where pipeline supports, section otherwise. As recommended.
+4. **Migrations rollback scope** (Q4): document rebuild path explicitly (forward-only per C.31, recovery is rebuild not rollback). As recommended.
+5. **Troubleshooting scope** (Q5): include orchestrator/connector startup symptoms (operator hits symptoms, not chunks). As recommended.
+6. **Prompt-version rollback** (Q6): yes, brief, per-prompt-version checkpoint namespace. As recommended.
+7. **Re-run cadence assumptions** (Q7): tracked in `questions.md` for ongoing Swoop dependencies.
+
+### Notes for the executing agent
+
+- All seven resolutions accept the agent's recommendations from the plan body. Author the runbook accordingly.
+- Voice-coherent with `evalset-growth.md` already at `product/cms/ops/`. Same role-based framing.

@@ -1,6 +1,6 @@
 # 03 — Execution: C.t1 Connector service skeleton + Postgres pool wiring
 
-**Status**: DRAFT — for HITL review. Not yet executable.
+**Status**: **HITL-ratified 2026-05-01 — ready for execution.**
 **Chunk**: C (retrieval & data).
 **Implements**: [`02-impl-retrieval-and-data.md`](02-impl-retrieval-and-data.md) §10 — the **C.t1** task ("Connector service skeleton + Postgres setup"). Stands up the runtime substrate the rest of chunk C plugs into.
 **Depends on**: A.t1–A.t5 (workspace, `ts-common` scaffold, decision log); C.t0 closed (dump understood, ontology rewritten); C.t2 closed (migrations 001–006 + Zod tool schemas authored — `product/connector/migrations/` exists; nothing to migrate against without a pool); decisions C.18 (Postgres 18 + pgvector + tsvector + pg_trgm), C.21 (SQL dump → Cloud SQL Postgres), C.31 (forward-only `node-pg-migrate`); the local Postgres bootstrap captured in `gotchas.md` ("Local Postgres is Postgres.app v18…").
@@ -362,3 +362,25 @@ If any of those creep into the PR diff, the reviewer rejects the change with a p
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks. Pattern matches `03-exec-c-t2.md` and `03-exec-c-t0.md`.)*
 
 — *(empty pending execution)*
+
+---
+
+## 2026-05-01 HITL ratification
+
+Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DRAFT to ready-for-execution.
+
+### Resolutions
+
+1. **pg pool config defaults** (Q1): accept the agent's recommended defaults (`max:10` / `idle:30s` / `statement_timeout:10s`) as the calibration starting point. **No specific load profile yet — flag the surface as tunable.** Document the values in `connector/src/db/pool.ts` with a header comment noting that ETL paths may want larger `max` or different `statement_timeout`. Future tuning is a known-known.
+2. **`node-pg-migrate` placement + invocation** (Q2): as recommended. Manual `npm run migrate:up` for C.t1; separate Cloud Run Job post-M4. Migrations live at `product/connector/migrations/` (already established in C.t2). Boot-time auto-migration explicitly rejected.
+3. **Data primitives directory convention** (Q3): as recommended. One-paragraph `src/data/README.md` naming the convention (one file per derived/domain entity primitive group; exported functions are the public surface). No `_template.ts`.
+4. **HTTP MCP surface NOW vs later** (Q4): **NOW** (option α). Stand it up empty (or with one no-op ping tool) so C.t4 just adds tool registrations. Make progress early; avoid a later refactor.
+5. **`DATABASE_URL` secret hygiene + validation** (Q5): **stricter** validation. Validate at boot: URL parses, scheme is `postgres://` or `postgresql://`, database name present in path. Reject malformed at boot rather than discovering at first query. `.env` for dev / Secret Manager post-M4.
+6. **Port assignment** (Q6): as recommended. `:3002` for new connector while the orchestrator's stub at `:3001` keeps backing things until C.t4.
+7. **`PostgresHandoffStore` swap timing** (Q7): as recommended. Defer to E.t2 proper. C.t1 ships the pool, but the handoff store stays on `FsHandoffStore` until GCP IAM lands.
+
+### Notes for the executing agent
+
+- Stricter URL validation per Q5 lives in `connector/src/config/schema.ts`. Use Zod's `z.string().url().refine()` pattern — same shape as the Sec-3 fix landed on `be9ca95` for `entryUrl`.
+- The "no-op ping tool" in Q4: simplest possible MCP tool returning `{ok: true, version: '0.1.0'}`. Removed by C.t4 when the real tools register.
+- `npm install` will pull `pg` and `@types/pg` — connector workspace concern.
