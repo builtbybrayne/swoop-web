@@ -122,7 +122,7 @@ Session bootstrap can consume from the warm pool (B.t10). For B.t5, just allocat
 
 Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-level.md). Status legend: 🔲 not started · 🟡 in flight · ✅ landed.
 
-### R2 — Race condition: `void appendToHistory(...)` writes mutate session concurrently — 🔲 [LATENT BUG]
+### R2 — Race condition: `void appendToHistory(...)` writes mutate session concurrently — ✅
 
 **Problem**: `chat.ts:213-219` (reasoning sink), `chat.ts:258` (`void persistPart(...)`) — multiple unawaited promises mutate session state concurrently via `store.update(sessionId, s => ({...s, conversationHistory: [...]}))`. Works today by accident: `InMemorySessionStore` happens to serialise via the JS event loop's microtask queue. Will silently break the moment B.t2's custom Postgres `SessionService` (B.22) lands — last-write-wins lost-update bug, history can drop entries, turn indices can collide, reasoning can persist *after* the next user message. The agent-loop tracer flagged this as the highest-confidence latent bug in the codebase.
 
@@ -132,19 +132,19 @@ Source: [planning/reviews/2026-04-30-code-level.md](reviews/2026-04-30-code-leve
 
 Recommend (a) — surgical, preserves incremental persistence, doesn't bake assumptions about turn boundaries.
 
-**Verification**: integration test that drives 2 concurrent `runAsync` calls on the same session and asserts `conversationHistory.length === expected` (no drops).
+**Landed (option a)**: new `MutexSessionStore` decorator at `product/orchestrator/src/session/mutex-store.ts`; wraps every `SessionStore` returned by `createSessionStore()` so both production wiring and tests benefit. Reads / creates / deletes are passthrough; `update` serialises per-sessionId via a chain of awaited promises with settled-not-succeeded gating (so one failed update can't poison the chain). Distinct sessions stay parallel — bounded growth with opportunistic chain cleanup. Choice of (a) over (b) documented in the file's top comment: surgical (no chat.ts callsite changes), preserves incremental persistence (mid-turn crash leaves coherent partial history; matters for the B.t2 reasoning-persists invariant + audit tooling), composes cleanly when B.22's Postgres `SessionService` lands. New `__tests__/mutex-store.test.ts` reproduces the lost-update bug against an unmutexed async control store, then asserts losslessness + ordering through the wrapper, cross-session parallelism, and chain integrity after a throw.
 
-**Commits**: _(landed: filled when done)_
+**Commits**: `dc2af42`
 
-### R4 (chat body part) — `/chat` accepts unbounded `message` — 🔲
+### R4 (chat body part) — `/chat` accepts unbounded `message` — ✅
 
 **Problem**: `chat.ts:81-87` only checks `typeof message === 'string'` + non-empty. `express.json({ limit: '64kb' })` (`server/index.ts:89`) is the only ceiling. A 60kb "user message" lands in event payload sha256 inputs and in `runner.runAsync` history.
 
 **Fix shape**: `.max(8_000)` on `message` field of the new `ChatRequestSchema` (see Theme-A.1 below). Lower `express.json` limit to 16kb after.
 
-**Verification**: route test rejects an over-cap message with 400.
+**Landed**: `CHAT_MESSAGE_MAX = 8_000` exported from `@swoop/common/routes.ts`; `ChatRequestSchema.message` carries `.max(CHAT_MESSAGE_MAX)`. Express body limit lowered to `'16kb'` in `product/orchestrator/src/server/index.ts`. New `ts-common/__tests__/routes.test.ts` covers boundary acceptance + over-cap rejection at the schema layer; new `server.test.ts` cases assert 413 on an 18 KB raw body, 400 on a `CHAT_MESSAGE_MAX + 1` message, 200 at exactly `CHAT_MESSAGE_MAX`.
 
-**Commits**: _(landed: filled when done)_
+**Commits**: `a9ede99`
 
 ### Theme-A.1 — Replace hand-rolled body validation with Zod schemas — 🔲
 
@@ -166,7 +166,7 @@ Recommend (a) — surgical, preserves incremental persistence, doesn't bake assu
 
 **Commits**: _(landed: filled when done)_
 
-### Test-1 — Integration tests for /chat error paths — 🔲
+### Test-1 — Integration tests for /chat error paths — ✅
 
 **Problem**: `chat.ts:166,331-343` writes `event: error` frames with `errorType: triage_classifier_failed` / `chat_turn_failed`. `server/__tests__/server.test.ts:240-295` covers happy-path streaming + reasoning-leak + pre-stream gates only. No test queues a runner that throws mid-stream; no test exercises the `error.raised` event emission. Plus: `server.test.ts:21,65-89` has scaffolding for a "client disconnect aborts the turn" assertion but no `it(...)` block — false sense of coverage.
 
@@ -175,9 +175,14 @@ Recommend (a) — surgical, preserves incremental persistence, doesn't bake assu
 - client-disconnect: spawn supertest connection; abort mid-stream; assert `runner.lastAborted() === true`; assert the abort instrumentation actually fires.
 - connector-unreachable: stub MCP client throws on tool call; assert tool-call SSE part has error envelope; assert error.raised emission.
 
-**Verification**: `npm test -w @swoop/orchestrator` adds 3 cases. Existing 132 still pass.
+**Landed**: three cases added in `server.test.ts` under "POST /chat — error path coverage (Test-1)":
+- (a) mid-stream throw — runner yields one good text part then throws; assert SSE `event: error` frame with `code: 'internal_error'`, structured `error.raised` event with `errorType: chat_turn_failed`, session history retains the user message (no corruption).
+- (b) client disconnect — uses a real `http.Server` + raw `node:http` client because supertest's transport buffers responses and won't socket-close mid-flight; runner attaches an abort listener up front and asserts it fires when the test destroys the client socket.
+- (c) connector unreachable — modelled as a thrown `ECONNREFUSED` from the runner before any events stream (the orchestrator-side surface is identical whether the runner blew up or the MCP connector did); assert SSE error frame + structured `error.raised` event.
 
-**Commits**: _(landed: filled when done)_
+(b) surfaced a real latent bug while being authored: the chat handler's disconnect listener was on `req.on('close')`, but Express 5 fires `req`'s close event *synchronously when the handler is entered* because the body parser has already drained the request stream. Real mid-stream disconnects therefore left the runner orphaned with no abort propagation. Fixed by switching to `res.on('close')`, which fires when the response socket actually closes — the signal we want for SSE cancel. Doc comment on the handler updated to spell out why.
+
+**Commits**: `6e2731a`
 
 ### Sec-3 — `/session` `entryUrl` URL-validation gap — 🔲
 

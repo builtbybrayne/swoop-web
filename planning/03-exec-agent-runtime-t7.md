@@ -134,12 +134,12 @@ Either change is bigger than a quick win and embeds a design call about whether 
 
 **Commits**: _(deferred — revisit after G.t0)_
 
-### Perf-3 — Skip triage on turn 1 (cheap interim win) — 🔲
+### Perf-3 — Skip triage on turn 1 (cheap interim win) — ✅
 
 **Problem**: `chat.ts:137` `if (deps.triageClassifier) { ... }` has no gate on `userTurnIndex` or message length. `triage-classifier.ts:215-218` always slices `priorUserTurns.slice(-2)` even when the array is empty. Today's classifier is a placeholder pending G.t0; running it on turn 1 (typically a one-line greeting) produces no behaviour change but pays Haiku TTFB on every first impression.
 
 **Fix shape**: gate on `userTurnIndex > 0` OR `message.length > N` in `chat.ts`. ~3 lines. Independent of Perf-2 (and serves as the half-measure if Perf-2 stays deferred).
 
-**Verification**: route test asserts no Haiku call on turn 1 (`triageClassifier.classify` not invoked).
+**Landed**: `userTurnIndex > 0` gate on the classifier branch in `chat.ts` (turn-index `0` is the first user message, which gets skipped). Verdicts from turn N still write into `session.triage` and remain available on turn N+1, which is the actual integration point. New route tests in `server.test.ts` ("POST /chat — Perf-3 turn-1 triage skip") use a counting classifier stub to assert zero invocations on turn 1 and exactly one on turn 2. Hello-world integration tests now drive a warm-up turn before their assertion-bearing turn so the two-layer-agent-model proof keeps holding under the new gating.
 
-**Commits**: _(landed: filled when done)_
+**Commits**: `7c505ab`
