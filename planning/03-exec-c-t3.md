@@ -703,7 +703,102 @@ If a transformation in the implementation file doesn't have a row in this table 
 
 ## Execution log
 
-*(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
+### 2026-05-02 — C.t3 implemented end-to-end (~0.5 day; under estimate)
+
+Implemented across 4 atomic commits in `worktree-agent-aa979fb29b8a90970` (off `c041add`).
+
+| Commit | Scope |
+|---|---|
+| `7eb8f34` | MariaDB SQL-dump parser (Option B per HITL Q1) — streaming line-walker, 16 tests, ~617K rows in ~4s smoke. |
+| `043ad66` | Domain-table upsert helper with ON CONFLICT DO UPDATE — 5 tests, column-allowlist + noUpdateColumns shape. |
+| `474575c` | Per-source-table transformations + lookup-builder — 41 tests, all 19 transforms. |
+| `5041d48` | Pipeline runner + CLI + daybyday concat (HITL Q2) + README + package.json. |
+
+**Verification (per plan §"Verification" + the false-green lesson)**:
+
+- All 6 workspaces green on fresh `npm install` + `DATABASE_URL=...puma_dev npm test --workspaces --if-present`. **Total: 576/576** (was 523; +53 from C.t3's new tests; all in @swoop/ingestion, 31 → 84).
+- Per-workspace: `@swoop/common` 102 / `@swoop/orchestrator` 158 / `@swoop/connector` 87 (was 84 — DB-gated tests run when DATABASE_URL set; was reported as 84 with skips in progress.md from C.t1) / `@swoop/ui` 71 / `@swoop/ingestion` **84** (+53) / `@swoop/harness` 74.
+- `npm run typecheck --workspaces --if-present` clean across all 6.
+- CLI runs end-to-end against the real dumps in 9.61s wall-clock (target was ≤10 min, beating it 60×).
+- Re-run produces zero row-count delta — idempotent confirmed.
+
+**Live row counts (fresh `puma_dev`)**:
+
+```
+country: 239   area: 16   location: 764   activity: 751
+tag: 79                    [matches plan: 79 ✓]
+image: 13012/13261         [matches ~13K ✓]
+page: 636/684 (40 Profile + 7 test + 1 dup_canonical filtered) [target ~482; 636 retains slightly more]
+contentblock: 2212/10110   [7,898 navigationcard/settings/etc. filtered]
+chunk: 46                  [matches plan: 46 ✓]
+faqitem: 906/928           [matches ~928 ✓]
+trip: 852                  [matches plan: 852 ✓]
+tour: 0/15                 [source `tours` rows mostly NULL-titled — content-empty]
+hotel: 44   vessel: 25   cabintype: 108   cabin: 98
+customerreview: 2160/2563  [403 unpublished filtered]
+customerreview_trip: 145/163 [matches ~163 ✓]
+```
+
+**Smoke checks (W-Trek trip 369)**:
+
+- `canonical_url` = `https://www.swoop-patagonia.com/chile/torres-del-paine/hiking/w-trek` ✓ (override_url-derived, host-prefixed)
+- `from_price` = 2900.00 USD ✓
+- `image_id` resolves via `image_trip` first per HITL Q4 ✓ (the W-Trek banner image)
+- `ntag_ids` = 5 tags via the aggregator ✓
+- `description` starts with "Day 1: …" confirming daybyday concatenation ✓
+- ntag area filter `ntag_ids @> ARRAY[(SELECT id FROM tag WHERE alias='torres-del-paine')]` returns the W-Trek + 4 sibling Torres del Paine trips ✓
+
+**Skip-list verified absent**: `tripvariant`, `season`, `adventurousness` tables not created; no rows in domain tables sourced from `partner*` / `swooper_*` / `enquiry`-typed `ntags_lookup` rows.
+
+**Calibration check (re-run from §"Calibration check — every transformation traces to a job")**:
+
+Every transformation lands a column on a domain row that backs a derived-table column at C.t3a, which backs an intent-named tool, which serves a journey moment. No transformation drifted bottom-up. Specific notes:
+
+- `country` / `area` / `location` populated for region-filter UX in `find_inspiring` / `find_someone_who` / `find_options` ✓
+- `area.country_id` and `area.parent_area_id` left null (source `area` doesn't carry them; hierarchy comes via the page parent_id chain — out of scope per §"Out of scope"). Flagged for HITL: if `find_locations` retrieval needs hierarchy, C.t3a's enrichment pass can derive it.
+- `location.area_id` and `location.country_id` similarly left null for the same reason.
+- `tag` (ntag) populated, ready for C.t3a's embedding pass. Legacy `tag` excluded ✓.
+- `image` populated with imgix URLs; `description` carried through where source has it (~47.5%, primes C.t6) ✓.
+- `page` filtered as designed; canonical_url constructed per C.15 ✓.
+- `contentblock` filtered to subtypes that carry prose; navigationcard/settings/page silenced ✓.
+- `chunk` whole-table copy ✓.
+- `faqitem` orphan filter applied ✓.
+- `trip` daybyday-concatenated; image-resolution per HITL Q4 ✓.
+- `tour`, `tour_item`: source `tours` rows mostly NULL-titled; filter at boundary leaves content-empty target tables. Surface call: HITL flag below.
+- `hotel`, `vessel`, `cabintype`, `cabin`: populated with light-touch detail ✓.
+- `customerreview` + `customerreview_trip`: published-filter + FK-drop on dangling junctions ✓.
+
+No transformation surfaced a calibration violation; no bottom-up drift detected.
+
+**Decisions logged**:
+- **C.38** — Filter shape A (filters in transform code, not Postgres views) — HITL Q8.
+- **C.39** — Trip image resolution: `image_trip` first, `image_page` fallback, single `trip.image_id` — HITL Q4.
+
+The HITL ratification block proposed C.35 + C.36 for these but those numbers were taken by the parallel C.t1 execution log earlier on 2026-05-01. Renumbered to C.38 + C.39 to keep the log monotone; flagged in each entry's body.
+
+**Open questions surfaced for HITL**:
+
+1. **Source `tours` is content-empty** — 15 source rows, all but 4 NULL-titled, the 4 with empty-string titles. The 36 `tour_items` rows can't anchor without a parent. C.t0 had named "8 tours" feed `find_options`; doesn't seem to apply here. **Question**: do we expect `tour` to carry rows? Or is "tours" actually rendered via `contentblock_tour` rows referencing trips directly? Not a C.t3 fix — needs Thomas/Richard to confirm what `find_options` should return for multi-region tours.
+2. **`area` / `location` hierarchy**: source columns don't have `country_id` / `parent_area_id` directly; hierarchy comes via the page parent_id chain. C.t3 leaves these null. If `find_locations` retrieval needs them, C.t3a should derive via a page-walk pass. Flagged for HITL when C.t3a starts.
+3. **`activity` (751 rows)** populated as first-class but with title-only — the source `activity` table is per-trip-per-area data with low-quality fields (mostly NULL `effort_level` / `duration` / `avg_hours_per_day`). Worth checking with Thomas/Richard whether `find_activities` (via `find_inspiring(activity=…)`) is well-served by the `tag` taxonomy + `inspire_passage` retrieval, in which case the `activity` domain table is dead weight.
+
+**Notable findings during execution** (captured in discoveries.md / gotchas.md):
+
+1. **Page self-FK requires a two-pass write.** `page.parent_id REFERENCES page(id)` is non-deferrable. Multi-row INSERT can land child rows before their parents in the batch, which Postgres rejects on the row that references a not-yet-inserted id. Two-pass write: INSERT all rows with `parent_id=NULL`, then UPDATE … CASE … END to wire ids in batches. Same pattern would apply to any future self-referencing FK at our scale.
+2. **Source `override_url || alias` collisions.** A handful of source rows carry the same `override_url` (legacy alt versions of the same content). The migration's `page.canonical_url UNIQUE` constraint requires within-batch dedupe before insert. Lowest-id winner; siblings counted as `dup_canonical` skipped. Same pattern needed for `tag.alias`, `trip.slug`, `tour.slug`, `hotel.slug`, `vessel.slug` UNIQUE keys — generic `SECONDARY_UNIQUE_KEY` map in `flushBuffer` covers all of them.
+3. **FK-nullify is the right boundary policy for soft FKs.** Source rows reference `image_id` / `bannerimage_id` / `parent_id` ids that we filtered (Profile pages, soft-deleted images, etc.). Two viable mitigations: drop the row entirely or null the FK. We pick null for soft FKs (downstream tools handle missing image_id gracefully — D.t9's widget code already has the affordance per the C.t4 plan); drop for hard NOT NULL FKs (cabin.vessel_id, customerreview_trip.{customerreview_id, trip_id}, tour_item.tour_id). Generic FkRule shape in `run.ts` makes the boundary explicit per table.
+
+**What's now possible**:
+
+- **C.t3a** can begin. Domain tables populated end-to-end; embedding pass + Haiku ETL classifiers (blog-post job, persona-summary aggregation by reviewer name, image annotation, blog-tag normalisation against ntag) all have data to read.
+- **C.t6** can begin. ~6.3K images carry `description` from the source (~47.5%); ~6.7K need vision annotation. Less than the £30–£150 plan estimate suggested — primed by the source data.
+- **C.t4** still needs C.t3a's derived tables before it can register the eight intent-named tool handlers. C.t3a is the gate.
+
+---
+
+## 2026-05-02 HITL re-ratification block
+
+No new HITL adjudication needed — Q1, Q2, Q3, Q4, Q6, Q7, Q8 resolved at the 2026-05-01 ratification and implemented as ratified. Q5 (`publishstate_id = 3` for trip) was the open question for Thomas/Richard from C.t0; per the ratification we shipped without it. Empirical observation: 852 trips populated (matches 852 in the dump's `trip` table, so we're loading everything — the `publishstate_id = 3` filter would need to be added to drop legacy/internal trips down to the public-feed ~111). C.t4 will need to handle "trips that never appear on the public site" gracefully, OR C.t3 will gain a publishstate filter once Thomas/Richard reply.
 
 ---
 
