@@ -2,22 +2,35 @@
   "name": "@swoop/connector",
   "version": "0.1.0",
   "private": true,
-  "description": "Puma data + side-effect connector. Exposes data tools (search/get_detail/illustrate — chunk C) and side-effecting tools (handoff_submit — chunk E) over MCP-over-HTTP. Today: handoff side-effects only; data tools land with chunk C.",
+  "description": "Puma data + side-effect connector. Exposes data tools (eight intent-named tools — chunk C) and side-effecting tools (handoff_submit — chunk E) over MCP-over-HTTP. As of C.t1: runtime substrate (Postgres pool + MCP server skeleton) plus handoff side-effects.",
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
+    "dev": "tsx watch src/server/index.ts",
+    "start": "tsx src/server/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrate:up": "tsx src/migrate.ts up"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@swoop/common": "*",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "node-pg-migrate": "^7.9.0",
     "nodemailer": "^8.0.7",
+    "pg": "^8.13.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
     "@types/node": "^20.14.0",
     "@types/nodemailer": "^8.0.0",
+    "@types/pg": "^8.11.10",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
+    "tsx": "^4.19.0",
     "vitest": "^2.1.0"
   }
 }

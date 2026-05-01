@@ -1,8 +1,8 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-01 (full review fix-wave landed; all fourteen review items merged; seven new chunk-C tier-3 plan drafts ready for HITL review)
+**Snapshot date**: 2026-05-01 (full review fix-wave landed; chunk-C tier-3 plans HITL-ratified; **C.t1 implemented + verified end-to-end**)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
-**Status**: **M1 live + chunks D + mock-host shipped; C.t2 closed; C.26 graduated; 2026-04-30 review wave fully landed; chunk-C tier-3 plans drafted; chunks B/E/F/G/H advancing.** 2026-05-01 landed via 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work review items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for chunk-C implementation. Sec-3 (`javascript:`/`data:` URL scheme rejection) was originally claimed-closed by Theme-A.1 but only validated against stale node_modules — actually closed by `be9ca95` adding a refine() check on top of `.url()`. The chat.ts-cluster agent (R2 + R4-server + Perf-3 + Test-1) also surfaced and fixed a latent Express 5 + Node 20 bug — `req.on('close')` fires synchronously after `express.json` drains, so the chat handler's mid-stream-disconnect listener never propagated to `abortController.abort()`; switched to `res.on('close')`. **Test count: 412 → 492 (+80)**. Earlier (2026-04-30): **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables); **C.26 graduated** with the customerreview supplementary dump (2,563 rows + 163 trip junctions); composer pattern removed (decision C.24); top-down-from-sales discipline elevated as theme 11. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
+**Status**: **M1 live + chunks D + mock-host shipped; C.t1 + C.t2 closed; C.26 graduated; 2026-04-30 review wave fully landed; chunk-C tier-3 plans HITL-ratified; chunks B/E/F/G/H advancing.** **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits (pool + config + URL validation, MCP-HTTP skeleton + ping tool, migration runner, libpq statement_timeout fix). Connector boots cleanly against `puma_dev`; `/healthz` + `/readyz` + `/mcp` (with no-op `ping`) all verified live; SIGTERM closes pool gracefully. Total tests now 519/519 (was 492; +27 for C.t1). 2026-05-01 (earlier) landed via 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work review items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for chunk-C implementation. Sec-3 (`javascript:`/`data:` URL scheme rejection) was originally claimed-closed by Theme-A.1 but only validated against stale node_modules — actually closed by `be9ca95` adding a refine() check on top of `.url()`. The chat.ts-cluster agent (R2 + R4-server + Perf-3 + Test-1) also surfaced and fixed a latent Express 5 + Node 20 bug — `req.on('close')` fires synchronously after `express.json` drains, so the chat handler's mid-stream-disconnect listener never propagated to `abortController.abort()`; switched to `res.on('close')`. **Test count: 412 → 492 (+80)**. Earlier (2026-04-30): **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables); **C.26 graduated** with the customerreview supplementary dump (2,563 rows + 163 trip junctions); composer pattern removed (decision C.24); top-down-from-sales discipline elevated as theme 11. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
 
 **Review-fix status (2026-04-30 code review)**: 14 of 14 pre-chunk-work items closed. Cross-cuts H1+H2 (messageOf + emitErrorRaised helpers) deferred to pair with next chunk-C work; Theme-A.2/3/4/5 (Zod hygiene tightenings) and Perf-2 (parallel-not-serial triage) intentionally deferred per the review's strategic table. Master ledger: [planning/reviews/2026-04-30-code-level.md](planning/reviews/2026-04-30-code-level.md).
 
@@ -36,6 +36,48 @@ The three services are all running (`:5173` UI, `:8080` orchestrator, `:3001` st
 - ✅ **Multi-file prompt loader** (B.t1a): `prompt-loader.ts` reads the directory, filters by pattern, sorts lexicographically, joins. Hot-reload preserved in dev. Sub-directories silently skipped via `withFileTypes`. Config rename: `SYSTEM_PROMPT_PATH` → `SYSTEM_PROMPT_DIR`. New unit tests cover concatenation, filtering, prod cache vs dev re-read, missing/empty dir, single file, sub-dir skip.
 - ✅ **Files relocated**: `cms/prompts/why.md` → `cms/prompts/system/00_why.md`; `cms/prompts/style-avoid.md` → `cms/prompts/system/10_style-avoid.md`. `cms/prompts/skills/` and `cms/prompts/tools/` created with `.gitkeep`.
 - ✅ **Authoring guide**: [product/cms/README.md](product/cms/README.md) rewritten as the day-to-day rules for non-engineers (layout + load contracts + naming + "what goes where" decision tree). Pointer added in [product/CLAUDE.md](product/CLAUDE.md).
+
+## C.t1 implemented (2026-05-01 — first chunk-C executor agent, ~0.5 day)
+
+First chunk-C tier-3 plan executed. Stood up `@swoop/connector` as a runnable service: Postgres pool + Express + MCP-over-HTTP transport + health endpoints + migration runner. The orchestrator continues to talk to the existing stub at `:3001`; the new connector boots independently on `:3002` with a no-op `ping` tool until C.t4 registers the eight intent-named tools. See [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) §"Execution log" for the full breakdown.
+
+### Four atomic commits
+
+| Commit | Scope | Tests delta |
+|---|---|---|
+| `735c585` | Postgres pool + DATABASE_URL config + stricter URL validation (mirrors Sec-3 / be9ca95 shape — scheme allowlist + db name) | +19 (56→75) |
+| `5bab8c4` | MCP-HTTP surface skeleton with no-op ping tool (HITL Q4 option α) | +6 (75→81) |
+| `1f7ade8` | `node-pg-migrate` runner + `migrate:up` script (forward-only per C.31) | +2 (81→83) |
+| `3d42175` | Live-smoke fix: `statement_timeout` via libpq startup options (no race vs `on('connect')` query queue) | +1 (83→84) |
+
+### End-to-end verification (per plan §"Verification" + the false-green lesson)
+
+- All 6 workspaces green on fresh `npm install`. Total: **519/519** (was 492; +27 from C.t1's new tests).
+- Per-workspace: `@swoop/common` 102 (unchanged) / `@swoop/orchestrator` 158 (unchanged — orchestrator unaffected confirmed) / `@swoop/connector` **84** (was 56; +28, with 3 DB-gated tests skipped in CI mode) / `@swoop/ui` 71 (unchanged) / `@swoop/ingestion` 31 (unchanged) / `@swoop/harness` 74 (unchanged).
+- Typecheck clean across all 6 workspaces.
+- Service boots, `/healthz` returns `{"status":"ok"}`, `/readyz` returns `{"status":"ready","db":"ok"}` against a live test DB, MCP discovery returns exactly the `ping` tool, `ping` returns `{ok: true, version: '0.1.0'}`, SIGTERM produces graceful shutdown.
+- Migration runner applies all 6 SQL files (001–006) cleanly to a fresh DB; re-run is "No migrations to run!" — idempotent forward-only confirmed (theme 5).
+
+### HITL Q resolutions verified in code
+
+Q1 pool defaults `max:10 / idle:30s / statement_timeout:10s` documented + tunable via env. Q2 manual `npm run migrate:up`; default `pgmigrations` table; boot-time auto-migration explicitly *not* implemented. Q3 `src/data/README.md` codifies the per-primitive convention. Q4 (option α + ping) MCP-over-HTTP server stands up empty save for the no-op `ping` tool. Q5 stricter `DATABASE_URL` validation rejects `https://example.com`, `javascript:alert(1)`, multi-segment paths, and missing db name at boot. Q6 `:3002` claimed; `:3001` stub stays. Q7 `FsHandoffStore` left untouched.
+
+### Notable findings during execution
+
+1. **`pg`'s `client.query()` deprecation when used in `on('connect')` is real.** Live-smoke surfaced what unit tests didn't catch: setting `statement_timeout` via the connect handler races with pg's internal driver-init queries. Fix: pass via the libpq `options` startup parameter (`-c statement_timeout=<ms>`). Cloud SQL honours this. Future pool tunables: prefer libpq startup options over `on('connect')`. Captured in `discoveries.md`.
+2. **`node-pg-migrate` emits informational `"Can't determine timestamp for NNN"` warnings** when migrations don't carry timestamp prefixes. Our zero-padded prefix per C.31 is the durable choice; warnings are benign. Mention in C.t8 if operators worry.
+3. **npm shell wrapper doesn't propagate SIGTERM cleanly to its tsx child.** Local-dev concern; production (Cloud Run / Docker) sends SIGTERM to PID 1 directly, not via npm. Captured in `gotchas.md`.
+
+### Downstream what's now possible
+
+- **C.t3** can begin. CLI in `@swoop/ingestion` imports `getPool` / `withPgClient` from `@swoop/connector` (or builds its own — design call).
+- **C.t3a** can begin in parallel with C.t3 once C.t3's transform shape is settled.
+- **C.t4** can begin once C.t3 + C.t3a have populated rows. Tool handlers register on the existing `createConnectorMcpServer`; the no-op `ping` is removed there.
+- **C.t8** documents the operating shape stood up here.
+
+**Coordination point for the next chunk-C agent**: H1 (`messageOf` helper) + H2 (`emitErrorRaised` helper) — pair these into the *first* commit of whichever C.t* agent next touches the 16-site sweep. They're consumed by the new tool handlers' error envelopes per the 2026-04-30 review's strategic table. C.t1 didn't touch the 16 sites so didn't pick them up.
+
+---
 
 ## Review fix-wave + chunk-C plan drafts (2026-05-01 — 14-agent swarm + 2 integration fixes)
 
@@ -185,7 +227,7 @@ Archive of superseded docs: [planning/archive/](planning/archive/) — includes 
 | **A — foundations** | Repo, workspaces, `ts-common`, CI, decision log | ✅ Complete (t1–t5) | `@swoop/*` scope locked. npm workspaces at `product/` root. |
 | **B — agent runtime** | ADK orchestrator, session, connector adapter, translator, SSE, config, two-layer proof, multi-file prompt loader | ✅ Core complete (t1, t1a, t2–t7) | ADK 1.0 + Claude shim + stub connector + translator + SSE + triage classifier all wired. **B.t1a** added 2026-04-27: directory-driven concatenation system-prompt loader. |
 | **B — deferred** | Response-format parser (t8), modular-guidance loader (t9), warm pool (t10), **server-side history endpoint (t11 — unparked 2026-04-29)** | Partial (B.t10 done, disabled) | B.t8 parser not needed. **B.t9** skill loader pairs with G.t3 — ADK 1.0's `loadAllSkillsInDir` confirmed; structure is `cms/prompts/skills/<name>/SKILL.md`. **B.t11** unparked after observation that assistant-ui doesn't auto-rehydrate; original commit `6d31124` worth reviewing for shape, with Postgres-aware retry framing required. |
-| **C — retrieval & data** | MCP connector + Postgres derived store + ETL + eight intent-named tools + annotation pipeline | Tier 2 rewrite landed 2026-04-28; revised 2026-04-29 (no composers, eight tools, page-prose dominance); **C.t0 done 2026-04-29; C.t2 done 2026-04-30; C.26 graduated 2026-04-30**. Tier 3 plans for C.t1 / C.t3 / C.t3a / C.t4 / C.t6 / C.t8 pending. | Stub connector in orchestrator's `test-fixtures/` carries M1 still. SQL dump + customerreview supplementary dump loaded into local MariaDB. **C.t2 contract layer fully shipped** — 21 domain tables + 5 derived tables + 73 indexes + 5 intent-named tool I/O Zod pairs + production-quality tool descriptions + fixtures. Live `puma_dev` Postgres 18 verified; production migrations applied cleanly. **`find_someone_who` is live**; customertip remains pending Swoop's separate delivery. |
+| **C — retrieval & data** | MCP connector + Postgres derived store + ETL + eight intent-named tools + annotation pipeline | Tier 2 rewrite landed 2026-04-28; revised 2026-04-29; **C.t0 done 2026-04-29; C.t2 done 2026-04-30; C.26 graduated 2026-04-30; C.t1 done 2026-05-01**. C.t3 / C.t3a / C.t4 / C.t5 / C.t6 / C.t8 ready for execution (HITL-ratified plans). | Stub connector in orchestrator's `test-fixtures/` carries M1 still. **`@swoop/connector` is now a runnable service** at `:3002` — Postgres pool + Express + MCP-over-HTTP + health endpoints + `migrate:up` runner. One no-op `ping` tool registered (removed by C.t4). **C.t2 contract layer fully shipped** — 21 domain tables + 5 derived tables + 73 indexes + 5 intent-named tool I/O Zod pairs + production-quality tool descriptions + fixtures. Live `puma_dev` Postgres 18 verified. **`find_someone_who` is live**; customertip remains pending Swoop's separate delivery. |
 | **D — chat surface** | Full chunk shipped (t1–t8); **t9 (mount-rehydrate) unparked 2026-04-29** | ✅ Core closed; D.t9 reactivated | ErrorBanner + preflight + mobile reflow + brand extension surface all shipped. **D.t9** unparked alongside B.t11 — pairs with server-side history endpoint to resolve the assistant-ui auto-rehydrate gap. |
 | **Mock-host harness** | Side-quest. 5-page static site + iframe trigger + sidebar | ✅ **Shipped** (Al-built; verified 2026-04-29) | Reproduces production iframe-remount failure mode. Active demo + observation surface. See [planning/02-impl-side-quest-host-harness.md](planning/02-impl-side-quest-host-harness.md). |
 | **E — handoff & compliance** | Triage-aware handoff + persistence + email + legal | **Mostly shipped** (t1, t2 interim, t3 off-by-default, t4 functional, t8 skeleton). **t5–t7 + t9 open.** | E.t1 schema (2026-04-24), E.t2 file-backed interim + E.t3 mailer + E.t4 end-to-end consent flow (all 2026-04-28), **E.t8 compliance-bundle skeleton 2026-04-29**. Remaining: legal copy (t5; gates Q1 voice anchors), retention enforcement (t6, post-IAM), data-deletion script (t7; was a runbook, becomes `psql DELETE` script), legal counsel review (t9 — gates M5). |
@@ -198,13 +240,13 @@ Archive of superseded docs: [planning/archive/](planning/archive/) — includes 
 
 ## Workspaces
 
-`product/` is an npm-workspaces monorepo. **Six workspaces ship code today**. **412 tests passing** (was 397; +15 from C.t2 fixture round-trip cases):
+`product/` is an npm-workspaces monorepo. **Six workspaces ship code today**. **519 tests passing** (was 492; +27 from C.t1 connector substrate):
 
 | Workspace | Purpose | Test count |
 |---|---|---|
-| `@swoop/common` | Shared types, schemas, `emitEvent` helper, fixtures, eight-tool I/O Zod, derived-entity Zod | 58 |
-| `@swoop/orchestrator` | Agent runtime, server, session store, prompt loader, route handlers | 132 |
-| `@swoop/connector` | Mailer, durable handoff store, `submitHandoff()` orchestration. Postgres migrations 001–006 at `migrations/`. | 46 |
+| `@swoop/common` | Shared types, schemas, `emitEvent` helper, fixtures, eight-tool I/O Zod, derived-entity Zod | 102 |
+| `@swoop/orchestrator` | Agent runtime, server, session store, prompt loader, route handlers | 158 |
+| `@swoop/connector` | Mailer, durable handoff store, `submitHandoff()` orchestration. **C.t1 added**: runnable service at `:3002` (Express + MCP-HTTP + Postgres pool + health + migrate runner). Postgres migrations 001–006 at `migrations/`. | 84 |
 | `@swoop/ui` | React chat surface, widgets, runtime adapter, error UX | 71 |
 | `@swoop/harness` | Behavioural eval CLI + YAML scenarios | 74 |
 | `@swoop/ingestion` | Blog REST → NDJSON snapshots; per-entity ETL helpers (future) | 31 |

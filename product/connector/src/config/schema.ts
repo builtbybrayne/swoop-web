@@ -1,0 +1,141 @@
+/**
+ * Zod schema for the @swoop/connector runtime config surface.
+ *
+ * Owned by C.t1 — see planning/03-exec-c-t1.md. The connector previously
+ * shipped handoff side-effects only (mailer + FsHandoffStore), which the
+ * orchestrator wires up through its own config. This schema is the *new*
+ * surface the connector owns now that it boots as a service in its own right
+ * (Express + MCP-over-HTTP + Postgres pool).
+ *
+ * Single source of truth for env vars consumed by the connector service.
+ * Mirrors the pattern in product/orchestrator/src/config/schema.ts. Adding a
+ * new tunable means:
+ *   1. Add a field here with a sensible default.
+ *   2. Mirror it in .env.example (commented).
+ *   3. Re-export from ./index.ts if it's part of the public surface.
+ *
+ * Callers never see this schema directly — they consume the frozen `Config`
+ * object produced by `loadConfig()` in ./load.ts.
+ */
+
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { z } from 'zod';
+
+/**
+ * Package root: the directory containing this package's package.json.
+ *
+ * With `tsx` in dev we run from src/ directly; with `node` from dist/ after a
+ * build. In both cases, going two levels up from this file lands at the
+ * package root (src/config/schema.ts → src/ → package root;
+ * dist/config/schema.js → dist/ → package root).
+ */
+export const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+/**
+ * The raw schema — what we parse out of `process.env`.
+ *
+ * Defaults live here so the Tier 3 §"Full config surface" list is
+ * machine-checkable. Pool tunables come with conservative defaults; ETL paths
+ * (C.t3 / C.t3a) may override per-connection if they need a wider statement
+ * timeout. Future tuning is a known-known surfaced in C.t1's HITL Q1.
+ */
+export const configSchema = z
+  .object({
+    // --- Postgres connection -------------------------------------------------
+    //
+    // Stricter validation per C.t1 HITL Q5: a malformed DATABASE_URL fails at
+    // boot rather than on first query. The shape mirrors the Sec-3 fix at
+    // be9ca95 for `entryUrl` — Zod's `.url()` accepts non-http(s) schemes
+    // (the URL constructor doesn't reject by scheme), so we layer a `.refine()`
+    // on top to enforce `postgres://` or `postgresql://` AND a non-empty
+    // database name in the path component.
+    DATABASE_URL: z
+      .string()
+      .trim()
+      .min(
+        1,
+        'DATABASE_URL is required; set it in product/connector/.env or the environment.',
+      )
+      .url('DATABASE_URL must parse as a valid URL.')
+      .refine(
+        (raw) => {
+          let url: URL;
+          try {
+            url = new URL(raw);
+          } catch {
+            return false;
+          }
+          // Scheme allowlist. `URL` preserves the trailing colon.
+          if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
+            return false;
+          }
+          // Database name lives in the pathname (e.g. `/puma_dev`). Strip the
+          // leading `/` and require something non-empty. Multi-segment paths
+          // (e.g. `/db/extra`) are rejected — pg's connection-string parser
+          // would tolerate them but they're ambiguous.
+          const dbName = url.pathname.replace(/^\//, '');
+          if (dbName.length === 0 || dbName.includes('/')) {
+            return false;
+          }
+          return true;
+        },
+        {
+          message:
+            'DATABASE_URL must use scheme postgres:// or postgresql:// and include a database name in the path (e.g. postgresql://user:pass@host:5432/dbname).',
+        },
+      ),
+
+    // --- HTTP server ---------------------------------------------------------
+    //
+    // :3002 by default so the new connector coexists with the orchestrator's
+    // stub at :3001 during the C.t1 → C.t4 transition (HITL Q6). The stub
+    // retires in B.t3a once C.t4 lands the real tools.
+    CONNECTOR_PORT: z.coerce.number().int().positive().default(3002),
+
+    // --- Postgres pool tunables (HITL Q1) -----------------------------------
+    //
+    // Defaults are conservative starting calibration. Per HITL ratification:
+    // surface as tunable, no specific load profile yet, ETL paths may want
+    // larger `max` or different timeouts (override per-connection or via
+    // env at execution time). Revisit at C.t8 runbook authoring + first
+    // M4 load test.
+    PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    PG_POOL_IDLE_MS: z.coerce.number().int().nonnegative().default(30_000),
+    PG_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10_000),
+
+    // --- Environment selector ----------------------------------------------
+    NODE_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
+  })
+  // No cross-field refinements at C.t1. The connector's surface is small
+  // enough that single-field validation covers the failure modes that matter
+  // (URL malformed, pool max out of range). Future tunables that interact
+  // (e.g. statement-timeout vs request-timeout once a request layer lands)
+  // belong in `.refine()`s here.
+  ;
+
+/**
+ * The raw parsed shape — before load.ts adds derived fields.
+ */
+export type RawConfig = z.infer<typeof configSchema>;
+
+/**
+ * The frozen, public Config object. Callers consume this, not `RawConfig`.
+ *
+ * Derived fields (computed in load.ts):
+ *   - packageRoot: absolute fs path to this package's root.
+ *   - migrationsDirAbsolutePath: absolute path to the migrations/ directory.
+ *   - isProduction: NODE_ENV === 'production'.
+ */
+export type Config = Readonly<
+  RawConfig & {
+    /** Absolute path to this package's root directory. */
+    readonly packageRoot: string;
+    /** Absolute path to the migrations directory consumed by migrate.ts. */
+    readonly migrationsDirAbsolutePath: string;
+    /** True iff NODE_ENV === 'production'. */
+    readonly isProduction: boolean;
+  }
+>;
