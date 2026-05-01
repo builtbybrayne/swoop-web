@@ -1,13 +1,17 @@
 // -----------------------------------------------------------------------------
 // @swoop/connector — public surface.
 //
-// Today: handoff side-effects only. Data tools (search / get_detail /
-// illustrate) land in chunk C.
+// As of C.t1: runtime substrate (Postgres pool + MCP server skeleton + config
+// schema) plus the existing handoff side-effects (mailer + FsHandoffStore +
+// submitHandoff for chunk E). Data tools (the eight intent-named tools) land
+// with C.t4; data primitives land with C.t3a + C.t4.
 //
 // Consumers import from the package name:
 //   import { submitHandoff, type SubmitResult } from "@swoop/connector";
+//   import { loadConfig, getPool, withPgClient } from "@swoop/connector";
 // -----------------------------------------------------------------------------
 
+// --- Handoff side-effects (chunk E) ---------------------------------------
 export {
   sendHandoffEmail,
   preparePayloadForTemplate,
@@ -32,3 +36,25 @@ export {
   type SubmitDeps,
   type SubmitResult,
 } from './handoff/submit.js';
+
+// --- Runtime substrate (C.t1) ---------------------------------------------
+//
+// Re-exported so future C.t* tasks (and the eventual ETL CLI in C.t3) can
+// import the pool factory + config loader without reaching into internals.
+// The MCP server is intentionally NOT re-exported — it's owned by the
+// service entrypoint at src/server/index.ts and shouldn't be embedded in
+// other processes.
+export {
+  loadConfig,
+  configSchema,
+  PACKAGE_ROOT,
+  type Config,
+  type RawConfig,
+} from './config/index.js';
+
+export {
+  getPool,
+  withPgClient,
+  closePool,
+  buildPoolConfig,
+} from './data/pool.js';
