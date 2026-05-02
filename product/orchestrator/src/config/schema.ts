@@ -123,16 +123,18 @@ export const configSchema = z
     SESSION_TTL_ARCHIVE_DAYS: z.coerce.number().int().positive().default(7),
 
     // --- Connector -------------------------------------------------------
-    // Default points at the MCP-over-HTTP endpoint so B.t3's connector
-    // adapter resolves locally without extra config. B.t3 originally
-    // introduced these two keys ad hoc in the monolithic config; B.t6
-    // subsumes them here and preserves the same default path for
-    // backward-compat with any B.t3 callers already importing Config.
+    // Default points at the real @swoop/connector service on :3002 (per
+    // C.t1 + C.t4 boot path). Pre-B.t3a (2026-05-02) this defaulted to
+    // :3001 — the in-tree stub-connector test fixture — because the real
+    // connector hadn't yet registered the eight intent-named tools. B.t3a
+    // retires the stub; the orchestrator now talks to the real connector
+    // by default in dev. Override via .env if you're pointing at a remote
+    // connector or a non-default port.
     CONNECTOR_URL: z
       .string()
       .trim()
-      .url('CONNECTOR_URL must be an absolute URL (e.g. http://localhost:3001/mcp).')
-      .default('http://localhost:3001/mcp'),
+      .url('CONNECTOR_URL must be an absolute URL (e.g. http://localhost:3002/mcp).')
+      .default('http://localhost:3002/mcp'),
     CONNECTOR_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
 
     // --- Server ----------------------------------------------------------
