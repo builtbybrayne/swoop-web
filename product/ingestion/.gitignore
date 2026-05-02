@@ -1,0 +1,10 @@
+# Local-only ingestion run scratch.
+#
+# Holds:
+#   - data/blog/raw/<UTC-stamp>/      — WordPress blog ingest snapshots
+#   - data/image-annotations/<ns>/    — C.t6 annotation pipeline checkpoints
+#                                        (see src/images/checkpoint.ts)
+#
+# Never commit; ingestion outputs may contain content we don't have
+# redistribution rights to.
+/data/
