@@ -31,6 +31,7 @@ import { chmod, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/prom
 import path from 'node:path';
 import {
   HandoffPayloadSchema,
+  messageOf,
   type HandoffPayload,
 } from '@swoop/common';
 
@@ -112,7 +113,7 @@ export class FsHandoffStore implements HandoffStore {
       await rename(tmpPath, finalPath);
       return { ok: true, handoffId: payload.handoffId, absolutePath: finalPath };
     } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
+      const detail = messageOf(err);
       return { ok: false, reason: 'write_failed', detail };
     }
   }

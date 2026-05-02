@@ -22,6 +22,8 @@
 import type { Request, Response } from 'express';
 import type pg from 'pg';
 
+import { messageOf } from '@swoop/common';
+
 const READINESS_TIMEOUT_MS = 1_000;
 
 /** Plain liveness — the process is responsive. */
@@ -53,7 +55,7 @@ export function buildReadyzHandler(pool: pg.Pool): (req: Request, res: Response)
     } catch (err) {
       res.status(503).json({
         status: 'not_ready',
-        db: err instanceof Error ? err.message : String(err),
+        db: messageOf(err),
       });
     }
   };

@@ -30,6 +30,7 @@
  */
 
 import pg from 'pg';
+import { messageOf } from '@swoop/common';
 import type { Config } from '../config/index.js';
 
 let cachedPool: pg.Pool | undefined;
@@ -77,9 +78,7 @@ export function getPool(config: Config): pg.Pool {
   // so a single hiccup doesn't bring the service down; the borrowed-client
   // path (`withPgClient`) still surfaces real errors to callers.
   pool.on('error', (err) => {
-    console.error(
-      `[connector] idle pg client error: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    console.error(`[connector] idle pg client error: ${messageOf(err)}`);
   });
 
   cachedPool = pool;
