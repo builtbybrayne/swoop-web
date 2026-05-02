@@ -23,11 +23,23 @@ interface ImageRow {
   canonical_url: string;
   description: string | null;
   annotation: string | null;
+  subject_tags?: string[];
+  mood_tags?: string[];
+  region_tags?: string[];
+  tags?: string[];
 }
 
 class FakePgClient {
   rows: ImageRow[];
-  writes: Array<{ id: number; description: string | null; annotation: string | null }> = [];
+  writes: Array<{
+    id: number;
+    description: string | null;
+    annotation: string | null;
+    subject_tags: string[];
+    mood_tags: string[];
+    region_tags: string[];
+    tags: string[];
+  }> = [];
 
   constructor(rows: ImageRow[]) {
     this.rows = rows;
@@ -47,41 +59,70 @@ class FakePgClient {
     }
 
     if (trimmed.startsWith('UPDATE IMAGE')) {
-      // Both-cols, annotation-only, description-only branches all start with this.
+      // Single-shape SQL post-fold: $1=id, $2=desc, $3=ann, $4-$7=tag arrays.
       const id = params[0] as number;
       const target = this.rows.find((r) => r.id === id);
-      if (!target) return { rows: [{ desc_written: false, ann_written: false }] };
+      if (!target) {
+        return {
+          rows: [{ desc_written: false, ann_written: false, tags_written: false }],
+        };
+      }
 
-      const isBoth = sql.includes('description = COALESCE') && sql.includes('annotation = $3');
-      const isAnnOnly = !isBoth && sql.includes('annotation = $2');
+      const newDesc = (params[1] as string) ?? '';
+      const newAnn = (params[2] as string) ?? '';
+      const newSubject = (params[3] as string[]) ?? [];
+      const newMood = (params[4] as string[]) ?? [];
+      const newRegion = (params[5] as string[]) ?? [];
+      const newTags = (params[6] as string[]) ?? [];
 
       let descWritten = false;
       let annWritten = false;
 
-      if (isBoth) {
-        const newDesc = params[1] as string;
-        const newAnn = params[2] as string;
-        // Only fill description when previously empty/null/whitespace.
-        if (target.description === null || target.description.trim() === '') {
-          target.description = newDesc;
-          descWritten = true;
-        }
-        target.annotation = newAnn;
-        annWritten = true;
-      } else if (isAnnOnly) {
-        target.annotation = params[1] as string;
-        annWritten = true;
-      } else {
-        // description-only
-        const newDesc = params[1] as string;
-        if (target.description === null || target.description.trim() === '') {
-          target.description = newDesc;
-          descWritten = true;
-        }
+      // Description: COALESCE(NULLIF(TRIM(description), ''), NULLIF($2, ''))
+      // Only writes when upstream is empty AND new desc is non-empty.
+      if (
+        (target.description === null || target.description.trim() === '') &&
+        newDesc !== ''
+      ) {
+        target.description = newDesc;
+        descWritten = true;
       }
 
-      this.writes.push({ id, description: target.description, annotation: target.annotation });
-      return { rows: [{ desc_written: descWritten, ann_written: annWritten }] };
+      // Annotation: NULLIF($3, '') — writes always when non-empty.
+      if (newAnn !== '') {
+        target.annotation = newAnn;
+        annWritten = true;
+      } else {
+        target.annotation = null;
+      }
+
+      target.subject_tags = newSubject;
+      target.mood_tags = newMood;
+      target.region_tags = newRegion;
+      target.tags = newTags;
+
+      const tagsWritten =
+        newSubject.length + newMood.length + newRegion.length + newTags.length > 0;
+
+      this.writes.push({
+        id,
+        description: target.description,
+        annotation: target.annotation,
+        subject_tags: newSubject,
+        mood_tags: newMood,
+        region_tags: newRegion,
+        tags: newTags,
+      });
+
+      return {
+        rows: [
+          {
+            desc_written: descWritten,
+            ann_written: annWritten,
+            tags_written: tagsWritten,
+          },
+        ],
+      };
     }
 
     throw new Error(`FakePgClient unhandled SQL: ${sql.slice(0, 80)}`);
@@ -214,6 +255,42 @@ describe('run() — annotation pipeline', () => {
     expect(pg.writes).toHaveLength(1);
     expect(pg.writes[0]?.description).toMatch(/Granite/);
     expect(pg.writes[0]?.annotation).toMatch(/Three peaks/);
+    // Tag arrays default to [] when omitted by the model.
+    expect(pg.writes[0]?.subject_tags).toEqual([]);
+    expect(pg.writes[0]?.mood_tags).toEqual([]);
+    expect(pg.writes[0]?.region_tags).toEqual([]);
+    expect(pg.writes[0]?.tags).toEqual([]);
+  });
+
+  it('live mode writes the four tag arrays end-to-end (C.t3a fold)', async () => {
+    const pg = new FakePgClient([
+      { id: 1, canonical_url: 'https://x/1.jpg', description: null, annotation: null },
+    ]);
+    const result = await run({
+      client: pg as never,
+      mode: 'live',
+      maxBudgetUsd: 10,
+      apiKey: 'fake-key',
+      visionClient: fakeVision(
+        JSON.stringify({
+          description: 'Granite towers.',
+          annotation: 'Three peaks. Lake.',
+          subject_tags: ['granite', 'tower', 'lake'],
+          mood_tags: ['golden-hour', 'vast'],
+          region_tags: ['torres-del-paine'],
+          tags: ['clear', 'summer'],
+        }),
+      ),
+      checkpointBaseDir: tmpDir,
+      log: () => {},
+      maxAttempts: 1,
+    });
+    expect(result.succeeded).toBe(1);
+    expect(pg.writes).toHaveLength(1);
+    expect(pg.writes[0]?.subject_tags).toEqual(['granite', 'tower', 'lake']);
+    expect(pg.writes[0]?.mood_tags).toEqual(['golden-hour', 'vast']);
+    expect(pg.writes[0]?.region_tags).toEqual(['torres-del-paine']);
+    expect(pg.writes[0]?.tags).toEqual(['clear', 'summer']);
   });
 
   it('live mode skip-signal: model returns blanks → recorded skipped, no write', async () => {
