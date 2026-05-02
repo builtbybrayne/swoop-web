@@ -94,8 +94,10 @@ function printHelp(): void {
 Options:
   --mode <m>            embed | classify | compose | all   (required)
   --source <s>          tag | faqitem | image | blog_chunk | blog-post-job |
-                        persona-summary | image-annotation |
-                        blog-tag-normalisation                  (default: all)
+                        persona-summary | blog-tag-normalisation
+                        (image-annotation retired 2026-05-02 — folded into
+                        C.t6's Vision call; use \`annotate-images\` instead)
+                        (default: all)
   --limit N             per-pass row cap (testing)
   --dry-run             estimate cost + plan operations; no API calls / writes
   --database-url <url>  override DATABASE_URL env

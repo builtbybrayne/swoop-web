@@ -288,6 +288,10 @@ interface ProcessOutcome {
   reason: string | null;
   description?: string;
   annotation?: string;
+  subjectTags?: string[];
+  moodTags?: string[];
+  regionTags?: string[];
+  tags?: string[];
 }
 
 async function processOne(args: LiveArgs, candidate: Candidate): Promise<ProcessOutcome> {
@@ -334,6 +338,10 @@ async function processOne(args: LiveArgs, candidate: Candidate): Promise<Process
       reason: null,
       description: parsed.value.description,
       annotation: parsed.value.annotation,
+      subjectTags: parsed.value.subject_tags,
+      moodTags: parsed.value.mood_tags,
+      regionTags: parsed.value.region_tags,
+      tags: parsed.value.tags,
     };
   }
   return { status: 'failed', reason: `exhausted_${args.maxAttempts}_attempts: ${lastReason}` };
@@ -350,11 +358,15 @@ async function applyOutcome(
         imageId: candidate.id,
         description: outcome.description ?? '',
         annotation: outcome.annotation ?? '',
+        subjectTags: outcome.subjectTags ?? [],
+        moodTags: outcome.moodTags ?? [],
+        regionTags: outcome.regionTags ?? [],
+        tags: outcome.tags ?? [],
       });
       recordEntry(args.checkpointFile, candidate.id, 'done', null);
       args.summary.succeeded += 1;
       args.log(
-        `[annotate] image=${candidate.id} done desc_written=${wb.descriptionWritten} ann_written=${wb.annotationWritten}`,
+        `[annotate] image=${candidate.id} done desc_written=${wb.descriptionWritten} ann_written=${wb.annotationWritten} tags_written=${wb.tagsWritten}`,
       );
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -472,7 +484,19 @@ function abort(
 
 function parseAndValidate(
   rawText: string,
-): { ok: true; value: { description: string; annotation: string } } | { ok: false; reason: string } {
+):
+  | {
+      ok: true;
+      value: {
+        description: string;
+        annotation: string;
+        subject_tags: string[];
+        mood_tags: string[];
+        region_tags: string[];
+        tags: string[];
+      };
+    }
+  | { ok: false; reason: string } {
   // Strip code-fence markers if the model wrapped its output.
   const cleaned = rawText
     .replace(/^```(?:json)?\s*/i, '')

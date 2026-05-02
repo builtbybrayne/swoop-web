@@ -11,6 +11,14 @@
  * up from this file to find the `product/` root, then descend to
  * `cms/prompts/etl/image-annotation/prompt.md`. Verified by the
  * snapshot test in `__tests__/prompt.test.ts`.
+ *
+ * The prompt file may carry an optional YAML frontmatter block at the
+ * top — `---\nversion: 2\n---` — used by operators to track which
+ * prompt revision a given run executed against. Frontmatter is parsed
+ * separately and stripped from the system-prompt text we feed to
+ * Claude. Per the 2026-05-02 fold of C.t3a's image-annotation
+ * classifier into this Vision call, the prompt now bumps to version 2;
+ * the schema gained four tag arrays.
  */
 
 import path from 'node:path';
@@ -33,10 +41,26 @@ export function resolvePromptPath(): string {
 }
 
 /**
+ * Strip a leading YAML-style frontmatter block (`---\n...\n---`) from
+ * the prompt. We don't try to parse the values — just remove the block
+ * so it doesn't bleed into the system prompt the model sees.
+ */
+function stripFrontmatter(raw: string): string {
+  if (!raw.startsWith('---')) return raw;
+  const endIdx = raw.indexOf('\n---', 3);
+  if (endIdx === -1) return raw;
+  // Skip past the closing `\n---` (4 chars) and any leading whitespace
+  // line so the body starts at the first real content character.
+  return raw.slice(endIdx + 4).replace(/^\s*\n/, '');
+}
+
+/**
  * Read the prompt from disk. Throws if the file is missing — fail-fast
  * is the right call: we'd rather discover a missing prompt at boot than
  * burn through a budget call only for the model to receive a blank
  * system prompt.
+ *
+ * Strips frontmatter from the returned text.
  */
 export function loadPrompt(promptPath: string = resolvePromptPath()): string {
   if (!existsSync(promptPath)) {
@@ -49,5 +73,5 @@ export function loadPrompt(promptPath: string = resolvePromptPath()): string {
   if (text.trim().length === 0) {
     throw new Error(`[annotate] prompt file at ${promptPath} is empty.`);
   }
-  return text;
+  return stripFrontmatter(text);
 }

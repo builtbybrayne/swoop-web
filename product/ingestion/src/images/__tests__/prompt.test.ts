@@ -28,9 +28,13 @@ describe('annotation prompt', () => {
     expect(text).toMatch(/Torres del Paine/);
     expect(text).toMatch(/Magellanic penguin/i);
 
-    // The two output keys + their voice cues.
+    // The six output keys + their voice cues.
     expect(text).toMatch(/`description`/);
     expect(text).toMatch(/`annotation`/);
+    expect(text).toMatch(/`subject_tags`/);
+    expect(text).toMatch(/`mood_tags`/);
+    expect(text).toMatch(/`region_tags`/);
+    expect(text).toMatch(/`tags`/);
     expect(text).toMatch(/journey-shaped/);
 
     // The empty-pair skip-signal contract — tested branch in run.ts.
@@ -40,6 +44,19 @@ describe('annotation prompt', () => {
     // Avoidance list — voice control. (Subset; full list in 10_style-avoid.md.)
     expect(text).toMatch(/em-dash/i);
     expect(text).toMatch(/delve/i);
+  });
+
+  it('strips frontmatter (version + metadata block) before exposing the system prompt', () => {
+    const text = loadPrompt();
+    // The body starts with the prompt's opening header, not the
+    // frontmatter fence. Both `# Image annotation prompt` (the first
+    // header) and the absence of a leading `---\nversion:` block prove
+    // the loader stripped frontmatter cleanly.
+    expect(text.trimStart().startsWith('---')).toBe(false);
+    expect(text).toMatch(/^# Image annotation prompt/m);
+    // Specifically: the frontmatter `version: 2` line must not appear
+    // in the body the model sees.
+    expect(text.split('\n').slice(0, 3).join('\n')).not.toMatch(/^version:/m);
   });
 
   it('throws on missing file', () => {

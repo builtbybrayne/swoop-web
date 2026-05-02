@@ -6,6 +6,20 @@
 
 **Review-fix status (2026-04-30 code review)**: 14 of 14 pre-chunk-work items closed. Cross-cuts H1+H2 (messageOf + emitErrorRaised helpers) deferred to pair with next chunk-C work; Theme-A.2/3/4/5 (Zod hygiene tightenings) and Perf-2 (parallel-not-serial triage) intentionally deferred per the review's strategic table. Master ledger: [planning/reviews/2026-04-30-code-level.md](planning/reviews/2026-04-30-code-level.md).
 
+## C.t6 + C.t3a fold (2026-05-02 — HITL-ratified architectural collapse)
+
+Per Al's HITL session 2026-05-02: fold C.t3a's separate Haiku-text-only image-annotation classifier into C.t6's Vision call. **One Claude Vision call per image now produces all six outputs** (description + annotation + subject_tags + mood_tags + region_tags + tags) instead of two passes (Vision for description + annotation, Haiku for the four tag arrays). Cheaper, simpler, one prompt to iterate, one cost cap to manage. Decision logged as **C.40**.
+
+**What landed**:
+- **Migration 008** (`product/connector/migrations/008_image_tag_columns.sql`) — forward-only-idempotent assertion of the four tag-array columns on `image` (already declared in 002) plus the `tags` GIN index that 004 didn't carry.
+- **C.t6 Vision prompt** (`product/cms/prompts/etl/image-annotation/prompt.md`) — bumped to `version: 2` with a four-tag-array section, vocabulary cues per bucket, "what NOT to do" extended to cover tag-array hygiene (no padding, no cross-bucket repetition), worked examples now show all six outputs.
+- **C.t6 Zod schema** (`product/ingestion/src/images/output-schema.ts`) — extended to `description + annotation + subject_tags[] + mood_tags[] + region_tags[] + tags[]`, all four arrays default to `[]`.
+- **C.t6 write-back** (`product/ingestion/src/images/write-back.ts`) — single SQL UPDATE now touches all six output columns plus `modified_at`. Description still COALESCE-gated; annotation + tag arrays always-write.
+- **C.t6 runner** (`product/ingestion/src/images/run.ts`) — threads tag arrays from parsed Vision response through `ProcessOutcome` into `writeAnnotation`.
+- **C.t3a image-annotation classifier retired**: deleted `product/ingestion/src/enrich/classify/image-annotation.ts`, removed import + dispatch from `enrich/run.ts`, retired `ImageAnnotationOutputSchema` + `'image-annotation'` from `enrich/schemas.ts` `CLASSIFIER_SCHEMAS`. Help text in `enrich/index.ts` updated to point operators at the C.t6 CLI.
+
+**Tests delta**: ingestion workspace +6 / -2 net (output-schema gained 5 cases for tag arrays + skip-signal coverage; write-back rewritten for single-shape SQL with 5 cases; run.test.ts gained the end-to-end "writes the four tag arrays" case; enrich/schemas.test.ts lost 2 cases for the retired schema). All 6 workspaces remain green (verified locally; full fresh-install verification in commit-time).
+
 ---
 
 ## What M1 looks like right now

@@ -8,6 +8,16 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.40 — Fold C.t3a's image-annotation classifier into C.t6's Vision call: one call, six outputs
+
+**Decided**: 2026-05-02
+**Owner**: HITL ratification (Al, 2026-05-02) + C.t6+C.t3a fold execution agent
+**Rationale**: C.t6 was already paying for one Claude Vision call per image to produce `description` + `annotation`; C.t3a was about to pay separately for a Haiku-text-only pass over the same images to produce `subject_tags` + `mood_tags` + `region_tags` + `tags`. Two passes, two prompts, two checkpoints, twice the operator surface — for outputs that share the same image, the same context, and the same voice constraints. Fold both into a single Claude Vision call producing all six outputs (two prose fields + four tag arrays). Cheaper, simpler, one prompt to iterate, one cost cap to manage. Migration 008 adds GIN-indexed `subject_tags` / `mood_tags` / `region_tags` / `tags` arrays to the `image` domain table (the columns themselves were already declared in migration 002 with `TEXT[] DEFAULT '{}'`; 008 is forward-only-idempotent and asserts them with `IF NOT EXISTS` plus the `tags` GIN index that 004 didn't carry). C.t6's prompt + Zod schema + write-back extend to cover all six; C.t3a's `classify/image-annotation.ts` retires, its entry in `CLASSIFIER_SCHEMAS` retires, the orchestration call in `enrich/run.ts` retires.
+
+Prompt frontmatter bumps `version: 1 → 2` to mark the schema change so an operator running an older checkpoint can see the prompt revised under them.
+
+**Swap cost**: Low. If we ever want to split annotation back out (e.g. iterate tag-prompt independently of prose-prompt), the structured-output schema cleanly separates the four arrays from the two prose fields; a future split would re-instate the Haiku classifier path with a narrower schema. The one-call shape is a content-prompt-iteration choice, not an architectural lock-in.
+
 ## C.39 — Trip image resolution: `image_trip` first, `image_page` fallback, single `trip.image_id`
 
 **Decided**: 2026-05-01

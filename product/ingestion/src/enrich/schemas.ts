@@ -50,24 +50,16 @@ export const PersonaSummaryOutputSchema = z.object({
 export type PersonaSummaryOutput = z.infer<typeof PersonaSummaryOutputSchema>;
 
 // -----------------------------------------------------------------------------
-// 3. Image annotation classifier (text-only)
+// 3. (retired 2026-05-02) — image annotation classifier
 // -----------------------------------------------------------------------------
 //
-// Per the 2026-04-29 image text-field finding: ~50% of images carry
-// description / title / caption text. This text-only pass extracts subject
-// / mood / region tags + a free-text tags[] array. The remaining ~50%
-// (images without any text input) is C.t6's vision-pass territory.
-
-export const ImageAnnotationOutputSchema = z.object({
-  subject_tags: z.array(z.string()).default([]),
-  mood_tags: z.array(z.string()).default([]),
-  region_tags: z.array(z.string()).default([]),
-  tags: z.array(z.string()).default([]),
-  description: z.string().optional(),
-});
-
-export type ImageAnnotationOutput = z.infer<typeof ImageAnnotationOutputSchema>;
-
+// The standalone Haiku-text-only image annotation classifier was retired
+// when C.t3a's image-annotation pass was folded into C.t6's unified Vision
+// call (one Claude Vision call → description + annotation + four tag
+// arrays). The Zod schema for the unified output now lives at
+// `product/ingestion/src/images/output-schema.ts` (alongside its
+// run-time consumer); this enrich-side schema entry was removed.
+//
 // -----------------------------------------------------------------------------
 // 4. Blog-tag normalisation classifier
 // -----------------------------------------------------------------------------
@@ -90,7 +82,6 @@ export type BlogTagNormalisationOutput = z.infer<typeof BlogTagNormalisationOutp
 export const CLASSIFIER_SCHEMAS = {
   'blog-post-job': BlogPostJobOutputSchema,
   'persona-summary': PersonaSummaryOutputSchema,
-  'image-annotation': ImageAnnotationOutputSchema,
   'blog-tag-normalisation': BlogTagNormalisationOutputSchema,
 } as const;
 
