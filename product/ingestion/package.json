@@ -13,7 +13,9 @@
     "blog:fetch:backfill": "tsx src/blog/fetch.ts --backfill",
     "blog:fetch:dry-run": "tsx src/blog/fetch.ts --dry-run",
     "etl:sql": "tsx src/sql-transform/index.ts",
-    "annotate-images": "tsx src/images/annotate.ts"
+    "annotate-images": "tsx src/images/annotate.ts",
+    "enrich": "tsx src/enrich/index.ts",
+    "enrich:dry-run": "tsx src/enrich/index.ts --mode=all --dry-run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
