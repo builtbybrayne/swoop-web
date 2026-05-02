@@ -12,9 +12,12 @@
     "blog:fetch": "tsx src/blog/fetch.ts",
     "blog:fetch:backfill": "tsx src/blog/fetch.ts --backfill",
     "blog:fetch:dry-run": "tsx src/blog/fetch.ts --dry-run",
-    "etl:sql": "tsx src/sql-transform/index.ts"
+    "etl:sql": "tsx src/sql-transform/index.ts",
+    "enrich": "tsx src/enrich/index.ts",
+    "enrich:dry-run": "tsx src/enrich/index.ts --mode=all --dry-run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
     "@swoop/common": "*",
     "dotenv": "^17.4.2",
     "pg": "^8.13.1",
