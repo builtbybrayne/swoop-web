@@ -34,8 +34,10 @@ import { loadClassifierPrompt, resolveEtlPromptsRoot } from './prompts.js';
 import { CLASSIFIER_SCHEMAS } from './schemas.js';
 import { classifyBlogPostJob } from './classify/blog-post-job.js';
 import { classifyPersonaSummary } from './classify/persona-summary.js';
-import { classifyImageAnnotation } from './classify/image-annotation.js';
 import { classifyBlogTagNormalisation } from './classify/blog-tag-normalisation.js';
+// Image-annotation classifier retired 2026-05-02: folded into C.t6's
+// unified Vision call (one Claude Vision call → description + annotation
+// + 4 tag arrays). See product/ingestion/src/images/.
 import { composeInspirePassage } from './compose/inspire-passage.js';
 import { composeCustomerStory } from './compose/customer-story.js';
 import { composeTrustProof } from './compose/trust-proof.js';
@@ -181,21 +183,12 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
             dryRun: opts.dryRun,
           });
         }
-        if (!opts.source || opts.source === 'image-annotation' || opts.source === 'all') {
-          log(`[enrich/classify/image-annotation] starting`);
-          const prompt = await loadClassifierPrompt('image-annotation', {
-            rootDir: promptsRoot,
-            schema: CLASSIFIER_SCHEMAS['image-annotation'],
-          });
-          passResults['classify:image-annotation'] = await classifyImageAnnotation({
-            client,
-            batch: opts.batch,
-            ledger,
-            prompt,
-            limit: opts.limit,
-            dryRun: opts.dryRun,
-          });
-        }
+        // image-annotation classifier retired 2026-05-02 — folded into
+        // C.t6's unified Vision call. The four image tag arrays are
+        // populated by `product/ingestion/src/images/annotate.ts`, not
+        // here. The `--source=image-annotation` argument is no longer
+        // recognised; operators producing image tags should run the C.t6
+        // CLI: `npm run -w @swoop/ingestion annotate-images -- ...`.
         if (!opts.source || opts.source === 'blog-tag-normalisation' || opts.source === 'all') {
           log(`[enrich/classify/blog-tag-normalisation] starting`);
           const prompt = await loadClassifierPrompt('blog-tag-normalisation', {

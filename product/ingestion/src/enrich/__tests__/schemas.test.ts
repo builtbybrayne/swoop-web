@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   BlogPostJobOutputSchema,
   PersonaSummaryOutputSchema,
-  ImageAnnotationOutputSchema,
   BlogTagNormalisationOutputSchema,
   CLASSIFIER_SCHEMAS,
 } from '../schemas.js';
@@ -55,26 +54,11 @@ describe('PersonaSummaryOutputSchema', () => {
   });
 });
 
-describe('ImageAnnotationOutputSchema', () => {
-  it('accepts all-empty defaults', () => {
-    const r = ImageAnnotationOutputSchema.safeParse({});
-    expect(r.success).toBe(true);
-    if (r.success) {
-      expect(r.data.subject_tags).toEqual([]);
-      expect(r.data.mood_tags).toEqual([]);
-    }
-  });
-
-  it('accepts populated arrays', () => {
-    const r = ImageAnnotationOutputSchema.safeParse({
-      subject_tags: ['hiker', 'mountain'],
-      mood_tags: ['dramatic'],
-      region_tags: ['torres-del-paine'],
-      tags: ['w-trek'],
-    });
-    expect(r.success).toBe(true);
-  });
-});
+// ImageAnnotationOutputSchema retired 2026-05-02: folded into C.t6's
+// unified Vision call. Its replacement schema (with description +
+// annotation + 4 tag arrays) lives at
+// product/ingestion/src/images/output-schema.ts and is exercised by
+// product/ingestion/src/images/__tests__/output-schema.test.ts.
 
 describe('BlogTagNormalisationOutputSchema', () => {
   it('accepts ids + unmapped', () => {
@@ -97,11 +81,11 @@ describe('BlogTagNormalisationOutputSchema', () => {
 });
 
 describe('CLASSIFIER_SCHEMAS', () => {
-  it('exposes all four classifier names', () => {
+  it('exposes the three live classifier names (image-annotation retired 2026-05-02)', () => {
     const keys = Object.keys(CLASSIFIER_SCHEMAS);
     expect(keys).toContain('blog-post-job');
     expect(keys).toContain('persona-summary');
-    expect(keys).toContain('image-annotation');
     expect(keys).toContain('blog-tag-normalisation');
+    expect(keys).not.toContain('image-annotation');
   });
 });
