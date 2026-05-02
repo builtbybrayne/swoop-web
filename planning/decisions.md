@@ -8,6 +8,24 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.42 — Imgix tenant host + Swoop production host live as constants in `@swoop/common/image`, not env vars
+
+**Decided**: 2026-05-02
+**Owner**: C.t5 execution + 2026-05-01 HITL ratification (Q2)
+**Rationale**: `@swoop/common/image` exports `IMGIX_HOST` (`https://swoop-patagonia.imgix.net`) and `SWOOP_PATAGONIA_HOST` (`https://www.swoop-patagonia.com/`) as module constants. Three placement options considered: (a) constants in the module (recommended); (b) env vars (`IMGIX_HOST` / `SWOOP_HOST`) read at boot; (c) CMS config under `product/cms/config/`. Picked (a). Rationale: (i) Swoop has a single imgix tenant + single production host; env-var indirection introduces a way for orchestrator and connector to read divergent values from inconsistent `.env` files with no compile-time check; (ii) CMS is for content (prompts, sales prose, legal), not infra strings; (iii) if Swoop ever migrates imgix tenants, the change is a one-line constant edit + a release. The simplicity stance from theme 2 (content-as-data, infra-as-code) puts these on the code side.
+
+**Swap cost**: Low. If a real second tenant ever materialises, the constants flip to env-var reads and every call site continues to import from `@swoop/common/image` unchanged.
+
+## C.41 — Default imgix render parameters: `auto=format,enhance,compress&fit=crop&q=80`; configurable per-call
+
+**Decided**: 2026-05-02
+**Owner**: C.t5 execution + 2026-05-01 HITL ratification (Q1)
+**Rationale**: `@swoop/common/image`'s `imgixUrl(filename, params?)` helper applies a default param string when callers don't pass overrides. Three candidate defaults considered: (a) `auto=format,enhance,compress&fit=crop&q=80` — content-aware delivery, subtle enhancement, fit-by-crop, q=80 (recommended); (b) leaner `auto=format,compress&q=80` — skip `enhance` to avoid washing muted Patagonia palettes; (c) no defaults, callers always compose. Picked (a). Rationale: (i) it's a sensible technical floor; widget heroes that need specific `w` + `h` override per-call via the second arg, so defaults never fight per-variant needs; (ii) `enhance` at q=80 lifts low-light Patagonia imagery without saturating it — empirical re-tuning is a content-prompt-iteration concern not an architectural concern; (iii) "no defaults" pushes choice to every call site, which in practice means inconsistent variants. The constant is exported as `DEFAULT_IMGIX_PARAMS` so a future brand-imagery review can flip it in one place.
+
+**Swap cost**: Low. The default is one constant; per-call overrides already supported. If Swoop's brand voice on imagery dislikes `enhance`, drop to (b) by editing the constant.
+
+---
+
 ## C.40 — Fold C.t3a's image-annotation classifier into C.t6's Vision call: one call, six outputs
 
 **Decided**: 2026-05-02
