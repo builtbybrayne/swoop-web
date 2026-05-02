@@ -7,13 +7,15 @@ functional triage classifier that runs on a different (cheaper) model.
 
 See the Tier 2 plan `planning/02-impl-agent-runtime.md` for the architecture
 and `planning/03-exec-agent-runtime-*.md` (t1–t7) for per-task execution
-briefs.
+briefs. The B.t3a sunset (2026-05-02) replaced the librarian-shaped
+`search` / `get_detail` stub pair with the eight intent-named tools served
+by `@swoop/connector` on `:3002` — the orchestrator now talks to the real
+connector by default.
 
 ## Scripts
 
 ```bash
 npm run dev                   -w @swoop/orchestrator   # tsx watch src/index.ts
-npm run dev:stub-connector    -w @swoop/orchestrator   # tsx watch fixture connector
 npm run build                 -w @swoop/orchestrator   # tsc → ./dist
 npm run start                 -w @swoop/orchestrator   # node dist/index.js
 npm run typecheck             -w @swoop/orchestrator   # tsc --noEmit
@@ -23,9 +25,9 @@ npm run test                  -w @swoop/orchestrator   # vitest run
 ## Running the hello-world smoke test
 
 The M1 smoke test proves the end-to-end vertical slice: browser → orchestrator
-(Sonnet) → tool call (stubbed connector) → layer-2 classifier (Haiku) →
-SSE stream back to the caller. Run it manually with a real Anthropic key to
-sanity-check behaviour before wiring chunk D's UI.
+(Sonnet) → tool call (real `@swoop/connector` over MCP-HTTP) → layer-2
+classifier (Haiku) → SSE stream back to the caller. Run it manually with a
+real Anthropic key to sanity-check behaviour.
 
 **Prerequisites**:
 
@@ -35,13 +37,16 @@ sanity-check behaviour before wiring chunk D's UI.
    ```
    Optional: override `ORCHESTRATOR_MODEL`, `FUNCTIONAL_CLASSIFIER_MODEL`,
    `CONNECTOR_URL`. See `src/config/schema.ts` for the full surface.
-2. `cd product && nvm use && npm install`.
+2. Create `product/connector/.env` with at minimum a working
+   `DATABASE_URL` against a populated `puma_dev` (see `gotchas.md` for
+   the bootstrap walkthrough + the C.t3 ETL CLI to populate it).
+3. `cd product && nvm use && npm install`.
 
 **Runbook** (three terminals, all under `product/`):
 
 ```bash
-# Terminal 1 — stub connector (MCP-over-HTTP) on :3001.
-npm run dev:stub-connector -w @swoop/orchestrator
+# Terminal 1 — real @swoop/connector on :3002 (Postgres + MCP-over-HTTP).
+npm run dev -w @swoop/connector
 
 # Terminal 2 — orchestrator on :8080.
 npm run dev -w @swoop/orchestrator
@@ -60,10 +65,11 @@ curl -N -X POST http://localhost:8080/chat \
 
 **Expected output**:
 
-- Terminal 1 logs tool calls from the stub connector.
+- Terminal 1 logs the eight tools registered + per-call `tool.invoked`
+  events from the connector.
 - Terminal 2 logs:
   - orchestrator model (e.g. `claude-sonnet-4-5-20250929`),
-  - triage classifier model (e.g. `claude-haiku-4-5-20250929`),
+  - triage classifier model (e.g. `claude-haiku-4-5-20251001`),
   - per-turn `puma_triage_classifier classified turn (model=…)` — the
     two-layer agent model proof.
 - Terminal 3 shows an SSE stream with:
@@ -72,13 +78,14 @@ curl -N -X POST http://localhost:8080/chat \
   - more text frames after the tool result,
   - a terminating `event: done` line.
 
-**Teardown**: `Ctrl-C` each terminal; sessions are in-memory and evaporate
-with the orchestrator process.
+**Teardown**: `Ctrl-C` each terminal; orchestrator sessions are in-memory
+and evaporate with the process. The connector's pool closes gracefully.
 
 **Cost note**: A single hello-world turn costs roughly £0.01–£0.05 depending
 on how much the orchestrator says. Do not loop this test; the integration
 test under `src/__tests__/integration/hello-world.test.ts` is the
-no-API-cost automated counterpart.
+no-API-cost automated counterpart (it stubs the ADK runner directly so no
+live connector or Anthropic key is needed).
 
 ## Layout
 
@@ -86,7 +93,8 @@ no-API-cost automated counterpart.
 src/
   config/               # env → frozen Config, per-agent model registry.
   agent/                # ADK LlmAgent factory + ClaudeLlm shim.
-  connector/            # MCP-over-HTTP client + ADK FunctionTool adapters.
+  connector/            # MCP-over-HTTP client + ADK FunctionTool adapters
+                        # over the eight intent-named tools (post-B.t3a).
   functional-agents/    # Layer-2 agents (B.t7: triage-classifier.ts).
   session/              # SessionStore interface + in-memory / ADK-native /
                         # Vertex AI / Firestore adapters (the latter two
@@ -100,8 +108,6 @@ src/
   index.ts              # Startup wiring.
   __tests__/
     integration/        # Vertical-slice integration (B.t7 hello-world).
-test-fixtures/
-  stub-connector.ts     # MCP-over-HTTP fixture connector (not shipped).
 ```
 
 ## Two-layer agent model
