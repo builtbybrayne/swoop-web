@@ -8,6 +8,22 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## B.24 — Tool-description loading is owned by `@swoop/connector` and re-exported; the orchestrator does not duplicate it
+
+**Decided**: 2026-05-02
+**Owner**: B.t3a execution
+**Rationale**: B.t3a needed the orchestrator's connector adapter to load `cms/prompts/tools/<tool>/description.md` for the eight intent-named tools at boot — same fail-fast contract C.t4 stood up on the connector side per HITL Q3 (every tool must have a non-empty description.md or boot refuses). Two approaches considered: (a) duplicate the loader inside the orchestrator's `connector/` directory; (b) re-export `loadAllToolDescriptions` + `ToolDescriptions` + `ALL_TOOL_NAMES` + `ToolDescriptionLoadError` + `RegisteredToolName` from `@swoop/connector` and consume from the orchestrator entrypoint. Picked **(b)**. The orchestrator already depends on `@swoop/connector` (for `FsHandoffStore` from chunk E), so the dep is paid for; duplicating invites drift between the two sides of the wire on what counts as a valid description; the principled rule is "anything an out-of-process consumer of the connector wire could need (loaders, payload shapes, ID validation) is in the connector's public surface; anything tied to the connector's own boot path stays internal." The MCP server itself is intentionally NOT re-exported, preserving the split.
+
+**Swap cost**: Low. If a future consumer doesn't depend on `@swoop/connector` (unlikely), it can re-implement the loader against the same `cms/` files in ~30 lines. The frozen `ToolDescriptions` shape is already type-stable.
+
+## B.23 — Retire the stub-connector test fixture; do NOT rewrite for the eight-tool surface
+
+**Decided**: 2026-05-02
+**Owner**: B.t3a execution (per the brief's option-4 choice)
+**Rationale**: The stub at `product/orchestrator/test-fixtures/stub-connector.ts` served the orchestrator before `@swoop/connector` was a runnable service. C.t1 stood up the real connector on `:3002`; C.t4 registered the eight intent-named tools. With B.t3a flipping the orchestrator's adapter to those tools and `CONNECTOR_URL` defaulting to `:3002`, the stub had no remaining role: production never used it, and no test in any of the six workspaces consumes it (the hello-world integration test stubs the ADK runner directly, not the MCP wire). Two options considered per the B.t3a brief: (a) retire, (b) rewrite for the eight-tool surface as a fixture-backed connector for tests-without-live-DB. Picked **(a)**. (b) would mean authoring fresh fixtures for 5 new derived schemas (passages / stories / proofs / chunks / cards) we'd never use; carrying ~270 lines of dead code for a hypothetical future need is the wrong default. If a future test surface needs it, we add it back then with the right shape.
+
+**Swap cost**: Low. Adding back a stub for a future test surface is a one-file addition; the fixtures live in `@swoop/common/fixtures` and the MCP server registration shape is well-documented in the connector workspace.
+
 ## C.45 — Operator-runbook monitoring: Cloud Logging post-M4, stdout in dev
 
 **Decided**: 2026-05-02

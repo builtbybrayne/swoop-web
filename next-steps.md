@@ -4,7 +4,7 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-05-02 — **C.t3 implemented**; **C.t6 + C.t3a folded into one Vision call**; review fix-wave fully landed; chunk-C tier-3 plans HITL-ratified; C.t1 implemented)
+## Status (2026-05-02 — **B.t3a closed** (orchestrator → real connector; eight intent-named tools registered); **C.t3 implemented**; **C.t6 + C.t3a folded into one Vision call**; review fix-wave fully landed; chunk-C tier-3 plans HITL-ratified; C.t1 implemented)
 
 **2026-05-02 (later)**: C.t6 + C.t3a image-annotation fold landed per Al's HITL ratification. One Claude Vision call per image now produces all six outputs (description + annotation + 4 tag arrays); C.t3a's separate Haiku image-annotation classifier retired. Migration 008 adds GIN-indexed tag-array columns; C.t6's prompt bumps to version 2; the C.t3a `image-annotation` classifier and `--source=image-annotation` CLI argument retire. Decision **C.40** logged.
 
@@ -68,14 +68,10 @@ Dispatch order (C.t3 / C.t3a / C.t4 chain in sequence; C.t5 / C.t6 / C.t8 parall
 7. **C.t8** — [planning/03-exec-c-t8.md](planning/03-exec-c-t8.md) — ETL + annotation runbooks at `product/cms/ops/`. ~0.5 day. Last task in chunk-C. **Should reference the 3 C.t1 execution-log notable findings** (libpq options for pool tunables, node-pg-migrate "Can't determine timestamp" warnings are benign, npm-doesn't-propagate-SIGTERM-to-tsx local-dev concern). 7 numbered open questions.
 
 **Downstream augments triggered by C.t4** (live in their owning chunks; not authored as tier-3 plans yet):
-- **B.t3a** — orchestrator's connector adapter rewrite. Drop `@deprecated` `Search*` / `GetDetail*` schemas; register the eight intent-named tools. ~0.5–1 day, mostly mechanical.
-- **D.t9** — chat-surface widget rewrite. Add new widgets for the five intent-named tool outputs from `*PublicSchema` shapes; `inspiration` and `lead-capture` survive from D.t3 (rendering `illustrate` and `handoff`); `component-list` and `component-detail` deprecate alongside `search` / `get_detail`. ~1–2 days.
+- ~~**B.t3a** — orchestrator's connector adapter rewrite. Drop `@deprecated` `Search*` / `GetDetail*` schemas; register the eight intent-named tools.~~ ✅ **done 2026-05-02**, ~0.5 day. Six atomic commits (`d697007`, `f9e81f9`, `d75df3f`, `33ccd42`, `30de639`, plus the docs commit). Stub at `:3001` retired (option a); orchestrator now talks to the real connector at `:3002` by default. Execution log in [planning/03-exec-agent-runtime-t3.md §"B.t3a — connector adapter sunset"](planning/03-exec-agent-runtime-t3.md#bt3a--connector-adapter-sunset-2026-05-02-execution-log).
+- **D.t9** — chat-surface widget rewrite. **Now actionable** — B.t3a deleted the orphaned `search-results.tsx` + `item-detail.tsx`; D.t9 builds the new widgets for the five intent-named tool outputs from `*PublicSchema` shapes. `inspiration` and `lead-capture` survive from D.t3 (rendering `illustrate` and `handoff`). The `AttributeTable` primitive in `product/ui/src/shared/` is currently consumer-less and likely needed for D.t9's per-tool widgets (e.g. trip cards). ~1–2 days.
 
 **Coordination point with cross-cuts**: H1 (`messageOf` helper) and H2 (`emitErrorRaised` helper) are deferred until they pair with chunk-C work. Whoever picks up C.t4 first should land H1 + H2 in `@swoop/common` as the same agent's first commits — they're consumed by the new tool handlers' error envelopes anyway.
-
-**Downstream augments triggered by C.t4** (live in their owning chunks):
-- **B.t3a** — orchestrator's connector adapter rewrite. Drop `@deprecated` `Search*` / `GetDetail*` schemas; register the eight intent-named tools. ~0.5–1 day, mostly mechanical.
-- **D.t9** — chat-surface widget rewrite. Add new widgets for the five intent-named tool outputs from `*PublicSchema` shapes; `inspiration` and `lead-capture` survive from D.t3 (rendering `illustrate` and `handoff`); `component-list` and `component-detail` deprecate alongside `search` / `get_detail`. ~1–2 days.
 
 **Method discipline**: every Tier 3 plan above gets a "★ Read this first" pointer that calibrates the executing agent against theme 11 (top-down from sales, not bottom-up from data) before they touch code. The chunk-C plan's anchor section in [02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md) is the canonical calibration text — refer to it from each Tier 3 brief.
 
