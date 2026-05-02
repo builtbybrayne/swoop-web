@@ -349,6 +349,75 @@ Some handlers will run primitives in parallel (e.g. `find_inspiring` may paralle
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
 
+### 2026-05-02 — C.t4 landed (executing agent: a8969883db628d1c2)
+
+Eight tool handlers + data primitive layer + MCP registration + H1/H2 cross-cuts shipped across nine commits on `worktree-agent-a8969883db628d1c2` from base `ad105e4`.
+
+**Commit hashes** (oldest → newest):
+
+- `c5e9b15` — `feat(common): H1 — messageOf(err) helper + initial site sweep`
+- `4ca90bb` — `feat(common): H1 — complete site sweep across remaining 4 workspaces` (sweeps 23 sites in orchestrator/ui/harness/ingestion)
+- `abef9af` — `feat(common): H2 — emitErrorRaised helper`
+- `2845040` — `feat(common): H2 — sweep 10 error.raised emission sites onto helper`
+- `a8b1efb` — `feat(common): C.t4 — tool.invoked event kind (Q5)`
+- `8eee1d1` — `feat(connector): C.t4 — data primitive expansion (vector + RRF + filter composition)`
+- `6e394f1` — `feat(connector): C.t4 — eight tool handlers over data primitives`
+- `1a7bd2b` — `feat(cms): C.t4 — handoff/handoff_submit/illustrate tool descriptions`
+- `e2169d5` — `feat(connector): C.t4 — register 8 tools on MCP server (retires ping; fail-fast description loading)`
+
+**Files changed (high-level)**:
+
+- `product/ts-common/src/errors.ts` (new) — `messageOf(err)` H1 helper.
+- `product/ts-common/src/emit-event.ts` — `emitErrorRaised(...)` H2 helper.
+- `product/ts-common/src/events.ts` + `fixtures/event.sample.ts` — `tool.invoked` event kind + sample fixture (Q5).
+- `product/connector/src/data/` (new files): `embed-query.ts`, `hybrid-search.ts`, `find-inspire-passages.ts`, `find-customer-stories.ts`, `find-trust-proofs.ts`, `find-inform-chunks.ts`, `query-trips.ts`, `find-images-by-keywords.ts`, `resolve-image.ts`.
+- `product/connector/src/tools/` (new directory): `_handler-runtime.ts`, `deps.ts`, `description-loader.ts`, `index.ts` (registration), 8 handler files (`find_inspiring.ts`, `find_someone_who.ts`, `find_proof.ts`, `lookup.ts`, `find_options.ts`, `illustrate.ts`, `handoff.ts`, `handoff_submit.ts`), 2 test files.
+- `product/connector/src/server/mcp.ts` — full rewrite (was the no-op `ping` tool; now delegates to `registerAllTools`).
+- `product/connector/src/server/app.ts` + `index.ts` — wire pool/embedQuery/descriptions through.
+- `product/connector/src/server/__tests__/mcp.test.ts` — full rewrite (verifies the 8 tools surface).
+- `product/connector/src/config/{schema,load}.ts` — added `TOOLS_PROMPT_DIR` + `VOYAGE_API_KEY` + derived `toolsPromptDirAbsolutePath`.
+- `product/cms/prompts/tools/{handoff,handoff_submit,illustrate}/description.md` (new) — three description files so all 8 tools fail-fast cleanly per Q3.
+- 17 sweep files across orchestrator/ui/harness/ingestion (H1 + H2 sites).
+
+**Verification (all foreground, blocking, fresh install)**:
+
+```
+cd product && rm -rf node_modules && npm install
+npm run typecheck --workspaces --if-present  # all 6 green
+npm test --workspaces --if-present
+# ts-common      — 118 (was 102)  +16 from H1+H2 helpers + tool.invoked fixture
+# orchestrator   — 158 (unchanged) — 1 new orchestrator change preserved tests
+# connector      —  97 + 3 skipped (was 84+3)  +13 from new tool runtime / desc-loader / mcp tests
+# ui             —  71 (unchanged)
+# ingestion      — 233 (unchanged)
+# harness        —  74 (unchanged)
+# total          — 751 + 3 skipped (was 722 + 3 baseline)
+```
+
+**Sample MCP `tools/list` output** (from `mcp.test.ts` "lists exactly the eight intent-named tools" assertion): `find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`, `illustrate`, `handoff`, `handoff_submit`. The no-op `ping` tool is gone.
+
+**Per-tool integration test status**: integration tests against populated `puma_dev` are deferred — the connector runs against a fresh DB locally only when `DATABASE_URL` is set, and the agent that ran C.t4 had no live `puma_dev` connection. Integration tests therefore land as a follow-on (`npm test` skips them at unit level via the same `describeIfDb` gate as the existing `pool.test.ts`). The runHandler runtime + description-loader + MCP wiring tests cover the structural correctness; SQL-shape correctness against live data is the next iteration's concern. Flagging this for downstream B.t3a:
+
+- `find_inspiring` / `find_someone_who` / `find_proof` / `lookup` / `find_options` SQL plans exist; first live-DB run is when B.t3a brings the orchestrator's connector adapter onto the `:3002` surface and a real Sonnet turn exercises them.
+- `illustrate` ships against whatever C.t6 has populated. Pre-M1 starter sample test (per the plan §"Verification" item 4) deferred to the same window.
+- `handoff` returns `{status:'widget_triggered', widgetToken: <UUID>}` — verified in mcp.test.ts.
+- `handoff_submit` rejects with a pointer to `POST /handoff/submit` — verified by the unit test of the body, since per Q2 Sonnet should never invoke it.
+
+**Deviations from the plan**:
+
+- **`handoff_submit` body** ships as a **rejection-with-pointer** rather than a "thin wrapper over `submitHandoff()`". The plan §`handoff_submit` boundary called for the wrapper, but the MCP-shape input (`HandoffSubmitInputSchema`: widgetToken + contact + consent) is **not** the same shape as the full `HandoffPayload` `submitHandoff()` consumes (which carries verdict, conversation summary, motivation anchor, plus the consent + contact). Mapping MCP-input → `HandoffPayload` would require either inferring fields from session state (state the connector doesn't have visibility into) or renegotiating the `HandoffSubmitInputSchema` shape (out of C.t4's scope per "no new tool I/O Zod schemas"). Since per Q2 Sonnet should never invoke this tool anyway, returning a structured rejection that names the correct route is the safer interim posture. **Surface for B.t3a / future submission-mode work**: if a future architecture wants the MCP path to actually submit, it should redesign `HandoffSubmitInputSchema` to carry the full payload + add a session-state lookup, then drop this rejection.
+- **`embed-query.ts` cache** is in-process and unbounded — fine for M1 (visitor utterances per session are bounded), revisit at C.t8.
+- **HNSW `ef_search`** left at install default (40 per Q4); no `SET LOCAL` per call. Deferred to C.t8.
+- **Typecheck-fixed shape** in `pool.test.ts` fixture — added `TOOLS_PROMPT_DIR` + `toolsPromptDirAbsolutePath` to the test Config builder. No behavioural change.
+
+**Surfaced for downstream**:
+
+- **B.t3a** can now register the eight intent-named tools against `:3002` and drop the deprecated `Search*` / `GetDetail*` adapter wrappers. The orchestrator's `parseToolResult` H4 helper correctly handles the `{ok:false, code, detail}` envelope `runHandler` produces.
+- **D.t9** can render the five new `*PublicSchema` outputs (the connector returns the schema-validated public projection — widgets just consume it).
+- **G.t1 / G.t5** — once a real Sonnet turn through B.t3a runs, watch for systematic mis-selection between the 5 conversational tools. C.t2's first-pass description.md is "production first-pass — ship-ready"; tuning passes back to G if needed.
+- **C.t6** integration: `illustrate` quality silently improves as more images get annotated; no handler change needed.
+
+
 
 ---
 
