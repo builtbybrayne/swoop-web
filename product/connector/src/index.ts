@@ -58,3 +58,19 @@ export {
   closePool,
   buildPoolConfig,
 } from './data/pool.js';
+
+// --- Tool description loader (C.t4) ---------------------------------------
+//
+// Re-exported so the orchestrator's connector adapter (B.t3a) can load the
+// authoritative `cms/prompts/tools/<tool>/description.md` content into the
+// MCP tool registrations on the orchestrator side too — same fail-fast
+// contract as the connector boot path. Both sides share one description
+// loader so any future addition to the eight-tool surface lives in one
+// place. The MCP server itself remains owned by `src/server/`.
+export {
+  loadAllToolDescriptions,
+  ALL_TOOL_NAMES,
+  ToolDescriptionLoadError,
+  type ToolDescriptions,
+  type RegisteredToolName,
+} from './tools/index.js';

@@ -108,9 +108,14 @@ export const configSchema = z
     // --- Content paths ---------------------------------------------------
     // Per G.11: system prompt is the concatenation of files matching
     // `^\d{2}_[a-z0-9-]+\.md$` inside SYSTEM_PROMPT_DIR. SKILLS_DIR is the
-    // base path passed to ADK's `loadAllSkillsInDir`.
+    // base path passed to ADK's `loadAllSkillsInDir`. TOOLS_PROMPT_DIR holds
+    // one folder per tool with a `description.md` inside, loaded at boot by
+    // both the connector (per C.t4) and the orchestrator's connector
+    // adapter (per B.t3a) via `loadAllToolDescriptions` from
+    // `@swoop/connector`. Fail-fast on any missing/empty file.
     SYSTEM_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/system'),
     SKILLS_DIR: z.string().trim().min(1).default('../cms/prompts/skills'),
+    TOOLS_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/tools'),
 
     // --- Session ---------------------------------------------------------
     SESSION_BACKEND: SessionBackend.default('in-memory'),
@@ -214,6 +219,7 @@ export type RawConfig = z.infer<typeof configSchema>;
  *   - packageRoot: absolute fs path to this package's root.
  *   - systemPromptDirAbsolutePath: SYSTEM_PROMPT_DIR resolved against packageRoot.
  *   - skillsDirAbsolutePath: SKILLS_DIR resolved against packageRoot.
+ *   - toolsPromptDirAbsolutePath: TOOLS_PROMPT_DIR resolved against packageRoot.
  *   - handoffTemplatesDirAbsolutePath: HANDOFF_TEMPLATES_DIR resolved against packageRoot.
  *   - isProduction: NODE_ENV === 'production'.
  *
@@ -232,6 +238,13 @@ export type Config = Readonly<
     readonly systemPromptDirAbsolutePath: string;
     /** Absolute path to the skills directory (ADK loadAllSkillsInDir base path). */
     readonly skillsDirAbsolutePath: string;
+    /**
+     * Absolute path to the tools-prompt directory (`cms/prompts/tools/`).
+     * Holds one folder per tool with a `description.md`. Loaded at boot by
+     * the orchestrator's connector adapter (B.t3a) via
+     * `loadAllToolDescriptions` from `@swoop/connector`.
+     */
+    readonly toolsPromptDirAbsolutePath: string;
     /** Absolute path to the handoff email-template directory (E.t3 mailer reads from here). */
     readonly handoffTemplatesDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. Controls prompt-loader caching, CORS strictness, etc. */
