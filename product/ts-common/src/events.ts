@@ -318,6 +318,48 @@ export const WarmPoolMissEventSchema = z.object({
 });
 
 // -----------------------------------------------------------------------------
+// Connector-side tool invocation envelope (C.t4 / Q5).
+//
+// One shared event with a `toolName` discriminator (per HITL ratification of
+// 03-exec-c-t4.md Q5 — eight separate event kinds is dilution). Emitted by the
+// connector's `runHandler` wrapper around every tool call: input validated,
+// body executed, output validated, ok/elapsed/output_count summarised.
+//
+// `errorKind` is populated only when `ok === false`:
+//   - `tool_input_invalid`   — Zod parse on input failed.
+//   - `tool_output_invalid`  — Zod parse on output failed (defence in depth).
+//   - `handler_threw`        — handler body threw.
+//
+// This is distinct from the orchestrator-side `tool.called` / `tool.returned`
+// pair which lives at the agent ↔ connector boundary; `tool.invoked` lives
+// inside the connector and survives even if the orchestrator hangs up.
+// -----------------------------------------------------------------------------
+
+export const ToolInvokedEventSchema = z.object({
+  eventType: z.literal("tool.invoked"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    /** Tool name string (e.g. "find_inspiring", "handoff_submit"). */
+    toolName: z.string(),
+    /** Wall-clock duration of the body() execution in milliseconds. */
+    elapsedMs: z.number().int().nonnegative(),
+    /** True iff input validated, body returned, output validated. */
+    ok: z.boolean(),
+    /**
+     * Count of result rows returned by the body — `passages.length`,
+     * `cards.length`, `images.length`, etc. Set to 0 when the tool returns
+     * a non-collection shape (handoff / handoff_submit).
+     */
+    outputCount: z.number().int().nonnegative().optional(),
+    /** Populated when `ok === false`. */
+    errorKind: z
+      .enum(["tool_input_invalid", "tool_output_invalid", "handler_threw"])
+      .optional(),
+  }),
+});
+export type ToolInvokedEvent = z.infer<typeof ToolInvokedEventSchema>;
+
+// -----------------------------------------------------------------------------
 // Event — discriminated union on eventType.
 // -----------------------------------------------------------------------------
 
@@ -347,6 +389,8 @@ export const EventSchema = z.discriminatedUnion("eventType", [
   SessionExpiredEventSchema,
   WarmPoolHitEventSchema,
   WarmPoolMissEventSchema,
+  // C.t4 — connector-side tool invocation summary
+  ToolInvokedEventSchema,
 ]);
 export type Event = z.infer<typeof EventSchema>;
 

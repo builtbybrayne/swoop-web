@@ -69,6 +69,21 @@ export const SampleEventToolFailed: Event = {
   },
 };
 
+export const SampleEventToolInvoked: Event = {
+  eventType: "tool.invoked",
+  eventVersion: 1,
+  timestamp: "2026-04-22T09:02:31.000Z",
+  sessionId: "sess_puma_demo_001",
+  turnIndex: 2,
+  actor: "connector",
+  payload: {
+    toolName: "find_inspiring",
+    elapsedMs: 142,
+    ok: true,
+    outputCount: 4,
+  },
+};
+
 export const SampleEventHandoffTriggered: Event = {
   eventType: "handoff.triggered",
   eventVersion: 1,
