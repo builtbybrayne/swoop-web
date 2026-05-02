@@ -8,6 +8,32 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.45 — Operator-runbook monitoring: Cloud Logging post-M4, stdout in dev
+
+**Decided**: 2026-05-02
+**Owner**: C.t8 execution + 2026-05-01 HITL ratification (Q2)
+**Rationale**: The chunk-C operator runbooks at `product/cms/ops/` need to point at *somewhere* for log inspection. Three options considered: (a) Cloud Logging only (the canonical destination once Cloud Run deploy lands), (b) local-only at first, revisit post-M4, (c) Cloud Logging + a small dashboard. Picked the "Cloud Logging post-M4, stdout in dev" hybrid: today's runbooks tell the operator to *"watch the terminal"*; once Cloud Logging is wired (post-M4), the runbooks add a Cloud Logging filter section and the dev guidance moves to a fallback. Mid-fidelity dashboards are out of scope for M1.
+
+**Swap cost**: Low. Each runbook's "where to look first" section has a single Cloud Logging vs stdout note; flipping the bias is one edit per runbook.
+
+## C.44 — Operator-runbook audience: role-based, not name-based
+
+**Decided**: 2026-05-02
+**Owner**: C.t8 execution + 2026-05-01 HITL ratification (Q1)
+**Rationale**: The runbooks at `product/cms/ops/` need a consistent audience model. Three options considered: (a) named individuals (Thomas / Richard at Swoop), (b) generic "Swoop ops engineer", (c) role-based labels ("ETL operator" / "harness owner"). Picked (c) to match `evalset-growth.md`'s convention. Named individuals age badly when staffing changes; generic role labels stay valid through handover. Each runbook addresses *the ETL operator* or *the harness owner*; ownership-during-handover is captured in a "Cadence + ownership" section that names the current human (Al, until handover) but always under the role label.
+
+**Swap cost**: Trivial. Role labels are find-and-replace if the convention shifts.
+
+## C.43 — Operator-runbook re-run cadence assumptions
+
+**Decided**: 2026-05-02
+**Owner**: C.t8 execution + 2026-05-01 HITL ratification (Q7)
+**Rationale**: The chunk-C runbooks codify cadence assumptions until Swoop confirms otherwise. Recorded assumptions: (a) ETL re-run is event-triggered (when Swoop sends a fresh dump; weekly assumed); (b) embedding pass runs after every ETL re-run; (c) image annotation runs once at handover and on-demand for new image batches; (d) migrations run when a forward-only schema change lands. Each assumption is annotated in the relevant runbook with a back-link to `questions.md` for the open Swoop dependency.
+
+**Swap cost**: Low. Assumptions are stated in each runbook's "Cadence + ownership" section; updating them on Swoop's confirmation is a one-line edit per runbook.
+
+---
+
 ## C.42 — Imgix tenant host + Swoop production host live as constants in `@swoop/common/image`, not env vars
 
 **Decided**: 2026-05-02

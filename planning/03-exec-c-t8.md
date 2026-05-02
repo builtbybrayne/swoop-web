@@ -234,6 +234,44 @@ Numbered for tracking. Items 1 + 2 are HITL calls Al should close before the exe
 
 *(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
 
+### 2026-05-02 — C.t8 landed; chunk C closed
+
+Seven docs-only commits authored against the merge tip carrying the entire chunk-C spine (C.t1 + C.t3 + C.t3a + C.t4 + C.t5 + C.t6 fold + H1/H2 helpers).
+
+**Files landed** (all under `product/cms/ops/`):
+
+- `etl-rerun.md` — operator runbook for re-running the SQL-dump → Postgres transform. Covers expected row counts (852 trips / 79 tags / 13K images / 906 FAQ / 2,160 customer reviews), idempotency, page self-FK two-pass write, FK-orphan policy, within-batch UNIQUE-column dedupe, parity check against the live Swoop website.
+- `embedding-rerun.md` — operator runbook for re-running the Voyage-3 embedding pass + Haiku batch classifiers. Covers `--mode={embed,classify,compose,all}`, `--source=<corpus>`, `ENRICH_BUDGET_GBP` cap (£10 dev / £15 prod), £5 soft warning, batch-boundary kill-switch, anonymous-customerreview exclusion (HITL Q3), prompt-version invalidation via `content_hash`, link to Anthropic Batches API docs.
+- `image-annotation-rerun.md` — operator runbook for the C.t6 Vision pipeline. Covers dry-run default, `--max-budget=N` (USD, distinct from embedding-rerun's GBP), 6-output structure (description + annotation + 4 tag arrays per fold C.40), upstream-`image.description` skip (~6,300 of 13K images), batches-mode caveat (request-build verified, submission deferred), checkpoint-resume.
+- `migration-management.md` — operator runbook for `node-pg-migrate` operations. Covers `npm run migrate:up`, "Can't determine timestamp for NNN" benign warnings (per C.t1 finding), forward-only posture (C.31), full-rebuild recovery path, adding new migrations with `IF NOT EXISTS` guards.
+- `troubleshooting.md` — symptom-indexed recovery guide. Covers connector boot failures (DATABASE_URL validation, port collision, pgvector missing, /readyz 503), orchestrator-can't-reach-connector, empty-tool-results triage (derived tables empty / embeddings missing / filter mismatch), ETL slow runs, Vision-pipeline budget overrun, migration-failed-halfway, stale-node_modules false-green, `npm dev` SIGTERM doesn't kill `tsx` (per C.t1 finding), Cloud Logging vs stdout per C.45.
+- `prompt-version-rollback.md` — brief runbook for reverting a bad prompt-version bump using per-prompt-version checkpoint namespacing (per HITL Q6).
+- `README.md` — index linking all seven runbooks (six new + existing `evalset-growth.md`); voice-coherent conventions section.
+
+**Decisions logged** in `planning/decisions.md`:
+
+- **C.43** — Re-run cadence assumptions (event-triggered ETL, embedding-after-ETL, on-demand image annotation, migration-on-schema-change).
+- **C.44** — Operator-runbook audience: role-based, not name-based.
+- **C.45** — Monitoring lives in Cloud Logging post-M4, stdout in dev.
+
+(Note: the plan body proposed C.41–C.43; those slots had been taken by C.t5 execution between plan authoring and execution time. Re-numbered to C.43–C.45 to keep the log monotone — same rationale captured in C.38/C.39 in the same log.)
+
+**Voice-coherence audit**:
+- Grep for AI-jargon (`unpack` / `delve` / `dive into` / `leverage` / `synergy` / `streamline` / `robust` / `seamless` / `cutting-edge` / `landscape` / `realm` / `tapestry` / `in the world of`) across all seven runbooks: zero matches.
+- Cross-reference audit: README links resolve; body cross-references use plain filename references that resolve in the ops directory.
+- Tonal benchmark match: each runbook has the same evalset-growth.md-shaped header (purpose / what you'll do / cadence + ownership / step-by-step / failure modes / open items for Al / where the rules came from). Sampled one operator scenario from each runbook (e.g. "I just received a fresh dump"; "the agent's returning empty results"); each scenario routes cleanly to the relevant section.
+
+**Verification**:
+- All six runbook files at `product/cms/ops/` plus the README index — confirmed via `ls`.
+- `planning/decisions.md` has C.43 + C.44 + C.45 entries.
+- `npm run typecheck --workspaces --if-present` (sanity check; this is a docs-only task) — green.
+
+**Deviations from plan**:
+- File names match the briefing (`migration-management.md` / `image-annotation-rerun.md` / new `prompt-version-rollback.md`) rather than the plan body's earlier names (`migrations.md` / `image-annotation.md` / no separate prompt-rollback runbook). The briefing's names are more explicit and don't conflict with the plan's intent.
+- Decision-log numbering shifted C.41–C.43 → C.43–C.45 because of intervening C.t5 work that took the original slots. No semantic change.
+
+**Chunk C status after C.t8**: chunk-C spine complete. Downstream B.t3a (orchestrator's connector-adapter rewrite) and D.t9 (chat-surface widget rewrite) can begin against a known-good real-data substrate.
+
 ---
 
 ## 2026-05-01 HITL ratification
