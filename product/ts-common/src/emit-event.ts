@@ -25,7 +25,8 @@
 //     the session id. F-b can add sugar if retrofit pain shows up.
 // -----------------------------------------------------------------------------
 
-import { EventSchema, type Event } from "./events.js";
+import { EventSchema, type Event, type EventActor } from "./events.js";
+import { messageOf } from "./errors.js";
 
 export type EventSink = (event: Event) => void;
 
@@ -97,4 +98,86 @@ export function emitEvent(event: Event): void {
   } catch {
     // Sink throw must never propagate.
   }
+}
+
+// -----------------------------------------------------------------------------
+// emitErrorRaised — H2 helper.
+//
+// Closes H2 from planning/03-exec-crosscut-common-helpers-fix.md. The
+// `error.raised` envelope was being constructed inline at 9+ sites with subtly
+// inconsistent payloads (some sliced sanitisedContext to 500 chars, some
+// didn't; some passed an err and ran the inline `instanceof Error` triage,
+// others built a synthetic string). Folds them all into one helper.
+//
+// Behaviour:
+//   - `err` argument: when provided, sanitisedContext = messageOf(err) sliced
+//     to `sanitisedContextLimit` (default 500).
+//   - `sanitisedContext` override: when provided, used verbatim before slicing.
+//     Lets callers that already have a structured non-Error string (e.g. an
+//     LLM error code) emit without faking an Error.
+//   - Either `err` or `sanitisedContext` must be provided. Passing neither
+//     emits an envelope with no sanitisedContext field — Zod accepts that
+//     (it's optional on ErrorRaisedEventSchema).
+//   - Standardised slice limit: 500 chars unless overridden. Per H2 spec,
+//     consolidates the previous mix of sliced / unsliced sites.
+//   - `now` injectable for tests; defaults to `new Date()`.
+//
+// Caller-friendly call site:
+//
+//   emitErrorRaised({
+//     sessionId,
+//     turnIndex: userTurnIndex,
+//     actor: 'system',
+//     errorType: 'triage_classifier_failed',
+//     chunk: 'B',
+//     err,
+//   });
+// -----------------------------------------------------------------------------
+
+export type ErrorChunk = "B" | "C" | "D" | "E" | "F" | "system";
+
+export interface EmitErrorRaisedArgs {
+  sessionId: string;
+  turnIndex?: number | null;
+  actor: EventActor;
+  errorType: string;
+  chunk: ErrorChunk;
+  /** When provided, sanitisedContext = messageOf(err).slice(0, limit). */
+  err?: unknown;
+  /** When provided, sanitisedContext = sanitisedContext.slice(0, limit). */
+  sanitisedContext?: string;
+  /** Default 500. Set to Infinity to disable slicing. */
+  sanitisedContextLimit?: number;
+  /** Test-injectable clock; defaults to `new Date()`. */
+  now?: () => Date;
+}
+
+export function emitErrorRaised(args: EmitErrorRaisedArgs): void {
+  const limit = args.sanitisedContextLimit ?? 500;
+  const raw =
+    args.sanitisedContext !== undefined
+      ? args.sanitisedContext
+      : args.err !== undefined
+        ? messageOf(args.err)
+        : undefined;
+  const sliced =
+    raw !== undefined
+      ? Number.isFinite(limit)
+        ? raw.slice(0, limit)
+        : raw
+      : undefined;
+  const clock = args.now ?? (() => new Date());
+  emitEvent({
+    eventType: "error.raised",
+    eventVersion: 1,
+    timestamp: clock().toISOString(),
+    sessionId: args.sessionId,
+    turnIndex: args.turnIndex ?? null,
+    actor: args.actor,
+    payload: {
+      errorType: args.errorType,
+      chunk: args.chunk,
+      ...(sliced !== undefined ? { sanitisedContext: sliced } : {}),
+    },
+  });
 }
