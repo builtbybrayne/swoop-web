@@ -38,7 +38,7 @@
 //   - planning/03-exec-chat-surface-t4.md §"Continue triggers bootstrap"
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
-import { emitEvent, parseSseFrames } from "@swoop/common";
+import { emitEvent, messageOf, parseSseFrames } from "@swoop/common";
 
 /** Key used to persist the session id in tab-scoped storage. */
 export const SESSION_STORAGE_KEY = "swoop.session.id";
@@ -83,7 +83,7 @@ export function subscribeAdapterErrors(listener: AdapterErrorListener): () => vo
  *  the pre-bootstrap edge case where the transport failed before any
  *  session id landed in storage. */
 export function emitAdapterError(err: unknown): void {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = messageOf(err);
   const sessionId = readStoredSessionId() ?? "unknown";
   emitEvent({
     eventType: "error.raised",
@@ -570,7 +570,7 @@ export function createOrchestratorTransport<
             closeTextRun();
             // Reader/parse failures mid-stream — e.g. connection drop,
             // malformed frames — are `stream_drop` from the user's POV.
-            const base = err instanceof Error ? err.message : String(err);
+            const base = messageOf(err);
             const msg = base.startsWith("[stream]") ? base : `[stream] ${base}`;
             controller.enqueue({ type: "error", errorText: msg });
             emitAdapterError(new Error(msg));

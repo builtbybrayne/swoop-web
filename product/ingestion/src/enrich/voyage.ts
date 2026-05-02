@@ -20,6 +20,8 @@
  *   - Returns one EmbeddingResult per input, in order.
  */
 
+import { messageOf } from '@swoop/common';
+
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings';
 
 /** Voyage-3 dimensionality, locked per C.18. */
@@ -191,7 +193,7 @@ export class VoyageClient {
         // Network / fetch error → retry.
         const baseDelay = RETRY_DELAYS_MS[attempt] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
         const jitter = baseDelay * 0.25 * this.random();
-        const reason = err instanceof Error ? err.message : String(err);
+        const reason = messageOf(err);
         lastError = new VoyageError(`Voyage fetch failed: ${reason}`, undefined, attempt);
         if (attempt < RETRY_DELAYS_MS.length) {
           this.log(

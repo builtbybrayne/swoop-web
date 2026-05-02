@@ -30,6 +30,7 @@ import type { Request, Response } from 'express';
 import {
   HandoffSubmitRequestSchema,
   emitEvent,
+  messageOf,
   type HandoffPayload,
   type HandoffPayloadDisqualified,
   type HandoffPayloadInconclusive,
@@ -104,7 +105,7 @@ export function createHandoffSubmitHandler(
     try {
       payload = enrichPayload({ reqBody, session, now: clock() });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = messageOf(err);
       const body: HandoffSubmitResponse = {
         ok: false,
         reason: 'invalid_request',

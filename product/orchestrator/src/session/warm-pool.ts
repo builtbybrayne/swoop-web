@@ -22,7 +22,7 @@
  */
 
 import type { SessionState } from '@swoop/common';
-import { emitEvent } from '@swoop/common';
+import { emitEvent, messageOf } from '@swoop/common';
 import type { SessionStore } from './interface.js';
 
 /**
@@ -287,7 +287,7 @@ export class WarmSessionPool implements SessionAllocator {
         payload: {
           errorType: 'warm_pool_tick_failed',
           chunk: 'B',
-          sanitisedContext: err instanceof Error ? err.message : String(err),
+          sanitisedContext: messageOf(err),
         },
       });
     }
@@ -377,7 +377,7 @@ export class WarmSessionPool implements SessionAllocator {
         payload: {
           errorType: 'warm_pool_build_failed',
           chunk: 'B',
-          sanitisedContext: err instanceof Error ? err.message : String(err),
+          sanitisedContext: messageOf(err),
         },
       });
       return null;

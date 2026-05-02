@@ -31,7 +31,7 @@ loadDotenv({ override: true });
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { InMemoryRunner } from '@google/adk';
-import { emitEvent } from '@swoop/common';
+import { emitEvent, messageOf } from '@swoop/common';
 import { FsHandoffStore, type MailerConfig } from '@swoop/connector';
 
 import { loadConfig } from './config/index.js';
@@ -204,7 +204,7 @@ async function main(): Promise<void> {
           errorType: 'connector_close_failed',
           chunk: 'B',
           sanitisedContext:
-            (err instanceof Error ? err.message : String(err)).slice(0, 500),
+            messageOf(err).slice(0, 500),
         },
       });
     });

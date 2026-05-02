@@ -45,6 +45,7 @@ import { BaseLlm } from '@google/adk';
 import type { BaseLlmConnection, LlmRequest, LlmResponse } from '@google/adk';
 import type { Content, Part as GenaiPart } from '@google/genai';
 import Anthropic from '@anthropic-ai/sdk';
+import { messageOf } from '@swoop/common';
 import type {
   ContentBlockParam,
   MessageParam,
@@ -520,7 +521,7 @@ function functionCallResponse(
 }
 
 function errorResponse(err: unknown): LlmResponse {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = messageOf(err);
   const code =
     err && typeof err === 'object' && 'status' in err
       ? String((err as { status: unknown }).status)

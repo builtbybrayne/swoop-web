@@ -13,6 +13,7 @@
 // The helper reads the current session id from sessionStorage (same key
 // the orchestrator-adapter uses) so the caller doesn't need to plumb it.
 
+import { messageOf } from "@swoop/common";
 import type {
   HandoffSubmitRequest,
   HandoffSubmitResponse,
@@ -72,7 +73,7 @@ export async function postHandoffSubmit(
     return {
       ok: false,
       reason: "internal_error",
-      detail: err instanceof Error ? err.message : String(err),
+      detail: messageOf(err),
     };
   }
 

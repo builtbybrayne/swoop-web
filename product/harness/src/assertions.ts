@@ -20,7 +20,7 @@
  *   the handlers fully.
  */
 
-import type { Event } from '@swoop/common';
+import { messageOf, type Event } from '@swoop/common';
 
 import type { Judge } from './judge.js';
 import type {
@@ -453,7 +453,7 @@ async function evaluateJudgeRubric(
         : `judge failed: ${verdict.reasoning}`,
     };
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = messageOf(err);
     return {
       kind: 'judge_rubric',
       passed: false,

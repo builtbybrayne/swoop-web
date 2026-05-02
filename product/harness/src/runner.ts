@@ -29,6 +29,8 @@
  *   `null` and `triage_verdict` assertions fail accordingly.
  */
 
+import { messageOf } from '@swoop/common';
+
 import {
   evaluateAll,
   type AssertionOutcome,
@@ -157,7 +159,7 @@ export async function runScenario(
       judge: judgeVerdict,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = messageOf(err);
     return {
       file,
       name: scenario.name,

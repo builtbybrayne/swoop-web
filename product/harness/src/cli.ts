@@ -22,6 +22,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { messageOf } from '@swoop/common';
+
 import { OrchestratorClient } from './orchestrator-client.js';
 import { StubJudge } from './judge.js';
 import { NullEventCapture } from './event-capture.js';
@@ -108,7 +110,7 @@ async function main(): Promise<void> {
   try {
     scenarios = loadScenarios(scenariosDir);
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
+    const reason = messageOf(err);
     console.error(`[harness] failed to load scenarios: ${reason}`);
     process.exit(0);
     return;

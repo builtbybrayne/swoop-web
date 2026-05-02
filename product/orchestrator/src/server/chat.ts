@@ -28,7 +28,7 @@ import type { Request, Response } from 'express';
 import { createHash } from 'node:crypto';
 import type { Content } from '@google/genai';
 import type { Runner, Event as AdkEvent } from '@google/adk';
-import { ChatRequestSchema, emitEvent } from '@swoop/common';
+import { ChatRequestSchema, emitEvent, messageOf } from '@swoop/common';
 import type {
   MessagePart,
   ReasoningPart,
@@ -182,7 +182,7 @@ export function createChatHandler(
             errorType: 'triage_classifier_failed',
             chunk: 'B',
             sanitisedContext:
-              (err instanceof Error ? err.message : String(err)).slice(0, 500),
+              messageOf(err).slice(0, 500),
           },
         });
       }
@@ -344,7 +344,7 @@ export function createChatHandler(
         });
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = messageOf(err);
       if (!closed) {
         writeSseError(res, 'internal_error', message);
       }

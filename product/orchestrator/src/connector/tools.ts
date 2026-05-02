@@ -36,6 +36,7 @@ import {
   SearchInputSchema,
   SearchOutputSchema,
   TOOL_DESCRIPTIONS,
+  messageOf,
   type ToolName,
 } from '@swoop/common';
 import { z } from 'zod';
@@ -216,7 +217,7 @@ export async function invokeTool(
       error: {
         kind: 'transport_error',
         toolName: spec.name,
-        message: err instanceof Error ? err.message : String(err),
+        message: messageOf(err),
       },
     };
   }
