@@ -1,15 +1,22 @@
 /**
- * Unit tests for the B.t3 connector adapter.
+ * Unit tests for the B.t3 / B.t3a connector adapter.
  *
- * Scope (planning/03-exec-agent-runtime-t3.md §"Tests"):
+ * Scope (planning/03-exec-agent-runtime-t3.md §"Tests" + B.t3a sunset):
  *   - Input validation rejects malformed args with a structured error.
  *   - Output validation rejects malformed responses with a structured error.
+ *   - Connector-level (`isError: true`) and transport errors surface
+ *     distinctly to the agent.
  *   - Retry wrapper retries on 5xx / transport errors and does NOT retry on
  *     4xx or Zod validation errors.
  *
  * We mock the ConnectorClient — nothing hits the network. The live end-to-end
  * round-trip is covered by B.t7's integration test, which runs the stub
  * connector under test-fixtures/ alongside the orchestrator.
+ *
+ * Tool surface verified: the eight intent-named tools registered post-B.t3a
+ * (find_inspiring / find_someone_who / find_proof / lookup / find_options /
+ * illustrate / handoff / handoff_submit). The deprecated search / get_detail
+ * pair has been removed.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -38,27 +45,56 @@ function stubClient(overrides: Partial<ConnectorClient> = {}): ConnectorClient {
   };
 }
 
+describe('TOOL_SPECS — eight intent-named tools', () => {
+  it('registers exactly the eight intent-named tools (no deprecated search / get_detail)', () => {
+    const names = TOOL_SPECS.map((s) => s.name).sort();
+    expect(names).toEqual(
+      [
+        'find_inspiring',
+        'find_options',
+        'find_proof',
+        'find_someone_who',
+        'handoff',
+        'handoff_submit',
+        'illustrate',
+        'lookup',
+      ].sort(),
+    );
+  });
+
+  it('exposes seven tools to the model — handoff_submit stays internal', () => {
+    const exposed = TOOL_SPECS.filter((s) => s.exposedToModel).map((s) => s.name);
+    expect(exposed).toContain('find_inspiring');
+    expect(exposed).toContain('find_someone_who');
+    expect(exposed).toContain('find_proof');
+    expect(exposed).toContain('lookup');
+    expect(exposed).toContain('find_options');
+    expect(exposed).toContain('illustrate');
+    expect(exposed).toContain('handoff');
+    expect(exposed).not.toContain('handoff_submit');
+  });
+});
+
 describe('invokeTool — input validation', () => {
   it('returns an input_validation error when required args are missing', async () => {
     const client = stubClient();
-    // `search` requires `query`; pass nothing.
-    const result = await invokeTool(client, specFor('search'), {});
+    // `lookup` requires `question`; pass nothing.
+    const result = await invokeTool(client, specFor('lookup'), {});
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe('input_validation');
-    expect(result.error.toolName).toBe('search');
+    expect(result.error.toolName).toBe('lookup');
     // Zod issues are surfaced so the agent / logs can see WHY it rejected.
     expect(Array.isArray(result.error.details)).toBe(true);
     // Critically: the connector was never hit.
     expect(client.callTool).not.toHaveBeenCalled();
   });
 
-  it('returns an input_validation error when entityTypes contains an unknown value', async () => {
+  it('returns an input_validation error when budgetBand contains an unknown value', async () => {
     const client = stubClient();
-    const result = await invokeTool(client, specFor('search'), {
-      query: 'torres del paine',
-      entityTypes: ['trip', 'totally-not-a-type'],
+    const result = await invokeTool(client, specFor('find_options'), {
+      budgetBand: 'totally-not-a-band',
     });
 
     expect(result.ok).toBe(false);
@@ -72,39 +108,35 @@ describe('invokeTool — output validation', () => {
   it('returns an output_validation error when the connector omits required fields', async () => {
     const client = stubClient({
       callTool: vi.fn().mockResolvedValue({
-        // Missing `totalMatches` and `hits[].score` — should fail parse.
-        structuredContent: { hits: [{ entityType: 'trip', id: 'x', slug: 'x', title: 't', summary: 's' }] },
+        // `lookup` output requires `chunks` + `count`. Send an empty object.
+        structuredContent: {},
       } satisfies CallToolRawResult),
     });
 
-    const result = await invokeTool(client, specFor('search'), { query: 'w trek' });
+    const result = await invokeTool(client, specFor('lookup'), {
+      question: 'how long is the W trek',
+    });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe('output_validation');
-    expect(result.error.toolName).toBe('search');
+    expect(result.error.toolName).toBe('lookup');
     expect(Array.isArray(result.error.details)).toBe(true);
   });
 
   it('accepts a valid structuredContent payload and returns it parsed', async () => {
-    const payload = {
-      hits: [
-        {
-          entityType: 'trip',
-          id: 't_1',
-          slug: 'w-trek',
-          title: 'W Trek',
-          summary: 'Five days on the W.',
-          score: 0.9,
-        },
-      ],
-      totalMatches: 1,
-    };
+    // `lookup` output: `{ chunks: InformChunkPublicSchema[], count: number }`.
+    // The empty-array case is a perfectly valid response shape ("no chunks
+    // matched") — this path tests the happy round-trip without needing a
+    // full chunk fixture.
+    const payload = { chunks: [], count: 0 };
     const client = stubClient({
       callTool: vi.fn().mockResolvedValue({ structuredContent: payload } satisfies CallToolRawResult),
     });
 
-    const result = await invokeTool(client, specFor('search'), { query: 'w trek' });
+    const result = await invokeTool(client, specFor('lookup'), {
+      question: 'how cold is December',
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -112,14 +144,16 @@ describe('invokeTool — output validation', () => {
   });
 
   it('falls back to parsing a text content block when structuredContent is absent', async () => {
-    const payload = { hits: [], totalMatches: 0 };
+    const payload = { chunks: [], count: 0 };
     const client = stubClient({
       callTool: vi.fn().mockResolvedValue({
         content: [{ type: 'text', text: JSON.stringify(payload) }],
       } satisfies CallToolRawResult),
     });
 
-    const result = await invokeTool(client, specFor('search'), { query: 'nothing' });
+    const result = await invokeTool(client, specFor('lookup'), {
+      question: 'nothing',
+    });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -136,7 +170,7 @@ describe('invokeTool — connector-level errors', () => {
       } satisfies CallToolRawResult),
     });
 
-    const result = await invokeTool(client, specFor('search'), { query: 'w trek' });
+    const result = await invokeTool(client, specFor('find_options'), { region: 'patagonia' });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -149,7 +183,7 @@ describe('invokeTool — connector-level errors', () => {
       callTool: vi.fn().mockRejectedValue(new Error('socket hang up')),
     });
 
-    const result = await invokeTool(client, specFor('search'), { query: 'w trek' });
+    const result = await invokeTool(client, specFor('lookup'), { question: 'w trek' });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;

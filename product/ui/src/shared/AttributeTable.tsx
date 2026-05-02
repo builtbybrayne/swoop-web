@@ -1,7 +1,10 @@
 // product/ui/src/shared/AttributeTable.tsx
 //
-// Dumb key-value grid. Used by item-detail to render duration, regions,
-// activities, budget band in a uniform layout. Skips entries whose value is
+// Dumb key-value grid. Originally used by the retired `item-detail` widget
+// to render duration, regions, activities, budget band in a uniform layout.
+// Currently has no consumers (B.t3a 2026-05-02 retired item-detail); kept
+// as a generic primitive likely needed by the D.t9 per-tool widget rewrite
+// (e.g. trip cards in `find_options`). Skips entries whose value is
 // undefined/null/empty, so callers don't have to guard.
 
 import type { ReactNode } from "react";

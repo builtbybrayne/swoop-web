@@ -72,7 +72,7 @@ describe('ScenarioSchema', () => {
       assertions: [
         {
           kind: 'tool_call',
-          toolName: 'search',
+          toolName: 'lookup',
           atTurn: 1,
           argsContains: { activity: 'hiking' },
         },
@@ -167,7 +167,7 @@ describe('ScenarioSchema', () => {
       description: 'extra key',
       turns: [{ user: 'hi' }],
       assertions: [
-        { kind: 'tool_call', toolName: 'search', extraKey: true },
+        { kind: 'tool_call', toolName: 'lookup', extraKey: true },
       ],
     });
     expect(result.success).toBe(false);

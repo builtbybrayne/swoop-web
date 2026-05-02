@@ -70,7 +70,7 @@ The connector isn't running, or it's running but not on `:3002` where the orches
 
 Fix:
 - `curl http://localhost:3002/healthz` from your terminal. 200 means the connector is up; anything else means it's not.
-- Check `MCP_CONNECTOR_URL` in the orchestrator's env (defaults to the local connector URL).
+- Check `CONNECTOR_URL` in the orchestrator's env (defaults to `http://localhost:3002/mcp` post-B.t3a).
 - If the connector is up but `/readyz` is 503, see "Connector won't boot — `/readyz` returns 503" above.
 
 ### Symptom: connector logs but orchestrator times out on tool calls

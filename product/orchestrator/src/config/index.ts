@@ -12,8 +12,9 @@
  *   - B.t1 callers (src/index.ts, src/agent/factory.ts) import `loadConfig`
  *     and the `Config` type from this path. Preserved.
  *   - B.t3 connector adapter reads `config.CONNECTOR_URL` /
- *     `config.CONNECTOR_REQUEST_TIMEOUT_MS`. Preserved with the same default
- *     (`http://localhost:3001/mcp`, 10_000 ms).
+ *     `config.CONNECTOR_REQUEST_TIMEOUT_MS`. Default is now
+ *     `http://localhost:3002/mcp` (the real @swoop/connector) — flipped from
+ *     `:3001` (the retired in-tree stub) in B.t3a 2026-05-02.
  *   - `config.PRIMARY_MODEL` still resolves (mirrors ORCHESTRATOR_MODEL).
  *
  * The full surface (session, CORS, warm pool, per-agent models, ...) lands

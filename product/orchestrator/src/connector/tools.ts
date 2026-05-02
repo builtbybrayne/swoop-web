@@ -1,8 +1,7 @@
 /**
- * ADK tool wrappers over the MCP connector client (B.t3).
+ * ADK tool wrappers over the MCP connector client (B.t3 / B.t3a).
  *
- * For each Puma tool name declared in `@swoop/common` TOOL_DESCRIPTIONS, build
- * a `FunctionTool` that:
+ * For each Puma tool name, build a `FunctionTool` that:
  *
  *   1. Validates the LLM's proposed args against the matching
  *      `*InputSchema` from `@swoop/common` BEFORE hitting the network. Bad
@@ -12,33 +11,54 @@
  *   3. Validates the returned payload against the matching `*OutputSchema`.
  *      Schema drift on the connector side → structured error returned.
  *
- * Tool descriptions are carried verbatim from `TOOL_DESCRIPTIONS` — chunk G
- * owns that copy. Do not paraphrase here (planning/03-exec-agent-runtime-t3.md
- * "Key implementation notes" 1).
+ * Tool surface: the **eight intent-named tools** mapped to the five
+ * conversational jobs (decisions C.24 + C.25):
  *
- * `handoff_submit` is listed in TOOL_DESCRIPTIONS for contract completeness
- * but is NOT exposed to the model — it's called by the lead-capture widget
- * directly (see ts-common/src/tools.ts comment). We still wrap it so the
- * widget's eventual integration has a single place to borrow the validation;
- * agent registration is filtered in `createConnectorTools`.
+ *   find_inspiring   → Inspire           (find_someone_who → Mirror)
+ *   find_proof       → Reassure          (lookup           → Inform)
+ *   find_options     → Propose options
+ *   illustrate       → Visual companion
+ *   handoff          → Open lead-capture
+ *   handoff_submit   → Submit lead       (NOT exposed to the model;
+ *                                         called by the lead-capture widget
+ *                                         directly via POST /handoff/submit)
+ *
+ * B.t3a (2026-05-02) replaced the librarian-shaped `search` / `get_detail`
+ * pair the A.t2 stub seeded with the eight intent-named tools above. The
+ * deprecated schemas were removed from `@swoop/common` in the same change.
+ *
+ * Tool descriptions: the SDK requires a description string at registration
+ * time; the authoritative copy lives in `cms/prompts/tools/<tool>/
+ * description.md` per G.11. The orchestrator's entrypoint loads each file
+ * once at boot via `loadAllToolDescriptions` (re-exported from
+ * `@swoop/connector`) and passes the resulting `ToolDescriptions` map into
+ * `createConnectorTools`. Fail-fast on missing/empty files matches the
+ * connector boot path.
  */
 
 import { FunctionTool } from '@google/adk';
 import {
-  GetDetailInputSchema,
-  GetDetailOutputSchema,
+  FindInspiringInputSchema,
+  FindInspiringOutputSchema,
+  FindOptionsInputSchema,
+  FindOptionsOutputSchema,
+  FindProofInputSchema,
+  FindProofOutputSchema,
+  FindSomeoneWhoInputSchema,
+  FindSomeoneWhoOutputSchema,
   HandoffInputSchema,
   HandoffOutputSchema,
   HandoffSubmitInputSchema,
   HandoffSubmitOutputSchema,
   IllustrateInputSchema,
   IllustrateOutputSchema,
-  SearchInputSchema,
-  SearchOutputSchema,
-  TOOL_DESCRIPTIONS,
+  LookupInputSchema,
+  LookupOutputSchema,
+  TOOL_NAMES,
   messageOf,
   type ToolName,
 } from '@swoop/common';
+import type { ToolDescriptions } from '@swoop/connector';
 import { z } from 'zod';
 
 import type { ConnectorClient, CallToolRawResult } from './client.js';
@@ -75,52 +95,67 @@ export type ToolAdapterResult<T> = ToolAdapterSuccess<T> | ToolAdapterError;
 /** Registration entry mapping a tool name to its Zod I/O schemas. */
 interface ToolSpec {
   readonly name: ToolName;
-  readonly description: string;
   readonly inputSchema: z.ZodTypeAny;
   readonly outputSchema: z.ZodTypeAny;
   /**
-   * Exposed to the conversational model? `handoff_submit` is internal-only;
-   * see module docstring.
+   * Exposed to the conversational model? `handoff_submit` is internal-only —
+   * the lead-capture widget POSTs to `/handoff/submit` directly; the agent
+   * never sees this tool in its tool list.
    */
   readonly exposedToModel: boolean;
 }
 
 /**
- * Canonical spec table. One row per Puma tool; order here drives the order in
- * which tools land in the agent's `tools` array (diagnostic, not semantic).
+ * Canonical spec table — the eight intent-named tools. Order here drives the
+ * order in which tools land in the agent's `tools` array (diagnostic, not
+ * semantic). The `exposedToModel` flag filters `handoff_submit` out of the
+ * model-facing list.
  */
 const TOOL_SPECS: ReadonlyArray<ToolSpec> = [
   {
-    name: 'search',
-    description: TOOL_DESCRIPTIONS.search,
-    inputSchema: SearchInputSchema,
-    outputSchema: SearchOutputSchema,
+    name: TOOL_NAMES.FindInspiring,
+    inputSchema: FindInspiringInputSchema,
+    outputSchema: FindInspiringOutputSchema,
     exposedToModel: true,
   },
   {
-    name: 'get_detail',
-    description: TOOL_DESCRIPTIONS.get_detail,
-    inputSchema: GetDetailInputSchema,
-    outputSchema: GetDetailOutputSchema,
+    name: TOOL_NAMES.FindSomeoneWho,
+    inputSchema: FindSomeoneWhoInputSchema,
+    outputSchema: FindSomeoneWhoOutputSchema,
     exposedToModel: true,
   },
   {
-    name: 'illustrate',
-    description: TOOL_DESCRIPTIONS.illustrate,
+    name: TOOL_NAMES.FindProof,
+    inputSchema: FindProofInputSchema,
+    outputSchema: FindProofOutputSchema,
+    exposedToModel: true,
+  },
+  {
+    name: TOOL_NAMES.Lookup,
+    inputSchema: LookupInputSchema,
+    outputSchema: LookupOutputSchema,
+    exposedToModel: true,
+  },
+  {
+    name: TOOL_NAMES.FindOptions,
+    inputSchema: FindOptionsInputSchema,
+    outputSchema: FindOptionsOutputSchema,
+    exposedToModel: true,
+  },
+  {
+    name: TOOL_NAMES.Illustrate,
     inputSchema: IllustrateInputSchema,
     outputSchema: IllustrateOutputSchema,
     exposedToModel: true,
   },
   {
-    name: 'handoff',
-    description: TOOL_DESCRIPTIONS.handoff,
+    name: TOOL_NAMES.Handoff,
     inputSchema: HandoffInputSchema,
     outputSchema: HandoffOutputSchema,
     exposedToModel: true,
   },
   {
-    name: 'handoff_submit',
-    description: TOOL_DESCRIPTIONS.handoff_submit,
+    name: TOOL_NAMES.HandoffSubmit,
     inputSchema: HandoffSubmitInputSchema,
     outputSchema: HandoffSubmitOutputSchema,
     exposedToModel: false,
@@ -129,6 +164,12 @@ const TOOL_SPECS: ReadonlyArray<ToolSpec> = [
 
 export interface BuildConnectorToolsParams {
   readonly client: ConnectorClient;
+  /**
+   * Authoritative tool descriptions loaded from `cms/prompts/tools/<tool>/
+   * description.md` at boot. Same fail-fast contract as the connector side.
+   * The `ToolDescriptions` type is re-exported from `@swoop/connector`.
+   */
+  readonly descriptions: ToolDescriptions;
   /** Names the connector reported at startup. Used as a sanity check. */
   readonly discoveredNames: readonly string[];
 }
@@ -145,11 +186,14 @@ export interface BuildConnectorToolsParams {
  */
 export function createConnectorTools({
   client,
+  descriptions,
   discoveredNames,
 }: BuildConnectorToolsParams): FunctionTool[] {
   warnOnMismatch(discoveredNames);
 
-  return TOOL_SPECS.filter((spec) => spec.exposedToModel).map((spec) => buildFunctionTool(client, spec));
+  return TOOL_SPECS.filter((spec) => spec.exposedToModel).map((spec) =>
+    buildFunctionTool(client, spec, descriptions[spec.name]),
+  );
 }
 
 /**
@@ -167,11 +211,15 @@ export function createConnectorTools({
  *   duplicating the schema definitions. If ADK ever stops bundling zod, this
  *   cast becomes a no-op.
  */
-function buildFunctionTool(client: ConnectorClient, spec: ToolSpec): FunctionTool {
+function buildFunctionTool(
+  client: ConnectorClient,
+  spec: ToolSpec,
+  description: string,
+): FunctionTool {
   const parameters = spec.inputSchema as unknown as never;
   return new FunctionTool({
     name: spec.name,
-    description: spec.description,
+    description,
     parameters,
     execute: async (input: unknown) => {
       return invokeTool(client, spec, input);

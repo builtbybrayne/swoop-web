@@ -32,7 +32,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { InMemoryRunner } from '@google/adk';
 import { emitErrorRaised, messageOf } from '@swoop/common';
-import { FsHandoffStore, type MailerConfig } from '@swoop/connector';
+import {
+  FsHandoffStore,
+  loadAllToolDescriptions,
+  type MailerConfig,
+} from '@swoop/connector';
 
 import { loadConfig } from './config/index.js';
 import { createPromptLoader } from './agent/prompt-loader.js';
@@ -64,7 +68,14 @@ async function main(): Promise<void> {
   // not on the first user turn.
   const initialPrompt = promptLoader.load();
 
-  const connector = await setupConnector(config);
+  // Load every tool's description.md eagerly per HITL Q3 ratification (C.t4):
+  // fail-fast if any of the eight is missing/empty. Same contract on both
+  // sides of the wire — the connector loads its own copy at boot, the
+  // orchestrator's adapter consumes the same files for its FunctionTool
+  // registrations.
+  const toolDescriptions = loadAllToolDescriptions(config.toolsPromptDirAbsolutePath);
+
+  const connector = await setupConnector({ config, descriptions: toolDescriptions });
 
   const agent = buildOrchestratorAgent({ config, promptLoader, tools: connector.tools });
 

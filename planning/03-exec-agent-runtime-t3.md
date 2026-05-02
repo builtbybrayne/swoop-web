@@ -105,3 +105,61 @@ Per-tool-call timeout of ~10s. Too long breaks conversational feel; too short ca
 - The connector may not be ready when this task runs. Stub it with a minimal Express server that registers the Puma tool names and returns fixtures from `@swoop/common/fixtures`. This keeps B.t3 unblocked.
 - Do not duplicate the retry policy logic anywhere else — retries live in `connector/retry.ts` only.
 - Skill loading (B.t9) is a separate mechanism — ADK-native skill primitive, **not** a connector tool call. Don't implement skill loading here.
+
+---
+
+## B.t3a — connector adapter sunset (2026-05-02 execution log)
+
+**Status**: ✅ done. Triggered by C.t4 landing the eight intent-named tools on the real `@swoop/connector` (`:3002`). Pre-this, the orchestrator's adapter still registered `search` + `get_detail` + `illustrate` + `handoff` + `handoff_submit` against the in-tree stub at `:3001`. B.t3a folded the librarian-shaped pair, swapped the wire to the real connector, and retired the stub.
+
+### Six atomic commits
+
+| Commit | Scope |
+|---|---|
+| `d697007` | `refactor(common)`: retire deprecated `Search*` / `GetDetail*` Zod schemas + types + `TOOL_NAMES.{Search,GetDetail}` + `TOOL_DESCRIPTIONS.{search,get_detail}`. |
+| `f9e81f9` | `feat(orchestrator)`: register the 8 intent-named tools on the connector adapter. `TOOL_SPECS` becomes 8 rows; `createConnectorTools` accepts a `descriptions: ToolDescriptions` map; orchestrator entrypoint loads from CMS via `loadAllToolDescriptions` (re-exported from `@swoop/connector`). New config field `TOOLS_PROMPT_DIR` + derived `toolsPromptDirAbsolutePath`. |
+| `d75df3f` | `feat(orchestrator)`: `CONNECTOR_URL` default `http://localhost:3001/mcp` → `http://localhost:3002/mcp`. Test fixtures pick up the new field. |
+| `33ccd42` | `refactor(orchestrator)`: retire stub-connector test fixture (option a). Deletes `product/orchestrator/test-fixtures/stub-connector.ts` (~270 lines), drops the `dev:stub-connector` npm script, rewrites the README runbook around `npm run dev -w @swoop/connector`. |
+| `30de639` | `chore(orchestrator,ui,common,harness)`: cross-cut sweep. UI workspace retires `SearchResultsWidget` + `ItemDetailWidget` + their tests + the brand-extension surface assertions for them; `widgets/index.ts` map drops the two entries; `parts/index.ts` docblock updated. Harness assertions / scenario test renames `searchCall` helper → `lookupCall` and `'search'` toolName fixtures → `'lookup'`. `@swoop/common` event sample fixtures (`SampleEventToolFailed` / `SampleEventUiWidgetRendered`) move off `search` to `lookup` / `illustrate`. Operator runbook `MCP_CONNECTOR_URL` typo → `CONNECTOR_URL`. |
+| (this commit) | `docs(planning)`: B.t3a execution log + `progress.md` / `next-steps.md` / `discoveries.md` / `decisions.md` updates. |
+
+### Decisions logged
+
+- **B.t3a — Option (a) Retire** the stub at `product/orchestrator/test-fixtures/stub-connector.ts`, don't rewrite for the eight-tool surface.
+  - **Rationale**: nothing in the test suite consumes the stub (the hello-world integration test stubs the ADK runner directly). Rewriting for 8 new tools would mean authoring fresh fixtures for 5 new derived schemas (passages / stories / proofs / chunks / cards) we'd never use. Carrying ~270 lines of dead code for a hypothetical future need is the wrong default.
+  - **Reversibility**: low cost. Adding back a stub for a future test surface (e.g. for harness scenarios that need a fixture-backed connector without a live DB) is a one-file addition.
+
+### Notable findings during execution
+
+1. **The `@swoop/connector` description loader is the right place to own `loadAllToolDescriptions`.** B.t3a needs the same fail-fast contract on both sides of the wire (orchestrator + connector both load the same eight `cms/prompts/tools/<tool>/description.md` files at boot). Re-exporting the connector's loader keeps it as a single source of truth — the orchestrator already depends on `@swoop/connector` for `FsHandoffStore`, so the dep is paid for. Duplicating the loader inside the orchestrator would have invited drift.
+2. **`as Config` casts in test fixtures had been masking config-shape drift.** Both `hello-world.test.ts` and `triage-classifier.test.ts` cast their fixture object to `Config` to bypass missing fields. Adding `TOOLS_PROMPT_DIR` / `toolsPromptDirAbsolutePath` could have silently been missing — typecheck wouldn't have flagged it. Fixed by populating both fields explicitly. Pattern to remember: when extending the `Config` type, grep for `as Config` and update every fixture in lockstep.
+3. **The `claude-llm.test.ts` `'search'` placeholders are NOT a B.t3a concern.** That test exercises the Anthropic SDK shim's tool-schema serialisation; the tool name is opaque framework-level data. Distinguishing "tool surface concern" from "SDK shim concern" was the right discipline — leaving those references alone kept the diff minimal.
+
+### Downstream what's now possible
+
+- **D.t9** (UI widget rewrite for the five intent-named conversational tools) can begin. Boundary cleanly drawn:
+  - The two retired widgets (`search-results.tsx`, `item-detail.tsx`) are gone.
+  - `AttributeTable` survives in `product/ui/src/shared/` as a generic primitive D.t9's per-tool widgets will likely consume (e.g. trip cards in `find_options`).
+  - Until D.t9 lands, Sonnet weaves the five tools' structured outputs directly into prose. Only `illustrate` and `handoff` carry visible widget renderers.
+- **Live smoke testing post-B.t3a**: the orchestrator + connector now talk over real MCP-over-HTTP. The hello-world manual runbook in `product/orchestrator/README.md` is updated; running it requires a populated `puma_dev` (per C.t3 ETL CLI) plus a working `VOYAGE_API_KEY` in `product/connector/.env` for tools that compose embeddings.
+
+### What B.t3a did NOT touch
+
+- The 8 tool handlers in `@swoop/connector` (chunk-C territory).
+- C.t6 vision pipeline / C.t3a enrichment / C.t3 ETL.
+- D.t9 (UI widget rewrite for the five new conversational tools).
+- The harness assertion-framework shape — only fixture tool-name strings updated, not the `tool_call` assertion semantics.
+
+### Verification (fresh-install)
+
+- All 6 workspaces green on fresh `npm install` + `npm test --workspaces --if-present`. **Total: 767 + 3 DB-gated skipped = 770/770.**
+- Per-workspace deltas vs. pre-B.t3a baseline:
+  - `@swoop/common`: 141/141 (unchanged).
+  - `@swoop/orchestrator`: **160/160** (was 158; +2 from new TOOL_SPECS surface assertions).
+  - `@swoop/connector`: 97/100 (3 DB-gated skips, unchanged — re-export added; no internal consumer).
+  - `@swoop/ui`: **62/62** (was 71; **−9** from retired SearchResults + ItemDetail widget tests + 2 brand-extension cases — expected).
+  - `@swoop/ingestion`: 233/233 (unchanged).
+  - `@swoop/harness`: 74/74 (unchanged shape; renamed `searchCall` → `lookupCall`).
+- Typecheck clean across all 5 buildable workspaces.
+- `grep -rn 'SearchInput\|SearchOutput\|GetDetailInput\|GetDetailOutput' product/` returns 0 hits.
+- Tool-list verification deferred to live smoke (requires populated `puma_dev`); the spec table in `connector/tools.ts` is the source of truth for what the orchestrator advertises.

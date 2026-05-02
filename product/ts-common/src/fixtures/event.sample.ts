@@ -62,8 +62,8 @@ export const SampleEventToolFailed: Event = {
   turnIndex: 2,
   actor: "connector",
   payload: {
-    toolName: "search",
-    toolCallId: "call_search_17",
+    toolName: "lookup",
+    toolCallId: "call_lookup_17",
     errorCategory: "upstream",
     latencyMs: 430,
   },
@@ -118,8 +118,8 @@ export const SampleEventUiWidgetRendered: Event = {
   turnIndex: 2,
   actor: "ui",
   payload: {
-    widgetType: "search-results",
-    toolName: "search",
+    widgetType: "inspiration",
+    toolName: "illustrate",
     turnIndex: 2,
   },
 };

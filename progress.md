@@ -1,10 +1,49 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-02 (**C.t3 implemented + verified end-to-end**; full review fix-wave landed; chunk-C tier-3 plans HITL-ratified; C.t1 implemented + verified end-to-end)
+**Snapshot date**: 2026-05-02 (**B.t3a closed**: orchestrator now talks to the real `@swoop/connector` on `:3002`; deprecated `Search*` / `GetDetail*` schemas + stub-connector retired; C.t3 implemented + verified end-to-end; full review fix-wave landed; chunk-C tier-3 plans HITL-ratified; C.t1 implemented + verified end-to-end)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
-**Status**: **M1 live + chunks D + mock-host shipped; C.t1 + C.t2 closed; C.26 graduated; 2026-04-30 review wave fully landed; chunk-C tier-3 plans HITL-ratified; chunks B/E/F/G/H advancing.** **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits (pool + config + URL validation, MCP-HTTP skeleton + ping tool, migration runner, libpq statement_timeout fix). Connector boots cleanly against `puma_dev`; `/healthz` + `/readyz` + `/mcp` (with no-op `ping`) all verified live; SIGTERM closes pool gracefully. Total tests now 519/519 (was 492; +27 for C.t1). 2026-05-01 (earlier) landed via 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work review items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for chunk-C implementation. Sec-3 (`javascript:`/`data:` URL scheme rejection) was originally claimed-closed by Theme-A.1 but only validated against stale node_modules — actually closed by `be9ca95` adding a refine() check on top of `.url()`. The chat.ts-cluster agent (R2 + R4-server + Perf-3 + Test-1) also surfaced and fixed a latent Express 5 + Node 20 bug — `req.on('close')` fires synchronously after `express.json` drains, so the chat handler's mid-stream-disconnect listener never propagated to `abortController.abort()`; switched to `res.on('close')`. **Test count: 412 → 492 (+80)**. Earlier (2026-04-30): **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables); **C.26 graduated** with the customerreview supplementary dump (2,563 rows + 163 trip junctions); composer pattern removed (decision C.24); top-down-from-sales discipline elevated as theme 11. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
+**Status**: **M1 live + chunks D + mock-host shipped; C.t1 + C.t2 closed; C.26 graduated; B.t3a closed (orchestrator → real connector; eight intent-named tools registered); 2026-04-30 review wave fully landed; chunk-C tier-3 plans HITL-ratified; chunks B/E/F/G/H advancing.** **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits (pool + config + URL validation, MCP-HTTP skeleton + ping tool, migration runner, libpq statement_timeout fix). Connector boots cleanly against `puma_dev`; `/healthz` + `/readyz` + `/mcp` (with no-op `ping`) all verified live; SIGTERM closes pool gracefully. Total tests now 519/519 (was 492; +27 for C.t1). 2026-05-01 (earlier) landed via 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work review items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for chunk-C implementation. Sec-3 (`javascript:`/`data:` URL scheme rejection) was originally claimed-closed by Theme-A.1 but only validated against stale node_modules — actually closed by `be9ca95` adding a refine() check on top of `.url()`. The chat.ts-cluster agent (R2 + R4-server + Perf-3 + Test-1) also surfaced and fixed a latent Express 5 + Node 20 bug — `req.on('close')` fires synchronously after `express.json` drains, so the chat handler's mid-stream-disconnect listener never propagated to `abortController.abort()`; switched to `res.on('close')`. **Test count: 412 → 492 (+80)**. Earlier (2026-04-30): **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables); **C.26 graduated** with the customerreview supplementary dump (2,563 rows + 163 trip junctions); composer pattern removed (decision C.24); top-down-from-sales discipline elevated as theme 11. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
 
 **Review-fix status (2026-04-30 code review)**: 14 of 14 pre-chunk-work items closed. Cross-cuts H1+H2 (messageOf + emitErrorRaised helpers) deferred to pair with next chunk-C work; Theme-A.2/3/4/5 (Zod hygiene tightenings) and Perf-2 (parallel-not-serial triage) intentionally deferred per the review's strategic table. Master ledger: [planning/reviews/2026-04-30-code-level.md](planning/reviews/2026-04-30-code-level.md).
+
+## B.t3a closed (2026-05-02 — connector adapter sunset)
+
+Triggered by C.t4 landing the eight intent-named tools on the real `@swoop/connector` (`:3002`). Pre-this, the orchestrator's adapter still registered `search` + `get_detail` + `illustrate` + `handoff` + `handoff_submit` against the in-tree stub at `:3001`. **B.t3a folded the librarian-shaped pair, swapped the wire to the real connector, and retired the stub.** ~0.5 day. Six atomic commits.
+
+### What landed
+
+| Commit | Scope |
+|---|---|
+| `d697007` | `refactor(common)`: retire deprecated `Search*` / `GetDetail*` Zod schemas + types from `@swoop/common`. |
+| `f9e81f9` | `feat(orchestrator)`: register the 8 intent-named tools on the connector adapter; load descriptions from `cms/prompts/tools/<tool>/description.md` via `loadAllToolDescriptions` (re-exported from `@swoop/connector`). New config field `TOOLS_PROMPT_DIR`. |
+| `d75df3f` | `feat(orchestrator)`: `CONNECTOR_URL` default flips `:3001` → `:3002` (real connector). |
+| `33ccd42` | `refactor(orchestrator)`: retire `product/orchestrator/test-fixtures/stub-connector.ts` (option a per the brief). |
+| `30de639` | `chore(orchestrator,ui,common,harness)`: cross-cut sweep. UI retires `SearchResultsWidget` + `ItemDetailWidget` (D.t9 will rebuild for the new five conversational tools). Harness fixture renames. CMS event sample fixtures move off `search`. Operator runbook env-var name fixed. |
+| (this commit) | `docs(planning)`: B.t3a execution log + orientation file updates. |
+
+### Verification (per the false-green lesson)
+
+- All 6 workspaces green on fresh `npm install`. **Total: 767 + 3 DB-gated skipped = 770/770.**
+- Per-workspace: `@swoop/common` 141 (=) / `@swoop/orchestrator` **160** (was 158, +2) / `@swoop/connector` 97+3 skipped (=) / `@swoop/ui` **62** (was 71, **−9** for retired widgets) / `@swoop/ingestion` 233 (=) / `@swoop/harness` 74 (=).
+- Typecheck clean across all 5 buildable workspaces.
+- `grep -rn 'SearchInput\|SearchOutput\|GetDetailInput\|GetDetailOutput' product/` returns 0 hits.
+
+### What B.t3a unblocks
+
+- **D.t9** (UI widget rewrite for the five intent-named conversational tools — `find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`). Until D.t9 lands, Sonnet weaves the structured outputs of those five tools directly into prose; only `illustrate` and `handoff` carry visible widget renderers.
+- **Live smoke testing on the real connector**: orchestrator + connector now talk over real MCP-over-HTTP. The hello-world manual runbook in `product/orchestrator/README.md` is updated to point at `npm run dev -w @swoop/connector` (real connector at `:3002` against a populated `puma_dev`).
+
+### Decision logged
+
+**B.t3a — Option (a) Retire** the stub at `product/orchestrator/test-fixtures/stub-connector.ts`, don't rewrite for the eight-tool surface. Reasoning + reversibility cost in the [B.t3 plan's B.t3a addendum](planning/03-exec-agent-runtime-t3.md#bt3a--connector-adapter-sunset-2026-05-02-execution-log).
+
+### Notable findings during execution
+
+1. **The connector's `loadAllToolDescriptions` is the right place to own the loader** — re-exporting it from `@swoop/connector` keeps the description-loading contract identical on both sides of the wire (orchestrator + connector both load the same eight files). The orchestrator already depends on `@swoop/connector` for `FsHandoffStore`, so the dep is paid for.
+2. **`as Config` casts in test fixtures had been masking config-shape drift.** Both `hello-world.test.ts` and `triage-classifier.test.ts` use `as Config` casts; adding `TOOLS_PROMPT_DIR` could have silently been missing. Pattern to remember: when extending the `Config` type, grep for `as Config` and update every fixture in lockstep.
+3. **The `claude-llm.test.ts` `'search'` placeholders are NOT a B.t3a concern** — they exercise the Anthropic SDK shim's tool-schema serialisation; the tool name is opaque framework-level data. Distinguishing "tool surface concern" from "SDK shim concern" was the right discipline for keeping the diff minimal.
+
+---
 
 ## C.t6 + C.t3a fold (2026-05-02 — HITL-ratified architectural collapse)
 

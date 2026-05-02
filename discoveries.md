@@ -6,6 +6,20 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-02 — Tool-description loading is owned by `@swoop/connector`; both sides of the wire share one fail-fast contract
+
+B.t3a needed the orchestrator's connector adapter to load `cms/prompts/tools/<tool>/description.md` for each of the eight intent-named tools at boot — same fail-fast-on-missing-or-empty contract C.t4 stood up on the connector side per HITL Q3 ratification. The choice was: duplicate the loader inside the orchestrator, or re-export from the connector?
+
+**Pick re-export.** The orchestrator already depends on `@swoop/connector` (for `FsHandoffStore` from chunk E), so the dep is paid for. `loadAllToolDescriptions` + `ToolDescriptions` + `ALL_TOOL_NAMES` + `ToolDescriptionLoadError` + `RegisteredToolName` all promoted to the public surface in `product/connector/src/index.ts`. Both sides import from one place; "every tool must have a non-empty description.md at boot" is one rule, not two.
+
+The MCP server itself is intentionally NOT re-exported from `@swoop/connector` — it stays owned by the connector's service entrypoint. The split is principled: anything an out-of-process consumer of the connector wire could need (description loading, ID validation, payload shapes) goes in the public surface; anything tied to the connector's own boot path stays internal.
+
+**Pattern to remember**: when two workspaces need the same fail-fast boot-time contract on shared content (descriptions, prompts, fixtures, etc.), put the loader in the workspace that *owns* the content's relationship to the runtime (here: the connector, because tool descriptions are the connector's tool-list copy) and re-export. Duplicating invites drift; central loaders + thin re-exports keep the contract honest.
+
+A second pattern surfaced from the same task: **`as Config` casts in test fixtures had been masking config-shape drift.** Both `hello-world.test.ts` and `triage-classifier.test.ts` build their fixture object and cast it `as Config` to bypass missing fields. When B.t3a added `TOOLS_PROMPT_DIR` + `toolsPromptDirAbsolutePath` to the `Config` type, neither fixture had to be touched for tests to compile — typecheck cheerfully accepted both casts. Both fixtures got updated explicitly anyway, but the lesson is: **when extending the `Config` type, grep for `as Config` and update every fixture in lockstep.** A future review fix candidate is to drop the casts and use `Object.freeze({...}) satisfies Config` — that flips the discipline from "the cast hides the gap" to "the typecheck reports the gap".
+
+---
+
 ## 2026-05-02 — Self-referencing FKs need two-pass writes; soft FK orphans want nullify, hard FK orphans want drop
 
 C.t3 surfaced two FK-management patterns worth pinning for any future ETL touching this kind of legacy CMS schema.

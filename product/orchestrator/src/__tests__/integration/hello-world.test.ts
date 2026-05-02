@@ -62,10 +62,11 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     FUNCTIONAL_CLASSIFIER_TEMPERATURE: 0.2,
     SYSTEM_PROMPT_DIR: '../cms/prompts/system',
     SKILLS_DIR: '../cms/prompts/skills',
+    TOOLS_PROMPT_DIR: '../cms/prompts/tools',
     SESSION_BACKEND: 'in-memory' as const,
     SESSION_TTL_IDLE_HOURS: 24,
     SESSION_TTL_ARCHIVE_DAYS: 7,
-    CONNECTOR_URL: 'http://localhost:3001/mcp',
+    CONNECTOR_URL: 'http://localhost:3002/mcp',
     CONNECTOR_REQUEST_TIMEOUT_MS: 10_000,
     PORT: 8080,
     NODE_ENV: 'test',
@@ -86,6 +87,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     packageRoot: '/tmp/test',
     systemPromptDirAbsolutePath: '/tmp/test/cms/prompts/system',
     skillsDirAbsolutePath: '/tmp/test/cms/prompts/skills',
+    toolsPromptDirAbsolutePath: '/tmp/test/cms/prompts/tools',
     handoffTemplatesDirAbsolutePath: '/tmp/test/cms/templates/handoff',
     isProduction: false,
     ...overrides,
@@ -161,8 +163,12 @@ interface StubRunner {
 /**
  * Build a stub ADK runner that yields a canned event stream emulating a
  * real orchestrator turn with a tool call in the middle:
- *   text ("Let me check…") → tool_use (search) → text ("Here's what I found…")
+ *   text ("Let me check…") → tool_use (lookup) → text ("Here's what I found…")
  *   → turnComplete.
+ *
+ * `lookup` is one of the eight intent-named tools (post-B.t3a) — the test
+ * is tool-agnostic at the wire-shape level; we use lookup as a representative
+ * conversational tool with a free-form `question` input.
  *
  * We also capture the orchestrator model name on each call so the test can
  * assert the two models are different.
@@ -182,14 +188,17 @@ function makeStubRunner(orchestratorModel: string): StubRunner {
             {
               functionCall: {
                 id: 'toolu_fake_1',
-                name: 'search',
-                args: { query: 'Patagonia trips' },
+                name: 'lookup',
+                args: { question: 'Patagonia trips' },
               },
             },
           ],
         },
       });
-      // Simulate tool response as a functionResponse turn.
+      // Simulate tool response as a functionResponse turn. The response
+      // shape mirrors `lookup`'s output (chunks + count) loosely — the
+      // integration test cares about wire shape, not schema validity, so
+      // a minimal shape is enough.
       yield mkEvent({
         content: {
           role: 'user',
@@ -197,8 +206,11 @@ function makeStubRunner(orchestratorModel: string): StubRunner {
             {
               functionResponse: {
                 id: 'toolu_fake_1',
-                name: 'search',
-                response: { hits: [{ title: 'Patagonia Classic', score: 0.92 }] },
+                name: 'lookup',
+                response: {
+                  chunks: [{ title: 'Patagonia Classic', summary: 'Five days on the W.' }],
+                  count: 1,
+                },
               },
             },
           ],

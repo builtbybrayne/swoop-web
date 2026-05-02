@@ -14,14 +14,19 @@
 //   handoff          → Open lead-capture
 //   handoff_submit   → Submit lead
 //
-// `search` and `get_detail` from the A.t2 stub are **deprecated** here. They
-// stay exported so the orchestrator's existing connector adapter compiles;
-// B.t3a removes them when it rewrites the adapter against the new surface.
+// History note: an earlier iteration shipped librarian-shaped `search` /
+// `get_detail` tools from the A.t2 stub. Those were retired 2026-05-02 in
+// B.t3a, alongside the orchestrator's connector adapter rewrite — the
+// canonical surface is now exactly the eight tools above (no deprecated pair).
+// See `discoveries.md` 2026-04-30 entry "Five-jobs / eight-tools / no-composer
+// is the load-bearing substrate of chunk C" + the chunk-C ★ Read this first
+// anchor in `planning/02-impl-retrieval-and-data.md`.
 //
 // Tool descriptions live in `cms/prompts/tools/<tool>/description.md` per
 // G.11 — the prose Sonnet reads to pick a tool. The `TOOL_DESCRIPTIONS` map
-// here carries placeholder strings for runtime tool registration; the
-// authoritative copy is the markdown.
+// here carries short labels for runtime tool registration where the SDK
+// requires a description string; the authoritative copy is the markdown,
+// loaded by the connector at boot via `loadAllToolDescriptions`.
 // -----------------------------------------------------------------------------
 
 import { z } from "zod";
@@ -34,70 +39,6 @@ import {
   TrustProofPublicSchema,
   TrustProofTopicSchema,
 } from "./derived.js";
-
-// =============================================================================
-// DEPRECATED — superseded 2026-04-29 by the eight-tool intent-named surface.
-// Removed in B.t3a when the orchestrator's connector adapter is rewritten.
-// =============================================================================
-
-// -----------------------------------------------------------------------------
-// search — keyword / semantic lookup across domain entities.
-//
-// @deprecated since 2026-04-29 — superseded by `lookup` (free-form factual)
-// and `find_options` (structured trip filter). Removed in B.t3a.
-// -----------------------------------------------------------------------------
-
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export const SearchInputSchema = z.object({
-  query: z.string().min(1),
-  entityTypes: z.array(z.enum(["trip", "tour", "region", "story"])).optional(),
-  limit: z.number().int().positive().max(20).optional(),
-});
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export type SearchInput = z.infer<typeof SearchInputSchema>;
-
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export const SearchHitSchema = z.object({
-  entityType: z.enum(["trip", "tour", "region", "story"]),
-  id: z.string(),
-  slug: z.string(),
-  title: z.string(),
-  summary: z.string(),
-  score: z.number().min(0).max(1),
-});
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export type SearchHit = z.infer<typeof SearchHitSchema>;
-
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export const SearchOutputSchema = z.object({
-  hits: z.array(SearchHitSchema),
-  totalMatches: z.number().int().nonnegative(),
-});
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export type SearchOutput = z.infer<typeof SearchOutputSchema>;
-
-// -----------------------------------------------------------------------------
-// get_detail — full record for a single entity.
-//
-// @deprecated since 2026-04-29 — superseded by `lookup` (free-form factual)
-// and `find_options` (structured trip filter). Removed in B.t3a.
-// -----------------------------------------------------------------------------
-
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export const GetDetailInputSchema = z.object({
-  entityType: z.enum(["trip", "tour", "region", "story"]),
-  slug: z.string(),
-});
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export type GetDetailInput = z.infer<typeof GetDetailInputSchema>;
-
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export const GetDetailOutputSchema = z.object({
-  entityType: z.enum(["trip", "tour", "region", "story"]),
-  record: z.record(z.string(), z.unknown()),
-});
-/** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-export type GetDetailOutput = z.infer<typeof GetDetailOutputSchema>;
 
 // =============================================================================
 // CARRIED FORWARD — unchanged from the A.t2 stub. Match the eight-tool surface.
@@ -349,38 +290,25 @@ export const TOOL_NAMES = {
   Illustrate: "illustrate",
   Handoff: "handoff",
   HandoffSubmit: "handoff_submit",
-  // Deprecated — kept for orchestrator compile until B.t3a
-  Search: "search",
-  GetDetail: "get_detail",
 } as const;
 export type ToolNameKey = keyof typeof TOOL_NAMES;
 export type ToolNameValue = (typeof TOOL_NAMES)[ToolNameKey];
 
 // =============================================================================
-// TOOL_DESCRIPTIONS — short labels for runtime tool registration.
+// TOOL_DESCRIPTIONS — short labels for runtime tool registration where the SDK
+// requires a description string but the authoritative copy is the markdown.
 //
 // THE AUTHORITATIVE TOOL DESCRIPTIONS LIVE AT
 // `product/cms/prompts/tools/<tool-name>/description.md` (per G.11).
 //
-// Tool code reads its CMS folder explicitly. The strings here are runtime
-// labels for tool registration where a description string is required by the
-// SDK shape but the rich Sonnet-facing prose comes from the markdown. They're
-// short on purpose — duplication across two surfaces invites drift.
-//
-// TODO(C.t4): The placeholder strings below contain pointers like
-// "See cms/prompts/tools/<tool>/description.md" but no actual loading
-// happens here. C.t4 (tool registration in the connector boot path) is
-// responsible for: (1) reading the markdown at startup from
-// `product/cms/prompts/tools/<tool>/description.md`, (2) substituting the
-// rich prose into the MCP tool registration before the connector advertises
-// the tool surface, and (3) failing fast if any expected description.md is
-// missing. Until that wiring lands, Sonnet sees the short labels here, not
-// the full markdown. This comment is the breadcrumb so the loading step
-// doesn't get missed during C.t4.
+// The connector loads the markdown at boot via `loadAllToolDescriptions` (per
+// C.t4) and registers each tool with the rich prose Sonnet reads. The
+// orchestrator's connector adapter (post-B.t3a) does the same. The strings
+// below are fallback / unit-test labels — the runtime path always prefers the
+// loaded markdown.
 // =============================================================================
 
 export const TOOL_DESCRIPTIONS = {
-  // ---------- Eight-tool intent-named surface (C.25) ----------
   find_inspiring:
     "Surface vivid Patagonia passages — sensory, evocative, ready to weave " +
     "into a response. Reach for this when a visitor's curiosity is open " +
@@ -415,16 +343,6 @@ export const TOOL_DESCRIPTIONS = {
   handoff_submit:
     "Internal: called by the lead-capture widget when the visitor submits " +
     "contact details + tier-2 consent. Not invoked by the model directly.",
-
-  // ---------- Deprecated (B.t3a removes) ----------
-  /** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-  search:
-    "[DEPRECATED 2026-04-29 — use lookup or find_options] Search across " +
-    "Swoop's curated catalogue — trips, tours, regions, stories.",
-  /** @deprecated since 2026-04-29 — superseded by `lookup` / `find_options`. Removed in B.t3a. */
-  get_detail:
-    "[DEPRECATED 2026-04-29 — use lookup or find_options] Fetch the full " +
-    "record for one trip / tour / region / story by slug.",
 } as const;
 
 export type ToolName = keyof typeof TOOL_DESCRIPTIONS;
