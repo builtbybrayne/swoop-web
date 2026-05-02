@@ -104,6 +104,28 @@ export const configSchema = z
     PG_POOL_IDLE_MS: z.coerce.number().int().nonnegative().default(30_000),
     PG_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10_000),
 
+    // --- Tool description loader (C.t4 / C.34) -----------------------------
+    //
+    // Tool descriptions live as markdown under `cms/prompts/tools/<tool>/
+    // description.md`. The MCP server loads each tool's description at boot
+    // (cached process-lifetime) and registers it as the tool's MCP-facing
+    // description string. Per HITL Q3 ratification: fail-fast on ALL 8 tools
+    // if any `description.md` is missing.
+    //
+    // Default mirrors the orchestrator's SYSTEM_PROMPT_DIR pattern: relative
+    // path resolved against the package root at config-load time.
+    TOOLS_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/tools'),
+
+    // --- Voyage embeddings (C.t4) ------------------------------------------
+    //
+    // Voyage-3 / 1024d (decision C.18). The connector's vector retrieval
+    // primitives call Voyage to embed visitor utterances into a search
+    // vector. Optional at config-load time so connector boot doesn't fail
+    // when Voyage is unavailable; primitives that need an embedding throw
+    // a typed error if VOYAGE_API_KEY is missing at call time. Tests inject
+    // their own embedQuery function and never touch this.
+    VOYAGE_API_KEY: z.string().trim().min(1).optional(),
+
     // --- Environment selector ----------------------------------------------
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
@@ -135,6 +157,8 @@ export type Config = Readonly<
     readonly packageRoot: string;
     /** Absolute path to the migrations directory consumed by migrate.ts. */
     readonly migrationsDirAbsolutePath: string;
+    /** Absolute path to the tools-prompt directory (cms/prompts/tools). */
+    readonly toolsPromptDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. */
     readonly isProduction: boolean;
   }

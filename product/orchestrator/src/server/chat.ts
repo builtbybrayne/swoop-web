@@ -28,7 +28,7 @@ import type { Request, Response } from 'express';
 import { createHash } from 'node:crypto';
 import type { Content } from '@google/genai';
 import type { Runner, Event as AdkEvent } from '@google/adk';
-import { ChatRequestSchema, emitEvent } from '@swoop/common';
+import { ChatRequestSchema, emitErrorRaised, emitEvent, messageOf } from '@swoop/common';
 import type {
   MessagePart,
   ReasoningPart,
@@ -171,19 +171,14 @@ export function createChatHandler(
           }
         }
       } catch (err) {
-        emitEvent({
-          eventType: 'error.raised',
-          eventVersion: 1,
-          timestamp: now().toISOString(),
+        emitErrorRaised({
           sessionId,
           turnIndex: userTurnIndex,
           actor: 'system',
-          payload: {
-            errorType: 'triage_classifier_failed',
-            chunk: 'B',
-            sanitisedContext:
-              (err instanceof Error ? err.message : String(err)).slice(0, 500),
-          },
+          errorType: 'triage_classifier_failed',
+          chunk: 'B',
+          err,
+          now,
         });
       }
     }
@@ -344,22 +339,18 @@ export function createChatHandler(
         });
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = messageOf(err);
       if (!closed) {
         writeSseError(res, 'internal_error', message);
       }
-      emitEvent({
-        eventType: 'error.raised',
-        eventVersion: 1,
-        timestamp: now().toISOString(),
+      emitErrorRaised({
         sessionId,
         turnIndex: userTurnIndex,
         actor: 'system',
-        payload: {
-          errorType: 'chat_turn_failed',
-          chunk: 'B',
-          sanitisedContext: message.slice(0, 500),
-        },
+        errorType: 'chat_turn_failed',
+        chunk: 'B',
+        sanitisedContext: message,
+        now,
       });
     } finally {
       stopHeartbeat();

@@ -19,7 +19,7 @@
  */
 
 import type { Request, Response } from 'express';
-import { SessionBootstrapRequestSchema, emitEvent } from '@swoop/common';
+import { SessionBootstrapRequestSchema, emitErrorRaised, emitEvent } from '@swoop/common';
 import type { SessionStore, SessionAllocator } from '../session/index.js';
 import { DISCLOSURE_COPY_VERSION, sendError } from './errors.js';
 
@@ -120,18 +120,12 @@ export function createSessionBootstrapHandler(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'session bootstrap failed';
-      emitEvent({
-        eventType: 'error.raised',
-        eventVersion: 1,
-        timestamp: new Date().toISOString(),
+      emitErrorRaised({
         sessionId: 'unknown',
-        turnIndex: null,
         actor: 'system',
-        payload: {
-          errorType: 'session_bootstrap_failed',
-          chunk: 'B',
-          sanitisedContext: message.slice(0, 500),
-        },
+        errorType: 'session_bootstrap_failed',
+        chunk: 'B',
+        sanitisedContext: message,
       });
       sendError(res, 500, 'internal_error', message);
     }

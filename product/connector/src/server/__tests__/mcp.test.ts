@@ -1,17 +1,9 @@
 /**
- * Tests for the connector's MCP-over-HTTP surface.
+ * Tests for the connector's MCP-over-HTTP surface (post-C.t4).
  *
- * Boots the Express app via supertest, drives an MCP client over the
- * SDK's `StreamableHTTPClientTransport`, and verifies:
- *   - `tools/list` returns exactly the no-op `ping` tool (the C.t1 surface).
- *   - Calling `ping` returns the expected `{ ok, version }` payload.
- *
- * We use a real MCP client (not raw JSON-RPC) so the test doubles as a
- * smoke check on the transport contract — anything that breaks the round-
- * trip (incorrect content-type, missing session header, etc.) surfaces here.
- *
- * Verifies HITL Q4 ratification: HTTP MCP surface stands up NOW with a
- * no-op ping tool that responds with `{ok: true, version: <pkg version>}`.
+ * Boots the Express app via supertest, drives an MCP client over the SDK's
+ * `StreamableHTTPClientTransport`, and verifies the eight intent-named tools
+ * are advertised + that the no-op `ping` tool is gone (per C.t4 ratification).
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -23,8 +15,10 @@ import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 import { buildApp } from '../app.js';
+import { ALL_TOOL_NAMES, type ToolDescriptions } from '../../tools/index.js';
+import type { EmbedQueryFn } from '../../data/embed-query.js';
 
-/** Throw-on-touch pool — these tests never hit /readyz. */
+/** Throw-on-touch pool — most tests don't hit /readyz or any tool body. */
 function makeThrowingPool(): pg.Pool {
   return new Proxy({} as pg.Pool, {
     get() {
@@ -33,12 +27,26 @@ function makeThrowingPool(): pg.Pool {
   });
 }
 
+/** Fixed-vector embedQuery for tests — never calls Voyage. */
+const stubEmbedQuery: EmbedQueryFn = async () => new Array(1024).fill(0);
+
+/** Synthetic descriptions covering all eight tools. */
+function makeStubDescriptions(): ToolDescriptions {
+  const out: Record<string, string> = {};
+  for (const name of ALL_TOOL_NAMES) {
+    out[name] = `Stub description for ${name} (test fixture).`;
+  }
+  return Object.freeze(out as Record<(typeof ALL_TOOL_NAMES)[number], string>);
+}
+
 let server: Server | undefined;
 let baseUrl: string | undefined;
 
 beforeEach(async () => {
   const app = buildApp({
     pool: makeThrowingPool(),
+    embedQuery: stubEmbedQuery,
+    descriptions: makeStubDescriptions(),
     readinessHandler: (_req, res) => {
       res.json({ status: 'ready', db: 'ok' });
     },
@@ -74,29 +82,43 @@ async function withMcpClient<T>(fn: (client: McpClient) => Promise<T>): Promise<
 }
 
 describe('MCP /mcp endpoint', () => {
-  it('lists exactly the ping tool', async () => {
+  it('lists exactly the eight intent-named tools (no ping)', async () => {
     const tools = await withMcpClient(async (client) => client.listTools());
-    expect(tools.tools).toHaveLength(1);
-    expect(tools.tools[0]?.name).toBe('ping');
-    // Description carries the C.t1 / C.t4 lineage so future agents reading
-    // `mcp inspect` know this tool is throwaway.
-    expect(tools.tools[0]?.description).toMatch(/C\.t1|C\.t4|no-op/i);
+    const names = tools.tools.map((t) => t.name).sort();
+    expect(names).toEqual([...ALL_TOOL_NAMES].sort());
+    expect(names).not.toContain('ping');
+    expect(tools.tools).toHaveLength(8);
   });
 
-  it('ping tool returns ok: true with a version string', async () => {
+  it('each tool advertises its loaded description', async () => {
+    const tools = await withMcpClient(async (client) => client.listTools());
+    for (const t of tools.tools) {
+      expect(t.description).toMatch(/Stub description for/);
+    }
+  });
+
+  it('handoff tool returns widget_triggered + uuid widgetToken', async () => {
     const result = await withMcpClient(async (client) =>
-      client.callTool({ name: 'ping', arguments: {} }),
+      client.callTool({
+        name: 'handoff',
+        arguments: {
+          verdict: 'qualified',
+          reasonCode: 'ready_to_book',
+          conversationSummary: 'Visitor wants W trek in March',
+          motivationAnchor: 'autumn light in Patagonia',
+        },
+      }),
     );
-    // Verify via the structured-content channel — that's the load-bearing
-    // signal Sonnet would consume in production.
-    const structured = (result.structuredContent ?? {}) as { ok?: boolean; version?: string };
-    expect(structured.ok).toBe(true);
-    expect(typeof structured.version).toBe('string');
-    expect(structured.version!.length).toBeGreaterThan(0);
+    const structured = (result.structuredContent ?? {}) as {
+      status?: string;
+      widgetToken?: string;
+    };
+    expect(structured.status).toBe('widget_triggered');
+    expect(typeof structured.widgetToken).toBe('string');
+    expect(structured.widgetToken!.length).toBeGreaterThan(0);
   });
 
   it('rejects /mcp requests without an active session', async () => {
-    // Hit /mcp directly with a non-initialize body — should 400.
     const res = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },

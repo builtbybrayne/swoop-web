@@ -42,6 +42,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { messageOf } from '@swoop/common';
+
 /** Files matching this pattern under `cms/prompts/system/` are concatenated
  *  into the system prompt; everything else is ignored. Two-digit numeric
  *  prefix is required to keep lexicographic sort stable past 9. */
@@ -94,7 +96,7 @@ function loadAndJoin(absoluteDirPath: string): string {
   try {
     entries = readdirSync(absoluteDirPath, { withFileTypes: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = messageOf(err);
     throw new Error(
       `[orchestrator] Failed to read system-prompt directory at ${absoluteDirPath}: ${message}`,
     );
@@ -121,7 +123,7 @@ function loadAndJoin(absoluteDirPath: string): string {
     try {
       raw = readFileSync(filePath, 'utf8');
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = messageOf(err);
       throw new Error(
         `[orchestrator] Failed to read system-prompt fragment ${filePath}: ${message}`,
       );

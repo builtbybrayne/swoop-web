@@ -13,7 +13,7 @@
  */
 
 import path from 'node:path';
-import { emitEvent } from '@swoop/common';
+import { emitErrorRaised } from '@swoop/common';
 import { configSchema, PACKAGE_ROOT, type Config } from './schema.js';
 
 /**
@@ -48,18 +48,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // Structured signal for Cloud Logging / BigQuery so config failures at
     // boot are greppable alongside runtime events. `sessionId` is
     // deliberately `"unknown"` — boot fails before any session exists.
-    emitEvent({
-      eventType: 'error.raised',
-      eventVersion: 1,
-      timestamp: new Date().toISOString(),
+    emitErrorRaised({
       sessionId: 'unknown',
-      turnIndex: null,
       actor: 'system',
-      payload: {
-        errorType: 'config_invalid',
-        chunk: 'B',
-        sanitisedContext: issues.slice(0, 500),
-      },
+      errorType: 'config_invalid',
+      chunk: 'B',
+      sanitisedContext: issues,
     });
     // Human-facing tail stays on stderr so the operator sees the pointer to
     // .env.example immediately without hunting through structured logs.

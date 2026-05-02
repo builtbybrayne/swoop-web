@@ -31,7 +31,7 @@ loadDotenv({ override: true });
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { InMemoryRunner } from '@google/adk';
-import { emitEvent } from '@swoop/common';
+import { emitErrorRaised, messageOf } from '@swoop/common';
 import { FsHandoffStore, type MailerConfig } from '@swoop/connector';
 
 import { loadConfig } from './config/index.js';
@@ -193,19 +193,12 @@ async function main(): Promise<void> {
       console.warn('[orchestrator] warm pool stop failed during shutdown:', err);
     });
     connector.client.close().catch((err) => {
-      emitEvent({
-        eventType: 'error.raised',
-        eventVersion: 1,
-        timestamp: new Date().toISOString(),
+      emitErrorRaised({
         sessionId: 'unknown',
-        turnIndex: null,
         actor: 'system',
-        payload: {
-          errorType: 'connector_close_failed',
-          chunk: 'B',
-          sanitisedContext:
-            (err instanceof Error ? err.message : String(err)).slice(0, 500),
-        },
+        errorType: 'connector_close_failed',
+        chunk: 'B',
+        err,
       });
     });
     server.close(() => process.exit(0));
@@ -216,19 +209,15 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  emitEvent({
-    eventType: 'error.raised',
-    eventVersion: 1,
-    timestamp: new Date().toISOString(),
+  // Stack-preferring sanitisedContext: orchestrator startup failure is
+  // operator-facing, so the full trace beats just `err.message`.
+  emitErrorRaised({
     sessionId: 'unknown',
-    turnIndex: null,
     actor: 'system',
-    payload: {
-      errorType: 'orchestrator_startup_failed',
-      chunk: 'B',
-      sanitisedContext:
-        (err instanceof Error ? err.stack ?? err.message : String(err)).slice(0, 500),
-    },
+    errorType: 'orchestrator_startup_failed',
+    chunk: 'B',
+    sanitisedContext:
+      err instanceof Error ? err.stack ?? err.message : String(err),
   });
   // Also stderr so the operator sees the full trace at process exit.
   console.error('[orchestrator] fatal startup error:', err);

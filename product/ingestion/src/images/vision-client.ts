@@ -26,6 +26,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { messageOf } from '@swoop/common';
 import type {
   ImageBlockParam,
   MessageCreateParamsNonStreaming,
@@ -236,7 +237,7 @@ function extractAssistantText(
  * `failed` entries.
  */
 function classifyError(err: unknown): AnnotateErr {
-  const message = err instanceof Error ? err.message : String(err);
+  const message = messageOf(err);
   const status = (err as { status?: number; statusCode?: number }).status
     ?? (err as { status?: number; statusCode?: number }).statusCode;
   // Anthropic SDK exposes status on APIError; some throws (network) won't.

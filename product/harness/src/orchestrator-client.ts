@@ -20,7 +20,7 @@
  * need without re-parsing the SSE.
  */
 
-import { parseSseFrames } from '@swoop/common';
+import { messageOf, parseSseFrames } from '@swoop/common';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
 
@@ -156,7 +156,7 @@ export class OrchestratorClient {
       });
     } catch (err) {
       clearTimeout(timer);
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = messageOf(err);
       throw new Error(`POST /chat fetch failed: ${reason}`);
     }
 

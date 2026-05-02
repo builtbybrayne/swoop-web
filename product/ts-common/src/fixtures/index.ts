@@ -21,13 +21,14 @@ export {
   SampleHandoffInconclusive,
 } from "./handoff.sample.js";
 
-// Event fixtures — one per event kind + back-compat alias. See F-a.
+// Event fixtures — one per event kind + back-compat alias. See F-a + C.t4.
 export {
   SampleEvent,
   SampleEventHandoffSubmitted,
   SampleEventConsentGranted,
   SampleEventConsentDeclined,
   SampleEventToolFailed,
+  SampleEventToolInvoked,
   SampleEventHandoffTriggered,
   SampleEventSkillLoaded,
   SampleEventUiWidgetRendered,

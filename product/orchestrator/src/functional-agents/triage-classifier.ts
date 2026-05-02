@@ -56,7 +56,7 @@ import { LlmAgent } from '@google/adk';
 import type { Config } from '../config/index.js';
 import { getModelFor, type ModelConfig } from '../config/index.js';
 import { ClaudeLlm } from '../agent/claude-llm.js';
-import { emitEvent } from '@swoop/common';
+import { emitErrorRaised } from '@swoop/common';
 import type { SessionState, TriageState } from '@swoop/common';
 
 // ---------------------------------------------------------------------------
@@ -249,19 +249,12 @@ async function runClassification(params: {
     if (resp.errorCode) {
       // Classifier failure is not fatal — emit an error event and fall
       // through to the unclear fallback so the orchestrator turn proceeds.
-      emitEvent({
-        eventType: 'error.raised',
-        eventVersion: 1,
-        timestamp: new Date().toISOString(),
+      emitErrorRaised({
         sessionId: session.sessionId,
-        turnIndex: null,
         actor: 'system',
-        payload: {
-          errorType: 'triage_classifier_llm_error',
-          chunk: 'B',
-          sanitisedContext:
-            `${resp.errorCode}: ${resp.errorMessage ?? '(no message)'}`.slice(0, 500),
-        },
+        errorType: 'triage_classifier_llm_error',
+        chunk: 'B',
+        sanitisedContext: `${resp.errorCode}: ${resp.errorMessage ?? '(no message)'}`,
       });
       return fallback('classifier_error', modelConfig.model);
     }

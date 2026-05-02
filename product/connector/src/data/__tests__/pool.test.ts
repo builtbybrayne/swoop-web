@@ -30,9 +30,11 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     PG_POOL_MAX: 10,
     PG_POOL_IDLE_MS: 30_000,
     PG_STATEMENT_TIMEOUT_MS: 10_000,
+    TOOLS_PROMPT_DIR: '../cms/prompts/tools',
     NODE_ENV: 'development' as const,
     packageRoot: '/tmp/fake-package-root',
     migrationsDirAbsolutePath: '/tmp/fake-package-root/migrations',
+    toolsPromptDirAbsolutePath: '/tmp/fake-package-root/cms/prompts/tools',
     isProduction: false,
   });
   return Object.freeze({ ...base, ...overrides });

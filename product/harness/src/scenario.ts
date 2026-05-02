@@ -29,6 +29,8 @@ import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
+import { messageOf } from '@swoop/common';
+
 // ---------------------------------------------------------------------------
 // Verdict + tier enums.
 //
@@ -299,7 +301,7 @@ export function loadScenarios(dir: string): LoadedScenario[] {
     try {
       parsed = parseYaml(raw);
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = messageOf(err);
       throw new Error(`[harness] YAML parse error in ${file}: ${reason}`);
     }
     const result = ScenarioSchema.safeParse(parsed);

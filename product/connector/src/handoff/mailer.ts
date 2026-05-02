@@ -50,6 +50,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import nodemailer from 'nodemailer';
 import type { Transporter, SendMailOptions } from 'nodemailer';
+import { messageOf } from '@swoop/common';
 import type {
   HandoffPayload,
   HandoffPayloadQualified,
@@ -152,7 +153,7 @@ export async function sendHandoffEmail(
   try {
     rawTemplate = readTemplate(templatePath);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = messageOf(err);
     return { status: 'failed', reason: `template_read_failed: ${message}` };
   }
 
@@ -178,7 +179,7 @@ export async function sendHandoffEmail(
     await transporter.sendMail(mailOptions);
     return { status: 'sent', toAddress, subject };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = messageOf(err);
     return { status: 'failed', reason: `smtp_send_failed: ${message}` };
   }
 }

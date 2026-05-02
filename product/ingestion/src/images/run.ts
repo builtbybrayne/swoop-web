@@ -33,6 +33,9 @@
  */
 
 import type pg from 'pg';
+
+import { messageOf } from '@swoop/common';
+
 import { fetchCandidates, type Candidate } from './candidates.js';
 import { estimateCost, formatCostEstimate, fitsBudget, type CostEstimate } from './cost.js';
 import {
@@ -369,7 +372,7 @@ async function applyOutcome(
         `[annotate] image=${candidate.id} done desc_written=${wb.descriptionWritten} ann_written=${wb.annotationWritten} tags_written=${wb.tagsWritten}`,
       );
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = messageOf(err);
       recordEntry(args.checkpointFile, candidate.id, 'failed', `write_back: ${reason}`);
       args.summary.failed += 1;
       args.log(`[annotate] image=${candidate.id} write_back FAILED: ${reason}`);
@@ -508,7 +511,7 @@ function parseAndValidate(
   } catch (err) {
     return {
       ok: false,
-      reason: `parse_error: ${err instanceof Error ? err.message : String(err)}`,
+      reason: `parse_error: ${messageOf(err)}`,
     };
   }
   const result = ImageAnnotationOutputSchema.safeParse(json);
