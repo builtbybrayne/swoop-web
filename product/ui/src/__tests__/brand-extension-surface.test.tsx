@@ -15,11 +15,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ChromeBadge } from "../disclosure/chrome-badge";
 import { OpeningScreen } from "../disclosure/opening-screen";
 import { ErrorBanner } from "../errors/error-banner";
-import { SearchResultsWidget } from "../widgets/search-results";
-import { ItemDetailWidget } from "../widgets/item-detail";
 import { InspirationWidget } from "../widgets/inspiration";
 import { LeadCaptureWidget } from "../widgets/lead-capture";
-import { SampleHandoff, SampleTrip } from "@swoop/common/fixtures";
+import { SampleHandoff } from "@swoop/common/fixtures";
 
 afterEach(() => cleanup());
 
@@ -29,7 +27,7 @@ function toolProps<T>(overrides: Partial<Record<string, unknown>>): T {
   return {
     type: "tool-call" as const,
     toolCallId: "call_handover",
-    toolName: "search",
+    toolName: "illustrate",
     args: {},
     argsText: "{}",
     addResult: () => {},
@@ -88,55 +86,11 @@ describe("brand extension surface (data-swoop-part contract)", () => {
     expect(banner).toHaveAttribute("data-swoop-part", "error-banner");
   });
 
-  it("SearchResultsWidget root carries widget + discriminator", () => {
-    const result = {
-      hits: [
-        {
-          entityType: "trip",
-          id: SampleTrip.id,
-          slug: SampleTrip.slug,
-          title: SampleTrip.title,
-          summary: SampleTrip.summary,
-          score: 0.9,
-          heroImageUrl: SampleTrip.heroImageUrl,
-          publicUrl: "https://example.com/trip",
-        },
-      ],
-      totalMatches: 1,
-    };
-    render(
-      <SearchResultsWidget
-        {...toolProps<React.ComponentProps<typeof SearchResultsWidget>>({
-          toolName: "search",
-          result,
-        })}
-      />,
-    );
-    const root = screen.getByTestId("search-results");
-    expect(root).toHaveAttribute("data-swoop-part", "widget");
-    expect(root).toHaveAttribute("data-swoop-widget", "search-results");
-  });
-
-  it("ItemDetailWidget root carries widget + discriminator", () => {
-    const result = {
-      entityType: "trip",
-      record: {
-        title: SampleTrip.title,
-        summary: SampleTrip.summary,
-      },
-    };
-    render(
-      <ItemDetailWidget
-        {...toolProps<React.ComponentProps<typeof ItemDetailWidget>>({
-          toolName: "get_detail",
-          result,
-        })}
-      />,
-    );
-    const root = screen.getByTestId("item-detail");
-    expect(root).toHaveAttribute("data-swoop-part", "widget");
-    expect(root).toHaveAttribute("data-swoop-widget", "item-detail");
-  });
+  // Per B.t3a (2026-05-02): SearchResultsWidget + ItemDetailWidget retired
+  // alongside the deprecated `search` / `get_detail` tools. D.t9 picks up
+  // per-tool widgets for the five intent-named conversational tools; until
+  // those land, only InspirationWidget + LeadCaptureWidget have brand-
+  // extension surface tests here.
 
   it("InspirationWidget root carries widget + discriminator", () => {
     const result = {

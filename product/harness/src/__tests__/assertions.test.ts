@@ -42,11 +42,11 @@ function ctx(overrides: Partial<RunContext> = {}): RunContext {
   };
 }
 
-function searchCall(
+function lookupCall(
   turnIndex: number,
   input: Record<string, unknown> = {},
 ): CapturedToolCall {
-  return { turnIndex, toolName: 'search', input };
+  return { turnIndex, toolName: 'lookup', input };
 }
 
 function triageDecidedEvent(
@@ -167,18 +167,18 @@ describe('not_contains', () => {
 describe('tool_call', () => {
   it('passes when the named tool was called on any turn', async () => {
     const out = await evaluateAssertion(
-      { kind: 'tool_call', toolName: 'search' },
-      ctx({ toolCalls: [searchCall(1, { activity: 'hiking' })] }),
+      { kind: 'tool_call', toolName: 'lookup' },
+      ctx({ toolCalls: [lookupCall(1, { activity: 'hiking' })] }),
       stubJudge,
     );
     expect(out.passed).toBe(true);
-    expect(out.message).toMatch(/search/);
+    expect(out.message).toMatch(/lookup/);
   });
 
   it('fails when the named tool was never called', async () => {
     const out = await evaluateAssertion(
       { kind: 'tool_call', toolName: 'illustrate' },
-      ctx({ toolCalls: [searchCall(1)] }),
+      ctx({ toolCalls: [lookupCall(1)] }),
       stubJudge,
     );
     expect(out.passed).toBe(false);
@@ -187,8 +187,8 @@ describe('tool_call', () => {
 
   it('respects atTurn — passes when the call happened on the right turn', async () => {
     const out = await evaluateAssertion(
-      { kind: 'tool_call', toolName: 'search', atTurn: 2 },
-      ctx({ toolCalls: [searchCall(1), searchCall(2, { activity: 'hiking' })] }),
+      { kind: 'tool_call', toolName: 'lookup', atTurn: 2 },
+      ctx({ toolCalls: [lookupCall(1), lookupCall(2, { activity: 'hiking' })] }),
       stubJudge,
     );
     expect(out.passed).toBe(true);
@@ -196,8 +196,8 @@ describe('tool_call', () => {
 
   it('respects atTurn — fails when the call was on a different turn', async () => {
     const out = await evaluateAssertion(
-      { kind: 'tool_call', toolName: 'search', atTurn: 2 },
-      ctx({ toolCalls: [searchCall(1)] }),
+      { kind: 'tool_call', toolName: 'lookup', atTurn: 2 },
+      ctx({ toolCalls: [lookupCall(1)] }),
       stubJudge,
     );
     expect(out.passed).toBe(false);
@@ -208,12 +208,12 @@ describe('tool_call', () => {
     const out = await evaluateAssertion(
       {
         kind: 'tool_call',
-        toolName: 'search',
+        toolName: 'lookup',
         argsContains: { activity: 'hiking' },
       },
       ctx({
         toolCalls: [
-          searchCall(1, { activity: 'hiking', region: 'patagonia', limit: 5 }),
+          lookupCall(1, { activity: 'hiking', region: 'patagonia', limit: 5 }),
         ],
       }),
       stubJudge,
@@ -226,10 +226,10 @@ describe('tool_call', () => {
     const out = await evaluateAssertion(
       {
         kind: 'tool_call',
-        toolName: 'search',
+        toolName: 'lookup',
         argsContains: { activity: 'hiking' },
       },
-      ctx({ toolCalls: [searchCall(1, { activity: 'kayaking' })] }),
+      ctx({ toolCalls: [lookupCall(1, { activity: 'kayaking' })] }),
       stubJudge,
     );
     expect(out.passed).toBe(false);
@@ -240,12 +240,12 @@ describe('tool_call', () => {
     const out = await evaluateAssertion(
       {
         kind: 'tool_call',
-        toolName: 'search',
+        toolName: 'lookup',
         argsContains: { filters: { activity: 'hiking' } },
       },
       ctx({
         toolCalls: [
-          searchCall(1, {
+          lookupCall(1, {
             filters: { activity: 'hiking', month: 'march' },
             limit: 5,
           }),
@@ -638,11 +638,11 @@ describe('evaluateAll', () => {
       [
         { kind: 'contains', text: 'hello' },
         { kind: 'not_contains', text: 'email address' },
-        { kind: 'tool_call', toolName: 'search' },
+        { kind: 'tool_call', toolName: 'lookup' },
       ],
       ctx({
         finalUtterance: 'Hello traveller — what draws you to Patagonia?',
-        toolCalls: [searchCall(1)],
+        toolCalls: [lookupCall(1)],
       }),
       stubJudge,
     );

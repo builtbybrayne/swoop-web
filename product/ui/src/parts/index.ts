@@ -15,9 +15,13 @@
 //   - `Reasoning`: the dev-mode guard. Any reasoning part hitting this is a
 //     translator bug (decision D.9).
 //   - `data.by_name.fyi`: the ephemeral `<fyi>` renderer.
-//   - `tools.by_name.{search,get_detail,illustrate,handoff}`: widget
-//     renderers (D.t3). Imported from ../widgets so each tool has a single
-//     registration site.
+//   - `tools.by_name.{illustrate,handoff}`: widget renderers (D.t3).
+//     Imported from ../widgets so each tool has a single registration site.
+//     Post-B.t3a 2026-05-02: the librarian-shaped `search` / `get_detail`
+//     widget entries retired alongside the schemas they consumed.
+//     Per-tool widgets for the five intent-named conversational tools
+//     land in D.t9 — until then Sonnet weaves their structured outputs
+//     directly into prose.
 //
 // Importing this module is sufficient to wire the renderers. App.tsx imports
 // it for the side-effect-free named export and passes it to Parts.

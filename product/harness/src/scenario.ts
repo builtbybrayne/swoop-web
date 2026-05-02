@@ -84,8 +84,8 @@ const NotContainsAssertionSchema = z
  *   - `argsContains` (optional): a partial-match record. Every key in the
  *     record must be present in the captured tool-call's `input` object with
  *     a deeply-equal value. Missing keys on the tool call cause failure;
- *     extra keys are fine. Useful for "the agent called `search` with at
- *     least `{ activity: 'hiking' }` somewhere in args".
+ *     extra keys are fine. Useful for "the agent called `find_options` with
+ *     at least `{ activity: 'hiking' }` somewhere in args".
  */
 const ToolCallAssertionSchema = z
   .object({

@@ -81,14 +81,14 @@ describe("emitUiEvent", () => {
     window.sessionStorage.setItem(SESSION_STORAGE_KEY, "sess-widget");
     emitUiEvent({
       eventType: "ui.widget_rendered",
-      payload: { widgetType: "search-results", toolName: "search", turnIndex: 3 },
+      payload: { widgetType: "inspiration", toolName: "illustrate", turnIndex: 3 },
     });
 
     expect(captured).toHaveLength(1);
     const event = captured[0]!;
     if (event.eventType === "ui.widget_rendered") {
       expect(event.payload.turnIndex).toBe(3);
-      expect(event.payload.toolName).toBe("search");
+      expect(event.payload.toolName).toBe("illustrate");
     }
   });
 });
