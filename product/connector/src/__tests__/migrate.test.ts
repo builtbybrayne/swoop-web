@@ -25,7 +25,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.resolve(HERE, '..', '..', 'migrations');
 
 describe('migrate.ts setup', () => {
-  it('migrations directory contains the six C.t2 SQL files', () => {
+  it('migrations directory contains the expected SQL files (001–007)', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith('.sql'))
       .sort();
@@ -37,6 +37,7 @@ describe('migrate.ts setup', () => {
       '004_indexes.sql',
       '005_canonical_url_function.sql',
       '006_customerreview_tables.sql',
+      '007_image_annotation.sql',
     ]);
   });
 
