@@ -22,7 +22,7 @@
  */
 
 import type { SessionState } from '@swoop/common';
-import { emitEvent, messageOf } from '@swoop/common';
+import { emitErrorRaised, emitEvent, messageOf } from '@swoop/common';
 import type { SessionStore } from './interface.js';
 
 /**
@@ -277,18 +277,12 @@ export class WarmSessionPool implements SessionAllocator {
     } catch (err) {
       // Observability — refill failures should be visible but must not crash
       // the timer. Emit the sanitised context and move on.
-      emitEvent({
-        eventType: 'error.raised',
-        eventVersion: 1,
-        timestamp: new Date().toISOString(),
+      emitErrorRaised({
         sessionId: 'warm-pool',
-        turnIndex: null,
         actor: 'system',
-        payload: {
-          errorType: 'warm_pool_tick_failed',
-          chunk: 'B',
-          sanitisedContext: messageOf(err),
-        },
+        errorType: 'warm_pool_tick_failed',
+        chunk: 'B',
+        err,
       });
     }
   }
@@ -367,18 +361,12 @@ export class WarmSessionPool implements SessionAllocator {
       if (created) {
         await this.sessionStore.delete(created.sessionId).catch(() => {});
       }
-      emitEvent({
-        eventType: 'error.raised',
-        eventVersion: 1,
-        timestamp: new Date().toISOString(),
+      emitErrorRaised({
         sessionId: created?.sessionId ?? 'warm-pool',
-        turnIndex: null,
         actor: 'system',
-        payload: {
-          errorType: 'warm_pool_build_failed',
-          chunk: 'B',
-          sanitisedContext: messageOf(err),
-        },
+        errorType: 'warm_pool_build_failed',
+        chunk: 'B',
+        err,
       });
       return null;
     }
