@@ -22,6 +22,8 @@
  * you've drifted bottom-up. Stop and re-anchor.
  */
 
+import { canonicalUrl, IMGIX_HOST, SWOOP_PATAGONIA_HOST } from '@swoop/common';
+
 import type { DumpRow } from './parser.js';
 import type { Lookups } from './lookups.js';
 import { numOrNull, strOrNull } from './lookups.js';
@@ -33,8 +35,10 @@ import { numOrNull, strOrNull } from './lookups.js';
 /** Per discoveries.md 2026-04-29: pagetype 20 is Profile (specialist bios). */
 const PAGETYPE_PROFILE_ID = 20;
 
-const SWOOP_HOST = 'https://www.swoop-patagonia.com/';
-const IMGIX_HOST = 'https://swoop-patagonia.imgix.net/';
+// Swoop production + imgix tenant hosts live in @swoop/common/image (decisions
+// C.15 + C.42). Imported above; aliased here for stable diff against the prior
+// inline constants. SWOOP_PATAGONIA_HOST has a trailing slash; IMGIX_HOST does
+// not (so a slash is added at the call site).
 
 /**
  * Test-page filter (decision C.28). Conservative: only obviously-test
@@ -165,9 +169,9 @@ export function transformImage(row: DumpRow, lookups: Lookups): Record<string, u
   if (!file) return null; // file row missing or not an image extension.
 
   // Construct imgix-prefixed URL. Render-variant params are NOT applied at
-  // ETL — they're applied at read-time per Tier 2 §2.6. ETL stores the bare
-  // filename URL.
-  const canonical_url = `${IMGIX_HOST}${file.name}`;
+  // ETL — they're applied at read-time per Tier 2 §2.6 via @swoop/common's
+  // imgixUrl(). ETL stores the bare filename URL.
+  const canonical_url = `${IMGIX_HOST}/${file.name}`;
   const tagIds = lookups.ntagsByEntity.get('image')?.get(id) ?? [];
 
   return {
@@ -219,12 +223,12 @@ export function transformPage(row: DumpRow, lookups: Lookups): PageTransformResu
     return { row: null, reason: 'test_page' };
   }
 
-  // canonical_url construction. Per discoveries.md 2026-04-29 + C.15:
-  // override_url || alias, prefixed with the production host.
+  // canonical_url construction. Per discoveries.md 2026-04-29 + C.15: shared
+  // override_url || alias rule lives in @swoop/common/image's canonicalUrl().
   const overrideUrl = strOrNull(row.values.override_url);
-  const slug = overrideUrl ?? alias;
+  const slug = canonicalUrl({ override_url: overrideUrl, alias });
   if (slug === null) return { row: null, reason: 'missing_canonical' };
-  const canonical_url = `${SWOOP_HOST}${slug}`;
+  const canonical_url = `${SWOOP_PATAGONIA_HOST}${slug}`;
 
   const imageId = numOrNull(row.values.image_id);
   const bannerId = numOrNull(row.values.banner_id);

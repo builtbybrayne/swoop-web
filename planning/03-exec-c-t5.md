@@ -187,7 +187,80 @@ Numbered for tracking. Items 1 + 2 should be closed by Al before the executing a
 
 ## Execution log
 
-*(Appended by the executing agent post-execution. Format: dated entries, what landed, what was deferred, what surfaced for downstream tasks.)*
+### 2026-05-02 — C.t5 implemented (single-file shape; SQL-transform refactored to consume)
+
+**Landed:**
+
+1. **`product/ts-common/src/image.ts`** (new, ~210 lines incl. JSDoc) — single utility module exporting:
+   - Constants: `IMGIX_HOST` = `'https://swoop-patagonia.imgix.net'`; `SWOOP_PATAGONIA_HOST` = `'https://www.swoop-patagonia.com/'`; `DEFAULT_IMGIX_PARAMS` = `'auto=format,enhance,compress&fit=crop&q=80'`.
+   - `canonicalUrl({ override_url?, alias })` — path-only canonical; mirrors SQL `canonical_url(override_url, alias)` (migration 005) including the empty-string-as-absent rule. Returns `null` when both inputs are absent.
+   - `pageUrl({ override_url?, alias })` — thin wrapper, prepends host. Returns `null` if `canonicalUrl` would.
+   - `imgixUrl(filename, params?)` — composes `${IMGIX_HOST}/${filename}?${params ?? DEFAULT_IMGIX_PARAMS}`. Params treated as opaque querystring.
+   - `resolveImageSet(record, pageImageIds)` — page-as-hub fallback per C.16 + 2026-04-29 discovery. Direct-join wins; falls back to page-attached; otherwise empty. Short-circuits at the first non-empty layer (per HITL Q5).
+   - Types: `CanonicalUrlInput`, `ImageSetRecord`, `PageImageLookup`.
+   - Decision-log cross-references in JSDoc (C.15 / C.16 / C.41 / C.42).
+
+   Plan §"Outputs" called for two files (`url.ts` + `image.ts`); the dispatch summary called for one. Honoured the dispatch — single file. The split was an organisational nicety, not load-bearing; one file lands easier and the section comments inside the file demarcate the URL helpers from the image helpers cleanly.
+
+2. **Re-export from `product/ts-common/src/index.ts`** — appended `export * from "./image.js";`.
+
+3. **Tests at `product/ts-common/src/__tests__/image.test.ts`** (23 cases):
+   - `canonicalUrl`: override-wins (W-Trek shape), alias-fallback when override is null/undefined/empty-string, both-absent → null.
+   - `pageUrl`: composes host + path; null pass-through.
+   - `imgixUrl`: default params; default param contents; caller-supplied params; defaults completely replaced (no merge).
+   - `resolveImageSet`: direct-join wins, page-fallback (hotel-style), empty when nothing resolves, empty when page lookup is empty/missing, **short-circuit assertion** (direct wins even when page also has images — C.16 contract), reference identity preserved when direct wins.
+   - Constants sanity tests.
+
+4. **Refactor of `product/ingestion/src/sql-transform/transformations.ts`** to consume the shared utility:
+   - Replaced inline `SWOOP_HOST` + `IMGIX_HOST` constants with imports from `@swoop/common`.
+   - Replaced inline `override_url ?? alias` rule in `transformPage` with `canonicalUrl(...)` call.
+   - Image canonical URL construction now uses `${IMGIX_HOST}/${file.name}` (new `IMGIX_HOST` lacks the trailing slash; preserved exact same output string).
+   - No behaviour change. Verified via fresh `npm test --workspaces`: ingestion's 233 tests still pass; sql-transform tests round-trip identically.
+
+5. **Decision-log entries**:
+   - **C.42** — host string locations (constants in `@swoop/common/image`, per HITL Q2).
+   - **C.41** — default imgix render params (`auto=format,enhance,compress&fit=crop&q=80`; per-call configurable; per HITL Q1).
+   - C.35 / C.36 IDs were already taken by C.t1's execution log (see decisions.md §"C.36 — Connector binds :3002…" and §"C.35 — Connector statement_timeout via libpq options"). C.41 + C.42 picked to keep the log monotone, matching the precedent set by C.38 / C.39 in C.t3.
+
+**Verification (post-`rm -rf node_modules && npm install`):**
+
+| Workspace | Tests | Status |
+|---|---|---|
+| @swoop/common | 125 (was 102, +23 from C.t5) | ✅ |
+| @swoop/orchestrator | 158 | ✅ |
+| @swoop/connector | 84 + 3 DB-skipped | ✅ |
+| @swoop/ui | 71 | ✅ |
+| @swoop/ingestion | 233 | ✅ |
+| @swoop/harness | 74 | ✅ |
+| **Total** | **745 + 3 skipped** | ✅ |
+
+Typecheck: green across all 6 workspaces.
+
+Lint: pre-existing baseline noise in unrelated files (orchestrator test, ui adapter/preflight/widget-shell — files I didn't touch). Targeted lint over `image.ts` + `image.test.ts` + `index.ts` + `transformations.ts`: clean.
+
+**Spot-check (W-Trek shape from 2026-04-29 discovery):**
+- `canonicalUrl({ override_url: 'chile/torres-del-paine/hiking/w-trek/original', alias: 'w-trek-torres-del-paine' })` → `'chile/torres-del-paine/hiking/w-trek/original'` ✅ matches discovery
+- `pageUrl(...)` → `'https://www.swoop-patagonia.com/chile/torres-del-paine/hiking/w-trek/original'` ✅
+- `imgixUrl('hero.jpg')` → `'https://swoop-patagonia.imgix.net/hero.jpg?auto=format,enhance,compress&fit=crop&q=80'` ✅
+- `resolveImageSet({ directImageIds: [9001, 9002], pageId: 3 }, ...)` → `[9001, 9002]` (direct wins, short-circuit) ✅
+- `resolveImageSet({ directImageIds: [], pageId: 42 }, ...)` → page-attached set ✅
+
+**Commits (worktree-agent-a4db38d062518181c branch):**
+- `feat(common): C.t5 — image URL utility + page-as-hub resolver in @swoop/common/image.ts`
+- `refactor(ingestion): C.t5 — sql-transform consumes shared image utility`
+- `docs(planning): C.t5 — execution log + decisions C.41 + C.42`
+
+**Did-you-refactor-or-leave-inline decision**: Refactored. The diff was small + the inline constants were exact-mirror of the new shared ones. Behaviour-preserving (verified by ingestion's 233 tests still green); means the canonical rule for canonical-URL composition + imgix tenant lives in exactly one place going forward.
+
+**Deviations from spec:**
+- Single `image.ts` file instead of `url.ts` + `image.ts` split. Honoured the dispatch summary's stricter API surface; the plan's two-file split was an organisational preference (decisions/JSDoc tie back to the same C.15 + C.16 + C.41 + C.42).
+- Decision IDs landed at C.41 + C.42 instead of the plan-suggested C.35 + C.36, both of which were already taken by C.t1's execution log. Same precedent as C.38 / C.39 in C.t3.
+
+**For downstream tasks:**
+- C.t4 tool handlers should `import { canonicalUrl, pageUrl, imgixUrl, resolveImageSet } from '@swoop/common'` instead of inlining anything URL/image-shaped. The migration 005 SQL `canonical_url()` function and the TS `canonicalUrl()` helper are now sibling implementations of the same C.15 rule.
+- C.t6 vision pipeline can use `imgixUrl()` if it ever needs to render an image (today it consumes the bare-prefixed URL stored on `image.canonical_url` directly — fine).
+- D.t9 widget rewrite: same import path; `@swoop/common/image` is isomorphic (no Node-specific imports).
+- If migration 005's SQL function ever changes (e.g. to handle a new `external_url` column), the TS helper must update in the same commit.
 
 ---
 
