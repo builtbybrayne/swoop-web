@@ -86,14 +86,14 @@ export function countOutputRows(value: unknown): number | undefined {
  *     `{ok:false, code:'tool_output_invalid'}` + event.
  *   - Success → `{ok:true, value}` + event with outputCount.
  */
-export async function runHandler<I, O>(
+export async function runHandler<S extends z.ZodTypeAny, T extends z.ZodTypeAny>(
   toolName: string,
-  inputSchema: z.ZodSchema<I>,
-  outputSchema: z.ZodSchema<O>,
-  body: (input: I) => Promise<O>,
+  inputSchema: S,
+  outputSchema: T,
+  body: (input: z.infer<S>) => Promise<z.infer<T>>,
   rawInput: unknown,
   deps: HandlerRuntimeDeps,
-): Promise<HandlerResult<O>> {
+): Promise<HandlerResult<z.infer<T>>> {
   const now = deps.now ?? (() => new Date());
   const actor = deps.actor ?? 'connector';
   const startedAt = now().getTime();
@@ -134,9 +134,9 @@ export async function runHandler<I, O>(
   }
 
   // 2. Body execution
-  let output: O;
+  let output: z.infer<T>;
   try {
-    output = await body(parsedInput.data);
+    output = await body(parsedInput.data as z.infer<S>);
   } catch (err) {
     emit(false, undefined, 'handler_threw');
     emitErrorRaised({

@@ -19,12 +19,18 @@ import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type pg from 'pg';
 
+import type { EmbedQueryFn } from '../data/embed-query.js';
+import type { ToolDescriptions } from '../tools/index.js';
 import { healthzHandler, buildReadyzHandler } from './health.js';
 import { createConnectorMcpServer } from './mcp.js';
 
 export interface BuildAppDeps {
-  /** Pool used for /readyz's SELECT 1 probe. */
+  /** Pool used for /readyz's SELECT 1 probe + tool body borrows. */
   readonly pool: pg.Pool;
+  /** Voyage-bound embedQuery — wired into every conversational tool. */
+  readonly embedQuery: EmbedQueryFn;
+  /** Loaded tool descriptions (one per registered tool). */
+  readonly descriptions: ToolDescriptions;
   /**
    * Optional readiness override — tests substitute a deterministic handler
    * to exercise the 200 / 503 branches without touching pg. Production
@@ -67,7 +73,11 @@ export function buildApp(deps: BuildAppDeps): Express {
       transport.onclose = () => {
         if (transport?.sessionId) transports.delete(transport.sessionId);
       };
-      const server = createConnectorMcpServer();
+      const server = createConnectorMcpServer({
+        pool: deps.pool,
+        embedQuery: deps.embedQuery,
+        descriptions: deps.descriptions,
+      });
       await server.connect(transport);
     }
 

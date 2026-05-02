@@ -14,7 +14,7 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type pg from 'pg';
 
 import {
@@ -66,13 +66,6 @@ export interface RegisterToolsOptions {
   readonly now?: HandlerRuntimeDeps['now'];
 }
 
-interface SpecWithBody<I, O> {
-  readonly name: string;
-  readonly inputSchema: z.ZodSchema<I>;
-  readonly outputSchema: z.ZodSchema<O>;
-  readonly body: (input: I, deps: ToolHandlerDeps) => Promise<O>;
-}
-
 /**
  * Build a `withClient` from a pool that borrows-and-releases per call. Each
  * tool composes 1–N primitives inside one `withClient` so transient state
@@ -93,6 +86,48 @@ function buildWithClient(pool: pg.Pool): ToolHandlerDeps['withClient'] {
 }
 
 /**
+ * Register a single tool on the MCP server with the runHandler runtime.
+ * Generic over input/output types so each callsite preserves its precise
+ * spec types (avoids a heterogeneous-union dance at the call site).
+ */
+function registerOne<S extends z.ZodTypeAny, T extends z.ZodTypeAny>(
+  server: McpServer,
+  name: string,
+  description: string,
+  inputSchema: S,
+  outputSchema: T,
+  body: (input: z.infer<S>) => Promise<z.infer<T>>,
+  runtimeDeps: HandlerRuntimeDeps,
+): void {
+  // The SDK accepts a ZodRawShape; for our z.object().strict() schemas the
+  // .shape is what we want. Cast through `any` because the schema
+  // discriminator the SDK exposes is more general than what we feed.
+  const shape =
+    (inputSchema as unknown as { shape?: z.ZodRawShape }).shape ?? {};
+  server.registerTool(
+    name,
+    { description, inputSchema: shape },
+    async (rawInput: unknown) => {
+      const result = await runHandler(
+        name,
+        inputSchema,
+        outputSchema,
+        body,
+        rawInput,
+        runtimeDeps,
+      );
+      const mapped = toMcpToolResult(result);
+      // Cast: SDK's structuredContent type is `Record<string, unknown> |
+      // undefined`; our schema-validated output is more permissive at the
+      // type level. The runtime shape is correct.
+      return mapped as unknown as Awaited<
+        ReturnType<Parameters<McpServer['registerTool']>[2]>
+      >;
+    },
+  );
+}
+
+/**
  * Register every tool on a fresh MCP server instance. Mirrors the per-session
  * `createConnectorMcpServer` shape in `server/mcp.ts`.
  */
@@ -110,58 +145,87 @@ export function registerAllTools(
     now: opts.now,
   };
 
-  const allSpecs: ReadonlyArray<SpecWithBody<unknown, unknown>> = [
-    {
-      ...findInspiringSpec,
-      body: (input, deps) => findInspiringBody(input, deps),
-    },
-    {
-      ...findSomeoneWhoSpec,
-      body: (input, deps) => findSomeoneWhoBody(input, deps),
-    },
-    { ...findProofSpec, body: (input, deps) => findProofBody(input, deps) },
-    { ...lookupSpec, body: (input, deps) => lookupBody(input, deps) },
-    {
-      ...findOptionsSpec,
-      body: (input, deps) => findOptionsBody(input, deps),
-    },
-    { ...illustrateSpec, body: (input, deps) => illustrateBody(input, deps) },
-    { ...handoffSpec, body: (input) => handoffBody(input) },
-    {
-      ...handoffSubmitSpec,
-      body: (input) => handoffSubmitBody(input),
-    },
-  ] as ReadonlyArray<SpecWithBody<unknown, unknown>>;
-
-  for (const spec of allSpecs) {
-    const description = opts.descriptions[spec.name as keyof ToolDescriptions];
+  const lookupDescription = (name: keyof ToolDescriptions): string => {
+    const description = opts.descriptions[name];
     if (!description) {
-      // Defence in depth — loadAllToolDescriptions already throws on miss,
-      // but a corrupt descriptions map shouldn't silently succeed.
+      // Defence in depth — loadAllToolDescriptions already throws on miss.
       throw new Error(
-        `[connector/tools] Cannot register tool "${spec.name}": description map is missing this entry.`,
+        `[connector/tools] Cannot register tool "${name}": description map is missing this entry.`,
       );
     }
-    server.registerTool(
-      spec.name,
-      {
-        description,
-        // Pass the schema's shape — the SDK's inputSchema accepts a ZodRawShape.
-        // For our z.object().strict() schemas, .shape is what we need.
-        inputSchema: ((spec.inputSchema as unknown as { shape?: z.ZodRawShape })
-          .shape ?? {}) as z.ZodRawShape,
-      },
-      async (rawInput) => {
-        const result = await runHandler(
-          spec.name,
-          spec.inputSchema,
-          spec.outputSchema,
-          (input) => spec.body(input, baseDeps),
-          rawInput,
-          runtimeDeps,
-        );
-        return toMcpToolResult(result);
-      },
-    );
-  }
+    return description;
+  };
+
+  registerOne(
+    server,
+    findInspiringSpec.name,
+    lookupDescription(findInspiringSpec.name),
+    findInspiringSpec.inputSchema,
+    findInspiringSpec.outputSchema,
+    (input) => findInspiringBody(input, baseDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    findSomeoneWhoSpec.name,
+    lookupDescription(findSomeoneWhoSpec.name),
+    findSomeoneWhoSpec.inputSchema,
+    findSomeoneWhoSpec.outputSchema,
+    (input) => findSomeoneWhoBody(input, baseDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    findProofSpec.name,
+    lookupDescription(findProofSpec.name),
+    findProofSpec.inputSchema,
+    findProofSpec.outputSchema,
+    (input) => findProofBody(input, baseDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    lookupSpec.name,
+    lookupDescription(lookupSpec.name),
+    lookupSpec.inputSchema,
+    lookupSpec.outputSchema,
+    (input) => lookupBody(input, baseDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    findOptionsSpec.name,
+    lookupDescription(findOptionsSpec.name),
+    findOptionsSpec.inputSchema,
+    findOptionsSpec.outputSchema,
+    (input) => findOptionsBody(input, baseDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    illustrateSpec.name,
+    lookupDescription(illustrateSpec.name),
+    illustrateSpec.inputSchema,
+    illustrateSpec.outputSchema,
+    (input) => illustrateBody(input, baseDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    handoffSpec.name,
+    lookupDescription(handoffSpec.name),
+    handoffSpec.inputSchema,
+    handoffSpec.outputSchema,
+    (input) => handoffBody(input),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    handoffSubmitSpec.name,
+    lookupDescription(handoffSubmitSpec.name),
+    handoffSubmitSpec.inputSchema,
+    handoffSubmitSpec.outputSchema,
+    (input) => handoffSubmitBody(input),
+    runtimeDeps,
+  );
 }

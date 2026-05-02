@@ -24,6 +24,8 @@ loadDotenv({ override: true });
 
 import { loadConfig } from '../config/index.js';
 import { getPool, closePool } from '../data/pool.js';
+import { buildEmbedQuery } from '../data/embed-query.js';
+import { loadAllToolDescriptions, ALL_TOOL_NAMES } from '../tools/index.js';
 import { buildApp } from './app.js';
 
 async function main(): Promise<void> {
@@ -33,7 +35,13 @@ async function main(): Promise<void> {
   // boot, not on the first /readyz probe.
   const pool = getPool(config);
 
-  const app = buildApp({ pool });
+  // Load all eight tool descriptions at boot — fail-fast on any missing /
+  // empty file (per HITL Q3 ratification: ALL 8, not just the 5
+  // conversational; development-time visibility).
+  const descriptions = loadAllToolDescriptions(config.toolsPromptDirAbsolutePath);
+  const embedQuery = buildEmbedQuery(config);
+
+  const app = buildApp({ pool, embedQuery, descriptions });
 
   const server = app.listen(config.CONNECTOR_PORT, () => {
     console.log(`[connector] ready on http://localhost:${config.CONNECTOR_PORT}`);
@@ -43,7 +51,10 @@ async function main(): Promise<void> {
       `[connector] pool: max=${config.PG_POOL_MAX} idle=${config.PG_POOL_IDLE_MS}ms ` +
         `statement_timeout=${config.PG_STATEMENT_TIMEOUT_MS}ms`,
     );
-    console.log(`[connector] tools: ping (no-op; removed by C.t4 when real tools land)`);
+    console.log(`[connector] tools: ${ALL_TOOL_NAMES.join(', ')}`);
+    console.log(
+      `[connector] descriptions loaded from: ${config.toolsPromptDirAbsolutePath}`,
+    );
     console.log(`[connector] env: ${config.NODE_ENV}`);
   });
 

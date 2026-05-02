@@ -15,6 +15,18 @@ import request from 'supertest';
 import type pg from 'pg';
 import type { Request, Response } from 'express';
 import { buildApp } from '../app.js';
+import { ALL_TOOL_NAMES, type ToolDescriptions } from '../../tools/index.js';
+import type { EmbedQueryFn } from '../../data/embed-query.js';
+
+const stubEmbedQuery: EmbedQueryFn = async () => new Array(1024).fill(0);
+
+function makeStubDescriptions(): ToolDescriptions {
+  const out: Record<string, string> = {};
+  for (const name of ALL_TOOL_NAMES) {
+    out[name] = `Stub description for ${name} (test fixture).`;
+  }
+  return Object.freeze(out as Record<(typeof ALL_TOOL_NAMES)[number], string>);
+}
 
 /**
  * A pg.Pool stand-in that throws if anything actually touches it. /healthz
@@ -32,6 +44,8 @@ describe('GET /healthz', () => {
   it('returns 200 ok without touching the pool', async () => {
     const app = buildApp({
       pool: makeThrowingPool(),
+      embedQuery: stubEmbedQuery,
+      descriptions: makeStubDescriptions(),
       readinessHandler: () => {
         throw new Error('readiness should not be called by /healthz');
       },
@@ -48,7 +62,12 @@ describe('GET /readyz', () => {
     const okHandler = async (_req: Request, res: Response): Promise<void> => {
       res.json({ status: 'ready', db: 'ok' });
     };
-    const app = buildApp({ pool: makeThrowingPool(), readinessHandler: okHandler });
+    const app = buildApp({
+      pool: makeThrowingPool(),
+      embedQuery: stubEmbedQuery,
+      descriptions: makeStubDescriptions(),
+      readinessHandler: okHandler,
+    });
 
     const res = await request(app).get('/readyz');
     expect(res.status).toBe(200);
@@ -59,7 +78,12 @@ describe('GET /readyz', () => {
     const failHandler = async (_req: Request, res: Response): Promise<void> => {
       res.status(503).json({ status: 'not_ready', db: 'connection refused' });
     };
-    const app = buildApp({ pool: makeThrowingPool(), readinessHandler: failHandler });
+    const app = buildApp({
+      pool: makeThrowingPool(),
+      embedQuery: stubEmbedQuery,
+      descriptions: makeStubDescriptions(),
+      readinessHandler: failHandler,
+    });
 
     const res = await request(app).get('/readyz');
     expect(res.status).toBe(503);
