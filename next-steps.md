@@ -4,7 +4,11 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-05-02 — **C.t3 implemented**; review fix-wave fully landed; chunk-C tier-3 plans HITL-ratified; C.t1 implemented)
+## Status (2026-05-02 — **C.t3 implemented**; **C.t6 + C.t3a folded into one Vision call**; review fix-wave fully landed; chunk-C tier-3 plans HITL-ratified; C.t1 implemented)
+
+**2026-05-02 (later)**: C.t6 + C.t3a image-annotation fold landed per Al's HITL ratification. One Claude Vision call per image now produces all six outputs (description + annotation + 4 tag arrays); C.t3a's separate Haiku image-annotation classifier retired. Migration 008 adds GIN-indexed tag-array columns; C.t6's prompt bumps to version 2; the C.t3a `image-annotation` classifier and `--source=image-annotation` CLI argument retire. Decision **C.40** logged.
+
+
 M1 live + chunk D closed + mock-host shipped + **C.t1 done + C.t2 done + C.t3 done** + **C.26 graduated** + **2026-04-30 review fix-wave fully merged**. **2026-05-02**: C.t3 implemented across 4 atomic commits — `@swoop/ingestion` now hosts a Node CLI (`etl:sql`) that streams the MariaDB SQL dumps into 19 domain tables in `puma_dev` in ~10s. Idempotent re-run produces zero row-count delta. End-to-end live counts: 852 trips, 79 tags, 13K images, 906 FAQ items, 2,160 published customerreviews. See [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) §"Execution log" for the full breakdown. **2026-05-01**: C.t1 + 14 review-fix items + 7 chunk-C plans (all HITL-ratified). Earlier: **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits — `@swoop/connector` is now a runnable service at `:3002` (Postgres pool + Express + MCP-HTTP transport + health endpoints + migration runner + no-op `ping` tool). Boots clean against `puma_dev`; SIGTERM closes pool gracefully; orchestrator-stub-connector at `:3001` continues to back the orchestrator until B.t3a swaps it post-C.t4. See [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) §"Execution log" + [progress.md](progress.md) §"C.t1 implemented (2026-05-01)" for the full breakdown.
 
 2026-05-01 (earlier) work landed across 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new chunk-C tier-3 plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored + HITL-ratified.
