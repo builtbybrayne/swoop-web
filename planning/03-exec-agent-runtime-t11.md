@@ -392,6 +392,54 @@ To append to `planning/decisions.md`:
 
 ---
 
+## Execution log (2026-05-12)
+
+**Status**: closed.
+
+### Commits
+
+Three atomic commits (in order):
+
+1. `feat(common): B.t11 — add four observability event kinds for rehydration`
+2. `feat(orchestrator,common): B.t11 — session history projection endpoint`
+3. `chore(connector): B.t11 — no-op migration 010 placeholder`
+
+### Files landed
+
+**Added**:
+- `product/orchestrator/src/server/session-history.ts` — the handler (~290 lines incl. doc).
+- `product/orchestrator/src/server/__tests__/session-history.test.ts` — 10 integration tests (7 salvaged + 3 new event-emit).
+- `product/connector/migrations/010_session_history_observability.sql` — no-op placeholder.
+
+**Modified**:
+- `product/orchestrator/src/server/index.ts` — registered `GET /session/:id/history` inside `registerRoutes`; added `BaseSessionService` import.
+- `product/ts-common/src/events.ts` — widened `SessionExpiredEventSchema.payload` to a discriminated union (`{cause}` for the sweeper path, `{gate}` for the rehydrate-404 path), added `SessionRehydratedEventSchema`, `SessionReplayEmptyEventSchema`, `SessionReplayFailedEventSchema`, registered them in `EventSchema`, exported `*Event` types.
+- `product/ts-common/src/fixtures/event.sample.ts` — added `SampleEventSessionExpiredRehydrate` (gate=puma variant of the existing kind), `SampleEventSessionRehydrated`, `SampleEventSessionReplayEmpty`, `SampleEventSessionReplayFailed`.
+- `product/ts-common/src/fixtures/index.ts` — re-exported the four new fixtures.
+- `product/ts-common/src/__tests__/fixtures.test.ts` — added four round-trip cases to the EVENT_FIXTURES table.
+- `product/connector/src/__tests__/migrate.test.ts` — bumped expected migration list to include 010, introduced `PLACEHOLDER_MIGRATIONS` set so placeholder bodies are accepted (size > 0 still required; the >64-byte floor stays for real migrations).
+
+### Deviations from plan
+
+- **Migration prefix shift 009 → 010**. The plan body named prefix 009. After HITL ratification on 2026-05-12, C.t9's Voyage→Gemini embedding swap (commit `8268700`) landed first on main and claimed 009 (`009_embeddings_dim_3072.sql`). The next free prefix at execution time was **010**, which is what shipped. The plan body's §"Migration scaffolding (C.31 compliance)" section continues to read "009" as authored; the actual file is `010_session_history_observability.sql` and its header documents the shift inline. The B.28 decision text refers to "next free prefix" rather than a hard "009" lock.
+- **`session.expired` kind already existed.** The plan asks for "four new event kinds in `@swoop/common/events`", but `SessionExpiredEventSchema` was already present (sweeper path, payload `{cause}`). To honour the plan's intent (a `gate` discriminator on the 404 path) without breaking the existing sweeper emit sites, the schema's `payload` was **widened to a Zod union** of `{cause: ...}` and `{gate: ...}`. Both shapes round-trip through `EventSchema`. Net new event *kinds* are three (`session.rehydrated`, `session.replay.empty`, `session.replay.failed`); the fourth is a backward-compatible payload extension. The test surface gains four fixture round-trips (one for each new payload), matching the plan's "+4 fixture cases" tally exactly.
+- **Empty-migration size assertion**. Migration 010's body is "intentionally empty; see comment." but the file still has the documenting header above that line, so `size > 0` holds — no test relaxation needed. The test now distinguishes placeholders (size > 0) from real migrations (size > 64) so a future accidentally-empty real migration still fails the assertion.
+- **Consent gate joined the 404 paths**. The handler explicitly checks `canAcceptTurn(pumaSession)` before attempting the ADK fetch and emits `session.expired{gate: "consent"}` if consent is ungranted. The plan §Outcome item 6 names this as a third 404 gate; the implementation makes the check explicit (not implied via the `/chat` consent gate that this read-only path bypasses).
+- **`startedAt` clock-read** uses the injected `now` so tests can pin `durationMs` deterministically. The plan §"Implementation detail" calls for clock injection; this is the concrete site.
+
+### Items affecting D.t9-mount-rehydrate's executor (pairing contract)
+
+- **Wire contract preserved verbatim**. Response body for the happy path is `{parts: MessagePart[]}` with empty array a valid response. Error envelope is `{error: {code, message}}` matching the rest of the HTTP surface.
+- **404 codes**: every 404 carries `error.code === "session_not_found"` regardless of whether the puma store, the consent gate, or the ADK service triggered it. The UI never special-cases by gate.
+- **The new event names are stable** — `session.rehydrated` / `session.replay.empty` / `session.replay.failed` are first-class union arms in `@swoop/common`'s `EventSchema`. The UI side's mirror events (`session.rehydrate.requested` / `session.rehydrate.applied`) remain D.t9-mount-rehydrate's territory.
+- **`session.expired` carries either `{cause}` (sweeper) or `{gate}` (rehydrate 404)** — UI-side analytics consumers must use `'gate' in payload` to discriminate.
+
+### HITL items surfaced
+
+No new HITL items introduced. The plan's existing open HITL items remain open and are reflected unchanged in §"Still open" — particularly Q1 (auth posture). The execution shipped with the same session-id-as-secret posture as `/chat` per B.8, awaiting legal counsel input (E.t9).
+
+---
+
 ## HITL ratification record (2026-05-12)
 
 Two items closed via HITL on 2026-05-12; four remain open.

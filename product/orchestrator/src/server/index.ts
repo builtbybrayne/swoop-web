@@ -21,7 +21,7 @@
 
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import helmet from 'helmet';
-import type { Runner } from '@google/adk';
+import type { BaseSessionService, Runner } from '@google/adk';
 import type { HandoffStore, MailerConfig } from '@swoop/connector';
 
 import type { SessionAllocator, SessionStore } from '../session/index.js';
@@ -32,6 +32,7 @@ import {
 } from './consent.js';
 import { createChatHandler } from './chat.js';
 import { createSessionPingHandler } from './session-ping.js';
+import { createSessionHistoryHandler } from './session-history.js';
 import { createHandoffSubmitHandler } from './handoff-submit.js';
 import { DISCLOSURE_COPY_VERSION } from './errors.js';
 import type { TriageClassifier } from '../functional-agents/triage-classifier.js';
@@ -165,6 +166,22 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
   app.delete('/session/:id', createSessionDeleteHandler(sharedDeps));
   // D.t6 proactive-preflight probe. Always 200 — verdict in body.
   app.get('/session/:id/ping', createSessionPingHandler(sharedDeps));
+  // B.t11 — server-side history projection (rehydration on iframe remount).
+  // 200 + parts on known session, 404 on unknown, 500 on translator/adk
+  // failure. Reuses the runner's ADK session service so the same event log
+  // that fed the live SSE feeds the rehydration response. Interface-typed
+  // against `BaseSessionService` so the post-M4 swap to a Postgres-backed
+  // SessionService (B.22) needs zero changes to the handler.
+  app.get(
+    '/session/:id/history',
+    createSessionHistoryHandler({
+      sessionStore: deps.sessionStore,
+      sessionService: deps.runner.sessionService as BaseSessionService,
+      appName: deps.runner.appName,
+      userId: deps.userId,
+      now: deps.now,
+    }),
+  );
 
   app.post(
     '/chat',

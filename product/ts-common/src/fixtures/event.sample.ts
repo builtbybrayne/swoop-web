@@ -162,6 +162,24 @@ export const SampleEventSessionExpired: Event = {
   },
 };
 
+/**
+ * B.t11 — session.expired emitted from the rehydration 404 path, carrying
+ * a `gate` discriminator rather than a `cause`. Distinguishes unknown-id
+ * (puma store) from desync (adk store) from pre-consent races (consent
+ * gate) so post-launch analytics can disambiguate the three.
+ */
+export const SampleEventSessionExpiredRehydrate: Event = {
+  eventType: "session.expired",
+  eventVersion: 1,
+  timestamp: "2026-05-12T09:00:02.000Z",
+  sessionId: "sess_puma_demo_001",
+  turnIndex: null,
+  actor: "system",
+  payload: {
+    gate: "puma",
+  },
+};
+
 export const SampleEventWarmPoolHit: Event = {
   eventType: "warm_pool.hit",
   eventVersion: 1,
@@ -231,6 +249,54 @@ export const SampleEventUiSessionRehydrateFailed: Event = {
   actor: "ui",
   payload: {
     stage: "fetch",
+  },
+};
+
+/**
+ * B.t11 — non-empty replay through the session-history projection endpoint.
+ */
+export const SampleEventSessionRehydrated: Event = {
+  eventType: "session.rehydrated",
+  eventVersion: 1,
+  timestamp: "2026-05-12T09:00:05.000Z",
+  sessionId: "sess_puma_demo_001",
+  turnIndex: null,
+  actor: "system",
+  payload: {
+    partCount: 6,
+    eventCount: 9,
+    durationMs: 12,
+  },
+};
+
+/**
+ * B.t11 — 200 with zero parts (consented but turn-empty / warm-pool-claimed).
+ */
+export const SampleEventSessionReplayEmpty: Event = {
+  eventType: "session.replay.empty",
+  eventVersion: 1,
+  timestamp: "2026-05-12T09:00:05.000Z",
+  sessionId: "sess_puma_demo_002",
+  turnIndex: null,
+  actor: "system",
+  payload: {
+    eventCount: 0,
+  },
+};
+
+/**
+ * B.t11 — translator or adk-fetch threw mid-replay (5xx path).
+ */
+export const SampleEventSessionReplayFailed: Event = {
+  eventType: "session.replay.failed",
+  eventVersion: 1,
+  timestamp: "2026-05-12T09:00:05.000Z",
+  sessionId: "sess_puma_demo_003",
+  turnIndex: null,
+  actor: "system",
+  payload: {
+    stage: "translator",
+    errorMessage: "translator threw mid-replay: invalid event content",
   },
 };
 

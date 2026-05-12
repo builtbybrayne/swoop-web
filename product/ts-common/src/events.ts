@@ -363,11 +363,72 @@ export const UiConversationClosedEventSchema = z.object({
   }),
 });
 
+/**
+ * `session.expired` carries two distinct emit sites:
+ *   - Sweeper-driven lifecycle expiry (in-memory store idle / archive paths).
+ *     Payload `{cause: "idle_timeout" | "archive_to_delete"}`.
+ *   - 404 from the B.t11 session-history projection (and any other
+ *     session-id-fronting probe that decides the session is gone).
+ *     Payload `{gate: "puma" | "adk" | "consent"}` — names which store
+ *     responded with "no such session" so post-launch analytics can
+ *     distinguish unknown-id from desync from pre-consent.
+ *
+ * The wire-level 404 in /session/:id/history conflates all three gates as
+ * `session_not_found` (matches D.16's /ping rationale); the observability
+ * channel keeps them distinct.
+ *
+ * Both shapes pass through one discriminated payload — readers branch on
+ * which field is populated. Adding new variants here does NOT bump
+ * eventVersion (the union widens; old consumers continue to switch on
+ * `cause` and ignore the `gate` arm).
+ */
 export const SessionExpiredEventSchema = z.object({
   eventType: z.literal("session.expired"),
   ...EventEnvelopeBase,
+  payload: z.union([
+    z.object({
+      cause: z.enum(["idle_timeout", "archive_to_delete"]),
+    }),
+    z.object({
+      gate: z.enum(["puma", "adk", "consent"]),
+    }),
+  ]),
+});
+
+// -----------------------------------------------------------------------------
+// B.t11 — session history projection observability (rehydration path).
+//
+// Per planning/03-exec-agent-runtime-t11.md §"Observability — four new event
+// kinds". Emitted inline by the GET /session/:id/history handler so the
+// signal lives at the site (mirrors the B.18 warm-pool emit-at-the-site
+// convention). The fourth — `session.expired` — extends the existing schema
+// above to also carry a `gate` discriminator (puma | adk | consent).
+// -----------------------------------------------------------------------------
+
+export const SessionRehydratedEventSchema = z.object({
+  eventType: z.literal("session.rehydrated"),
+  ...EventEnvelopeBase,
   payload: z.object({
-    cause: z.enum(["idle_timeout", "archive_to_delete"]),
+    partCount: z.number().int().nonnegative(),
+    eventCount: z.number().int().nonnegative(),
+    durationMs: z.number().int().nonnegative(),
+  }),
+});
+
+export const SessionReplayEmptyEventSchema = z.object({
+  eventType: z.literal("session.replay.empty"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    eventCount: z.number().int().nonnegative(),
+  }),
+});
+
+export const SessionReplayFailedEventSchema = z.object({
+  eventType: z.literal("session.replay.failed"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    stage: z.enum(["adk_fetch", "translator"]),
+    errorMessage: z.string(),
   }),
 });
 
@@ -518,6 +579,10 @@ export const EventSchema = z.discriminatedUnion("eventType", [
   WarmPoolMissEventSchema,
   // C.t4 — connector-side tool invocation summary
   ToolInvokedEventSchema,
+  // B.t11 — server-side session history projection (rehydration) observability
+  SessionRehydratedEventSchema,
+  SessionReplayEmptyEventSchema,
+  SessionReplayFailedEventSchema,
   // D.t9-mount-rehydrate — UI-side rehydrate lifecycle (paired with B.t11)
   UiSessionRehydrateRequestedEventSchema,
   UiSessionRehydrateAppliedEventSchema,
@@ -559,6 +624,9 @@ export type UiConversationClosedEvent = z.infer<typeof UiConversationClosedEvent
 export type SessionExpiredEvent = z.infer<typeof SessionExpiredEventSchema>;
 export type WarmPoolHitEvent = z.infer<typeof WarmPoolHitEventSchema>;
 export type WarmPoolMissEvent = z.infer<typeof WarmPoolMissEventSchema>;
+export type SessionRehydratedEvent = z.infer<typeof SessionRehydratedEventSchema>;
+export type SessionReplayEmptyEvent = z.infer<typeof SessionReplayEmptyEventSchema>;
+export type SessionReplayFailedEvent = z.infer<typeof SessionReplayFailedEventSchema>;
 export type UiSessionRehydrateRequestedEvent = z.infer<
   typeof UiSessionRehydrateRequestedEventSchema
 >;
