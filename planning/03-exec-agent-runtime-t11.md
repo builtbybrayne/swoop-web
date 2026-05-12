@@ -392,11 +392,19 @@ To append to `planning/decisions.md`:
 
 ---
 
-## Open HITL questions
+## HITL ratification record (2026-05-12)
+
+Two items closed via HITL on 2026-05-12; four remain open.
+
+### Closed
+
+2. **404 UX on D.t9-mount-rehydrate side.** ✅ **Ratified: soft-fail to OpeningScreen with a small notification.** Auto-clear `sessionStorage`, route to OpeningScreen, surface a brief notification acknowledging the previous conversation expired (toast / banner / preamble — UI executor picks the most appropriate D.t8-consistent affordance). **No manual click required to start over.** Closes the paired question (D.t9-mount-rehydrate Q1).
+
+3. **Empty-replay UX.** ✅ **Ratified: no special case.** A consented zero-turn rehydrated session is semantically identical to a fresh chat — show the thread directly, no "Restoring…" placeholder, no "Welcome back" affordance. Standard empty state. Closes the paired question (D.t9-mount-rehydrate Q2).
+
+### Still open
 
 1. **Auth posture: is session-id-as-secret good enough for the rehydration endpoint, or should we issue a short-lived bearer token at consent grant?** The rehydration endpoint leaks more state per call than `/chat` does per turn. Legal counsel input (E.t9) could shape this. Default leaning: same posture as `/chat` (decision B.8). Surface to Al + Swoop legal counsel.
-2. **404 UX on D.t9-mount-rehydrate side: soft-fail (auto-clear sessionStorage, route to OpeningScreen with a one-line "your previous conversation expired" preamble) vs banner-fail (D.t5 `session_expired` banner with Start-over button)?** The side-quest plan §5 W2 leans soft-fail (cleaner UX); D.t5's design assumes banner-driven. Surface to Al.
-3. **Empty-replay UX: should the UI show a "we found your conversation; type to continue" placeholder or just the standard empty state?** Tiny but visible-product question. Surface to Al.
 4. **`session.expired{gate:"consent"}` — is this analytics-noisy enough to suppress?** The pre-consent race is extremely rare. Surface to F-chunk's analytics owner.
 5. **Should the projection endpoint rate-limit per session id?** Probe-style abuse (UI accidentally calls `/history` in a loop after a JS error) could hammer the in-memory backend. Cheap to add; HITL on whether it's worth the surface complexity in Phase 1.
 6. **Post-M4: when B.22 lands, do we want a paginated history endpoint?** Long conversations could grow large. Out of scope for B.t11. Flagged for the B.22 plan.

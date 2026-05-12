@@ -326,11 +326,19 @@ To append to `planning/decisions.md`:
 
 ---
 
-## Open HITL questions
+## HITL ratification record (2026-05-12)
 
-1. **404 UX: soft-fail to OpeningScreen with preamble, or banner-fail with "Start over" button?** Plan defaults soft-fail (cleaner; matches the side-quest JTBD of "trust the tool"); D.t5's existing banner UX is the alternative. Same question is open in B.t11's HITL list. Surface to Al — one call closes both plans.
-2. **Empty replay UX: is "Restoring your conversation…" → empty thread surface too jarring?** Could show a smaller "Welcome back" string in the empty state for the rehydrate path. Default: standard empty state, no special-case. Surface to Al.
-3. **Where does the "Restoring your conversation…" string live?** Inline vs `cms/errors/en.json` (extend with a `rehydrate` section). Default: inline (it's chrome, not content). Surface to Al.
+Two items closed via HITL on 2026-05-12; five remain open.
+
+### Closed
+
+1. **404 UX: soft-fail vs banner-fail.** ✅ **Ratified: soft-fail to OpeningScreen with a small notification.** Auto-clear `sessionStorage`, route to OpeningScreen, surface a brief notification acknowledging the previous conversation expired. No manual click required to start over. The notification's visual register is the UI executor's call (toast / banner / preamble — pick the most appropriate D.t8-consistent affordance). Mirrors B.t11 ratification (paired question).
+
+2. **Empty replay UX.** ✅ **Ratified: no special case.** A consented zero-turn rehydrated session === a fresh chat. Show the thread directly. Standard empty state. No "Restoring…" placeholder, no "Welcome back" affordance. Mirrors B.t11 ratification (paired question).
+
+### Still open
+
+3. **Where does the "previous conversation expired" notification string live?** Inline vs `cms/errors/en.json` (extend with a `rehydrate` section). Default: inline (it's chrome, not content). Surface to Al.
 4. **Retry behaviour on 5xx — silent backoff or visible Try-again?** Plan defaults visible — the D.t5 banner already has a retry button; reuse. Surface only if Al wants auto-retry.
 5. **Should the rehydrate hook also fire on `visibilitychange→visible`?** D.17's `usePreflight` does — the same "tab regained focus" trigger could trigger a re-rehydrate if the server has appended (e.g. another tab drove turns; impossible in Phase 1 since session ids are tab-scoped). Default: no — mount only. Surface if a real cross-tab need appears.
 6. **Telemetry on rehydrate latency**: should `ui.session.rehydrate.applied` carry `durationMs`? Adds a stopwatch around the fetch. Plan defaults yes (mirrors B.t11's server-side `durationMs`). Surface only if pushback.
