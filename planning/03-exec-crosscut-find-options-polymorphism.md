@@ -210,10 +210,10 @@ D.t9 UI widget tests consume these. Schema round-tripping tests in `@swoop/commo
 
 Append to `planning/decisions.md`:
 
-- **C.43** — `find_options` output is polymorphic. `ProposalCardPublicSchema` is a discriminated union over `trip | tour | hotel | region_base`. Reverses C.t2's TripCard-only contract. Rationale: top-down — the propose-options conversational moment ranges across proposal types; one tool, polymorphic output. Settle contract day-one; tranche backend.
-- **C.44** — Tours are a structurally-distinct entity from Trips in the dump (`tour` table + `tour_item` day-by-day breakdown; `group_size_max` is a tour-only column). Don't collapse to trips. Surface `groupSizeMax` + `dayCount` as tour-specific affordances. Luke's upsell priority lands in the tool description's "lean toward tours when signal could go either way".
-- **C.45** — Tranche strategy: v1 trips → v2 tours (Swoop-data-gated) → v3 hotels + region_bases. Each tranche is an independent landing on top of the v1 contract.
-- **C.46** — `findOptionsInput.preferredType` lets the agent steer the tool toward a specific proposal type when the conversational signal is decisive; when unset, the handler picks based on filter-to-data alignment.
+- **C.48** — `find_options` output is polymorphic. `ProposalCardPublicSchema` is a discriminated union over `trip | tour | hotel | region_base`. Reverses C.t2's TripCard-only contract. Rationale: top-down — the propose-options conversational moment ranges across proposal types; one tool, polymorphic output. Settle contract day-one; tranche backend. (Numbers C.43–C.47 already taken on main as of merge 2026-05-12 — operator-runbook + Gemini-embedding + sync-enrich-mode decisions.)
+- **C.49** — Tours are a structurally-distinct entity from Trips in the dump (`tour` table + `tour_item` day-by-day breakdown; `group_size_max` is a tour-only column). Don't collapse to trips. Surface `groupSizeMax` + `dayCount` as tour-specific affordances. Luke's upsell priority lands in the tool description's "lean toward tours when signal could go either way".
+- **C.50** — Tranche strategy: v1 trips → v2 tours (Swoop-data-gated) → v3 hotels + region_bases. Each tranche is an independent landing on top of the v1 contract.
+- **C.51** — `findOptionsInput.preferredType` lets the agent steer the tool toward a specific proposal type when the conversational signal is decisive; when unset, the handler picks based on filter-to-data alignment.
 
 ### 2.7 Swoop ask (`questions.md` addition)
 
@@ -245,7 +245,7 @@ Add under "Open / Data pipeline":
 5. Refactor `product/connector/src/tools/find-options.ts` to return discriminated cards. v1 = trips only with `type: 'trip'` literal.
 6. Update tests in `product/connector/src/tools/__tests__/find-options.test.ts` to assert the discriminator on every card.
 7. Update tests in `product/ts-common/src/__tests__/tools.test.ts` to round-trip the discriminated union.
-8. Append decisions C.43–C.46 to `planning/decisions.md`.
+8. Append decisions C.48–C.51 to `planning/decisions.md`.
 9. Add the Swoop ask to `questions.md` per §2.7.
 10. Fresh-install verification gate (see §5).
 
@@ -327,7 +327,7 @@ The lesson: polymorphism is right when each variant gets its own visual register
 ## 8. Coordination with siblings
 
 - **D.t9** ([`03-exec-chat-surface-t9.md`](03-exec-chat-surface-t9.md)) — the UI widgets ship all four card-variant renderers day-one; this plan's v1 makes the contract land. v2 / v3 tranches unlock live-data smoke for the tour / hotel / region_base renderers respectively. D.t9 verification has notes for both phases.
-- **C.t2** (closed) — this plan supersedes C.t2's TripCardPublicSchema. Decision C.43 logs the supersession.
+- **C.t2** (closed) — this plan supersedes C.t2's TripCardPublicSchema. Decision C.48 logs the supersession.
 - **C.t4** (closed) — this plan extends `find_options` handler. C.t4's eight-tool surface is preserved (one tool, polymorphic output); no new tools.
 - **G.t0** (HITL session pending) — if Al's conversational-architecture work surfaces strong signals about which proposal type lands when, fold them into the description.md guidance. Not a gate.
 - **Swoop content team** — gated by tour content population. Question open in `questions.md`.
@@ -339,7 +339,7 @@ The lesson: polymorphism is right when each variant gets its own visual register
 - [`03-exec-chat-surface-t9.md`](03-exec-chat-surface-t9.md) §"HITL ratification record" item 4 — the conversation that surfaced this.
 - [`03-exec-c-t2.md`](03-exec-c-t2.md) — the original contract being superseded.
 - [`03-exec-c-t4.md`](03-exec-c-t4.md) — the handler being refactored.
-- `planning/decisions.md` — entries C.14 (headline pricing only), C.24 (no composer layer), C.25 (eight tools), C.26 (find_someone_who graduated). New entries C.43–C.46 in this plan.
+- `planning/decisions.md` — entries C.14 (headline pricing only), C.24 (no composer layer), C.25 (eight tools), C.26 (find_someone_who graduated). New entries C.48–C.51 in this plan.
 - `product/connector/migrations/002_domain_tables.sql` — schema confirmation: `trip`, `tour`, `tour_item`, `hotel`, `area`, `page` all present and FK-correct.
 - `progress.md` — chunk-C status; the `tour: 0/15 populated` live-count surfaced in C.t3.
 - `gotchas.md` — no entries directly relevant. The polymorphic dispatch in the UI is a new pattern, no existing gotcha applies.
@@ -351,7 +351,7 @@ The lesson: polymorphism is right when each variant gets its own visual register
 When v1 lands:
 - `progress.md` chunk-C status line adds a note: *"find_options output polymorphic per crosscut plan; v1 trips-only live; v2/v3 follow."*
 - `next-steps.md` adds the v2/v3 tranches with their gates (v2: Swoop tour content; v3: not gated).
-- `decisions.md` carries C.43–C.46.
+- `decisions.md` carries C.48–C.51.
 - D.t9's executor unblocks (its prereq §0 sub-step verifies this plan's v1 landed).
 
 When v2 lands:
