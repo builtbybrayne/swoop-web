@@ -6,10 +6,19 @@
  * empty result is a valid outcome (data integrity surface, not handler logic).
  *
  * Filters compose as ANDed clauses; absent filters drop out cleanly.
+ *
+ * Crosscut C.48 (v1 tranche, 2026-05-12): the primitive now returns
+ * `TripProposalCard[]` — the `trip` variant of `ProposalCardPublicSchema`'s
+ * discriminated union. Every card carries `type: 'trip'`. Tour / hotel /
+ * region_base data primitives land in v2 / v3 tranches.
  */
 
 import type pg from 'pg';
-import { TripCardPublicSchema, type BudgetBand, type TripCardPublic } from '@swoop/common';
+import {
+  TripProposalCardSchema,
+  type BudgetBand,
+  type TripProposalCard,
+} from '@swoop/common';
 
 import { resolveImagesByIds } from './resolve-image.js';
 
@@ -38,7 +47,7 @@ const BUDGET_CEILING: Record<BudgetBand, number> = {
 export async function queryTripCardsByFilter(
   client: pg.PoolClient,
   opts: QueryTripCardsOptions,
-): Promise<TripCardPublic[]> {
+): Promise<TripProposalCard[]> {
   const clauses: string[] = [];
   const binds: unknown[] = [];
 
@@ -91,23 +100,39 @@ export async function queryTripCardsByFilter(
   const imageIds = res.rows.map((r) => r.image_id as number | null);
   const images = await resolveImagesByIds(client, imageIds);
 
-  return res.rows.map((r) =>
-    TripCardPublicSchema.parse({
-      id: r.id as number,
-      slug: (r.slug ?? null) as string | null,
+  return res.rows.map((r) => {
+    const image = r.image_id
+      ? (images.get(r.image_id as number) ?? undefined)
+      : undefined;
+    // Optional fields use `undefined` (not `null`) — `ProposalCardBaseFields`
+    // declares them with `.optional()`, no `.nullable()`. `.strict()` rejects
+    // explicit `null` for an absent value. `fromPrice` is the lone exception
+    // (`.nullable().optional()`) so the price line can render "no price"
+    // distinct from "field omitted".
+    const fromPrice =
+      r.from_price !== null && r.from_price !== undefined
+        ? Number(r.from_price)
+        : null;
+    return TripProposalCardSchema.parse({
+      type: "trip" as const,
+      id: String(r.id),
+      ...(r.slug != null ? { slug: r.slug as string } : {}),
       headline: r.headline as string,
-      vibeLine: (r.vibe_line ?? null) as string | null,
-      region: (r.region ?? null) as string | null,
-      durationDays: (r.duration_days ?? null) as number | null,
-      fromPrice:
-        r.from_price !== null && r.from_price !== undefined
-          ? Number(r.from_price)
-          : null,
-      currencyCode: (r.currency_code ?? null) as string | null,
-      accommodationStyle: (r.accommodation_style ?? null) as string | null,
+      ...(r.vibe_line != null ? { vibeLine: r.vibe_line as string } : {}),
+      ...(r.region != null ? { region: r.region as string } : {}),
+      ...(r.duration_days != null
+        ? { durationDays: r.duration_days as number }
+        : {}),
+      fromPrice,
+      ...(r.currency_code != null
+        ? { currencyCode: r.currency_code as string }
+        : {}),
+      ...(r.accommodation_style != null
+        ? { accommodationStyle: r.accommodation_style as string }
+        : {}),
       activityTags: (r.activity_tags ?? []) as string[],
       canonicalUrl: r.canonical_url as string,
-      image: r.image_id ? (images.get(r.image_id as number) ?? null) : null,
-    }),
-  );
+      ...(image ? { image } : {}),
+    });
+  });
 }

@@ -245,10 +245,20 @@ export const InformChunkPublicSchema = z
 export type InformChunkPublic = z.infer<typeof InformChunkPublicSchema>;
 
 // -----------------------------------------------------------------------------
-// TripCard — Propose options job
+// TripCard — Propose options job (full ETL row only).
 //
-// Surface (headline / vibeLine / region / duration / price / image /
-// canonicalUrl) is committed; internals settle once trips ingestion lands.
+// Public projection lives in `tools.ts` as a `ProposalCardPublicSchema` variant
+// (discriminated union over `trip | tour | hotel | region_base`). Per crosscut
+// plan `03-exec-crosscut-find-options-polymorphism.md` v1 tranche
+// (decisions C.48–C.51): the Propose-options conversational moment ranges
+// across proposal types; the public schema discriminates so each card type
+// renders in its own visual register.
+//
+// The ETL shape is trip-table-shaped (headline / vibeLine / region / duration
+// / price / image / canonicalUrl) — what `composeTripCard` writes to the
+// `trip_card` Postgres table. Tour / hotel / region_base ETL shapes belong to
+// future tranches (v2 / v3) and will land as their own derived-table rows
+// when the corresponding source tables get populated.
 // -----------------------------------------------------------------------------
 
 export const TripCardSchema = z
@@ -271,21 +281,3 @@ export const TripCardSchema = z
   })
   .strict();
 export type TripCard = z.infer<typeof TripCardSchema>;
-
-export const TripCardPublicSchema = z
-  .object({
-    id: z.number().int().positive(),
-    slug: z.string().min(1).nullable().optional(),
-    headline: z.string().min(1),
-    vibeLine: z.string().nullable().optional(),
-    region: z.string().nullable().optional(),
-    durationDays: z.number().int().positive().nullable().optional(),
-    fromPrice: z.number().nonnegative().nullable().optional(),
-    currencyCode: z.string().length(3).nullable().optional(),
-    accommodationStyle: z.string().nullable().optional(),
-    activityTags: z.array(z.string()).default([]),
-    canonicalUrl: z.string().url(),
-    image: DerivedImageSchema.nullable().optional(),
-  })
-  .strict();
-export type TripCardPublic = z.infer<typeof TripCardPublicSchema>;
