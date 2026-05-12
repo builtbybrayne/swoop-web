@@ -63,10 +63,20 @@ export {
   SampleInformChunkPublic,
 } from "./inform-chunk.sample.js";
 
+export { SampleTripCard } from "./trip-card.sample.js";
+
+// -----------------------------------------------------------------------------
+// Crosscut C.48 — ProposalCardPublic discriminated-union fixtures
+// (`find_options` v1 tranche: schema lands day-one, all four variants present;
+// only `type: 'trip'` is wired live by the connector handler).
+// -----------------------------------------------------------------------------
+
 export {
-  SampleTripCard,
-  SampleTripCardPublic,
-} from "./trip-card.sample.js";
+  SampleTripProposalCard,
+  SampleTourProposalCard,
+  SampleHotelProposalCard,
+  SampleRegionBaseProposalCard,
+} from "./proposal-card.sample.js";
 
 // -----------------------------------------------------------------------------
 // C.t2 — eight-tool intent-named surface I/O fixtures
@@ -95,4 +105,5 @@ export {
 export {
   SampleFindOptionsInput,
   SampleFindOptionsOutput,
+  SampleFindOptionsOutputMixed,
 } from "./find-options.sample.js";
