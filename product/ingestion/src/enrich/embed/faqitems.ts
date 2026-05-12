@@ -11,7 +11,7 @@
 import type pg from 'pg';
 import type { CostLedger } from '../cost.js';
 import { approxTokenCount } from '../cost.js';
-import { embedInBatches, VoyageClient } from '../voyage.js';
+import { embedInBatches, GeminiClient } from '../gemini.js';
 import { toPgVectorLiteral } from '../pool.js';
 import { stripHtml } from '../chunk.js';
 
@@ -23,7 +23,7 @@ interface FaqRow {
 
 export interface EmbedFaqOptions {
   client: pg.PoolClient;
-  voyage: VoyageClient;
+  embeddingClient: GeminiClient;
   ledger: CostLedger;
   limit?: number;
   dryRun?: boolean;
@@ -64,16 +64,16 @@ export async function embedFaqItems(opts: EmbedFaqOptions): Promise<EmbedFaqResu
     return { rowsConsidered: 0, rowsEmbedded: 0, rowsSkipped: 0, estimatedTokens: 0 };
   }
 
-  const out = await embedInBatches(opts.voyage, todo, faqEmbeddingInputText, {
-    batchSize: 128,
+  const out = await embedInBatches(opts.embeddingClient, todo, faqEmbeddingInputText, {
+    batchSize: 100,
     concurrency: 4,
     shouldAbort: () => opts.ledger.shouldAbort(),
-    onBatchComplete: (t) => opts.ledger.recordVoyage('voyage:faqitem', t, 1),
+    onBatchComplete: (t) => opts.ledger.recordEmbedding('gemini:faqitem', t, 1),
   });
 
   for (const { item, embedding } of out) {
     await opts.client.query(
-      `UPDATE faqitem SET embedding = $1::vector(1024), modified_at = NOW() WHERE id = $2`,
+      `UPDATE faqitem SET embedding = $1::halfvec(3072), modified_at = NOW() WHERE id = $2`,
       [toPgVectorLiteral(embedding), item.id],
     );
   }

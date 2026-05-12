@@ -23,7 +23,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
 import { runEnrich, type RunMode } from './run.js';
-import { VoyageClient } from './voyage.js';
+import { GeminiClient } from './gemini.js';
 import { AnthropicBatchClient, type AnthropicBatchSdk } from './anthropic-batch-client.js';
 import {
   DEFAULT_HARD_CAP_GBP_DEV,
@@ -128,13 +128,13 @@ async function main(): Promise<void> {
     throw new Error('DATABASE_URL not set; pass --database-url or set in connector/.env');
   }
 
-  // Voyage requires VOYAGE_API_KEY. Skip in dry-run mode.
-  const voyageApiKey = process.env.VOYAGE_API_KEY;
-  if (!voyageApiKey && !args.dryRun) {
-    throw new Error('VOYAGE_API_KEY not set; required for non-dry-run embed pass');
+  // Gemini requires GEMINI_API_KEY. Skip in dry-run mode.
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (!geminiApiKey && !args.dryRun) {
+    throw new Error('GEMINI_API_KEY not set; required for non-dry-run embed pass');
   }
 
-  const voyage = new VoyageClient({ apiKey: voyageApiKey ?? 'dry-run' });
+  const gemini = new GeminiClient({ apiKey: geminiApiKey ?? 'dry-run' });
 
   // Anthropic SDK lookup. If not installed, fall back to a no-op client that
   // throws on actual submit/poll/results so dry-runs still work.
@@ -155,7 +155,7 @@ async function main(): Promise<void> {
     limit: args.limit,
     dryRun: args.dryRun,
     databaseUrl,
-    voyage,
+    embeddingClient: gemini,
     batch,
     hardCapGbp: hardCap,
     log: (msg) => console.log(msg),

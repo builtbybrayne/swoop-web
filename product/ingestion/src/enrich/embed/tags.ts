@@ -13,7 +13,7 @@ import type pg from 'pg';
 import type { CostLedger } from '../cost.js';
 import { approxTokenCount } from '../cost.js';
 import { contentHash } from '../hash.js';
-import { embedInBatches, VoyageClient } from '../voyage.js';
+import { embedInBatches, GeminiClient } from '../gemini.js';
 import { toPgVectorLiteral } from '../pool.js';
 
 const SOURCE_TYPE = 'tag';
@@ -29,11 +29,11 @@ interface TagRow {
 
 export interface EmbedTagsOptions {
   client: pg.PoolClient;
-  voyage: VoyageClient;
+  embeddingClient: GeminiClient;
   ledger: CostLedger;
   /** Optional row limit (testing). */
   limit?: number;
-  /** Dry-run: read source rows + plan, never call Voyage, never write. */
+  /** Dry-run: read source rows + plan, never call Gemini, never write. */
   dryRun?: boolean;
 }
 
@@ -104,11 +104,11 @@ export async function embedTags(opts: EmbedTagsOptions): Promise<EmbedTagsResult
     return { rowsConsidered: rows.length, rowsEmbedded: 0, rowsSkipped: rows.length, estimatedTokens: 0 };
   }
 
-  const out = await embedInBatches(opts.voyage, todo, tagEmbeddingInputText, {
-    batchSize: 128,
+  const out = await embedInBatches(opts.embeddingClient, todo, tagEmbeddingInputText, {
+    batchSize: 100,
     concurrency: 2, // tiny pass, no benefit from higher concurrency.
     shouldAbort: () => opts.ledger.shouldAbort(),
-    onBatchComplete: (tokens, n) => opts.ledger.recordVoyage('voyage:tag', tokens, 1),
+    onBatchComplete: (tokens) => opts.ledger.recordEmbedding('gemini:tag', tokens, 1),
   });
 
   // UPSERT-style update: write the embedding inline. The `tag` table doesn't
@@ -117,7 +117,7 @@ export async function embedTags(opts: EmbedTagsOptions): Promise<EmbedTagsResult
   for (const { item, embedding } of out) {
     const literal = toPgVectorLiteral(embedding);
     await opts.client.query(
-      `UPDATE tag SET embedding = $1::vector(1024), modified_at = NOW() WHERE id = $2`,
+      `UPDATE tag SET embedding = $1::halfvec(3072), modified_at = NOW() WHERE id = $2`,
       [literal, item.id],
     );
     // Inject a hash also into a side-channel? No — for tag the simple "is

@@ -2,9 +2,10 @@
  * Top-level enrich runner — orchestrates the embed + classify + compose passes.
  *
  * Plan: planning/03-exec-c-t3a.md §"Sub-step ordering" + §"Verification".
+ * Provider swap to Gemini-embedding-001 / 3072d per C.46 (planning/03-exec-c-t9.md).
  *
  * Modes:
- *   - 'embed': Voyage embedding passes only.
+ *   - 'embed': Gemini embedding passes only.
  *   - 'classify': Haiku Batches API classifier passes only.
  *   - 'compose': SQL composition into derived tables only.
  *   - 'all': embed → classify → compose → embed-derived-rows (composition
@@ -28,7 +29,7 @@ import { embedFaqItems } from './embed/faqitems.js';
 import { embedImages } from './embed/images.js';
 import { embedBlogChunks } from './embed/blog-chunks.js';
 import { embedDerivedTable } from './embed/derived-rows.js';
-import { VoyageClient } from './voyage.js';
+import { GeminiClient } from './gemini.js';
 import type { BatchClient } from './haiku.js';
 import { loadClassifierPrompt, resolveEtlPromptsRoot } from './prompts.js';
 import { CLASSIFIER_SCHEMAS } from './schemas.js';
@@ -51,7 +52,7 @@ export interface EnrichRunOptions {
   /** Sub-source filter (e.g. 'tag', 'faqitem', 'blog_chunk'). 'all' if undefined. */
   source?: string;
   databaseUrl: string;
-  voyage: VoyageClient;
+  embeddingClient: GeminiClient;
   /** Haiku Batches API client. */
   batch: BatchClient;
   /** Hard cap; defaults to env or dev default. */
@@ -113,7 +114,7 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
           log(`[enrich/embed/tag] starting`);
           passResults['embed:tag'] = await embedTags({
             client,
-            voyage: opts.voyage,
+            embeddingClient: opts.embeddingClient,
             ledger,
             limit: opts.limit,
             dryRun: opts.dryRun,
@@ -123,7 +124,7 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
           log(`[enrich/embed/faqitem] starting`);
           passResults['embed:faqitem'] = await embedFaqItems({
             client,
-            voyage: opts.voyage,
+            embeddingClient: opts.embeddingClient,
             ledger,
             limit: opts.limit,
             dryRun: opts.dryRun,
@@ -133,7 +134,7 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
           log(`[enrich/embed/blog_chunk] starting`);
           passResults['embed:blog_chunk'] = await embedBlogChunks({
             client,
-            voyage: opts.voyage,
+            embeddingClient: opts.embeddingClient,
             ledger,
             limit: opts.limit,
             dryRun: opts.dryRun,
@@ -143,7 +144,7 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
           log(`[enrich/embed/image] starting`);
           passResults['embed:image'] = await embedImages({
             client,
-            voyage: opts.voyage,
+            embeddingClient: opts.embeddingClient,
             ledger,
             limit: opts.limit,
             dryRun: opts.dryRun,
@@ -240,29 +241,29 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
           // Embed derived tables now that they have text.
           log(`[enrich/embed-derived] embedding derived rows`);
           passResults['embed:inspire_passage'] = await embedDerivedTable({
-            client, voyage: opts.voyage, ledger,
+            client, embeddingClient: opts.embeddingClient, ledger,
             table: 'inspire_passage', textColumn: 'text', embedColumn: 'embedding',
-            ledgerKey: 'voyage:inspire_passage', populateTsv: false, idColumn: 'uuid',
+            ledgerKey: 'gemini:inspire_passage', populateTsv: false, idColumn: 'uuid',
           });
           passResults['embed:customer_story'] = await embedDerivedTable({
-            client, voyage: opts.voyage, ledger,
+            client, embeddingClient: opts.embeddingClient, ledger,
             table: 'customer_story', textColumn: 'persona_summary', embedColumn: 'persona_embedding',
-            ledgerKey: 'voyage:customer_story', populateTsv: false, idColumn: 'uuid',
+            ledgerKey: 'gemini:customer_story', populateTsv: false, idColumn: 'uuid',
           });
           passResults['embed:trust_proof'] = await embedDerivedTable({
-            client, voyage: opts.voyage, ledger,
+            client, embeddingClient: opts.embeddingClient, ledger,
             table: 'trust_proof', textColumn: 'evidence', embedColumn: 'embedding',
-            ledgerKey: 'voyage:trust_proof', populateTsv: false, idColumn: 'uuid',
+            ledgerKey: 'gemini:trust_proof', populateTsv: false, idColumn: 'uuid',
           });
           passResults['embed:inform_chunk'] = await embedDerivedTable({
-            client, voyage: opts.voyage, ledger,
+            client, embeddingClient: opts.embeddingClient, ledger,
             table: 'inform_chunk', textColumn: 'text', embedColumn: 'embedding',
-            ledgerKey: 'voyage:inform_chunk', populateTsv: false, idColumn: 'uuid',
+            ledgerKey: 'gemini:inform_chunk', populateTsv: false, idColumn: 'uuid',
           });
           passResults['embed:trip_card'] = await embedDerivedTable({
-            client, voyage: opts.voyage, ledger,
+            client, embeddingClient: opts.embeddingClient, ledger,
             table: 'trip_card', textColumn: 'headline', embedColumn: 'embedding',
-            ledgerKey: 'voyage:trip_card', populateTsv: false, idColumn: 'integer',
+            ledgerKey: 'gemini:trip_card', populateTsv: false, idColumn: 'integer',
           });
         }
 

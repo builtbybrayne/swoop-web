@@ -5,7 +5,7 @@ import {
   USD_TO_GBP,
   HAIKU_INPUT_PER_MILLION_USD,
   BATCH_DISCOUNT,
-  VOYAGE_INPUT_PER_MILLION_USD,
+  GEMINI_EMBEDDING_INPUT_PER_MILLION_USD,
 } from '../cost.js';
 
 describe('approxTokenCount', () => {
@@ -20,12 +20,17 @@ describe('approxTokenCount', () => {
 });
 
 describe('CostLedger', () => {
-  it('records voyage spend in GBP', () => {
+  it('records embedding spend in GBP', () => {
     const warns: string[] = [];
     const errs: string[] = [];
-    const ledger = new CostLedger({ hardCapGbp: 100, softWarningGbp: 50, warn: (m) => warns.push(m), err: (m) => errs.push(m) });
-    ledger.recordVoyage('voyage:tag', 1_000_000, 1);
-    const expectedUsd = VOYAGE_INPUT_PER_MILLION_USD;
+    const ledger = new CostLedger({
+      hardCapGbp: 100,
+      softWarningGbp: 50,
+      warn: (m) => warns.push(m),
+      err: (m) => errs.push(m),
+    });
+    ledger.recordEmbedding('gemini:tag', 1_000_000, 1);
+    const expectedUsd = GEMINI_EMBEDDING_INPUT_PER_MILLION_USD;
     const expectedGbp = expectedUsd * USD_TO_GBP;
     expect(ledger.totalGbp()).toBeCloseTo(expectedGbp, 6);
   });
@@ -48,7 +53,7 @@ describe('CostLedger', () => {
   it('shouldAbort when total ≥ hard cap', () => {
     const ledger = new CostLedger({ hardCapGbp: 0.001, softWarningGbp: 0 });
     expect(ledger.shouldAbort()).toBe(false);
-    ledger.recordVoyage('voyage:tag', 1_000_000, 1);
+    ledger.recordEmbedding('gemini:tag', 1_000_000, 1);
     expect(ledger.shouldAbort()).toBe(true);
   });
 
@@ -59,20 +64,20 @@ describe('CostLedger', () => {
       softWarningGbp: 0.0000001,
       warn: (m) => warns.push(m),
     });
-    ledger.recordVoyage('voyage:tag', 1_000_000, 1);
-    ledger.recordVoyage('voyage:tag', 1_000_000, 1);
+    ledger.recordEmbedding('gemini:tag', 1_000_000, 1);
+    ledger.recordEmbedding('gemini:tag', 1_000_000, 1);
     const softWarnings = warns.filter((w) => w.includes('soft warning'));
     expect(softWarnings.length).toBe(1);
   });
 
   it('summary breaks down per-pass', () => {
     const ledger = new CostLedger({ hardCapGbp: 100, softWarningGbp: 50 });
-    ledger.recordVoyage('voyage:tag', 100, 1);
+    ledger.recordEmbedding('gemini:tag', 100, 1);
     ledger.recordHaiku('haiku:blog_post_job', 200, 50, 1, true);
     const s = ledger.summary();
-    expect(s.perPass['voyage:tag']).toBeDefined();
+    expect(s.perPass['gemini:tag']).toBeDefined();
     expect(s.perPass['haiku:blog_post_job']).toBeDefined();
-    expect(s.perPass['voyage:tag']!.requests).toBe(1);
+    expect(s.perPass['gemini:tag']!.requests).toBe(1);
     expect(s.perPass['haiku:blog_post_job']!.requests).toBe(1);
   });
 });

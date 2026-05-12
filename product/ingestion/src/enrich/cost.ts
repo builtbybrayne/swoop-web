@@ -9,13 +9,13 @@
  * The ledger tracks per-pass + total spend so a runaway prompt is visible
  * immediately (Open Q12 in the plan).
  *
- * Pricing constants (2026-04 — verify against published pricing if anything
+ * Pricing constants (2026-05 — verify against published pricing if anything
  * looks off):
  *
- *   Voyage-3:            $0.02 / 1M input tokens
- *   Anthropic Haiku 4.5: $1.00 / 1M input tokens; $5.00 / 1M output tokens
- *   Batch API discount:  50% on Haiku (per HITL Q4 — batch processing for
- *                        all classifier passes)
+ *   Gemini-embedding-001: $0.15 / 1M input tokens (C.46 supersedes C.18)
+ *   Anthropic Haiku 4.5:  $1.00 / 1M input tokens; $5.00 / 1M output tokens
+ *   Batch API discount:   50% on Haiku (per HITL Q4 — batch processing for
+ *                         all classifier passes)
  *
  * GBP conversion: 0.79 USD→GBP (rough, recorded in the ledger so a future
  * post-mortem can re-cost). Plan §"Cost guards" sets the per-pass budget.
@@ -24,8 +24,8 @@
 /** Conversion ratio at recording time. */
 export const USD_TO_GBP = 0.79;
 
-/** Voyage-3 input pricing (per 1M tokens, USD). */
-export const VOYAGE_INPUT_PER_MILLION_USD = 0.02;
+/** Gemini-embedding-001 input pricing (per 1M tokens, USD), per C.46. */
+export const GEMINI_EMBEDDING_INPUT_PER_MILLION_USD = 0.15;
 
 /** Anthropic Haiku 4.5 input pricing (per 1M tokens, USD), full-rate. */
 export const HAIKU_INPUT_PER_MILLION_USD = 1.0;
@@ -46,15 +46,15 @@ export const DEFAULT_HARD_CAP_GBP_DEV = 10;
 export const DEFAULT_HARD_CAP_GBP_PROD = 15;
 
 export type LedgerPassKey =
-  | 'voyage:tag'
-  | 'voyage:image'
-  | 'voyage:faqitem'
-  | 'voyage:blog_chunk'
-  | 'voyage:inspire_passage'
-  | 'voyage:customer_story'
-  | 'voyage:trust_proof'
-  | 'voyage:inform_chunk'
-  | 'voyage:trip_card'
+  | 'gemini:tag'
+  | 'gemini:image'
+  | 'gemini:faqitem'
+  | 'gemini:blog_chunk'
+  | 'gemini:inspire_passage'
+  | 'gemini:customer_story'
+  | 'gemini:trust_proof'
+  | 'gemini:inform_chunk'
+  | 'gemini:trip_card'
   | 'haiku:blog_post_job'
   | 'haiku:persona_summary'
   | 'haiku:image_annotation'
@@ -96,7 +96,7 @@ export interface CostLedgerOptions {
 /**
  * In-memory cost ledger. One per ETL run.
  *
- * Increment via `recordVoyage` / `recordHaiku` after each batch. Call
+ * Increment via `recordEmbedding` / `recordHaiku` after each batch. Call
  * `shouldAbort()` at batch boundaries to honour the kill-switch.
  */
 export class CostLedger {
@@ -114,12 +114,19 @@ export class CostLedger {
     this.err = options.err ?? ((msg) => console.error(msg));
   }
 
-  recordVoyage(
+  /**
+   * Record an embedding-pass spend. Provider-neutral name (renamed from
+   * `recordVoyage` in C.t9 / C.46) so future provider swaps don't break the
+   * call sites a second time. Pass-key prefixes (`gemini:tag` etc.) remain
+   * provider-specific because they're audit-trail data.
+   */
+  recordEmbedding(
     pass: LedgerPassKey,
     inputTokens: number,
     requests: number = 1,
   ): void {
-    const usd = (inputTokens / 1_000_000) * VOYAGE_INPUT_PER_MILLION_USD;
+    const usd =
+      (inputTokens / 1_000_000) * GEMINI_EMBEDDING_INPUT_PER_MILLION_USD;
     this.add(pass, inputTokens, 0, requests, usd * USD_TO_GBP);
   }
 
@@ -203,10 +210,11 @@ export class CostLedger {
 /**
  * Approximate token count for a string. 1 token ≈ 4 chars of English prose.
  *
- * We deliberately avoid pulling tiktoken — it's a hefty WASM dep and Voyage
- * doesn't ship a tokenizer. The approximation is conservative enough for
- * cost estimation; actual API-reported usage is what the ledger should
- * reconcile to in production once we wire that.
+ * We deliberately avoid pulling tiktoken / google-tokenizer — both are hefty
+ * deps. Gemini's batchEmbedContents response carries no token usage either,
+ * so the approximation is also the only signal we have on the embedding leg.
+ * HITL Q5 (2026-05-12) ratified accepting the 1–2% drift; the ledger is a
+ * cap-not-billing instrument.
  */
 export function approxTokenCount(text: string): number {
   if (!text) return 0;
