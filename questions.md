@@ -94,6 +94,16 @@ b. **`daybyday` is much sparser than expected — confirm canonical filter.** Th
 
 c. **`ntag` operational meaning of less-obvious entries.** Most of the 79 ntags are self-evident (areas, activities). A few `interest` tags need confirmation: `Futa`, `Queulat`, `Pumalin`, `Navarino`, `San Martin` — are these region-bounded sub-themes, specific routes, or marketing campaigns? Affects how `stoke_imagination` weights them.
 
+### Tour content population — Thomas / Richard / Martin (raised 2026-05-12, route via Julie)
+
+The `tour` table is a structurally-distinct entity from `trip` in the export (own table; own `group_size_max` column; sibling `tour_item` table for day-by-day breakdown). The 2026-04-27 SQL dump carried 15 `tour` rows but almost all are NULL-titled — `tour: 0/15` populated after the C.t3 ETL filter (which excludes content-empty rows). The 36 `tour_item` rows then have no parent.
+
+**Question**: is the `tour` content intended to be populated, or is multi-region/tour content rendered via `contentblock_tour` rows referencing trips directly? If the former, what's the timeline for populating? If the latter, can Swoop confirm the architectural intent so we know not to wait for `tour` data?
+
+**Why it matters**: Luke's stated upsell priority is Tours. The `find_options` polymorphic-card design ([planning/03-exec-crosscut-find-options-polymorphism.md](planning/03-exec-crosscut-find-options-polymorphism.md)) ships a distinct `tour` variant with group-size badge + day-by-day affordance. The widget renderer + schema ship day-one; the v2 backend tranche (live tour cards) is gated on populated tour content. If Swoop confirms tours are populated elsewhere, the v2 tranche pivots to that source.
+
+**Decision gate**: Al ratified 2026-05-12 that Tours stay a first-class proposal type in the contract regardless of timing — only the v2 backend tranche is gated.
+
 ### Analytics platform preference — Julie / Thomas
 
 Where would Swoop want ad-hoc analysis of chat event logs to land? The default GCP path is BigQuery (simple sink from Cloud Logging, cheap, queryable), but they may already have a preferred BI / warehouse / analytics tool — Looker, Metabase, something else — that we should integrate with instead. Also: do they want the event schema to match conventions their analysts already use?
