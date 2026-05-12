@@ -8,6 +8,42 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.51 — `findOptionsInput.preferredType` lets the agent steer the tool toward a specific proposal type
+
+**Decided**: 2026-05-12
+**Owner**: Crosscut `03-exec-crosscut-find-options-polymorphism.md` v1 execution
+**Rationale**: With `find_options` now polymorphic over `trip | tour | hotel | region_base` (C.48), the agent needs an optional steer for moments when the conversational signal is decisive — e.g. the visitor has explicitly said "I want a small-group guided tour" and Sonnet shouldn't be left guessing whether to surface trip cards. Three shapes considered: (a) require Sonnet to call out the type explicitly every time, (b) infer purely from filter content, (c) optional `preferredType` field — present when the agent is decisive, absent when the handler should pick. Picked (c). Field shape: `z.enum(['trip','tour','hotel','region_base']).optional()` on `FindOptionsInputSchema`. v1 tranche is schema-only — the handler accepts the field and routes through the trip primitive regardless (only `type: 'trip'` is wired live); v2 (tours) and v3 (hotels + region_bases) wire the dispatch. The tool-description prose makes the steer affordance explicit.
+
+**Swap cost**: Low. Field is optional; removing it later means deleting one enum + one input-schema line + updating the description. The handler dispatch path lands separately per tranche; v1 ships the contract without committing to a dispatch policy.
+
+## C.50 — Tranche strategy for `find_options` polymorphism: v1 trips → v2 tours → v3 hotels + region_bases
+
+**Decided**: 2026-05-12
+**Owner**: Crosscut `03-exec-crosscut-find-options-polymorphism.md` v1 execution + HITL ratification 2026-05-12
+**Rationale**: The polymorphic contract (C.48) needs to land day-one so the UI (D.t9) can ship all four card-variant renderers against a stable schema. Backend support tranches behind it. Three tranches chosen, each independent on top of the v1 contract: **v1 (this commit)** ships the discriminated schema + the rewritten tool description + the connector handler returning trip cards with `type: 'trip'` literal. **v2 (Luke priority — tours)** adds `findTourOptions(filter)` data primitive joining `tour` + `tour_item` + `area`; gated on Swoop populating the `tour` table (currently `tour: 0/15 populated` post-ETL per C.t3 live counts — open question routed to Thomas/Richard). **v3 (hotels + region_bases)** adds `findHotelOptions(filter)` joining `hotel` + `location` + `area`, plus `findRegionBaseOptions(filter)` derived from `area` + `page`; not gated on Swoop input (hotel data exists live, region_base is fully derivable). Each tranche is independent — landing v2 doesn't unblock v3 or vice versa.
+
+**Swap cost**: Low per tranche. Each is a data-primitive addition + a handler dispatch arm; the contract doesn't move.
+
+## C.49 — Tours are structurally distinct from Trips; not collapsed in the proposal schema
+
+**Decided**: 2026-05-12
+**Owner**: Crosscut `03-exec-crosscut-find-options-polymorphism.md` v1 execution + HITL ratification 2026-05-12
+**Rationale**: The source `tour` table carries columns that `trip` does not — `group_size_max` is the load-bearing one; `tour_item` adds a separate day-by-day breakdown. Two ways to surface this: (a) collapse tours into trips with optional fields, (b) keep them as a distinct variant of the proposal-card discriminated union. Picked (b). Tours are a distinctive Swoop product (small-group expertise is part of what we sell) and the visual register the brand wants is type-specific — group-size + day-count are the affordances Luke wants foregrounded. The schema's `TourProposalCardSchema` carries `groupSizeMax` + `dayCount` as tour-only fields; the UI dispatches per `type` discriminator. The tool-description prose makes "lean toward tours when the signal could go either way" Sonnet's default — that's where Luke's upsell priority lives at the conversational layer (not in handler logic that would distort retrieval).
+
+**Swap cost**: Low. If real conversations reveal tours and trips can be merged after all, the variant retires by collapsing `TourProposalCardSchema` into `TripProposalCardSchema` (add `groupSizeMax` + `dayCount` as optional on trip; drop the tour discriminator). The UI's per-type renderer for tour retires alongside; the live tour data already routes through the trip primitive in v1 so there'd be no live-data smoke to migrate.
+
+## C.48 — `find_options` output is polymorphic; `ProposalCardPublicSchema` is a discriminated union over `trip | tour | hotel | region_base`
+
+**Decided**: 2026-05-12
+**Owner**: Crosscut `03-exec-crosscut-find-options-polymorphism.md` v1 execution + HITL ratification 2026-05-12
+**Supersedes**: the TripCard-only contract C.t2 settled (the `TripCardPublicSchema` projection inside `@swoop/common/derived.ts`). The ETL row `TripCardSchema` stays — the public schema is what becomes polymorphic.
+
+**Rationale**: The conversational moment `find_options` serves is *"propose concrete options the visitor can compare"*. A visitor narrowed to "a 7-day Patagonia trip in March, mid-budget" wants trip cards; one signalling "I want a small-group guided experience" wants tour cards; one asking "where could we base ourselves to explore Torres del Paine?" wants hotel or region_base cards. The conversational moment doesn't change — the *shape of the concrete option* does. Theme-11 top-down reasoning: the right tool surface follows from the job, not from the data shape. Bottom-up alternative (separate `find_trips` / `find_tours` / `find_hotels` tools) fragments Sonnet's tool-selection rationale and dilutes the intent-named-tool surface theme 11 was authored against. One tool, polymorphic output. The discriminator (`type`) is the load-bearing field; the UI dispatches over it; tests assert it; tranched backend implementations carry it from day one even when only the trip variant is wired live. The deprecated name `TripCardPublicSchema` is removed in the same commit that introduces `ProposalCardPublicSchema` — no grace period; B.t3a precedent already established that retiring deprecated schemas verbatim is the right discipline (settle once, never backtrack). Numbers C.43 – C.47 already taken on main as of merge 2026-05-12 — operator-runbook + Gemini-embedding + sync-enrich-mode decisions.
+
+**Swap cost**: Medium. The schema is consumed by the connector handler + (post-D.t9) the UI's polymorphic widget. Retiring polymorphism means collapsing all four variants back into a single object schema (and the UI loses per-type renderers). Adding a fifth variant is mechanical (one new sub-schema + one new line in the union + a new renderer); this is the design pattern that wins.
+
+---
+
 ## C.47 — Sync enrich mode for dev iteration (carve-out from HITL Q4 batch lock)
 
 **Decided**: 2026-05-12

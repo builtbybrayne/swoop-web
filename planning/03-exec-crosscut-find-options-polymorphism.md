@@ -346,6 +346,78 @@ The lesson: polymorphism is right when each variant gets its own visual register
 
 ---
 
+## Execution log
+
+### 2026-05-12 — v1 tranche landed
+
+**Scope**: v1 only — discriminated `ProposalCardPublicSchema` with all four variants ships day-one in `@swoop/common`; the connector handler returns trip cards with the `type: 'trip'` literal (no live tour / hotel / region_base dispatch). v2 (tours, Swoop-data-gated) and v3 (hotels + region_bases) are queued downstream of this commit.
+
+**What landed**:
+
+- **`@swoop/common`**:
+  - `product/ts-common/src/tools.ts` — new `ProposalCardPublicSchema` discriminated union (`TripProposalCardSchema | TourProposalCardSchema | HotelProposalCardSchema | RegionBaseProposalCardSchema`); each variant carries a `type` literal. `FindOptionsOutputSchema` updated to `{ cards: z.array(ProposalCardPublicSchema), count }`. `FindOptionsInputSchema` extended with `preferredType: ProposalTypeSchema.optional()` (v1: schema-only — handler accepts but does not yet dispatch off it; decision C.51).
+  - `product/ts-common/src/derived.ts` — `TripCardPublicSchema` + `TripCardPublic` retired. `TripCardSchema` (full ETL row) preserved unchanged — `composeTripCard` in `@swoop/ingestion` continues to validate against it. Header comment updated to point at the new polymorphic public projection.
+- **Fixtures** (`product/ts-common/src/fixtures/`):
+  - New `proposal-card.sample.ts` — one fixture per variant (`SampleTripProposalCard`, `SampleTourProposalCard`, `SampleHotelProposalCard`, `SampleRegionBaseProposalCard`). Each is Patagonia-flavoured with real-feeling regions, prices, and image records.
+  - `find-options.sample.ts` rewritten — `SampleFindOptionsOutput` (v1 reality, all-trip set) + new `SampleFindOptionsOutputMixed` (one of each variant — D.t9 widget executor consumes this).
+  - `trip-card.sample.ts` collapsed to the ETL-only `SampleTripCard`; the public-projection fixture moved into the discriminated-union family above.
+  - `fixtures/index.ts` — replaced `SampleTripCardPublic` export with the four proposal-card exports + `SampleFindOptionsOutputMixed`.
+- **`@swoop/common` tests** (`product/ts-common/src/__tests__/fixtures.test.ts`):
+  - 4 new per-variant round-trip tests against each sub-schema.
+  - 1 parametrised `it.each` block discriminating across all four `type` literals on the parent union.
+  - 2 reject-path tests (unknown discriminator, missing `type` field).
+  - `find_options` test split into: (1) v1 trips-only round-trip + asserts every card carries `type: 'trip'`, (2) mixed-variant round-trip + asserts all four types present, (3) `preferredType` accepted on input.
+  - Net: `fixtures.test.ts` grew from 47 to 57 tests; workspace total 132 → 152.
+- **Tool description** (`product/cms/prompts/tools/find_options/description.md`) — fully rewritten per §2.2: teaches Sonnet the four card variants, when each surfaces, the Luke "lean toward tours when signal could go either way" upsell instruction, per-type pricing rules (`per_night` for hotels, total "from £X" for the rest), and the `preferredType` steer affordance.
+- **`@swoop/connector`**:
+  - `product/connector/src/data/query-trips.ts` — switched from `TripCardPublicSchema` to `TripProposalCardSchema`; emits `type: 'trip'` on every card. SQL row → schema mapping converted to spread-when-present pattern (optional fields are now `.optional()`, not `.nullable().optional()`, so explicit `null` is rejected). Postgres integer ids stringified to satisfy `id: z.string()`.
+  - `product/connector/src/tools/find_options.ts` — header comment updated to spell out the v1 contract (every card `type: 'trip'`, `preferredType` schema-only).
+  - New `product/connector/src/tools/__tests__/find_options.test.ts` — 5 tests: discriminator on every card (mocked primitive), schema validation, empty primitive result, filter threading, `preferredType` accepted without dispatch (v1 contract pinning). Workspace total 97 → 102 (+3 skipped unchanged).
+- **Planning** — `planning/decisions.md` gains C.48 – C.51 verbatim per §2.6. C.43 – C.47 confirmed not to collide (taken on main by operator-runbook + Gemini + sync-enrich work landed via earlier merges).
+
+**Verification (fresh-install gate per §5)**:
+
+```text
+cd /Users/al/Studio/projects/swoop_web/.claude/worktrees/agent-a609ecd1765f43446/product
+rm -rf node_modules
+npm install                          # 1244 packages, exit 0
+npm run typecheck --workspaces --if-present
+  # ts-common      green
+  # orchestrator   green
+  # connector      green
+  # ui             green
+  # ingestion      green
+  # harness        green
+npm test --workspaces --if-present  # exit 0
+  # ts-common     152 passed (+20 from baseline at chapter open)
+  # orchestrator  160 passed
+  # connector     102 passed | 3 skipped (+5 v1-tranche tests)
+  # ui             62 passed
+  # ingestion    266 passed
+  # harness        74 passed
+  # total         816 passed | 3 skipped
+grep -rn TripCardPublic product/    # ZERO hits — sweep complete
+```
+
+**Deviations from the plan**:
+
+1. **`id: z.string()` vs source `INT`**. The plan §2.1 specifies `id: z.string()` on `ProposalCardBaseSchema`; the source `trip_card.id` is INT (mirror of `trip.id`). Resolved by stringifying in the connector primitive (`String(r.id)`). The fixture ids are strings (e.g. `"1042"` for trip, `"tour-217"` for tour). Why string: tour / hotel / region_base ids span integer source ids and synthetic UUID-like ids ("region-el-calafate") — string is the union-friendly choice and matches the plan's wording.
+2. **Optional-field shape**. The retired `TripCardPublicSchema` used `z.string().nullable().optional()` for many fields; the new `ProposalCardBaseFields` use `z.string().optional()` (no `.nullable()`) per the plan §2.1 example. To preserve the connector's existing tolerance for SQL NULLs, I introduced a spread-when-present pattern at the row → schema boundary. `fromPrice` is the lone `.nullable().optional()` exception so the UI can distinguish "no price line" from "field omitted".
+3. **Test file lived at `find_options.test.ts`, not `find-options.test.ts`**. The plan refers to `__tests__/find-options.test.ts` (with a hyphen); the connector's handler file is `find_options.ts` (with an underscore, matching its tool name), and the new test mirrors that name. The plan's intent was clearly "the tests adjacent to the find_options handler"; the underscore matches the existing file convention.
+4. **No D.t9 / UI files touched** — the plan explicitly forbids this (D.t9's executor runs in parallel). The fixtures (`SampleFindOptionsOutputMixed`, the four `Sample*ProposalCard` fixtures) are the surface D.t9 consumes from `@swoop/common`.
+
+**Items surfaced for downstream**:
+
+- **D.t9 widget executor** — the `ProposalCardPublicSchema` discriminated union is live in `@swoop/common`. The widget executor can import `ProposalCardPublic`, `TripProposalCard`, `TourProposalCard`, `HotelProposalCard`, `RegionBaseProposalCard`, plus `SampleFindOptionsOutputMixed` for widget tests, and `SampleTripProposalCard` / `SampleTourProposalCard` / etc. for per-variant fixtures. Every card carries `type` so the polymorphic dispatch in `find-options.tsx` is a clean discriminator switch.
+- **v2 tranche (Tours)** — gated on Swoop populating the `tour` table content (`questions.md` entry under "Open / Data pipeline" — the c-t10 review pass may already have routed this to Thomas/Richard; the v2 tranche unlocks the moment that lands). The fixture `SampleTourProposalCard` is the contract the v2 primitive's row mapper must satisfy.
+- **v3 tranche (Hotels + region_bases)** — not gated. Hotel content lives in the dump (44 rows per C.t3 live-counts); region_base derives from `area` + `page` + a count over `trip`. Implementation slot is open once the team's bandwidth is.
+- **`progress.md` chunk-C update** — per §10 of this plan: append the "find_options output polymorphic per crosscut plan; v1 trips-only live; v2/v3 follow" note. Not done in this commit (out of the v1 implementation scope; planning-doc maintenance is the next-steps writer's job).
+- **B.t3a connector adapter** — already retired the old surface; the v1 schema change is wire-compatible because the parsed payload is still a `{ cards, count }` object. The orchestrator's `parseToolResult` H4 helper does not narrow on individual `cards` element shape, so the discriminated-union shift is transparent at that seam.
+
+No HITL items surfaced during execution. The plan's open considerations §6 (tour data ambiguity, region_base eventual usefulness) remain queued for when v2 / v3 land against real data.
+
+---
+
 ## 10. Hand-off
 
 When v1 lands:
