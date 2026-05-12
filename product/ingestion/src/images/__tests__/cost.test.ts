@@ -10,6 +10,7 @@ import {
   estimateCost,
   fitsBudget,
   formatCostEstimate,
+  withLimit,
 } from '../cost.js';
 
 interface FakeClient {
@@ -75,6 +76,47 @@ describe('fitsBudget', () => {
     expect(r.ok).toBe(false); // 33.5 > 20
     const r2 = fitsBudget(baseEstimate, 40, { mode: 'live' });
     expect(r2.ok).toBe(true);
+  });
+});
+
+describe('withLimit', () => {
+  const fullEstimate = {
+    candidates: 1000,
+    perCallUsdLive: 0.005,
+    perCallUsdBatches: 0.0025,
+    totalUsdLive: 5,
+    totalUsdBatches: 2.5,
+  };
+
+  it('returns the original estimate reference when limit is undefined', () => {
+    expect(withLimit(fullEstimate, undefined)).toBe(fullEstimate);
+  });
+
+  it('returns the original estimate reference when limit >= candidates', () => {
+    expect(withLimit(fullEstimate, 1000)).toBe(fullEstimate);
+    expect(withLimit(fullEstimate, 5000)).toBe(fullEstimate);
+  });
+
+  it('scales totals proportionally when limit < candidates', () => {
+    const r = withLimit(fullEstimate, 100);
+    expect(r.candidates).toBe(100);
+    expect(r.perCallUsdLive).toBe(0.005);
+    expect(r.perCallUsdBatches).toBe(0.0025);
+    expect(r.totalUsdLive).toBe(0.5);
+    expect(r.totalUsdBatches).toBe(0.25);
+  });
+
+  it('limit=0 returns a zero-cost estimate', () => {
+    const r = withLimit(fullEstimate, 0);
+    expect(r.candidates).toBe(0);
+    expect(r.totalUsdLive).toBe(0);
+    expect(r.totalUsdBatches).toBe(0);
+  });
+
+  it('negative limit collapses to zero candidates (defensive)', () => {
+    const r = withLimit(fullEstimate, -5);
+    expect(r.candidates).toBe(0);
+    expect(r.totalUsdLive).toBe(0);
   });
 });
 

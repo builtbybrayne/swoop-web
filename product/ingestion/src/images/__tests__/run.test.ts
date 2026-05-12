@@ -231,6 +231,37 @@ describe('run() — annotation pipeline', () => {
     expect(pg.writes).toHaveLength(0);
   });
 
+  it('live mode with --limit + tight --max-budget: budget gate respects the limit (does NOT abort)', async () => {
+    // Regression: pre-fix the cost gate aborted against the full 1000-row
+    // projection ($5.00) even when --limit=20 meant only $0.10 would be
+    // spent. The fix scales the gate by the limit via withLimit().
+    const pg = new FakePgClient(
+      Array.from({ length: 1000 }, (_, i) => ({
+        id: i + 1,
+        canonical_url: `https://x/${i}.jpg`,
+        description: null,
+        annotation: null,
+      })),
+    );
+    const result = await run({
+      client: pg as never,
+      mode: 'live',
+      maxBudgetUsd: 1,
+      limit: 20,
+      apiKey: 'fake-key',
+      visionClient: fakeVision(
+        JSON.stringify({ description: 'd', annotation: 'a' }),
+      ),
+      checkpointBaseDir: tmpDir,
+      log: (l) => logs.push(l),
+    });
+    expect(result.abortedReason).toBeUndefined();
+    // Only 20 rows should have been processed (succeeded + failed + skipped ≤ 20).
+    expect(result.succeeded + result.failed + result.skipped).toBeLessThanOrEqual(20);
+    // The log should announce the limit-adjusted projection.
+    expect(logs.some((l) => l.includes('--limit=20 applied') && l.includes('effective 20 of 1,000'))).toBe(true);
+  });
+
   it('live mode happy path: parses JSON, writes both cols, records done', async () => {
     const pg = new FakePgClient([
       { id: 1, canonical_url: 'https://x/1.jpg', description: null, annotation: null },

@@ -84,6 +84,35 @@ export function formatCostEstimate(est: CostEstimate, opts?: { mode?: 'live' | '
 }
 
 /**
+ * Scale a CostEstimate down to a limited candidate count.
+ *
+ * The full estimate from `estimateCost` counts every row matching the
+ * filter; when the operator passes `--limit=N` the effective cost is
+ * `min(N, candidates) * perCall`. This helper produces that adjusted
+ * estimate so the budget gate reflects what will actually spend, not
+ * the worst-case full corpus.
+ *
+ * Returns the original `estimate` (same reference) when `limit` is
+ * undefined or ≥ the full candidate count — callers can use `===` to
+ * detect whether a limit was applied.
+ *
+ * Negative or zero limits collapse to zero candidates / zero cost
+ * (defensive — CLI validation should reject these earlier, but the
+ * helper stays honest if called directly).
+ */
+export function withLimit(estimate: CostEstimate, limit: number | undefined): CostEstimate {
+  if (limit === undefined || limit >= estimate.candidates) return estimate;
+  const candidates = Math.max(0, limit);
+  return {
+    candidates,
+    perCallUsdLive: estimate.perCallUsdLive,
+    perCallUsdBatches: estimate.perCallUsdBatches,
+    totalUsdLive: round2(candidates * estimate.perCallUsdLive),
+    totalUsdBatches: round2(candidates * estimate.perCallUsdBatches),
+  };
+}
+
+/**
  * Decide whether the projected spend fits the budget. Returns a tuple
  * of (ok, reason) — when not ok, the reason is the human-readable
  * explanation we surface to the operator.

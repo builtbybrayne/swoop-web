@@ -37,7 +37,7 @@ import type pg from 'pg';
 import { messageOf } from '@swoop/common';
 
 import { fetchCandidates, type Candidate } from './candidates.js';
-import { estimateCost, formatCostEstimate, fitsBudget, type CostEstimate } from './cost.js';
+import { estimateCost, formatCostEstimate, fitsBudget, withLimit, type CostEstimate } from './cost.js';
 import {
   loadCheckpoint,
   saveCheckpoint,
@@ -118,6 +118,18 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   const estimate = await estimateCost(opts.client, opts.perCallUsdOverride);
   log(formatCostEstimate(estimate, { mode: opts.mode === 'live' ? 'live' : 'batches' }));
 
+  // The budget gate must reflect `--limit=N` — without this the
+  // full-corpus projection refuses sliced runs that would actually only
+  // spend a fraction. `withLimit` returns the original estimate when no
+  // limit is in play, so the unlimited path is unchanged.
+  const effectiveEstimate = withLimit(estimate, opts.limit);
+  if (effectiveEstimate !== estimate) {
+    log(
+      `[annotate] --limit=${opts.limit} applied → effective ${effectiveEstimate.candidates.toLocaleString('en-US')} of ${estimate.candidates.toLocaleString('en-US')} candidates; budget gate uses the adjusted projection:`,
+    );
+    log(formatCostEstimate(effectiveEstimate, { mode: opts.mode === 'live' ? 'live' : 'batches' }));
+  }
+
   // 2) Mode branch.
   if (opts.mode === 'dry-run') {
     log(`[annotate] dry-run: no Vision calls fired. Re-run with --max-budget=N (and optional --mode=live|batches) to spend.`);
@@ -140,7 +152,7 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       `--max-budget=N is required to spend. Re-run with --max-budget=$N (USD).`,
     );
   }
-  const fits = fitsBudget(estimate, opts.maxBudgetUsd, {
+  const fits = fitsBudget(effectiveEstimate, opts.maxBudgetUsd, {
     mode: opts.mode === 'live' ? 'live' : 'batches',
   });
   if (!fits.ok) {
