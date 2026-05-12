@@ -63,13 +63,13 @@ The per-tool sections below name the conversational moment and the widget-or-no-
 
 - **`find_inspiring`** — Inspire job. Visitor in Awareness/Interest, curiosity open. **Ships a widget**: a small "inspiration passages" panel — one to three passage cards, each with the passage prose, the paired image (when present), region tag, and a deep-link to the canonical page. Visually lower-density than `find_options` (cards), higher-density than a citation (prose). The Inspire moment is where imagery + prose together do the lifting; a citation alone is insufficient.
 - **`find_someone_who`** — Mirror job. Visitor revealed a persona signal. **Ships a widget**: a "story vignette" — one to three customer-story cards each carrying the customer's story prose, an italicised persona summary that makes the match legible, optional region tag, optional image, deep-link to the source when present. Slightly different visual register from `find_inspiring`'s panel — the persona summary is the load-bearing affordance that makes Mirror feel like Mirror, not like Inspire.
-- **`find_proof`** — Reassure job. A hesitation has surfaced. **No widget**. Sonnet weaves the proof inline as `<utter>` prose with a deep-link. Justification in the per-tool section: a proof card risks turning warmth into legal disclosure; a sentence carrying the claim + the source link is the warmer affordance. Decision flagged for HITL ratification.
-- **`lookup`** — Inform job. Visitor wants a fact. **No widget**. Sonnet weaves the answer inline with at most one canonical-URL link offered when the source page is genuinely a "you'd benefit from reading the full page" affordance. Justification below: a chunk-list widget would look like a search-engine result page; the agent is supposed to be a knowledgeable friend, not a librarian. Decision flagged for HITL ratification.
-- **`find_options`** — Propose options job. Visitor ready to compare concrete trips. **Ships a widget**: a "trip card set" — two to four trip cards each with image, headline, vibe-line, region, headline price (e.g. "from £2,150"), duration, optional accommodation-style + activity tags, deep-link to the trip page. This is the only widget where structured comparison genuinely earns its place; trip cards are the canonical visual moment of the Propose-options job.
+- **`find_proof`** — Reassure job. A hesitation has surfaced. **Ships a quiet "pulled-quote" widget** (revised 2026-05-12 HITL Q1): the `evidence` text in lightly-emphasised type, the `claim` as a small lead-in, the `canonicalUrl` as a quiet inline "Read more →" link. NOT a card with "CLAIM:" / "EVIDENCE:" labels. NOT a coloured-border alert box. Visually a moment of emphasis on prose, with a clickable source — warmer than a citation, quieter than a card.
+- **`lookup`** — Inform job. Visitor wants a fact. **Ships a quiet "source-page" affordance** (revised 2026-05-12 HITL Q2): when one to two canonical URLs surface, render a small "Read the full guide on swoop-patagonia.com →" affordance beneath Sonnet's prose. When chunks have no canonical URLs (edge case), no widget. NOT a chunk-list, NOT search-results-cards — a single quiet link with a small page-title hint.
+- **`find_options`** — Propose options job. Visitor ready to compare concrete trips, tours, or accommodation. **Ships a polymorphic widget** (revised 2026-05-12 HITL Q3): a discriminated `ProposalCard` set rendering one of four card types — `trip`, `tour`, `hotel`, `region_base` — each with its own visual register and distinguishing affordances. v1 implementation ships trips only (current schema); v2 adds tours (Luke priority — group-size badge + day-by-day affordance); v3 adds hotels + region-bases. **Contract extension is settled now even though backend tranches v2/v3 land later** — see [crosscut plan: find-options polymorphism](03-exec-crosscut-find-options-polymorphism.md).
 
-**Net**: three widgets (Inspire panel, Mirror vignette, Trip card set), two non-widget tools (Reassure, Inform). Sonnet's prose carries Reassure and Inform; the three widgets carry the moments where visual scaffolding outperforms prose.
+**Net** (revised 2026-05-12 HITL): five widgets across all five conversational tools — Inspire panel, Mirror vignette, polymorphic Proposal cards (find_options), Reassure pulled-quote (find_proof), Inform source-page affordance (lookup). The three "richer" widgets (Inspire, Mirror, ProposalCards) carry the moments where structured visual scaffolding outperforms prose. The two "quiet" widgets (Reassure, Inform) are visually minimal — a citation + source link, nothing more — to complement Sonnet's prose without competing with it.
 
-The "no widget for Reassure / Inform" calls are the two genuinely top-down questions Al should ratify before execution; they're surfaced again in §"Open HITL questions" so they're hard to miss.
+**Default posture** (per HITL ratification 2026-05-12): widgets render whenever their tool fires. No per-call hint-driven hiding for v1. If real-conversation testing surfaces "the UI feels overwhelming", revisit. The earlier draft proposed an `InvisibleToolRenderer` for find_proof + lookup — superseded; both now ship their own quiet widgets.
 
 ---
 
@@ -144,144 +144,198 @@ Each section answers the five-step discipline in order. The journey-position lab
 
 ---
 
-### `find_proof` (Reassure) — **no widget** (HITL ratification candidate)
+### `find_proof` (Reassure) — **ships a quiet "pulled-quote" widget** (revised 2026-05-12 HITL Q1)
 
 **Conversational moment.** Interest → Strong Consideration, sometimes Strong Consideration → handoff. A hesitation has surfaced — *"are you guys actually any good at this?"*, *"what about the environmental side?"*. `description.md`: *"the visitor isn't asking for a sales pitch; they're asking for evidence."*
 
-**What the visitor sees.** A short Sonnet response that names the concern, weaves the proof into one or two sentences with the source link offered as a quiet inline affordance. The proof is named in Sonnet's voice — calmly, warmly, not defensively.
+**What the visitor sees.** Sonnet's framing prose, then a quiet pulled-quote treatment: the `evidence` text in slightly larger or italicised type, the `claim` as a small lead-in or unobtrusive title, the `canonicalUrl` as a "Read more →" inline affordance below. Visually a moment of emphasis on prose — not a card, not a coloured-border alert box, not a "CLAIM/EVIDENCE/SOURCE" disclosure block. Warm, not legal.
 
-**What the visitor does next.** Reads, accepts, returns to whatever was on top of the conversation. The reassurance is meant to *land and dissolve*, not occupy visual space. A minority click through to the source page to verify.
+One row per proof, stacked vertically if 2–3 returned.
 
-**Why no widget.** A proof card visually escalates a defensive moment. Imagine the visitor asks *"is Swoop actually B-Corp?"* and the chat surface throws up a card with "CLAIM: Swoop is a certified B Corporation. EVIDENCE: …" — the visual register is legal disclosure, not friendly reassurance. The warmer answer is Sonnet's prose: *"Yes — we've been B Corp certified since 2021, recertified 2024. Here's the impact report if you'd like to read it: \[link\]."*
+**What the visitor does next.** Reads, accepts, returns to whatever was on top of the conversation. The reassurance lands and dissolves — but the widget exists so the visitor can also forward / verify / point a sceptical partner at the source.
 
-The `find_proof` tool's `TrustProofPublicSchema` fields (`topic`, `claim`, `evidence`, `canonicalUrl`) are already prose-shaped — Sonnet can quote `evidence` verbatim where the wording is strong, paraphrase where the rhythm wants it, and offer `canonicalUrl` as an inline link. No new visual scaffolding earns its place.
+**Why a widget (revised).** The original plan proposed no widget on the warmth-vs-disclosure argument. HITL ratification 2026-05-12: a small, visually-quiet widget can preserve warmth *and* offer the source affordance without becoming legal chrome. The visual register is the discriminator — a "claim card with evidence label" is legal; a "pulled-quote with read-more link" is friendly.
 
-**Schema flow.** The connector returns `FindProofOutputSchema` shape unchanged; Sonnet receives the structured output in its tool-call result and weaves the response as `<utter>`. No registration in `toolWidgetComponents`. **Important**: without a registered renderer, assistant-ui's default behaviour is to render the tool-call as a small "called tool: find_proof" affordance — that's not what we want either. The widget map must register a **deliberate empty renderer** for `find_proof` (a `null`-returning component) so the tool call doesn't show in the chat at all, only Sonnet's `<utter>` response. Same pattern is needed for `lookup` (next section).
+The `find_proof` tool's `TrustProofPublicSchema` fields (`topic`, `claim`, `evidence`, `canonicalUrl`) drive the rendering directly. Sonnet's prose can still quote `evidence` verbatim above; the widget is complementary — it adds a clickable affordance and a moment of visual emphasis, nothing more.
 
-**Component + props + file path (for the empty renderer).**
-- A single shared file `product/ui/src/widgets/invisible-renderer.tsx` exports `InvisibleToolRenderer(props)` that returns `null` — but **only** after `props.status?.type === "complete"` (otherwise the loading state still wants visible feedback). The loading state shows the existing `WidgetLoadingPlaceholder` so the visitor sees *something happened* while the tool runs.
-- `toolWidgetComponents` registers `find_proof: InvisibleToolRenderer` and `lookup: InvisibleToolRenderer` (next section).
-- Edge case to handle: `incomplete` / `isError`. The shared shell's `renderLifecycleGate` already handles these via `WidgetMalformedPlaceholder` — but for an invisible-by-design renderer, showing a malformed card on tool error is the right behaviour (the visitor should know something went wrong). The `InvisibleToolRenderer` defers to the lifecycle gate and only returns `null` on `complete + result-available`.
+**Component + props + file path.**
+- `product/ui/src/widgets/find-proof.tsx` exports `FindProofWidget(props: ToolCallMessagePartProps<unknown, unknown>)`.
+- Threads through `renderLifecycleGate` first.
+- `safeParse(FindProofOutputSchema, props.result)` at the render boundary.
+- Empty array → no widget rendered at all (return `null` after lifecycle gate). Trust-proofs aren't a "we tried but found nothing" affordance — the absence of proof is itself the answer; Sonnet weaves whatever prose works.
+- Otherwise: a vertical stack of `PulledQuote` sub-components. Each carries: optional `claim` as a small caps-tracked label or italic lead-in; the `evidence` prose in emphasised typography (slightly larger size, lower weight than body, possibly italic — visual treatment decision sized to the brand-extension surface, not pixel-prescribed here); a quiet "Read more →" link to `canonicalUrl` when present (open in new tab).
 
-**Attribute hooks.** None — there's no rendered element.
+**Visual register.** Quiet. The visual emphasis is on the prose itself — a typographic moment, not a structural one. No coloured borders, no badges, no shields. The "Read more →" link is text-weight, not button-style. If the visitor's eye drifts away during reading, the widget shouldn't pull it back.
 
-**Fixture.** No widget body test required; the renderer's only visible state is "loading" (covered by the shell's existing tests) and "error" (ditto). A small contract test asserts that `find_proof` is registered in `toolWidgetComponents`, points at `InvisibleToolRenderer`, and that the renderer returns `null` on `complete` with valid output.
+**Attribute hooks (D.t8).** `data-swoop-part="widget"` + `data-swoop-widget="find-proof"` on the root. Each pulled-quote carries `data-swoop-part="find-proof-pulled-quote"` so the brand team can target the typographic emphasis treatment without targeting every internal element.
 
-**Decision recorded**: no widget — visual escalation of a defensive moment is the wrong affordance; Sonnet's prose with an inline source link is warmer. **Flagged for HITL** — this is a top-down design call, not a technical one (see §"Open HITL questions").
+**Fixture.** `SampleFindProofOutput` from `@swoop/common/fixtures` (exists, or add if not). Test renders against it; assertions: pulled-quote count matches `proofs.length`, evidence text visible, claim visible when present, "Read more →" link present + `target="_blank"`.
+
+**Decision recorded**: ships a quiet widget — the warmth-vs-disclosure tension resolves at the visual register, not at the structural one. The widget is a typographic moment, not a card.
 
 ---
 
-### `lookup` (Inform) — **no widget** (HITL ratification candidate)
+### `lookup` (Inform) — **ships a quiet "source-page" affordance** (revised 2026-05-12 HITL Q2)
 
 **Conversational moment.** Any point in the arc, but characteristically Interest. The visitor wants a specific answer to a specific question — *"how long is the W trek?"*, *"is December crowded?"*, *"do I need a visa?"*. `description.md`: *"the workhorse questions… the agent's job here is to be useful and specific, not to weave atmosphere."*
 
-**What the visitor sees.** Sonnet's response with a direct answer, often a single sentence, sometimes two paragraphs for procedural questions (visa rules, transport logistics). Where the source page genuinely rewards a deeper read, Sonnet offers the canonical URL as an inline affordance — *"the full visa guide is on the practical page if you want the detail: \[link\]."*
+**What the visitor sees.** Sonnet's response with a direct answer, then a small quiet affordance beneath: *"Read the full guide on swoop-patagonia.com →"* with a one-line page-title hint if available. Visually minimal — single inline-styled link, not a card, not a chunk-list, not a search-results layout. Where multiple source pages back the answer (rare; up to 2), render up to two such affordances stacked. Where chunks have no canonical URLs (edge case), no widget renders.
 
-**What the visitor does next.** Mostly: receives the answer, continues. A minority click through for procedural depth.
+**What the visitor does next.** Mostly: receives the answer, continues. A minority click through for procedural depth (visa rules, transport logistics, packing lists).
 
-**Why no widget.** A chunk-list widget — a stack of cards each carrying a prose chunk + URL — looks like a Google search-result page. The agent's mandate is to be a knowledgeable friend, not a librarian; visually rendering the lookup outputs as result cards undoes that positioning. The bottom-up reasoning ("`lookup` returns chunks, build a chunk-list widget") is exactly the trap theme 11 was authored against.
+**Why a widget (revised).** The original plan proposed no widget on the "librarian, not friend" argument. HITL ratification 2026-05-12: a *single source affordance* is friendlier than a chunk-list — it offers the path forward without imposing a search-results visual. The discriminator is "single quiet link" vs "stack of cards"; the former preserves the knowledgeable-friend positioning, the latter undoes it.
 
-The Inform job's value lives in Sonnet's synthesis: weave the answer, quote when the source is precise, paraphrase when the source is verbose, offer the link when the visitor would benefit from the full page. The structured `InformChunkPublicSchema` output (`question?`, `text`, `canonicalUrl?`, `topicTags`) gives Sonnet exactly what it needs to do that synthesis.
+The Inform job's value still lives in Sonnet's synthesis (quote when the source is precise, paraphrase when verbose). The widget complements: it gives a clear next-step affordance for the procedural class of questions where the visitor will want to bookmark / forward / read in full.
 
-**Schema flow.** Same as `find_proof`: connector returns structured output, Sonnet weaves prose, widget map registers `lookup: InvisibleToolRenderer`. No new code beyond the registration line.
+**Component + props + file path.**
+- `product/ui/src/widgets/lookup.tsx` exports `LookupWidget(props: ToolCallMessagePartProps<unknown, unknown>)`.
+- Threads through `renderLifecycleGate` first.
+- `safeParse(LookupOutputSchema, props.result)` at the render boundary.
+- Empty array → no widget. Same as find_proof's empty case.
+- Chunks all share the same `canonicalUrl` → render ONE affordance: *"Read the full guide on swoop-patagonia.com →"* (with `page-title hint` if surfaceable). This is the common case for procedural questions where one page authoritatively answers.
+- Chunks span multiple `canonicalUrl`s → render up to 2 affordances, stacked, with page-title hints to distinguish.
+- Chunks have no `canonicalUrl` → no widget. The structured tool output is then just synthesis-fuel for Sonnet; no visual moment.
 
-**Attribute hooks.** None.
+**Visual register.** Quieter than `find_proof`. A single text-weight link with a small page-title hint above it. No box, no border, no background.
 
-**Fixture.** Contract test as above (`lookup` registered, `InvisibleToolRenderer` returns null on complete).
+**Attribute hooks.** `data-swoop-part="widget"` + `data-swoop-widget="lookup"` on the root. Affordances inside carry `data-swoop-part="lookup-source-link"`.
 
-**Decision recorded**: no widget — librarian-shaped result cards undo the "knowledgeable friend" positioning theme 11 is built around. **Flagged for HITL** — same shape as `find_proof`'s call (see §"Open HITL questions").
+**Fixture.** `SampleLookupOutput` (exists or add). Test cases: (a) all chunks share one URL → one affordance rendered; (b) chunks span two URLs → two affordances rendered; (c) no URLs → no widget body; (d) empty chunks → no widget body.
+
+**Decision recorded**: ships a quiet widget — single source affordance preserves the knowledgeable-friend positioning where a chunk-list would have undone it. The widget IS the link, not the prose; Sonnet's synthesis carries the substance.
 
 ---
 
-### `find_options` (Propose options) — **ships a widget**
+### `find_options` (Propose options) — **ships a polymorphic widget** (revised 2026-05-12 HITL Q3)
 
 **Conversational moment.** Strong Consideration. The conversation has earned the move from *"tell me about Patagonia"* to *"what would I actually do?"*. `description.md`: *"the closest the agent gets to recommending; use it when the conversation has earned that move."*
 
-**What the visitor sees.** Below Sonnet's framing prose, a set of two to four trip cards. Each card carries a hero image, the trip headline, a one-line vibe pitch, the region, headline price (always "from £X"), duration, optional accommodation-style + activity tags, and a deep-link to the trip page on swoop-patagonia.com. Cards are visually denser than the Inspire panel — they're meant to be comparison affordances, not reading affordances. The visitor's eye should travel laterally across the set.
+**What the visitor sees.** Below Sonnet's framing prose, a set of two to four cards. Each card is one of four discriminated `ProposalCard` types — `trip`, `tour`, `hotel`, or `region_base` — and renders with its own visual register matched to the proposal's distinguishing characteristics. Same overall layout (responsive grid, comparable laterally) but the card *content* differs per type.
 
-**What the visitor does next.** Compares. Asks Sonnet about one specifically ("the self-guided W-trail one — what does that include?"). Clicks through to read the full trip page in a new tab. Sometimes flips back into the agent's chat and progresses toward handoff. The card set is the conversational moment most likely to trigger handoff downstream, because comparing is what visitors do just before they want to talk to a specialist.
+| Card type | Distinguishing affordances vs trip | Schema source |
+|---|---|---|
+| `trip` (v1) | Region / Duration / From price / Accommodation style | `trip` table |
+| `tour` (v2 — Luke priority) | All trip affordances PLUS **group-size badge** (e.g. *"max 12 guests"*) + **"day-by-day itinerary"** affordance pulled from `tour_item.day_label` count | `tour` + `tour_item` |
+| `hotel` (v3) | Location / Star rating / **"from £X/night"** pricing variant / Accommodation style | `hotel` |
+| `region_base` (v3) | Region / Nearby trips count / "Use as a base, explore around" framing | derivable from `page` + `area` |
 
-**Schema fields used.** `TripCardPublicSchema` carries `id`, `slug?`, `headline`, `vibeLine?`, `region?`, `durationDays?`, `fromPrice?`, `currencyCode?`, `accommodationStyle?`, `activityTags`, `canonicalUrl`, `image?`. The widget renders all of these.
+**Why a polymorphic widget (revised).** The original plan locked to TripCard-only. HITL ratification 2026-05-12 surfaces a real gap: the conversational moment "propose concrete options" doesn't always mean "propose trips". Luke specifically wants Tours upsold (group-guided fixed-itinerary products, structurally distinct from trips per the schema — see [crosscut plan](03-exec-crosscut-find-options-polymorphism.md) §"Tour vs Trip — schema-level distinction"). Hotels and region-bases are second-tier proposal shapes that emerge in some conversations.
 
-**Pricing rendering rule.** Always render as "from £X" (or "from $X", "from €X" per `currencyCode`) — never as a flat number, never as a range. This matches decision C.14 (no departures / headline pricing only). If `fromPrice` is null, the price line is omitted from the card; no placeholder.
+**Important** (per HITL ratification 2026-05-12): the contract is settled NOW even though backend tranches v2/v3 land later. This avoids the "future agent locks in TripCard-only because the schema says so" failure mode. The discriminated union `ProposalCardPublicSchema` ships with all four variants from day one. v1 connector handler returns only `type: 'trip'` cards; widgets handle all four variants from day one. **See the crosscut plan for the contract definition + backend tranches + tool-description rewrite.**
 
-**Component + props + file path.**
-- `product/ui/src/widgets/find-options.tsx` exports `FindOptionsWidget(props)`.
-- Lifecycle gate + `safeParse(FindOptionsOutputSchema, props.result)`.
-- Empty array → empty-state card ("No options to surface right now — try sharpening the filter, or share more about what you're after.").
-- Otherwise: a `<ul>` of `TripCard` sub-components. Layout: responsive — single column at narrow viewports (≤480px), two-column grid at wider viewports. **No horizontal scroll**; trip cards are meant to be compared side-by-side, not swiped.
-- Each `TripCard` is a `<Card>` containing: `<ImageBlock>` at top; headline as `<h3>`; vibe-line below; an attributes line below the vibe-line — and this is where `AttributeTable` earns its consumer (see "AttributeTable disposition" below). The attribute rows: Region / Duration / From price / Accommodation style. `activityTags` render as a small tag pill row above the deep-link CTA.
+**Pricing rendering rule (per-type).**
+- `trip`, `tour`, `region_base`: *"from £X"* (per `currencyCode`) — total trip / total tour / no specific framing. Matches decision C.14.
+- `hotel`: *"from £X / night"* — per-night framing; the discriminator from trip/tour total pricing.
 
-**Attribute hooks.** `data-swoop-part="widget"` + `data-swoop-widget="find-options"` on the root. Each card carries `data-swoop-part="find-options-card"`. The deep-link CTA carries `data-swoop-part="find-options-card-cta"` — this is the only sub-attribute that earns a hook per D.22's discriminator (it's the affordance most likely to be brand-restyled). The card's price element does *not* get a hook; price typography rides on tokens.
+If `fromPrice` is null, the price line is omitted; no placeholder.
 
-**Fixture.** `SampleFindOptionsOutput` (exists). Test asserts card count matches `cards.length`, headline + vibe-line rendered, "from £" rendering for price, deep-link href + target, attribute rows visible.
+**Component + props + file paths.**
+- `product/ui/src/widgets/find-options.tsx` exports `FindOptionsWidget(props: ToolCallMessagePartProps<unknown, unknown>)` — the parent widget. Polymorphic-dispatches per card type.
+- `product/ui/src/widgets/find-options/trip-card.tsx` — the `trip` variant renderer. v1 implementation; ships day-one.
+- `product/ui/src/widgets/find-options/tour-card.tsx` — the `tour` variant renderer. Ships day-one (the renderer; backend lands later). Renders against the discriminated union's `tour` branch; behind a fixture for v1, populated against real data when the connector tranche lands.
+- `product/ui/src/widgets/find-options/hotel-card.tsx` — the `hotel` variant renderer. Ships day-one (renderer); backend later.
+- `product/ui/src/widgets/find-options/region-base-card.tsx` — the `region_base` variant renderer. Ships day-one (renderer); backend later.
+- Parent widget: lifecycle gate + `safeParse(FindOptionsOutputSchema, props.result)`. Empty array → empty-state card. Otherwise iterates `cards`; per-card switch dispatches to the matching sub-renderer.
 
-**Decision recorded**: ships a widget — the Propose-options job is canonically a structured-comparison moment; trip cards are how that moment lands. This is the one widget where structured visual scaffolding genuinely outperforms prose.
+**Layout.** Responsive — single column at narrow viewports (≤480px), two-column grid at wider viewports. **No horizontal scroll**; cards are meant to be compared side-by-side. Polymorphism within the grid is fine — mixed proposal types in one set is visually coherent because the cards share width + image height + spacing, differing only in attribute rows and badges.
+
+**Attribute hooks (D.t8).** `data-swoop-part="widget"` + `data-swoop-widget="find-options"` on the parent root. Each card carries:
+- `data-swoop-part="find-options-card"` (common to all card types)
+- `data-swoop-card-type="trip" | "tour" | "hotel" | "region_base"` (discriminator hook for brand-team CSS)
+- The deep-link CTA carries `data-swoop-part="find-options-card-cta"`
+- Tour cards' group-size badge: `data-swoop-part="find-options-tour-group-size"` (Luke salience hook — brand team will likely want to style this prominently)
+
+**Fixture.** `SampleFindOptionsOutput` extends to include one card per type for widget-level coverage. Test cases: (a) all-trips set renders trip variant; (b) mixed set with one of each type renders four distinct variants; (c) tour card surfaces group-size + day-count affordances; (d) hotel card surfaces /night pricing; (e) region_base card surfaces base-and-explore framing; (f) empty → empty-state.
+
+**Decision recorded**: ships a polymorphic widget — the Propose-options job's shape ranges across trip / tour / hotel / region-base, all served by the same conversational moment. Settling the discriminated-union contract day-one avoids future-agent backtracking. v1 trips-only is the implementation tranche; the contract carries all four shapes.
 
 ---
 
-## AttributeTable disposition
+## AttributeTable disposition (revised 2026-05-12 for polymorphism)
 
 `product/ui/src/shared/AttributeTable.tsx` is currently consumer-less. The header comment on the file already notes: *"Currently has no consumers (B.t3a 2026-05-02 retired item-detail); kept as a generic primitive likely needed by the D.t9 per-tool widget rewrite (e.g. trip cards in `find_options`)."*
 
-**D.t9 consumes it in `find-options.tsx`.** The trip card's attribute section (Region / Duration / From price / Accommodation style) is exactly the key-value grid `AttributeTable` was authored to render. Reusing it (a) honours the "prefer existing primitives" discipline; (b) keeps the visual treatment of trip-card attributes consistent if Swoop's brand team later wants to restyle attribute layouts globally; (c) avoids re-inventing the same grid in `find-options.tsx`.
+**D.t9 consumes it across all four `find-options` card variants.** Each polymorphic card type composes its own attribute set:
 
-No refactor needed — the existing API (`rows: AttributeRow[]`) fits. The widget composes `AttributeRow` objects from the schema fields; the table's `isEmpty()` filter handles missing optionals (`durationDays`, `accommodationStyle` etc.) cleanly.
+- `trip-card.tsx` → Region / Duration / From price / Accommodation style
+- `tour-card.tsx` → Region / Duration / Group size (badge-styled) / From price / Day-count
+- `hotel-card.tsx` → Location / Star rating / From price (per-night) / Accommodation style
+- `region-base-card.tsx` → Region / Nearby trips count / "Use as base" framing line
 
-`AttributeTable` is **not** consumed by `find-inspiring.tsx` or `find-someone-who.tsx`. The Inspire passage card and Mirror story vignette don't have a key-value structure — they're prose-led; the region tag is a single chip, not a row in an attribute grid. Forcing those widgets through `AttributeTable` would be premature primitive-reuse.
+The existing `AttributeTable` API (`rows: AttributeRow[]`) fits all four. Each variant composes the rows it needs; `isEmpty()` handles missing optionals. No refactor needed; some new `AttributeRow` types may earn pill/badge styling (group-size for tours, star-rating for hotels) — that's a small visual extension, not a new primitive.
 
-**Net disposition**: consume in `find-options.tsx`; leave the file unchanged; update the header comment to name the now-real consumer.
+`AttributeTable` is **not** consumed by `find-inspiring.tsx`, `find-someone-who.tsx`, `find-proof.tsx`, or `lookup.tsx`. The Inspire passage card, Mirror story vignette, Reassure pulled-quote, and Inform source-link don't have key-value structures — they're prose-led or single-affordance.
+
+**Net disposition**: consume across all four find-options card variants; leave the file unchanged; update the header comment to name find-options as the consumer.
 
 ---
 
 ## File plan (the executor's checklist, in order)
 
+**Prereq** (lives in the crosscut plan, not in this file): `@swoop/common` ships the `ProposalCardPublicSchema` discriminated union + the rewritten `cms/prompts/tools/find_options/description.md` BEFORE the UI work below begins. See [03-exec-crosscut-find-options-polymorphism.md](03-exec-crosscut-find-options-polymorphism.md). The crosscut plan + this plan can execute concurrently from independent agent worktrees — they touch non-overlapping files — but the UI plan's `find-options*.tsx` files import from `@swoop/common` and need the schema's discriminated union present at compile time.
+
+D.t9 UI work:
+
 1. `product/ui/src/widgets/find-inspiring.tsx` — new. The Inspire panel.
 2. `product/ui/src/widgets/find-someone-who.tsx` — new. The Mirror vignette stack.
-3. `product/ui/src/widgets/find-options.tsx` — new. The trip-card set.
-4. `product/ui/src/widgets/invisible-renderer.tsx` — new. Shared `null`-returning renderer for `find_proof` + `lookup`. Defers loading + error states to the existing lifecycle gate; returns `null` only on `complete + result-available`.
-5. `product/ui/src/widgets/index.ts` — edited. Add five new entries to `toolWidgetComponents`: `find_inspiring`, `find_someone_who`, `find_options` → the three new widgets; `find_proof`, `lookup` → `InvisibleToolRenderer`. Header comment updated to reflect the per-tool decisions taken and reference this plan.
-6. `product/ui/src/widgets/__tests__/find-inspiring.test.tsx` — new. Mirrors the shape of `inspiration.test.tsx`. Three cases: happy path against fixture, empty state, malformed output → placeholder.
-7. `product/ui/src/widgets/__tests__/find-someone-who.test.tsx` — new. Same three-case shape, plus an extra assertion that the persona summary renders distinctly from the story text.
-8. `product/ui/src/widgets/__tests__/find-options.test.tsx` — new. Same three-case shape, plus an assertion that price renders as `from £…` and that the deep-link `target="_blank"`.
-9. `product/ui/src/widgets/__tests__/invisible-renderer.test.tsx` — new. Two cases: `complete + result` returns null (assert nothing rendered); `running` returns the loading placeholder (assert `widget-loading` testid present).
-10. `product/ui/src/shared/AttributeTable.tsx` — minor edit. Header comment updated to name `find-options.tsx` as the now-real consumer. No code change.
-11. `planning/decisions.md` — append D.t9 decision entries (one per per-tool widget-or-no-widget call; one for the `InvisibleToolRenderer` pattern; one for `AttributeTable` consumption).
+3. `product/ui/src/widgets/find-proof.tsx` — new. The Reassure pulled-quote widget.
+4. `product/ui/src/widgets/lookup.tsx` — new. The Inform source-page affordance.
+5. `product/ui/src/widgets/find-options.tsx` — new. The polymorphic Proposal-card set parent component.
+6. `product/ui/src/widgets/find-options/trip-card.tsx` — new. `trip` variant renderer (v1 implementation; ships day one with backend).
+7. `product/ui/src/widgets/find-options/tour-card.tsx` — new. `tour` variant renderer (ships day one against fixtures; live data arrives when crosscut plan's v2 backend tranche lands).
+8. `product/ui/src/widgets/find-options/hotel-card.tsx` — new. `hotel` variant renderer (ships day one against fixtures; live data v3).
+9. `product/ui/src/widgets/find-options/region-base-card.tsx` — new. `region_base` variant renderer (ships day one against fixtures; live data v3).
+10. `product/ui/src/widgets/index.ts` — edited. Add five entries to `toolWidgetComponents`: `find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options` → the five new widgets. Header comment updated to reflect the per-tool decisions taken and reference this plan.
+11. `product/ui/src/widgets/__tests__/find-inspiring.test.tsx` — new. Mirrors `inspiration.test.tsx`. Three cases: happy path, empty state, malformed.
+12. `product/ui/src/widgets/__tests__/find-someone-who.test.tsx` — new. Three cases + persona-summary-distinct-from-story-text assertion.
+13. `product/ui/src/widgets/__tests__/find-proof.test.tsx` — new. Three cases + "Read more →" link + `target="_blank"` assertion.
+14. `product/ui/src/widgets/__tests__/lookup.test.tsx` — new. Four cases: single-URL → one affordance; multi-URL → up-to-two affordances; no URLs → no widget; empty → no widget.
+15. `product/ui/src/widgets/__tests__/find-options.test.tsx` — new. Six cases: all-trips set; mixed (one of each variant); tour-card group-size affordance visible; hotel-card /night pricing variant; region_base "base-and-explore" framing visible; empty → empty-state.
+16. `product/ui/src/shared/AttributeTable.tsx` — minor edit. Header comment updated to name `find-options` as the consumer. No code change unless tour group-size badge or hotel star-rating row needs new `AttributeRow` variants — small extension if so, no API churn.
+17. `planning/decisions.md` — append D.t9 decision entries: per-tool widget call (5 entries), polymorphism contract (1 entry), `AttributeTable` consumption (1 entry), default-render-widgets posture (1 entry — agent-driven hinting deferred per HITL).
 
-**Not edited**: `App.tsx` (`parts/index.ts` already mounts `toolWidgetComponents` and picks up new entries automatically); any chunk-C / `ts-common` / `cms` file; `progress.md` / `next-steps.md` (HITL-ratification step, not authoring step).
+**Not edited**: `App.tsx` (`parts/index.ts` already mounts `toolWidgetComponents` and picks up new entries automatically); chunk-C migrations (the crosscut plan's contract change touches `@swoop/common` schemas, not migrations); `progress.md` / `next-steps.md` (HITL-ratification step, not authoring step).
 
 ---
 
 ## Sub-step ordering (within this task)
 
+0. **Verify the crosscut plan has landed.** Before opening any TSX file, confirm `@swoop/common` exports `ProposalCardPublicSchema` as a discriminated union with `trip | tour | hotel | region_base` variants. If not, halt and dispatch the crosscut executor first.
 1. Read this plan + the five `cms/prompts/tools/<tool>/description.md` files in full. Internalise the conversational moment for each tool before opening a TSX file.
-2. Build `invisible-renderer.tsx` first — smallest unit, sets the pattern for the lifecycle-gate delegation.
-3. Build `find-inspiring.tsx`. It's the simplest content widget — a vertical stack of cards, no AttributeTable consumption.
-4. Build `find-someone-who.tsx`. Same shape, plus the persona-summary affordance.
-5. Build `find-options.tsx`. The most structured — uses `AttributeTable`, has the price-rendering rule, has the responsive grid.
-6. Wire all five into `toolWidgetComponents` in `widgets/index.ts`.
-7. Author the four test files. Run `npm test --workspace @swoop/ui` after each — incremental green is easier to debug than a single end-of-task red.
-8. Run `npm run typecheck`, `npm run lint`, `npm test` workspace-wide. Six workspaces stay green.
-9. Run `npm run dev -w @swoop/orchestrator` + `npm run dev -w @swoop/connector` + `npm run dev -w @swoop/ui` against `puma_dev`. Manual browser smoke: ask the agent in turn for an Inspire moment, a Mirror moment, an Options moment, a Proof moment, an Inform moment. Verify the three widgets render and the two invisible tools render only prose.
-10. Append D.t9 decision-log entries.
-11. Append an "Execution log" section to this plan summarising what landed, what was deferred, what surfaced for downstream tasks.
+2. Build `find-inspiring.tsx` first — simplest content widget; a vertical stack of cards, no AttributeTable consumption. Sets the file shape.
+3. Build `find-someone-who.tsx`. Same shape + persona-summary affordance.
+4. Build `find-proof.tsx`. The quiet pulled-quote widget. New file shape — typographic emphasis, no card primitive consumption needed.
+5. Build `lookup.tsx`. The quietest widget — single source-page affordance (or two stacked, or none).
+6. Build `find-options.tsx` + its four card-variant sub-renderers (`find-options/trip-card.tsx`, `tour-card.tsx`, `hotel-card.tsx`, `region-base-card.tsx`). The parent does polymorphic-dispatch; each sub-renderer is self-contained against its discriminated variant.
+7. Wire all five top-level widgets into `toolWidgetComponents` in `widgets/index.ts`.
+8. Author the five test files. Run `npm test --workspace @swoop/ui` after each — incremental green is easier to debug than a single end-of-task red.
+9. Run `npm run typecheck`, `npm run lint`, `npm test` workspace-wide. Six workspaces stay green.
+10. Run `npm run dev -w @swoop/orchestrator` + `npm run dev -w @swoop/connector` + `npm run dev -w @swoop/ui` against `puma_dev`. Manual browser smoke: ask the agent in turn for an Inspire moment, a Mirror moment, a Reassure moment, an Inform moment, an Options moment (v1 trips). Verify all five widgets render and look right. Tour / hotel / region_base cards exercise against fixtures in unit tests; live-data smoke for those waits on crosscut tranches v2/v3.
+11. Append D.t9 decision-log entries.
+12. Append an "Execution log" section to this plan summarising what landed, what was deferred, what surfaced for downstream tasks.
 
 ---
 
-## Open HITL questions
+## HITL ratification record (2026-05-12)
 
-These three need Al's ratification before the executor commits to them. Two are top-down design calls; one is a copywriting affordance.
+Three questions reviewed with Al on 2026-05-12. Two reversed from plan-recommended, one carried over for executor judgement.
 
-1. **`find_proof` ships no widget.** The plan's stance: Sonnet's prose + an inline source link is warmer than a "claim/evidence" card. Counter-position to weigh: an explicit Reassure card gives the visitor a stable, scannable affordance for high-stakes hesitations (e.g. environmental impact, safety), and the visual constancy of "every proof looks the same shape" may build more trust than freeform prose. Ratify yes/no on shipping without a widget. (If yes, no new code; if no, the executor builds a fourth widget `find-proof.tsx` along the lines of the `find-inspiring` shape, swapping passage prose for the claim/evidence pair.)
+1. **`find_proof` widget call.** Original plan: no widget. ✅ **Reversed (HITL Q1)**: ships a quiet "pulled-quote" widget — evidence text with light typographic emphasis, claim as a small lead-in, "Read more →" inline link. NOT a claim/evidence card; NOT a coloured-border alert box. Visually warm, not legal. See §"`find_proof` (Reassure)" above for the full specification.
 
-2. **`lookup` ships no widget.** The plan's stance: librarian-shaped result cards undo the knowledgeable-friend positioning. Counter-position: for procedural questions (visa rules, transport logistics), an explicit chunk-list with deep-links is arguably the *friendlier* affordance — it gives the visitor the path to the source page they'll want to bookmark. Ratify yes/no. (If no, the executor builds a fifth widget `lookup.tsx` rendering one to three chunk cards with question + answer + canonical URL.)
+2. **`lookup` widget call.** Original plan: no widget. ✅ **Reversed (HITL Q2)**: ships a quiet "source-page" affordance — a single "Read the full guide on swoop-patagonia.com →" link beneath Sonnet's prose, up to two stacked when chunks span multiple URLs, nothing when chunks lack canonical URLs. NOT a chunk-list; NOT a search-results layout. See §"`lookup` (Inform)" above.
 
-3. **Persona-summary rendering in `find_someone_who`.** The plan recommends an italic block above the story prose, prefaced quietly with "Someone like…". Alternative: italic without preface (cleaner, less talkative). Alternative B: a small label-style header "Why this story?" above the persona summary in caps-tracked treatment (more legible but more chrome). Ratify which of the three lands the warmth + legibility balance. (This is a copywriting call as much as a visual one.)
+3. **Persona-summary rendering in `find_someone_who`.** ⏳ **Still open — executor's call with escalation if uncertain.** The plan recommends an italic block above the story prose with a quiet "Someone like…" preface. Alternatives: italic without preface (cleaner), or "Why this story?" header in caps-tracked treatment (more legible but more chrome). Executor picks one; if the call feels stuck, escalate via inbox or questions.md for a focused 30-second ratification.
 
-Additionally noted, not strictly HITL but worth Al's awareness:
+### New design moves landed on 2026-05-12 HITL
 
-- The `InvisibleToolRenderer` pattern is a UI-level decision the plan settles itself (it's the technical consequence of the "no widget" calls in 1 + 2); if Al ratifies widgets for `find_proof` and/or `lookup`, the renderer either ships with one consumer or retires entirely.
-- All three widgets share the existing D.t8 attribute pattern; no new tokens or attribute conventions are introduced. If the brand-extension surface needs new tokens for trip-card density (likely), that's a follow-up cross-cut against D.t8, not D.t9 scope.
+4. **`find_options` polymorphism (HITL Q3a — new policy).** Original plan: TripCard-only. ✅ **Replaced**: polymorphic `ProposalCard` discriminated union covering `trip | tour | hotel | region_base`. Luke specifically wants Tours upsold (group-guided products, structurally distinct from trips in the schema). Contract settled day-one; backend tranches v1 trips → v2 trips+tours → v3 +hotels+region_bases. Crosscut plan owns the contract change: [03-exec-crosscut-find-options-polymorphism.md](03-exec-crosscut-find-options-polymorphism.md). UI ships all four card-variant renderers day-one; the variants the connector doesn't populate yet are tested against fixtures.
+
+5. **Agent-driven widget hinting** (`renderMode: 'rich' | 'subtle' | 'none'` proposed mid-conversation). ✅ **Deferred entirely.** Per HITL: widgets render by default whenever their tool fires; whether a tool's widget is "MUST display" vs "MAY display" is a static per-tool decision (the widget map entry), not a runtime per-call hint. If real-conversation testing surfaces overwhelm, revisit. For v1: every conversational tool has a widget, every widget renders.
+
+### Awareness items (not HITL gates)
+
+- All five widgets share the existing D.t8 attribute pattern; no new tokens or attribute conventions are introduced. Brand-extension surface tokens for trip-card density / tour group-size badges may want extension later — that's a D.t8 follow-up, not D.t9 scope.
+- The previously-proposed `InvisibleToolRenderer` pattern is **retired** by the HITL Q1 + Q2 reversals — every conversational tool now has its own widget.
 
 ---
 
@@ -340,14 +394,15 @@ If any workspace fails on fresh install but passes on cached `node_modules`, the
 
 D.t9 is done when:
 
-1. The three new widget files exist, each registered in `toolWidgetComponents`.
-2. `find_proof` and `lookup` are registered against `InvisibleToolRenderer`.
-3. All four new test files pass; the existing `inspiration.test.tsx` + `lead-capture.test.tsx` + `widget-shell` tests still pass.
+1. The five new top-level widget files exist (`find-inspiring`, `find-someone-who`, `find-proof`, `lookup`, `find-options`), each registered in `toolWidgetComponents`.
+2. The four `find-options` card-variant renderers exist under `find-options/` (`trip-card`, `tour-card`, `hotel-card`, `region-base-card`). The parent dispatches polymorphically over the discriminated `ProposalCardPublicSchema` union.
+3. All five new test files pass; the existing `inspiration.test.tsx` + `lead-capture.test.tsx` + `widget-shell` tests still pass.
 4. `npm run typecheck` + `npm run lint` + `npm test` are green across all six workspaces, on a fresh `rm -rf node_modules && npm install` install.
-5. The five-tool browser walkthrough in `mcp__Claude_Preview__preview_*` produces the expected widget / no-widget rendering for each of the five conversational tools.
-6. `AttributeTable.tsx`'s header comment names `find-options.tsx` as its consumer.
-7. `planning/decisions.md` has new entries logging the per-tool widget-or-no-widget calls + the `InvisibleToolRenderer` pattern + the `AttributeTable` consumption decision.
+5. The five-tool browser walkthrough in `mcp__Claude_Preview__preview_*` produces all five widgets rendering in their expected visual register (rich for Inspire / Mirror / Options; quiet pulled-quote for Reassure; quiet source-link for Inform).
+6. `AttributeTable.tsx`'s header comment names `find-options` as its consumer.
+7. `planning/decisions.md` has new entries logging the per-tool widget calls, the polymorphism contract, the `AttributeTable` consumption decision, and the default-render-widgets posture (agent-driven hinting deferred per HITL 2026-05-12).
 8. An "Execution log" section is appended to this plan with the date, files landed, deviations from the plan (with justifications), and any items surfaced for downstream tasks.
+9. The crosscut plan's v1 tranche has landed BEFORE this task closes — `@swoop/common` exports the discriminated union; the v1 backend (trips only) returns shape-correct `ProposalCard` arrays.
 
 ---
 
@@ -367,7 +422,7 @@ D.t9 is done when:
 - **No new shared primitives beyond what's strictly needed.** The widgets compose `Card`, `ImageBlock`, `CtaButton`, `AttributeTable` from `shared/`. A new `Citation` or `SourceLink` primitive is *not* required — the `<a target="_blank">` pattern from `inspiration.tsx` is sufficient.
 - **No design-system extraction.** Trip-card density may suggest new D.t8 tokens later; that's a follow-up against D.t8's surface, not D.t9 scope.
 - **No animation beyond CSS transitions.** Hover / focus states only; no entrance animations on widget mount.
-- **No changes to `@swoop/common`.** If a field is needed that the public schemas don't expose, raise a `ts-common` change before continuing — don't invent local fields in the widget.
+- **No changes to `@swoop/common` from THIS plan's executor.** The `ProposalCardPublicSchema` polymorphism contract change is owned by the crosscut plan ([03-exec-crosscut-find-options-polymorphism.md](03-exec-crosscut-find-options-polymorphism.md)), which lands first. If a field is needed beyond what the crosscut plan exposes, raise a follow-up to the crosscut — don't invent local fields in the widget.
 - **No changes to `cms/prompts/tools/<tool>/description.md`.** Voice refinement of those files is G.t5's scope; D.t9 reads them as calibration but does not edit them.
 - **No carousel implementation for the trip-card set.** The plan's call is a responsive grid; if real conversations later show 6+ trip cards being a common output, revisit then — but the existing schema-side `limit: max(6).default(4)` caps it.
 - **No persistence of widget state across `restart`** (the D.t5 "New conversation" button + the D.t14 resetKey pattern already clear thread state; D.t9 inherits this behaviour transparently).
