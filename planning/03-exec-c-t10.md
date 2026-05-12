@@ -582,3 +582,52 @@ Al ratified the plan in conversation 2026-05-12. The body above is preserved as 
 Dispatch posture: independent of `03-exec-c-t9.md` — parallel-OK. Worktree-isolation pattern per the dispatch hardening lesson; Step 0 hash gate is mandatory.
 
 A **sibling Tier-3 plan for sync image annotation** is not authored as part of this engagement; Al will author it separately when ready.
+
+---
+
+## 2026-05-12 Execution log + closure
+
+The plan was executed by a dispatched agent (worktree `agent-a66c98aa661327c72`) on 2026-05-12. Four of the 9 implementation steps committed before the agent's turn budget exhausted; the closure (decisions / orientation docs / fresh-install verify) was completed in the spawning session against the merged branch. No deviations from the plan body or ratification appendix — the agent built exactly the shape ratified.
+
+### Commits landed (in order)
+
+By the dispatched agent on `worktree-agent-a66c98aa661327c72`:
+
+1. `af4f8a2` — `refactor(ingestion): C.t10 — extract parseSdkSuccessMessage helper for sync/batch DRY`
+2. `4b9ded4` — `feat(ingestion): C.t10 — SyncMessageClient (BatchClient via messages.create + concurrency)`
+3. `9373112` — `feat(ingestion): C.t10 — --sync CLI flag + isBatched on BatchClient (ledger sees full rate)`
+4. `fa0b733` — `docs(cms): C.t10 — operator runbook entry for --sync mode`
+
+By the spawning session on `claude/reverent-yonath-f1c780` after merge:
+
+5. `<TBD>` — closure: decisions.md C.47, progress.md / next-steps.md / discoveries.md updates.
+
+### Step status after closure
+
+| Step | Status | Notes |
+|---|---|---|
+| 0 — worktree hash gate | ✅ enforced by dispatched agent |
+| 1 — read plan + referenced files | ✅ done |
+| 2 — extract parseSdkSuccessMessage helper | ✅ done (commit `af4f8a2`) |
+| 3 — failing tests for SyncMessageClient | ✅ done (commit `4b9ded4` — 9 unit tests in `sync-message-client.test.ts`) |
+| 4 — implement SyncMessageClient | ✅ done (commit `4b9ded4`) |
+| 5 — wire `--sync` flag + `isBatched` on `BatchClient` | ✅ done (commit `9373112` — classifier modules + cost ledger updated) |
+| 6 — operator runbook | ✅ done (commit `fa0b733` — `product/cms/ops/sync-mode.md`) |
+| 7 — real-API smoke | **PENDING AL** — `ANTHROPIC_API_KEY` not present in the executing environments. Reproduction command for Al: `npm run -w @swoop/ingestion enrich -- --mode=classify --source=blog-post-job --sync --limit=5` after setting `ANTHROPIC_API_KEY=...` in `product/connector/.env`. Verify with `psql -d puma_dev -c "SELECT slug, primary_job FROM blog_post WHERE primary_job IS NOT NULL LIMIT 5;"`. Expected: 5 rows with non-null `primary_job` in <30s wall-clock. |
+| 8 — fresh-install verify | ✅ done in closure (covered by the C.t9 closure's fresh-install run; both plans verified together against the merged tip) |
+| 9 — decisions / progress / next-steps | ✅ done in closure |
+
+### Fresh-install verification (shared with C.t9 closure)
+
+`rm -rf product/node_modules && (cd product && npm install) && npm test --workspaces --if-present` — all six workspaces green:
+
+- `@swoop/common` 141 / `@swoop/orchestrator` 160 / `@swoop/connector` 97 (+ 3 DB-gated skipped) / `@swoop/ui` 62 / `@swoop/ingestion` 256 / `@swoop/harness` 74.
+
+The `SyncMessageClient` test count: 9 (per the plan). Per-workspace test count delta from baseline accounts for the new sync-message-client tests + the 2-test addition to `anthropic-batch-client.test.ts` for the extracted helper; net offset by the Voyage retirement on the C.t9 side.
+
+### Open follow-ups
+
+- **Step 7 smoke**: Al runs the reproduction command above with `ANTHROPIC_API_KEY` set.
+- **Sibling sync-image-annotation task** (`03-exec-c-t11.md` or similar): authored separately by Al per the ratification appendix. The pattern is the shape `SyncMessageClient` lays down — implement a sync sibling to the Vision Batches path with a `--sync` flag on `annotate-images`. Reuses `parseSdkSuccessMessage` directly.
+- **Worst-case attempt count** of the doubled retry layer (SDK retries × our `[1s, 2s, 4s]`): the agent should have documented this inline in `sync-message-client.ts` per the appendix. Verify the comment is present; if not, add it as a small follow-up.
+

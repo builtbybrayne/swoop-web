@@ -8,6 +8,40 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.47 — Sync enrich mode for dev iteration (carve-out from HITL Q4 batch lock)
+
+**Decided**: 2026-05-12
+**Owner**: Al
+**Context**: HITL Q4 (ratified 2026-05-01 against `03-exec-c-t3a.md`) locked all classifier passes to the Anthropic Batches API for the 50 % cost discount and up-to-24h SLA. For production this is the right trade; for dev iteration (prompt tweaks, schema fixes, end-to-end smokes against a small `--limit`) the latency floor is prohibitive — "I tweaked the persona-summary prompt; did it work?" → wait up to 24 hours.
+
+**Decision**: add a `--sync` CLI flag to the enrich runner. When set, classifier passes use a `SyncMessageClient` implementing the existing `BatchClient` interface via `messages.create` with bounded concurrency. Production continues to default to batches; sync is opt-in only. Mutually exclusive with `--dry-run`; no-op for `--mode=embed` (embed is sync regardless). The `BatchClient` interface gains a `readonly isBatched: boolean` property so the cost ledger keys the discount logic off the client rather than the call site — additive interface change, documented + tested.
+
+**Rationale**: the `BatchClient` interface in `haiku.ts` was deliberately shaped to admit this swap (see the file header). Carve-out cost is half a day. Cost ratio (2× batch full rate) means a complete sync run is ~£1–£2 vs ~£0.50–£1 batched — both well within the £10 dev cap. Retry layer: kept our own `[1000, 2000, 4000]` ms backoff on top of the SDK's built-in retries (per Al's preference for dev iteration: failures stalling the loop are more painful than the rare over-retried request).
+
+**Image annotation sync** is a sibling task (provisionally `03-exec-c-t11.md`), not part of this decision. An initial complete sync run uses two parallel shells: `enrich --sync` here, plus a future `annotate-images --sync` once that task lands.
+
+**Swap cost**: Low. Single class (`SyncMessageClient`), single CLI flag, no schema change. Retiring sync mode = deleting one file + one flag handler.
+
+## C.46 — Embeddings: Gemini-embedding-001 at halfvec(3072); supersedes the Voyage-3/1024d sub-decision inside C.18
+
+**Decided**: 2026-05-12
+**Owner**: Al
+**Supersedes**: the "**Embedding model: locked — Voyage-3**" sub-bullet inside C.18's "Stack pinned by this decision" section. C.18 itself (Postgres engine choice + extensions + Cloud SQL posture) remains intact — this decision changes only the embedding provider + dimensionality, not the storage engine.
+
+**Rationale**:
+
+1. **Vendor consolidation.** The project already pays for Anthropic (orchestrator + classifiers + Vision) and will pay for Google (Gemini API used here; possibly more downstream). Removing Voyage as a third vendor removes one API key, one billing relationship, one rate-limit budget, one operational dashboard.
+2. **Quality bump at near-zero scale cost.** At our corpus size (~25K vectors), 3072d storage + index memory is trivially within Postgres' working set. 3072d is MRL-optimal for `gemini-embedding-001` (≥ any truncated dim mathematically). API cost is dimension-independent ($0.15 / 1M input tokens regardless of output dim).
+3. **HNSW dimension cap forces `halfvec`, not `vector`** (load-bearing finding from C.t9 execution): pgvector's HNSW index has a hard 2000-dimension cap on the `vector` type. `vector(3072)` indexes simply fail at creation. The `halfvec` type (pgvector 0.7+, IEEE 754 binary16) lifts the HNSW cap to 4000 dims and halves the index memory footprint vs `vector` with negligible recall loss at 3072d. The opclass changes from `vector_cosine_ops` to `halfvec_cosine_ops` — cosine semantics carry across unchanged. **This is a plan deviation from `03-exec-c-t9.md`** which originally specified `vector(3072)`; the executing agent caught the index-creation failure empirically against `puma_dev_scratch` and made the right call. C.t9's HITL ratification appendix is updated accordingly.
+
+**Cost impact**: ~7.5× per-token cost vs Voyage-3 ($0.15 vs $0.02 per 1M input tokens). A full Puma re-embed is roughly £4–£8 once-off, well inside the £10 dev cap. Per-call API cost is unaffected by output dim.
+
+**Auth**: Google AI Studio API key (`generativelanguage.googleapis.com` + `x-goog-api-key`) scoped to Al's GCP dev project. Vertex AI service-account auth (`aiplatform.googleapis.com`) is the M4-era path; not needed for M1.
+
+**Migration shape**: forward-only migration 009 drops every `vector(1024)` embedding column, re-adds as `halfvec(3072)`, and recreates the 9 HNSW indexes with `halfvec_cosine_ops`. No DOWN path per C.31. Pre-launch with no production data, "swap cost" is the re-embed pass itself (~£4–£8) plus the migration's 5-minute apply.
+
+**Swap cost (going forward)**: Medium. Swapping providers again means dropping + re-adding the embedding columns and recreating HNSW indexes — the same shape this decision deploys. Post-launch with real embeddings populated, a re-embed run is also required.
+
 ## B.24 — Tool-description loading is owned by `@swoop/connector` and re-exported; the orchestrator does not duplicate it
 
 **Decided**: 2026-05-02
@@ -490,7 +524,7 @@ Vertex genuinely wins for million-doc corpora, multimodal search, or out-of-the-
 - **Cloud SQL for Postgres** in Swoop's "AI Pat Chat" GCP project for prod (small instance: `db-f1-micro` or `db-g1-small`).
 - **Postgres 18 in Docker Compose** locally — same image, identical behaviour.
 - **Schema migrations**: `node-pg-migrate` (plain-SQL, lean; Prisma rejected as too heavy for our shape — sub-decision worth flagging if it bites us).
-- **Embedding model**: **locked — Voyage-3 (`voyage-3`, 1024-dimensional) via the Voyage AI SaaS endpoint** (Al confirmed 2026-04-29, after C.t2 review). Anthropic's recommended pairing; chosen over OpenAI `text-embedding-3-small` (1536d). All `vector(...)` columns and the `EmbeddingSchema` Zod shape are sized 1024 to match. **Swap cost**: pgvector does not support `ALTER COLUMN TYPE` for vector width, so swapping providers means dropping + recreating every embedding column AND rebuilding all 9 HNSW indexes (`tag.embedding`, `image.embedding`, `faqitem.embedding`, `blog_chunk.embedding`, `inspire_passage.embedding`, `customer_story.persona_embedding`, `trust_proof.embedding`, `inform_chunk.embedding`, `trip_card.embedding`). Pre-launch (now) that's cheap because there's nothing to lose; post-launch it's a re-embed-everything migration. Lock is therefore "treat as load-bearing" — don't swap on a whim.
+- **Embedding model**: ~~**locked — Voyage-3 (`voyage-3`, 1024-dimensional) via the Voyage AI SaaS endpoint**~~ — **SUPERSEDED by C.46 (2026-05-12): now Gemini-embedding-001 at `halfvec(3072)`**. Historical body preserved below for provenance: *Voyage-3 originally chosen 2026-04-29 after C.t2 review as Anthropic's recommended pairing, over OpenAI `text-embedding-3-small` (1536d). All `vector(1024)` columns and the `EmbeddingSchema` Zod shape were sized 1024 to match. The pre-launch swap-cost analysis (no production data to lose) made the move to Gemini at 3072d viable; the in-flight discovery that pgvector's HNSW has a 2000d cap on the `vector` type forced the `halfvec` storage choice. See C.46 for the full rationale.*
 
 **When we'd revisit Vertex** (named triggers, not vibes):
 - Document corpus grows past ~100K (current trajectory says no, even with Antarctica + Arctic expansion — agent reasoning scales, not document count).

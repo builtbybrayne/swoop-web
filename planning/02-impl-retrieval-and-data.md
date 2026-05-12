@@ -613,3 +613,15 @@ For continuity with anyone reading the archived original or the 2026-04-28 rewri
 - **`ntag` is small + clean + typed**: 79 active tags across 5 dimensions. Embed once at ETL; visitor utterance → tag mapping is near-free.
 
 The foundations of the prior plan — disposable ETL, derived-datasource framing, Swoop hand-off clarity, image annotation as a parallel workstream, deep-link URLs as a UX affordance, the connector's MCP-over-HTTP transport, the SMTP-based handoff path — all carry forward unchanged. The 2026-04-29 revision is a tool-surface and content-supply correction, not an architectural one.
+
+---
+
+## 2026-05-12 — Embeddings provider swap + sync enrich mode
+
+Two infrastructure changes landed post chunk-C closure:
+
+- **Embeddings**: Voyage-3 / `vector(1024)` → **Gemini-embedding-001 / `halfvec(3072)`** via the Google AI Studio API key route. Decision **[C.46](decisions.md#c46)** supersedes the Voyage-3 sub-bullet inside C.18; the storage-engine decision (Postgres + extensions + Cloud SQL posture) is untouched. The `halfvec` storage type is used because pgvector's HNSW index has a hard 2000-dimension cap on the `vector` type; `halfvec` lifts that to 4000 with negligible recall loss. New plan: **[03-exec-c-t9.md](03-exec-c-t9.md)**. Migration **009** is the column drop + re-add at the new type. C.t9's HITL ratification + execution-deviations log records the halfvec finding in full.
+
+- **Sync enrich mode**: a `--sync` CLI flag on the enrich runner routes classifier passes through Anthropic's synchronous `messages.create` API instead of the Batches API. Decision **[C.47](decisions.md#c47)** is a deliberate carve-out from HITL Q4's batch lock for dev-iteration loops (the 24h batch SLA is fine for production runs, prohibitive for prompt-tweak debugging). Production continues to default to batches. New plan: **[03-exec-c-t10.md](03-exec-c-t10.md)**. A sibling task for synchronous image annotation is deferred to a later plan (`03-exec-c-t11.md` or similar) — an initial complete sync run uses two parallel shells.
+
+Neither change touches the tool surface, the eight intent-named tools, the five derived tables, the chunk-C top-down-from-sales discipline (theme 11), or the connector's transport. They are surface-level swaps to the embedding provider and the enrich CLI shape only.

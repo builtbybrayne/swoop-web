@@ -1,6 +1,6 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-12 (chunk-C implementation fully merged to `main` — `claude/magical-johnson-3b07a1` brought in across one consolidation session; C.t1 / C.t3 / C.t3a / C.t4 / C.t5 / C.t6 / C.t8 + B.t3a all closed; engine pin in `product/package.json` + `product/harness/package.json` loosened from `<21.0.0` to no upper cap; partial enrich pass (`--mode=embed`) underway to populate the embedding layer on domain tables; sync-classifier escape hatch for dev iteration being planned via Claude Code)
+**Snapshot date**: 2026-05-12 (chunk-C implementation fully merged to `main`; C.t1 / C.t3 / C.t3a / C.t4 / C.t5 / C.t6 / C.t8 + B.t3a all closed; engine pin loosened to no upper cap; afternoon session landed **C.t9** (Voyage-3 → Gemini-embedding-001 at `halfvec(3072)`, decision C.46 supersedes the Voyage-3 sub-bullet in C.18) + **C.t10** (`--sync` enrich mode for dev iteration, decision C.47 carve-out from HITL Q4); two parallel agents dispatched + closure landed in spawning session; real-API smokes for both pending Al's GCP / Anthropic credentials)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
 **Status**: **M1 live + chunks D + mock-host shipped; chunk-C implementation spine closed (C.t0/t1/t2/t3/t3a/t4/t5/t6/t8 + C.26 graduated); B.t3a closed (orchestrator → real connector; eight intent-named tools registered); 2026-04-30 review wave fully landed; chunks B/E/F/G/H advancing.** **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits (pool + config + URL validation, MCP-HTTP skeleton + ping tool, migration runner, libpq statement_timeout fix). Connector boots cleanly against `puma_dev`; `/healthz` + `/readyz` + `/mcp` (with no-op `ping`) all verified live; SIGTERM closes pool gracefully. Total tests now 519/519 (was 492; +27 for C.t1). 2026-05-01 (earlier) landed via 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work review items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for chunk-C implementation. Sec-3 (`javascript:`/`data:` URL scheme rejection) was originally claimed-closed by Theme-A.1 but only validated against stale node_modules — actually closed by `be9ca95` adding a refine() check on top of `.url()`. The chat.ts-cluster agent (R2 + R4-server + Perf-3 + Test-1) also surfaced and fixed a latent Express 5 + Node 20 bug — `req.on('close')` fires synchronously after `express.json` drains, so the chat handler's mid-stream-disconnect listener never propagated to `abortController.abort()`; switched to `res.on('close')`. **Test count: 412 → 492 (+80)**. Earlier (2026-04-30): **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables); **C.26 graduated** with the customerreview supplementary dump (2,563 rows + 163 trip junctions); composer pattern removed (decision C.24); top-down-from-sales discipline elevated as theme 11. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
 
@@ -20,6 +20,58 @@ After a week's gap, the `claude/magical-johnson-3b07a1` feature branch (67 commi
 **Operational next step — running enrich:** chunk-C *code* is all merged but the C.t3a enrichment *run* hasn't fired yet. Domain tables in `puma_dev` carry the C.t3 smoke load (852 trips, 13,012 images, 906 FAQ, 2,160 customerreviews, 79 tags — all verified live today via psql). The 5 derived tables (`inspire_passage`, `customer_story`, `trust_proof`, `trip_card`, `inform_chunk`) are all 0 rows. Partial `--mode=embed` pass kicked off this session to populate `embedding` columns on domain tables without invoking the Anthropic Batches API path (synchronous Voyage-3 only, minutes-not-24h).
 
 **Sync-classifier escape hatch — planned (not yet built):** the C.t3a classifiers hard-depend on Anthropic Batches per HITL Q4 ratification 2026-05-01 (50% cost discount, up to 24h SLA). For dev iteration loops, the 24h wait is friction. A deliberate carve-out — a `SyncMessageClient` implementing the existing `BatchClient` interface via `messages.create` + a `--no-batch` CLI flag — is being scoped via Claude Code in a separate session. Production runs continue via Batches; sync path is a dev-only escape hatch. No code changes yet; planning only.
+
+## 2026-05-12 (afternoon) — C.t9 + C.t10 closures: Gemini swap + sync enrich mode
+
+The afternoon session picked up the "Claude Code planning" thread above and broadened it. Al added a second change to the dev pass: switch out Voyage embeddings for Google Gemini. The two changes were authored as paired Tier-3 plans, HITL-ratified, and dispatched as parallel background agents.
+
+### Plans authored + ratified
+
+- [planning/03-exec-c-t9.md](planning/03-exec-c-t9.md) — Voyage-3 → Gemini-embedding-001 swap. 702 lines incl. HITL ratification appendix + post-execution deviations log. Commits `8342ab9` (initial draft) + appendix edits in this session.
+- [planning/03-exec-c-t10.md](planning/03-exec-c-t10.md) — `--sync` CLI flag on enrich runner. 580 lines, same structure.
+
+### Dispatch + closure mechanics
+
+Two parallel `general-purpose` agents dispatched via `isolation: "worktree"` from main at `8342ab9`, each named (`ct9-gemini-swap`, `ct10-sync-mode`) so SendMessage recovery was available. Both agents ran ~10 minutes wall-clock, committed atomic feat/refactor commits per their plan, then exhausted turn budget partway through. Worktrees: `agent-a83ba1fb9d1c28045` (C.t9, 5 commits) and `agent-a66c98aa661327c72` (C.t10, 4 commits).
+
+The closure (Step 8 + 9 + 11 for C.t9; Step 8/9 for C.t10; plus a `migrate.test.ts` bump for migration 009; plus all decisions / orientation docs) was completed in the spawning session against the merged branch.
+
+### Notable execution deviation — `halfvec(3072)` not `vector(3072)`
+
+The C.t9 plan body specified `vector(3072)` for migration 009. The dispatched agent discovered empirically against `puma_dev_scratch` that **pgvector's HNSW index has a hard 2000-dimension cap on the `vector` type** — `CREATE INDEX ... USING hnsw (... vector_cosine_ops)` fails at creation. The agent switched to **`halfvec(3072)`** (pgvector 0.7+, IEEE 754 binary16), which lifts the HNSW cap to 4000 dims and halves index memory with negligible recall loss. Opclass moved from `vector_cosine_ops` to `halfvec_cosine_ops` — same cosine semantics. **This is the right call**; decision C.46 records halfvec as the final shape. Documented inline in the migration header + in C.t9's "2026-05-12 Execution deviations + closure log" addendum. A new entry lands in `discoveries.md` so the next dim-change plan won't hit the same surprise.
+
+### What landed in code
+
+- `@swoop/ingestion`: new `GeminiClient` + tests (266 lines), retired `voyage.ts` + test, cost-ledger renames (`recordVoyage` → `recordEmbedding`; pass keys `voyage:*` → `gemini:*`; pricing $0.02 → $0.15 per 1M input tokens, ~7.5× per-token but full-corpus pass still ~£4–£8 once-off and inside the £10 dev cap), `--sync` CLI flag, `SyncMessageClient` (319 lines of tests), `isBatched: boolean` on `BatchClient` interface, classifier modules updated to consume it, `capToGeminiInput` defensive cap in `chunk.ts` (Gemini's 2048-token input ceiling — soft-truncate at the persona-aggregation boundary).
+- `@swoop/connector`: migration 009 (`halfvec(3072)` column re-creation + 9 HNSW indexes); `migrate.test.ts` bumped to expect 001–009.
+- `product/cms/ops/sync-mode.md`: operator runbook entry for `--sync`.
+- `product/ingestion/src/enrich/index.ts`: auto-merged cleanly across the two agent branches (Gemini construction + `--sync` flag are textually orthogonal; Git's `ort` strategy handled it).
+
+### Decisions logged
+
+- **C.46** — Gemini-embedding-001 at `halfvec(3072)` (supersedes the Voyage-3 sub-bullet in C.18; the storage-engine choice in C.18 itself is unchanged).
+- **C.47** — Sync enrich mode `--sync` flag for dev iteration (carve-out from HITL Q4).
+- Inline supersession marker added to the Voyage-3 sub-bullet inside C.18's "Stack pinned" section.
+
+### Tests after closure (fresh `npm install` → `npm test --workspaces --if-present`)
+
+| Workspace | Tests |
+|---|---|
+| `@swoop/common` | 141 |
+| `@swoop/orchestrator` | 160 |
+| `@swoop/connector` | 97 (+ 3 DB-gated skipped) |
+| `@swoop/ui` | 62 |
+| `@swoop/ingestion` | 256 |
+| `@swoop/harness` | 74 |
+| **Total** | **790 + 3 skipped** |
+
+One transient flake observed on `@swoop/orchestrator` `POST /chat ... CHAT_MESSAGE_MAX` on a parallel-workspace run; passed on focused re-run and on the second full run. Not introduced by C.t9 or C.t10 — flagged for awareness.
+
+### Pending — needs Al
+
+- **C.t9 Step 10 smoke** — set `GEMINI_API_KEY` in `product/connector/.env` (per the GCP setup notes captured in conversation: enable Generative Language API on the dev project, attach billing, generate AI Studio API key), then `npm run -w @swoop/ingestion enrich -- --mode=embed --source=tag --limit=10`. Verify: `psql -d puma_dev -c "SELECT id, vector_dims(embedding::vector) FROM tag WHERE embedding IS NOT NULL LIMIT 5;"` → 3072.
+- **C.t10 Step 7 smoke** — with `ANTHROPIC_API_KEY` set, run `npm run -w @swoop/ingestion enrich -- --mode=classify --source=blog-post-job --sync --limit=5`. Verify: 5 blog_post rows gain a `primary_job` in <30s wall-clock.
+- **Apply** — when smokes are good, merge `claude/reverent-yonath-f1c780` to main.
 
 ## B.t3a closed (2026-05-02 — connector adapter sunset)
 

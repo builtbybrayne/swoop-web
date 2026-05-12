@@ -6,6 +6,38 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-12 — pgvector's HNSW index caps at 2000 dimensions on `vector`; use `halfvec` for higher dims
+
+When migration 009 (C.t9 — Voyage-3 → Gemini-embedding-001 swap) tried to create HNSW indexes on `vector(3072)` columns, `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)` failed at creation time. This was an in-flight discovery against `puma_dev_scratch` that the C.t9 plan body had missed.
+
+**Cause**: pgvector's HNSW implementation has a hard 2000-dimension cap on the `vector` type. The cap is documented but not loud — easy to miss when committing to a high-dim embedding model that supports 768 / 1536 / 3072.
+
+**Fix**: switch from `vector(3072)` to **`halfvec(3072)`** (pgvector 0.7+, IEEE 754 binary16). The `halfvec` type:
+- Lifts the HNSW dimension cap to **4000**.
+- Halves the index memory footprint vs `vector` at the same dim (16-bit floats not 32-bit).
+- Has negligible recall loss at 3072d — the 16-bit precision is well above the noise floor of embedding-similarity search.
+- Uses `halfvec_cosine_ops` instead of `vector_cosine_ops` — same cosine semantics; opclass is just type-paired.
+
+**Pattern to remember**: for any embedding-model swap that takes the dimension above 2000, default to `halfvec` storage + `halfvec_cosine_ops` indexes. Don't even try `vector(N>2000)` with HNSW — the index just won't build. If a future provider goes above 4000 dims (Cohere's `embed-v4` ships at 8192d max for example), HNSW is out and you'd need IVF flat or a different ANN strategy.
+
+**Cast back at read time** for tools that want a plain `vector` (e.g. `vector_dims(...)` reads the dim count via the `vector` type's accessor — `halfvec` doesn't expose the function directly): `vector_dims(embedding::vector)`. The cast is cheap and exact.
+
+Migration 009 documents the choice inline in its header. Decision **C.46** (decisions.md) records it as the canonical shape.
+
+---
+
+## 2026-05-12 — `isBatched` boolean on `BatchClient` interface is the right DI shape for cost-discount routing
+
+C.t10 added a `SyncMessageClient` implementing the existing `BatchClient` interface (used by classifier modules). The cost ledger needs to know whether the call went through Anthropic's Batches API (50 % discount) or `messages.create` (full rate). Two paths considered: (a) the call site (classifier module) passes a `batched: boolean` arg into `ledger.recordHaiku(..., batched)`, deduced from the client type; (b) the `BatchClient` interface exposes a read-only `isBatched: boolean` property and the call site reads it from the client.
+
+**Picked (b).** The classifier module doesn't know — or want to know — which concrete client it has. The interface is the abstraction. Keying the discount logic off `batch.isBatched` keeps the call sites identical across the batch and sync paths, and the cost-pricing fact (which is a property of the client, not the call) lives on the client. Future client implementations (a hypothetical mocked batch client for tests, or a Vertex AI batch wrapper) inherit the contract.
+
+**Pattern to remember**: when a runtime difference between two implementations of the same interface affects downstream cost / observability decisions, expose the difference as a property on the interface — not as an inferred-by-the-caller flag. The interface is the canonical place; the call sites are the consumers.
+
+The dry-run client sets `isBatched: true` deliberately so cost projections match the production posture (which is batched).
+
+---
+
 ## 2026-05-02 — Tool-description loading is owned by `@swoop/connector`; both sides of the wire share one fail-fast contract
 
 B.t3a needed the orchestrator's connector adapter to load `cms/prompts/tools/<tool>/description.md` for each of the eight intent-named tools at boot — same fail-fast-on-missing-or-empty contract C.t4 stood up on the connector side per HITL Q3 ratification. The choice was: duplicate the loader inside the orchestrator, or re-export from the connector?

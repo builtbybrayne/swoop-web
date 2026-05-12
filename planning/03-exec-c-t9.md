@@ -702,3 +702,63 @@ Al ratified the plan in conversation 2026-05-12. The body above is preserved as 
 ### Plan is **READY FOR EXECUTION**
 
 Dispatch posture: independent of `03-exec-c-t10.md` — parallel-OK. Worktree-isolation pattern per the dispatch hardening lesson; Step 0 hash gate is mandatory.
+
+---
+
+## 2026-05-12 Execution deviations + closure log
+
+The plan was executed by a dispatched agent (worktree `agent-a83ba1fb9d1c28045`) on 2026-05-12. Five of the 11 implementation steps committed before the agent's turn budget exhausted; the remaining steps + the chunk cap + the migrate test fix + the doc work were completed in the spawning session against the merged branch. This addendum records both the deviation from the plan body and the closure mechanics, in keeping with the project's immutability discipline (plan bodies above are preserved as the authoring draft; deviations land here, not as rewrites of the body).
+
+### Deviation — `halfvec(3072)` instead of `vector(3072)` (load-bearing)
+
+The plan body and the 2026-05-12 HITL ratification appendix specified migration 009 using `vector(3072)`. The executing agent discovered empirically against `puma_dev_scratch` that **pgvector's HNSW index has a hard 2000-dimension cap on the `vector` type** — `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)` fails at creation when the column is `vector(3072)`.
+
+The agent chose **`halfvec(3072)`** instead — pgvector 0.7+, IEEE 754 binary16 (16-bit floats). The `halfvec` type lifts the HNSW dimension cap to 4000 and halves the index memory footprint vs `vector` at the same dim, with negligible recall loss at 3072d. This is the pgvector-idiomatic answer for high-dim retrieval. Opclass changes from `vector_cosine_ops` to `halfvec_cosine_ops`; cosine semantics carry across unchanged.
+
+The deviation is correct and the right call. Decision **C.46** records the final shape (halfvec) directly; readers should treat C.46's halfvec wording as canonical and this addendum as the explanation of why the plan body says `vector` while the shipped artefact uses `halfvec`. The agent documented the choice inline in the migration header — `product/connector/migrations/009_embeddings_dim_3072.sql` lines 4–14.
+
+### Commits landed (in order)
+
+By the dispatched agent on `worktree-agent-a83ba1fb9d1c28045`:
+
+1. `3c7dc62` — `feat(ingestion): C.t9 — add @google/genai dependency`
+2. `3624346` — `feat(ingestion): C.t9 — GeminiClient with retry + batching (gemini-embedding-001/3072d)`
+3. `8268700` — `feat(connector): C.t9 — migration 009 — embedding columns vector(1024) → halfvec(3072)`
+4. `36847e5` — `refactor(ingestion): C.t9 — cost ledger renames voyage:* → gemini:*, updates pricing`
+5. `7841b46` — `refactor(ingestion): C.t9 — swap VoyageClient → GeminiClient across embed pipeline`
+
+By the spawning session on `claude/reverent-yonath-f1c780` after merge:
+
+6. `<TBD>` — closure: chunk cap (Step 8), voyage.ts retirement (Step 9), migrate.test.ts bump, docs (Step 11 — decisions.md, Tier-2 addendum, progress/discoveries/gotchas/next-steps).
+
+### Step status after closure
+
+| Step | Status | Notes |
+|---|---|---|
+| 0 — worktree hash gate | ✅ enforced by dispatched agent |
+| 1 — read plan + referenced files | ✅ done |
+| 2 — install @google/genai | ✅ done (commit `3c7dc62`) |
+| 3 — failing tests for GeminiClient | ✅ done (commit `3624346`) |
+| 4 — implement GeminiClient | ✅ done (commit `3624346`) |
+| 5 — migration 009 | ✅ done with halfvec deviation (commit `8268700`); also fixed `migrate.test.ts` to expect 009 in closure commit |
+| 6 — cost ledger pricing + rename | ✅ done (commit `36847e5`) |
+| 7 — embed call-site swap | ✅ done (commit `7841b46`) |
+| 8 — defensive chunk cap | ✅ done in closure (`capToGeminiInput` in `chunk.ts` + 5 unit tests in `chunk.test.ts` + applied at `composePersonaInputProse`) |
+| 9 — retire `voyage.ts` + test | ✅ done in closure |
+| 10 — real-API smoke | **PENDING AL** — `GEMINI_API_KEY` not present in any of the executing environments. Reproduction command for Al: `npm run -w @swoop/ingestion enrich -- --mode=embed --source=tag --limit=10` after setting `GEMINI_API_KEY=...` in `product/connector/.env`. Verify with `psql -d puma_dev -c "SELECT id, vector_dims(embedding::vector) FROM tag WHERE embedding IS NOT NULL LIMIT 5;"` (note: `halfvec` cast to `vector` for the dim function; result should be `3072`). |
+| 11 — decisions / addenda / orientation | ✅ done in closure |
+
+### Fresh-install verification (per Al's swarm-merged-work memory)
+
+`rm -rf product/node_modules && (cd product && npm install) && npm test --workspaces --if-present` — all six workspaces green:
+
+- `@swoop/common` 141 / `@swoop/orchestrator` 160 / `@swoop/connector` 97 (+ 3 DB-gated skipped) / `@swoop/ui` 62 / `@swoop/ingestion` 256 / `@swoop/harness` 74.
+
+The `@swoop/orchestrator` test `POST /chat ... R4-server > returns 400 when the message field exceeds CHAT_MESSAGE_MAX` showed up once as a flake on a parallel-workspace run, but passed on focused re-run and on the second full run. Documented for awareness — not a regression introduced by C.t9.
+
+### Open follow-ups
+
+- **Step 10 smoke**: Al runs the reproduction command above after setting up GCP per the in-conversation 2026-05-12 setup notes (Generative Language API enabled on the dev project + AI Studio API key + `GEMINI_API_KEY` in `connector/.env`).
+- **Pricing constants verification**: `GEMINI_EMBEDDING_INPUT_PER_MILLION_USD = 0.15` was the ratification value; verify against published Gemini pricing if anything looks off on the first real billing cycle.
+- **HNSW dimension cap note** propagates to `discoveries.md` so the next dim-changing plan won't get caught by the same surprise.
+

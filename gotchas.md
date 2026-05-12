@@ -6,6 +6,20 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## Gemini embeddings cap inputs at 2048 tokens (vs Voyage-3's 32K)
+
+Symptom: a `gemini-embedding-001` call against a long string returns `400 INVALID_ARGUMENT: input exceeds maximum allowed length`. Voyage-3 happily accepted up to 32K tokens; Gemini's cap is **2048**.
+
+Our chunk targets are 800 tokens (`TARGET_CHUNK_CHARS = 800 * APPROX_CHARS_PER_TOKEN` in `product/ingestion/src/enrich/chunk.ts`), so chunks from blog HTML, contentblocks, FAQ items all sit comfortably under the cap.
+
+**Where this can bite**: `composePersonaInputProse` in `chunk.ts` aggregates many short customer reviews under the same reviewer name into a single composite blob (per the 2026-04-30 customerreview-corpus-shape discovery). Prolific reviewers (10+ rows) occasionally compose into a 2048+ token blob.
+
+Defence: `capToGeminiInput(text: string): string` in `chunk.ts` soft-truncates at 8192 chars (2048 × 4 chars/token). Applied at the persona-aggregation return path. Cap is exact; the truncated suffix is acceptable signal loss for persona summarisation. Per C.t9 Step 8 + the C.46 decision body. Other chunking paths (`chunkBlogHtml`, `chunkContentblockText`, `chunkFaqItem`) don't need the cap because their target is already half the limit.
+
+If you ever add a new embed-pass source that bypasses the existing chunking helpers, wrap your input in `capToGeminiInput()` defensively.
+
+---
+
 ## `pg.Pool` `on('connect')` queries warn about `client.query() while already executing`
 
 Symptom: connector boot logs include the deprecation warning `Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0.` even though no user code looks like it's calling `client.query()` twice.
