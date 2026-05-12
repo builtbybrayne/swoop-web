@@ -1,0 +1,132 @@
+// product/ui/src/widgets/find-inspiring.tsx
+//
+// =============================================================================
+// Conversational moment — Inspire (Awareness → Interest hinge).
+//
+// The visitor's energy is open and exploratory: they've named Patagonia, or a
+// region, or a feeling — "wild", "autumn light", "puma photography". This is
+// the moment *before* the moment they're ready to narrow. Sonnet's job is to
+// make the conversation come alive in prose; this widget gives the prose its
+// visual lift — image + passage together, where neither would be enough alone.
+//
+// The visitor sees: below Sonnet's text, one to three "passage cards", each
+// carrying real Patagonia prose, the paired image (when present), a small
+// region tag, and a quiet deep-link affordance to the canonical page. The
+// card is clickable as a whole; the prose-plus-image *is* the lift. No
+// horizontal carousel — vertical stack at default density (2-4 cards).
+//
+// What the visitor does next: most read and continue. A minority click
+// through to the canonical page (new tab; chat persists). Reading is the
+// primary path; the click affordance is secondary.
+//
+// Per `planning/03-exec-chat-surface-t9.md` §"`find_inspiring`" + the
+// conversational-moment calibration in
+// `product/cms/prompts/tools/find_inspiring/description.md`.
+// =============================================================================
+
+import {
+  FindInspiringOutputSchema,
+  type InspirePassagePublic,
+} from "@swoop/common";
+import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+import { Card, ImageBlock } from "../shared";
+import {
+  renderLifecycleGate,
+  safeParse,
+  WidgetMalformedPlaceholder,
+  type ToolCallLifecycle,
+} from "./widget-shell";
+
+export function FindInspiringWidget(
+  props: ToolCallMessagePartProps<unknown, unknown>,
+) {
+  const gate = renderLifecycleGate(
+    props as ToolCallLifecycle,
+    "Surfacing inspiration…",
+  );
+  if (gate) return gate;
+
+  const parsed = safeParse(FindInspiringOutputSchema, props.result);
+  if (!parsed.ok) return <WidgetMalformedPlaceholder />;
+  const { passages } = parsed.data;
+
+  if (passages.length === 0) {
+    return (
+      <div
+        data-testid="find-inspiring-empty"
+        data-swoop-part="widget"
+        data-swoop-widget="find-inspiring"
+        data-swoop-widget-state="empty"
+        className="my-2 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600"
+      >
+        No passages to surface right now.
+      </div>
+    );
+  }
+
+  return (
+    <section
+      data-testid="find-inspiring"
+      data-swoop-part="widget"
+      data-swoop-widget="find-inspiring"
+      aria-label="Inspiration passages"
+      className="my-2 flex w-full flex-col gap-3"
+    >
+      {passages.map((passage) => (
+        <PassageCard key={passage.id} passage={passage} />
+      ))}
+    </section>
+  );
+}
+
+FindInspiringWidget.displayName = "FindInspiringWidget";
+
+// -----------------------------------------------------------------------------
+// PassageCard — image-above-text card; the whole card is the affordance.
+// -----------------------------------------------------------------------------
+
+function PassageCard({ passage }: { passage: InspirePassagePublic }) {
+  return (
+    <Card
+      className="overflow-hidden"
+      // Card wrapper carries the per-card brand-extension hook so the brand
+      // team can target passage-card density / treatment without reaching into
+      // ImageBlock or paragraph internals.
+    >
+      <div data-swoop-part="find-inspiring-passage" className="contents">
+        {passage.image ? (
+          <ImageBlock
+            src={passage.image.canonicalUrl}
+            alt={passage.image.altText ?? ""}
+          />
+        ) : null}
+        <div className="flex flex-col gap-2 p-4">
+          <p className="text-sm leading-relaxed text-slate-800">
+            {passage.text}
+          </p>
+          <div className="flex items-center justify-between gap-2 pt-1">
+            {passage.region ? (
+              <span
+                data-testid="find-inspiring-region"
+                className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600"
+              >
+                {passage.region}
+              </span>
+            ) : (
+              <span aria-hidden="true" />
+            )}
+            <a
+              href={passage.canonicalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="find-inspiring-link"
+              className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-400"
+            >
+              Read more on swoop-patagonia.com →
+            </a>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}

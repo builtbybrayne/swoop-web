@@ -2,10 +2,16 @@
 //
 // Dumb key-value grid. Originally used by the retired `item-detail` widget
 // to render duration, regions, activities, budget band in a uniform layout.
-// Currently has no consumers (B.t3a 2026-05-02 retired item-detail); kept
-// as a generic primitive likely needed by the D.t9 per-tool widget rewrite
-// (e.g. trip cards in `find_options`). Skips entries whose value is
-// undefined/null/empty, so callers don't have to guard.
+//
+// Post-D.t9 (2026-05-12) consumers: the four `find_options` polymorphic card
+// variants — `trip-card.tsx`, `tour-card.tsx`, `hotel-card.tsx`, and
+// `region-base-card.tsx` — each compose their per-type attribute rows
+// (Region / Duration / From price / Accommodation for trip; +Group size
+// + Day count for tour; Location / Star rating + per-night From for hotel;
+// Nearby trips for region_base).
+//
+// Skips entries whose value is undefined/null/empty, so callers don't have
+// to guard.
 
 import type { ReactNode } from "react";
 

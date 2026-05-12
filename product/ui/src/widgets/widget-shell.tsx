@@ -17,7 +17,7 @@
 
 import { useEffect } from "react";
 import type { ReactNode } from "react";
-import type { ZodType } from "zod";
+import type { ZodTypeAny, infer as zInfer } from "zod";
 import { getToolErrorCopy } from "../errors";
 import { emitUiEvent } from "../runtime/emit-ui-event";
 
