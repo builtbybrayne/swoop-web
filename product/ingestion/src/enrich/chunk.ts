@@ -31,6 +31,33 @@ export const TARGET_CHUNK_CHARS = 800 * APPROX_CHARS_PER_TOKEN;
 /** Sliding-window overlap between adjacent chunks, in characters. */
 export const CHUNK_OVERLAP_CHARS = 100 * APPROX_CHARS_PER_TOKEN;
 
+/**
+ * Gemini's per-input token cap (gemini-embedding-001 = 2048 input tokens).
+ *
+ * Our 800-token chunk target sits comfortably below this — chunkBlogHtml,
+ * chunkContentblockText, and chunkFaqItem all produce outputs well inside
+ * the cap. But persona aggregation by reviewer name (composePersonaInputProse)
+ * can concatenate many short reviews into a blob that occasionally exceeds
+ * 2048 tokens for prolific reviewers. Apply the cap defensively at the
+ * persona-aggregation boundary; soft-truncate to the char-equivalent.
+ *
+ * Per c-t9 Step 8.
+ */
+export const GEMINI_INPUT_TOKEN_CAP = 2048;
+export const GEMINI_INPUT_CHAR_CAP = GEMINI_INPUT_TOKEN_CAP * APPROX_CHARS_PER_TOKEN;
+
+/**
+ * Truncate text to fit within Gemini's 2048-token input limit.
+ *
+ * Soft truncation at character boundary (no word-aware slicing) — the cap
+ * is a defensive boundary, not a quality knob. Persona-summary content
+ * past this point is rare and incremental; the lost suffix is acceptable.
+ */
+export function capToGeminiInput(text: string): string {
+  if (text.length <= GEMINI_INPUT_CHAR_CAP) return text;
+  return text.slice(0, GEMINI_INPUT_CHAR_CAP);
+}
+
 /** A chunked output. Index is the position within the source row. */
 export interface SourceChunk {
   /** 0-indexed position within the source row. */
@@ -220,8 +247,11 @@ export function aggregateReviewsByName(
  * coherent persona.
  */
 export function composePersonaInputProse(bucket: ReviewerBucket): string {
-  return bucket.rows
+  const joined = bucket.rows
     .map((r) => stripHtml(r.content).trim())
     .filter((t) => t.length > 0)
     .join('\n\n---\n\n');
+  // Defensive cap — Gemini's 2048-token input ceiling. Prolific reviewers
+  // can blow through this; the suffix loss is acceptable for persona signal.
+  return capToGeminiInput(joined);
 }

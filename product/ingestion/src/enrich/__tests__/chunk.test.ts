@@ -8,6 +8,9 @@ import {
   composePersonaInputProse,
   ANONYMOUS_BUCKET_KEY,
   TARGET_CHUNK_CHARS,
+  capToGeminiInput,
+  GEMINI_INPUT_CHAR_CAP,
+  GEMINI_INPUT_TOKEN_CAP,
 } from '../chunk.js';
 
 describe('stripHtml', () => {
@@ -166,5 +169,54 @@ describe('composePersonaInputProse', () => {
       ],
     });
     expect(out).toBe('real text');
+  });
+
+  it('caps composed prose at the Gemini input ceiling', () => {
+    // 50 reviews × ~500 chars of "X" each = ~25K chars composed = ~6.3K tokens
+    // (well past Gemini's 2048-token / 8192-char cap).
+    const longRow = (id: number) => ({
+      id,
+      content: 'X'.repeat(500),
+      location: null,
+      date: null,
+      title: null,
+      image_id: null as number | null,
+    });
+    const out = composePersonaInputProse({
+      name: 'Prolific Reviewer',
+      isAnonymous: false,
+      rows: Array.from({ length: 50 }, (_, i) => longRow(i + 1)),
+    });
+    expect(out.length).toBeLessThanOrEqual(GEMINI_INPUT_CHAR_CAP);
+  });
+});
+
+describe('capToGeminiInput', () => {
+  it('returns the input unchanged when under the cap', () => {
+    const text = 'hello world';
+    expect(capToGeminiInput(text)).toBe(text);
+  });
+
+  it('returns the input unchanged at exactly the cap', () => {
+    const text = 'x'.repeat(GEMINI_INPUT_CHAR_CAP);
+    expect(capToGeminiInput(text)).toBe(text);
+    expect(capToGeminiInput(text).length).toBe(GEMINI_INPUT_CHAR_CAP);
+  });
+
+  it('truncates input that exceeds the cap', () => {
+    const text = 'x'.repeat(GEMINI_INPUT_CHAR_CAP + 1_000);
+    const out = capToGeminiInput(text);
+    expect(out.length).toBe(GEMINI_INPUT_CHAR_CAP);
+    expect(out).toBe('x'.repeat(GEMINI_INPUT_CHAR_CAP));
+  });
+
+  it('truncates a 10K-char string to ~8192 chars', () => {
+    const out = capToGeminiInput('a'.repeat(10_000));
+    expect(out.length).toBe(GEMINI_INPUT_CHAR_CAP);
+  });
+
+  it('uses 2048 tokens × 4 chars/token = 8192 char cap', () => {
+    expect(GEMINI_INPUT_TOKEN_CAP).toBe(2048);
+    expect(GEMINI_INPUT_CHAR_CAP).toBe(8192);
   });
 });
