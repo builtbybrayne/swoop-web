@@ -2,7 +2,7 @@
 
 > **Status: ✅ FILLED** — production-ready for counsel review.
 >
-> Retention values are decisions E.6 / E.7 / E.8 (closed 2026-04-22). Enforcement mechanism is part of E.t6 (open, post-IAM); this section flags that gap explicitly so counsel can decide whether interim posture is acceptable.
+> Retention values are decisions E.6 / E.7 / E.8 (closed 2026-04-22). FS-side enforcement landed via E.t6 (2026-05-12): an in-process sweeper inside the orchestrator hard-deletes expired records on a daily cadence. Cloud Run Job replaces the in-process interval when the Postgres swap (E.t2 proper) lands post-IAM. Session-side enforcement (B.t2 sweeper) remains the open gap.
 
 ---
 
@@ -12,11 +12,13 @@
 |---|---|---|---|---|
 | In-progress session (idle) | 24h | Art. 5(1)(c) data minimisation + Art. 5(1)(e) storage limitation | E.8 | Idle TTL via session sweeper (planned) |
 | In-progress session (archived) | +7 days then deleted | as above | E.8 | Archive TTL via session sweeper (planned) |
-| Submitted handoff — qualified / referred_out | 12 months OR until CRM ingestion (whichever sooner) | Art. 6(1)(a) consent + sales lifecycle necessity | E.6 | Scheduled job (planned, post-Postgres swap) |
-| Submitted handoff — disqualified | 90 days | Art. 6(1)(f) legitimate interest in product analytics, post-purpose-served | E.7 | Scheduled job (planned, post-Postgres swap) |
-| Submitted handoff — inconclusive | 90 days | Art. 6(1)(f) legitimate interest in product analytics, agent-never-reached-confidence | E.7 pattern (per HITL Q5) | Scheduled job (planned, post-Postgres swap) |
+| Submitted handoff — qualified / referred_out | 12 months OR until CRM ingestion (whichever sooner)¹ | Art. 6(1)(a) consent + sales lifecycle necessity | E.6 | In-process sweeper (interim FS) / scheduled Cloud Run Job (post-Postgres) |
+| Submitted handoff — disqualified | 90 days | Art. 6(1)(f) legitimate interest in product analytics, post-purpose-served | E.7 | In-process sweeper (interim FS) / scheduled Cloud Run Job (post-Postgres) |
+| Submitted handoff — inconclusive | 90 days | Art. 6(1)(f) legitimate interest in product analytics, agent-never-reached-confidence | E.7 pattern (per HITL Q5) | In-process sweeper (interim FS) / scheduled Cloud Run Job (post-Postgres) |
 | Tier-1 / Tier-2 consent records | Lifetime of underlying handoff record | Bundled with handoff record (audit trail) | implicit in E.6/E.7 | as above |
 | Cloud Logging events (handoff.submitted etc.) | 30 days | Art. 6(1)(f) legitimate interest in observability | F-a / F-b | Cloud Logging default |
+
+¹ **Implementation note**: the sweeper uses **360 days** (12 × 30) as the outer bound rather than calendar-aware month arithmetic. Calendar-aware month arithmetic introduces leap-year / DST edge cases that the sweeper does not need; erring on the side of earlier deletion is conservative under Art. 5(1)(e) storage limitation. The "OR until CRM ingestion" branch is **not** automatic — it requires an operator-initiated deletion via the Art. 17 erasure runbook (E.t7). The 360-day outer bound is the failsafe.
 
 ---
 
@@ -57,25 +59,30 @@
 
 ## Enforcement — current state vs target state
 
-### Today (2026-04-28)
+### Today (2026-05-12, post-E.t6)
 
 - **In-progress sessions**: ADK in-built session store; sweeper not yet wired (B.t2 deferred). **No automatic deletion.** Sessions persist in memory until orchestrator restart, which deletes all in-memory state.
-- **Submitted handoffs**: `FsHandoffStore` writes JSON files under `<connector-package-root>/var/handoffs/`. **No automatic deletion.** Files persist until manually purged. `var/handoffs/` is gitignored so PII never enters the repo.
+- **Submitted handoffs**: enforced. The `FsHandoffStore` (interim) is swept by an in-process interval inside the orchestrator process via `sweepHandoffs` from `@swoop/connector`. Default cadence is **daily** (`HANDOFF_RETENTION_SWEEP_INTERVAL_MS=86_400_000`), governed by `HANDOFF_RETENTION_SWEEP_ENABLED` at boot. Each sweep emits `handoff.retention.sweep.{started,completed,failed}` events with per-verdict deletion counts. Operator runbook: [`product/cms/ops/handoff-retention-sweep.md`](../../ops/handoff-retention-sweep.md). `var/handoffs/` remains gitignored so PII never enters the repo.²
 - **Cloud Logging events**: standard 30-day Cloud Logging default applies.
 
-**Interim acceptability**: pre-launch, no real visitor traffic; the file-backed store sits on dev/staging machines with controlled access. Post-launch, this changes — the Cloud SQL Postgres swap (E.10) + the scheduled Cloud Run Job (E.t6) must be in place before real visitors reach Puma.
+**Interim acceptability**: the FS-side gap is closed. Pre-launch the orchestrator runs on a dev / staging machine with controlled access; the sweeper enforces retention on the same cadence the production Cloud Run Job will use post-IAM. The interim posture continues to be acceptable.
 
-### Target state (post-E.t6 + post-IAM)
+### Target state (post-IAM + post-Postgres-swap)
 
 - **In-progress sessions**: B's session sweeper runs `DELETE … WHERE last_active < NOW() - INTERVAL '24 hours' AND state = 'active'`-style logic. Plus archive sweep at 7 days post-archive.
-- **Submitted handoffs**: scheduled Cloud Run Job runs daily, executing parameterised SQL `DELETE FROM handoff WHERE scheduled_deletion_at < NOW()`. The `scheduled_deletion_at` column is computed at insert time from verdict (qualified/referred_out → +12 months; disqualified → +90 days).
+- **Submitted handoffs**: scheduled Cloud Run Job invokes `npm run sweep:handoffs --workspace @swoop/connector` daily. The CLI calls the **same** `sweepHandoffs()` function the in-process timer uses today; the `PostgresHandoffStore.sweep` implementation runs one `DELETE … WHERE scheduled_deletion_at < NOW()` SQL statement against the indexed column. The `scheduled_deletion_at` column is computed at insert time from verdict (qualified/referred_out → +360 days; disqualified/inconclusive → +90 days).
 - **Cloud Logging events**: unchanged — Cloud Logging native TTL.
+
+The carrier flips from "in-process interval" to "Cloud Run Job" at swap time; the operator runbook + observability events + `HandoffStore` interface all stay the same.
 
 ### Gap counsel should know about
 
-The bundle's other sections describe Puma's compliance posture as if enforcement were automatic. **It is not yet.** Until E.t6 lands (which depends on the Cloud SQL Postgres swap, which depends on GCP IAM landing — blocked on Thomas), retention is **policy-only** with manual enforcement.
+The handoff-side gap is closed by the interim sweeper (E.t6, landed 2026-05-12). **Two enforcement gaps remain:**
 
-This is acceptable pre-launch but **must be closed before public launch**. Flag for counsel: do you want a documented manual sweep cadence for the interim, or is "no real traffic" a sufficient framing?
+1. **Session-side** (in-progress chat sessions): B.t2 session sweeper not yet wired. Sessions persist in the orchestrator's in-memory store until process restart (which clears all state). With pre-launch traffic this is acceptable; pre-public-launch this must close — same pattern as the handoff sweeper, scoped to B.
+2. **Post-Postgres-swap carrier flip**: the in-process interval is the carrier today. When GCP IAM lands and the Cloud SQL Postgres swap happens (E.t2 proper), the carrier flips to a Cloud Run Job. The intervening period (Postgres swap in flight) needs operator attention to ensure neither carrier is missing.
+
+² **Counsel-review note (added 2026-05-12 per HITL Q1 ratification of E.t6):** Puma's interim handoff retention enforcement implements **hard-deletion** of expired records on schedule. Per GDPR Art. 17 right-to-erasure, hard-deletion aligns with the data-subject's expectation that expired records are removed. Auto-expiry signals are emitted via the observability event stream (counts only, no PII; see [`07-observability.md`](07-observability.md) for the event taxonomy). Accident-recovery is provided by deployment-level backup retention. If counsel prefers a soft-delete posture with secondary retention (e.g. quarantine to `var/handoffs/.expired/` with a separate retention window), the change is a single-implementation tweak: `FsHandoffStore.delete()` renames-to-quarantine instead of `unlink()`. The sweeper interface, scheduling, observability events, and operator runbook are all unchanged. No re-architecture required. Surface this design choice at E.t9 counsel review.
 
 ---
 

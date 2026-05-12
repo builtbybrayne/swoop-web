@@ -549,3 +549,72 @@ When this plan executes:
 - `progress.md` chunk-E status updates.
 - `discoveries.md` gets one entry: *"Retention sweep lives at the interface, not the implementation — survives the Postgres swap unchanged"*.
 - Counsel review (E.t9) can proceed with the FS-interim caveat narrowed: retention is enforced today against the FS store; full SQL enforcement lands with E.t2 proper.
+
+---
+
+## Execution log (2026-05-12)
+
+Executed against `867af2d` (HITL-ratified Tier 3 plans merge to main, 2026-05-12). Hash-verification gate passed; planning context loaded; full implementation order per §4 followed.
+
+### Files landed
+
+**Code (connector workspace)**
+
+- `product/connector/src/handoff/store.ts` — extended. New `DeleteResult`, `SkipReason`, `SweepResult`, `RetentionPolicy` types. `HandoffStore` interface gained `delete(handoffId)` + `sweep(now, policy)`. `FsHandoffStore.delete` (hard-delete via `fs.unlink`; idempotent on ENOENT; filename-safety regex enforced). `FsHandoffStore.sweep` (sequential iterate-list-get-delete with per-verdict tally + skip taxonomy).
+- `product/connector/src/handoff/sweeper.ts` — new. `sweepHandoffs(deps)` wrapper with injectable clock + emitter; `DEFAULT_RETENTION_POLICY` frozen constant (360d / 360d / 90d / 90d per E.6 / E.7); `digestPolicy` (sha256 over deterministic ordering) + `inferStoreKind` (constructor-name-based, with `'fs'` default).
+- `product/connector/src/index.ts` — re-exports `sweepHandoffs`, `DEFAULT_RETENTION_POLICY`, `SweeperDeps`, `DeleteResult`, `SkipReason`, `SweepResult`, `RetentionPolicy`.
+- `product/connector/bin/sweep.ts` — new CLI binary (§5b external-trigger path). Reads `HANDOFF_STORE_DIR` + four per-verdict `HANDOFF_RETENTION_*_WINDOW_SECONDS` overrides; resolves default store dir relative to `import.meta.url` so cwd is irrelevant. Prints `SweepResult` JSON to stdout; exits 1 on failure.
+- `product/connector/package.json` — added `sweep:handoffs` script.
+
+**Code (common)**
+
+- `product/ts-common/src/events.ts` — three new event kinds (`handoff.retention.sweep.started`, `…completed`, `…failed`) registered in `EventSchema` discriminated union + per-type inferred type exports. Counts-only payloads (no PII).
+
+**Code (orchestrator)**
+
+- `product/orchestrator/src/config/schema.ts` — added `HANDOFF_RETENTION_SWEEP_ENABLED` (default false), `HANDOFF_RETENTION_SWEEP_INTERVAL_MS` (default 24h), `HANDOFF_RETENTION_SWEEP_INITIAL_DELAY_MS` (default 60s, per HITL Q3 ratification).
+- `product/orchestrator/src/index.ts` — boot wiring. `setInterval` + `setTimeout` for the initial-delay sweep. Both timers `.unref()`'d so they don't prevent shutdown. Boot log line names the cadence + policy. `SIGTERM`/`SIGINT` shutdown clears both timers before warm-pool stop.
+- `product/orchestrator/.env.example` — documents the three new env vars + the operator-runbook reference.
+
+**Tests**
+
+- `product/connector/src/handoff/__tests__/sweeper.test.ts` — new. 15 cases: wrapper-level happy paths (empty, under-retention, over-retention, mixed), verdict-specific window (day 89 / day 91), corrupt-record skip, delete_failed propagation, policyDigest differing across policies, custom policy honoured, list() throws, store.sweep throws (contract violation). Plus FsHandoffStore integration (eight records mixed ages; corrupt record on disk) and DEFAULT_RETENTION_POLICY sanity.
+- `product/connector/src/handoff/__tests__/store.test.ts` — extended. 7 new cases: delete happy path / idempotency / double-delete / filename safety; sweep deletes expired + leaves fresh; sweep over missing dir returns no-op success.
+- `product/connector/src/handoff/__tests__/submit.test.ts` — extended fixtures. The `inMemoryStore` + `failingStore` test doubles got stub `delete()` + `sweep()` methods to satisfy the extended interface; existing 14 cases unchanged.
+- `product/orchestrator/src/server/__tests__/handoff-submit.test.ts` — extended fixtures. `inMemoryHandoffStore` test double got the same stub methods; existing 9 cases unchanged.
+
+**Docs**
+
+- `product/cms/ops/handoff-retention-sweep.md` — new operator runbook. Why-this-exists, cadence + ownership, confirm-it's-running, manual trigger (incl. §5b smoke recipe), disable/inspect/recover, Art. 17 separation, when-things-go-wrong taxonomy mapping `parse_failed` / `delete_failed` / `sweep_failed` to operator actions, where-the-rules-came-from.
+- `product/cms/ops/README.md` — index updated to include the new runbook.
+- `product/cms/legal/compliance-bundle/05-retention-policy.md` — retention-windows table "Enforced?" column flipped from "Scheduled job (planned, post-Postgres swap)" to "In-process sweeper (interim FS) / scheduled Cloud Run Job (post-Postgres)" for the four handoff rows. "Enforcement — current state" section rewritten to reflect interim sweeper landed. Counsel-review footnote added per §5a (hard-delete posture; reversible without interface change). 360-day-vs-calendar-month footnote added per §2.2.
+
+### Deviations from plan + justifications
+
+1. **Cross-field refine** — plan §4 step 6 says "Add env vars + cross-field refine in orchestrator schema (per §2.7)". §2.7 is about the Postgres-side contract, not the env vars; §2.6 (boot integration) is where the env vars are spec'd, and §2.6 doesn't require a cross-field refine (the sweep flags are independent — when enabled, no other field becomes required). Implementation: three env vars with sensible defaults, no cross-field refine. The existing `HANDOFF_EMAIL_ENABLED` refine is the pattern reference; the sweeper flags don't have a "when enabled, X is required" surface that would need it.
+
+2. **Connector config loader untouched** — the CLI in `bin/sweep.ts` does not go through `@swoop/connector`'s `loadConfig()` because that schema requires `DATABASE_URL` (for the pool / MCP service). The sweep CLI only needs the store directory + optional retention overrides, and operators running it ad-hoc should not need a `DATABASE_URL` setting. The CLI reads env vars directly with defaults; this is the same posture as `migrate.ts`'s discipline of "load only what you need".
+
+3. **`storeKind` inference** — the plan §2.8 documented `storeKind: z.enum(['fs', 'postgres'])` in the started event but didn't spec how to derive it. Implementation: constructor name lowercase-contains-"postgres" → `'postgres'`, else `'fs'`. Conservative default; the future `PostgresHandoffStore` is expected to ship with that constructor name.
+
+4. **`not_expired` skip omitted from the tally** — the plan §2.1 defines `SkipReason` including `not_expired`. Implementation: the sweep loop continues silently when a record is in-window rather than pushing it to `skipped`. Rationale: in a fully-populated store, `not_expired` would dominate the skip count (most records on most sweeps are fresh) and drown the operator-relevant signals (`parse_failed`, `delete_failed`). The implicit count is `scanned - deleted - skipped.length`. The type definition includes `'not_expired'` for forward compatibility if an explicit listing turns out useful, but the FsHandoffStore implementation doesn't emit it today.
+
+5. **Pre-existing UI errors** — the worktree at HEAD `867af2d` carried uncommitted in-flight changes for D.t9-mount-rehydrate (`ui/src/session/use-rehydrate.ts`, `ui/src/session/replay-into-thread.ts`, `ui/src/session/rehydrate.ts`, plus modifications to App.tsx, disclosure/, errors/) that have typecheck errors against current `@swoop/common` event types. These are not E.t6 work and are not blocked by E.t6. Documented but not addressed here.
+
+### Verification
+
+- `npm --workspace @swoop/common run typecheck` — clean.
+- `npm --workspace @swoop/connector run typecheck` — clean.
+- `npm --workspace @swoop/orchestrator run typecheck` — clean.
+- `npm --workspace @swoop/common test` — 145 / 145 green.
+- `npm --workspace @swoop/connector test` — 118 + 3 skipped (DB-gated). New: 22 (15 sweeper + 7 store extensions).
+- `npm --workspace @swoop/orchestrator test` — 160 / 160 green.
+- **§5b CLI smoke test** — executed successfully against a hand-crafted expired record with 1-second windows; `SweepResult` returned `{ ok: true, scanned: 1, deleted: 1, perVerdict: { qualified: 1, …zeros }, skipped: [] }`; both `handoff.retention.sweep.{started,completed}` events emitted to stdout; record file removed from `var/handoffs/`.
+- **In-process timer path** — covered by unit tests (the boot wiring is a thin `setInterval` over the same `sweepHandoffs(deps)` function the CLI calls; the function's behaviour is the load-bearing surface, exercised by 15 cases including event-emission and clock-injection assertions).
+- Fresh `npm install` + cross-workspace typecheck + test — see "Fresh-install gate" below.
+
+### Open items + follow-ups
+
+- **`PostgresHandoffStore.sweep`** — interface contract is settled (§2.7); the SQL implementation lands with E.t2 proper post-IAM. The Cloud Run Job carrier replaces the in-process interval at swap time; runbook + events + interface unchanged.
+- **B.t2 session sweeper** — independent task; same architectural pattern. The shape of this plan is the template if a future agent picks up B.t2.
+- **Counsel review at E.t9** — the hard-delete posture and the 360-day-vs-calendar approximation should be confirmed. Both are flagged in the compliance bundle footnote.

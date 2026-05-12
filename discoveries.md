@@ -6,6 +6,31 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-12 — Retention sweep lives at the interface, not the implementation — survives the Postgres swap unchanged
+
+E.t6 (handoff retention sweeper) faced the same Postgres-swap-survival question every chunk-E artefact does: today's `FsHandoffStore` is interim, tomorrow's `PostgresHandoffStore` lands post-IAM. Where does the deletion loop live?
+
+Two shapes were on the table:
+
+1. **Inside `FsHandoffStore`** — as a private method or a static `sweepFsHandoffsDir` function. Caller code (boot wiring + CLI + runbook) calls into the file-backed store directly.
+2. **On the `HandoffStore` interface** — `sweep(now, policy)` as a method every implementation satisfies. Caller code holds a `HandoffStore` reference and doesn't know which concrete backend it's sweeping.
+
+**Picked (2).** The deletion loop's *shape* is interface-level: same return type (`SweepResult`), same input (`Date` + `RetentionPolicy`), same observability events (`handoff.retention.sweep.{started,completed,failed}`). The *implementation* differs wildly — `FsHandoffStore.sweep` iterates JSON files sequentially via `list()` + `get()` + `delete()`; `PostgresHandoffStore.sweep` will be one SQL `DELETE … WHERE scheduled_deletion_at < NOW()` against an indexed column. But the boot wiring's `setInterval(() => sweepHandoffs({ store }), ...)`, the operator runbook's `npm run sweep:handoffs`, the CLI's `bin/sweep.ts`, the event taxonomy in `@swoop/common`, and the test contract are **all invariant at swap time**.
+
+The Cloud Scheduler → Cloud Run Job posture replaces the in-process `setInterval` with an out-of-process CLI invocation — but the function the CLI calls is the same `sweepHandoffs(deps)`. The carrier flips; the unit-of-work doesn't.
+
+**Pattern to remember**: when a side-effect needs to survive an implementation swap (FS → Postgres, in-memory → durable, etc.), define the side-effect's API at the interface level even if today only one implementation exists. Two-step rule of thumb:
+1. What's the unit of work? Name it as an interface method.
+2. What's the carrier (process? job? CLI? cron?). That's a separate concern — the unit of work doesn't care.
+
+E.t6 lands a sweeper that runs as an in-process interval today and as a Cloud Run Job tomorrow. The same `HandoffStore.sweep()` interface method is called from both. The caller code (`sweepHandoffs(deps)`) is identical; the operator runbook is identical; the event payloads are identical. Only the carrier wiring (`setInterval` vs Cloud Scheduler) differs.
+
+A sweeper that had lived inside `FsHandoffStore` as a private method (or as a top-level `sweepFsHandoffsDir` function) would not have survived this swap. The interface-level commit is the whole point.
+
+Documentary refs: planning/03-exec-handoff-t6.md §"★ Read this first" + §3 "Architectural principles applied here". E.t2 proper will satisfy the same interface — that's the contract this lays down.
+
+---
+
 ## 2026-05-12 — pgvector's HNSW index caps at 2000 dimensions on `vector`; use `halfvec` for higher dims
 
 When migration 009 (C.t9 — Voyage-3 → Gemini-embedding-001 swap) tried to create HNSW indexes on `vector(3072)` columns, `CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)` failed at creation time. This was an in-flight discovery against `puma_dev_scratch` that the C.t9 plan body had missed.

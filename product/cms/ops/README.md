@@ -18,6 +18,7 @@ If you're new here, read [`troubleshooting.md`](troubleshooting.md) first to ori
 | [`troubleshooting.md`](troubleshooting.md) | Something's wrong and you don't know which pipeline is at fault. Symptom-indexed. |
 | [`prompt-version-rollback.md`](prompt-version-rollback.md) | A prompt-version bump produced bad outputs and you want to revert without burning the whole pipeline. |
 | [`evalset-growth.md`](evalset-growth.md) | Friday afternoon: convert real Puma conversations into new harness scenarios. |
+| [`handoff-retention-sweep.md`](handoff-retention-sweep.md) | Verifying the durable handoff store's per-verdict retention enforcement, or recovering when something looks off. |
 
 ---
 
