@@ -6,6 +6,33 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## Gemini embeddings 429 under our default concurrency — dial down with env vars
+
+Symptom: `npm run -w @swoop/ingestion enrich -- --mode=all --sync` immediately throws
+
+```
+GeminiError: Gemini HTTP 429: { "error": { "code": 429, "message": "You exceeded your current quota, ..." } }
+```
+
+Even on a Tier 1 (post-pay) Google AI Studio project where an isolated `curl` to the same endpoint with the same key returns 200. The dashboard shows essentially zero spend because 429-rejected requests are billing-free.
+
+Cause: Gemini's per-minute token throughput (TPM) is enforced on **sub-second bursts**, not just steady throughput. Our `embedInBatches` defaults are **concurrency 4 + batch size 100** — fine for Tier 1 in steady state, but a fresh enrich pass fires the four embed sources (`tag` / `faqitem` / `blog_chunk` / `image`) sequentially, each opening 4 parallel batches of up to 100 docs ≈ 50K tokens each. That's ~200K tokens hitting in a sub-second window — past the burst ceiling on Tier 1, instantly past free-tier. Our retry chain `[1s, 2s, 4s]` is too tight to clear Gemini's per-minute reset window.
+
+Fix: dial concurrency + batch size down via env vars for the initial run, then re-raise once you trust the pipeline.
+
+```sh
+GEMINI_CONCURRENCY=1 GEMINI_BATCH_SIZE=50 \
+  npm run -w @swoop/ingestion enrich -- --mode=all --sync
+```
+
+`GEMINI_CONCURRENCY=1 GEMINI_BATCH_SIZE=50` = max 50 docs (~25K tokens) per request, no parallel-burst — well inside Tier 1 TPM. Implementation: `resolvePositiveIntFromEnv` in `product/ingestion/src/enrich/gemini.ts`. Non-numeric / non-positive values fall through to the defaults (4 and 100). Explicit `options.concurrency` / `options.batchSize` arguments still win over env (test-injection path stays clean).
+
+Diagnostic for whether the issue is your key vs our pipeline: isolated curl to `batchEmbedContents` with the literal `$GEMINI_API_KEY` from `connector/.env` — if 200, the pipeline's burst is the cause; if 429, the project/tier is the cause.
+
+For later: longer initial backoff (env-overridable `GEMINI_BACKOFF_BASE_MS`?) would let our retry chain ride out the per-minute window. Not built yet — current shape is dial-down-burst first, extend-backoff later if 429s recur after dialing down.
+
+---
+
 ## Gemini embeddings cap inputs at 2048 tokens (vs Voyage-3's 32K)
 
 Symptom: a `gemini-embedding-001` call against a long string returns `400 INVALID_ARGUMENT: input exceeds maximum allowed length`. Voyage-3 happily accepted up to 32K tokens; Gemini's cap is **2048**.

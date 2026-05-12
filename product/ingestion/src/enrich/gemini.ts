@@ -242,11 +242,33 @@ async function safeText(response: Response): Promise<string> {
 }
 
 /**
+ * Resolve a positive-integer env var with a default fallback.
+ *
+ * Used by `embedInBatches` to let operators dial down concurrency / batch
+ * size for the initial pass when Gemini's short-window TPM clipping
+ * triggers (Tier 1 quotas are generous in steady state but strict on
+ * sub-second bursts). Non-numeric / non-positive values fall through.
+ */
+function resolvePositiveIntFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+/**
  * Run an embed pass over `items` with batching + concurrency.
  *
  * Yields results as `{item, embedding}` tuples so the caller can persist
  * each batch as it comes back. Caller is responsible for breaking on cost
  * cap (caller checks ledger between batches).
+ *
+ * Tunable via env (operator-facing — see `cms/ops/embedding-rerun.md`):
+ *   - `GEMINI_CONCURRENCY`  — max in-flight batches (default 4)
+ *   - `GEMINI_BATCH_SIZE`   — documents per batch (default 100)
+ *
+ * Explicit `options.concurrency` / `options.batchSize` still wins (used by
+ * tests). Env-var overrides take effect only when the option is unset.
  */
 export async function embedInBatches<T>(
   client: GeminiClient,
@@ -260,8 +282,10 @@ export async function embedInBatches<T>(
     shouldAbort?: () => boolean;
   } = {},
 ): Promise<Array<{ item: T; embedding: number[] }>> {
-  const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
-  const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
+  const batchSize =
+    options.batchSize ?? resolvePositiveIntFromEnv('GEMINI_BATCH_SIZE', DEFAULT_BATCH_SIZE);
+  const concurrency =
+    options.concurrency ?? resolvePositiveIntFromEnv('GEMINI_CONCURRENCY', DEFAULT_CONCURRENCY);
   const shouldAbort = options.shouldAbort ?? (() => false);
 
   // Build batches.

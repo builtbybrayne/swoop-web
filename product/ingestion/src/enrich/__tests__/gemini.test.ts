@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   GeminiClient,
   embedInBatches,
@@ -262,5 +262,83 @@ describe('embedInBatches (gemini)', () => {
     });
     expect(batchesCalled).toBeLessThan(20);
     expect(out.length).toBeLessThan(items.length);
+  });
+
+  describe('env-var overrides (GEMINI_BATCH_SIZE / GEMINI_CONCURRENCY)', () => {
+    const savedBatch = process.env.GEMINI_BATCH_SIZE;
+    const savedConc = process.env.GEMINI_CONCURRENCY;
+
+    afterEach(() => {
+      if (savedBatch === undefined) delete process.env.GEMINI_BATCH_SIZE;
+      else process.env.GEMINI_BATCH_SIZE = savedBatch;
+      if (savedConc === undefined) delete process.env.GEMINI_CONCURRENCY;
+      else process.env.GEMINI_CONCURRENCY = savedConc;
+    });
+
+    it('GEMINI_BATCH_SIZE env var overrides DEFAULT_BATCH_SIZE when option is unset', async () => {
+      process.env.GEMINI_BATCH_SIZE = '3';
+      const seen: number[] = [];
+      const fetcher = vi.fn(async (_url, init) => {
+        const body = JSON.parse(init!.body as string) as { requests: unknown[] };
+        seen.push(body.requests.length);
+        return makeOkResponse(body.requests.length);
+      });
+      const client = new GeminiClient({ apiKey: 'k', fetcher, sleep: () => Promise.resolve() });
+      const items = Array.from({ length: 10 }, (_, i) => `${i}`);
+      const out = await embedInBatches(client, items, (s) => s, { concurrency: 1 });
+      expect(out).toHaveLength(10);
+      expect(seen).toEqual([3, 3, 3, 1]);
+    });
+
+    it('GEMINI_CONCURRENCY env var overrides DEFAULT_CONCURRENCY when option is unset', async () => {
+      process.env.GEMINI_CONCURRENCY = '1';
+      let maxInFlight = 0;
+      let inFlight = 0;
+      const fetcher = vi.fn(async (_url, init) => {
+        inFlight += 1;
+        if (inFlight > maxInFlight) maxInFlight = inFlight;
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight -= 1;
+        const body = JSON.parse(init!.body as string) as { requests: unknown[] };
+        return makeOkResponse(body.requests.length);
+      });
+      const client = new GeminiClient({ apiKey: 'k', fetcher, sleep: () => Promise.resolve() });
+      const items = Array.from({ length: 20 }, (_, i) => `${i}`);
+      await embedInBatches(client, items, (s) => s, { batchSize: 2 });
+      expect(maxInFlight).toBe(1);
+    });
+
+    it('explicit options.batchSize wins over GEMINI_BATCH_SIZE env var', async () => {
+      process.env.GEMINI_BATCH_SIZE = '3';
+      const seen: number[] = [];
+      const fetcher = vi.fn(async (_url, init) => {
+        const body = JSON.parse(init!.body as string) as { requests: unknown[] };
+        seen.push(body.requests.length);
+        return makeOkResponse(body.requests.length);
+      });
+      const client = new GeminiClient({ apiKey: 'k', fetcher, sleep: () => Promise.resolve() });
+      const items = Array.from({ length: 10 }, (_, i) => `${i}`);
+      await embedInBatches(client, items, (s) => s, { batchSize: 5, concurrency: 1 });
+      // Option=5 wins; env-var=3 ignored.
+      expect(seen).toEqual([5, 5]);
+    });
+
+    it('non-numeric / non-positive env-var values fall back to default', async () => {
+      const fallbackCases = ['', 'banana', '0', '-1', 'NaN'];
+      for (const v of fallbackCases) {
+        process.env.GEMINI_BATCH_SIZE = v;
+        const seen: number[] = [];
+        const fetcher = vi.fn(async (_url, init) => {
+          const body = JSON.parse(init!.body as string) as { requests: unknown[] };
+          seen.push(body.requests.length);
+          return makeOkResponse(body.requests.length);
+        });
+        const client = new GeminiClient({ apiKey: 'k', fetcher, sleep: () => Promise.resolve() });
+        const items = Array.from({ length: 3 }, (_, i) => `${i}`);
+        await embedInBatches(client, items, (s) => s, { concurrency: 1 });
+        // Falls back to DEFAULT_BATCH_SIZE (100) → single batch of 3.
+        expect(seen).toEqual([3]);
+      }
+    });
   });
 });
