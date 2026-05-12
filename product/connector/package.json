@@ -11,7 +11,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "migrate:up": "tsx src/migrate.ts up"
+    "migrate:up": "tsx src/migrate.ts up",
+    "sweep:handoffs": "tsx bin/sweep.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

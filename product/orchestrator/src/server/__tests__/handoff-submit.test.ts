@@ -52,6 +52,29 @@ function inMemoryHandoffStore(opts: { failOnSave?: boolean } = {}) {
     async list() {
       return saved.map((p) => p.handoffId).sort();
     },
+    async delete(id: string) {
+      const before = saved.length;
+      const filtered = saved.filter((p) => p.handoffId !== id);
+      saved.length = 0;
+      saved.push(...filtered);
+      return { ok: true, deleted: filtered.length !== before };
+    },
+    async sweep() {
+      // Route-handler tests don't exercise retention; satisfy the interface
+      // with a no-op success.
+      return {
+        ok: true,
+        scanned: saved.length,
+        deleted: 0,
+        perVerdict: {
+          qualified: 0,
+          referred_out: 0,
+          disqualified: 0,
+          inconclusive: 0,
+        },
+        skipped: [],
+      };
+    },
   };
   return { store, saved };
 }

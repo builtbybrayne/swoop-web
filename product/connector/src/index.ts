@@ -29,6 +29,10 @@ export {
   HANDOFF_ID_PATTERN,
   type HandoffStore,
   type SaveResult,
+  type DeleteResult,
+  type SkipReason,
+  type SweepResult,
+  type RetentionPolicy,
 } from './handoff/store.js';
 
 export {
@@ -36,6 +40,13 @@ export {
   type SubmitDeps,
   type SubmitResult,
 } from './handoff/submit.js';
+
+// --- E.t6 — retention sweeper ----------------------------------------------
+export {
+  sweepHandoffs,
+  DEFAULT_RETENTION_POLICY,
+  type SweeperDeps,
+} from './handoff/sweeper.js';
 
 // --- Runtime substrate (C.t1) ---------------------------------------------
 //

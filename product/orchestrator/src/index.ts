@@ -35,6 +35,7 @@ import { emitErrorRaised, messageOf } from '@swoop/common';
 import {
   FsHandoffStore,
   loadAllToolDescriptions,
+  sweepHandoffs,
   type MailerConfig,
 } from '@swoop/connector';
 
@@ -163,6 +164,30 @@ async function main(): Promise<void> {
     mailerConfig,
   });
 
+  // E.t6 — handoff retention sweeper.
+  // Interim in-process interval. The CLI external-trigger path (`npm run
+  // sweep:handoffs --workspace @swoop/connector`) is independent of this
+  // wiring — it runs one sweep regardless. Cloud Run Job + Cloud Scheduler
+  // will replace the interval at swap time (E.t2 proper) but the same
+  // `sweepHandoffs(deps)` function is the unit-of-work either way.
+  let retentionSweepInterval: NodeJS.Timeout | undefined;
+  let retentionSweepInitialTimer: NodeJS.Timeout | undefined;
+  if (config.HANDOFF_RETENTION_SWEEP_ENABLED) {
+    // First sweep fires after the initial delay so boot logs stay clean.
+    retentionSweepInitialTimer = setTimeout(() => {
+      // Errors are emitted as `handoff.retention.sweep.failed` events
+      // inside sweepHandoffs; catch here is a no-op safety net.
+      void sweepHandoffs({ store: handoffStore }).catch(() => {});
+    }, config.HANDOFF_RETENTION_SWEEP_INITIAL_DELAY_MS);
+    retentionSweepInitialTimer.unref?.();
+
+    // Recurring cadence.
+    retentionSweepInterval = setInterval(() => {
+      void sweepHandoffs({ store: handoffStore }).catch(() => {});
+    }, config.HANDOFF_RETENTION_SWEEP_INTERVAL_MS);
+    retentionSweepInterval.unref?.();
+  }
+
   const server = app.listen(config.PORT, () => {
     console.log(`[orchestrator] ready on http://localhost:${config.PORT}`);
     console.log(`[orchestrator] system prompt loaded from ${promptLoader.path} (${initialPrompt.length} chars)`);
@@ -189,6 +214,15 @@ async function main(): Promise<void> {
         config.HANDOFF_EMAIL_ENABLED ? `enabled, sending to ${config.HANDOFF_EMAIL_TO_QUALIFIED}` : 'disabled (set HANDOFF_EMAIL_ENABLED=true to flip)'
       }`,
     );
+    console.log(
+      `[orchestrator] handoff retention sweeper: ${
+        config.HANDOFF_RETENTION_SWEEP_ENABLED
+          ? `enabled, interval=${Math.round(config.HANDOFF_RETENTION_SWEEP_INTERVAL_MS / 1000)}s, ` +
+            `initialDelay=${Math.round(config.HANDOFF_RETENTION_SWEEP_INITIAL_DELAY_MS / 1000)}s, ` +
+            `policy={qualified:360d, referred_out:360d, disqualified:90d, inconclusive:90d}`
+          : 'disabled (set HANDOFF_RETENTION_SWEEP_ENABLED=true to flip)'
+      }`,
+    );
     console.log(`[orchestrator] env: ${config.NODE_ENV} (prompt hot-reload: ${config.isProduction ? 'off' : 'on'})`);
   });
 
@@ -197,6 +231,10 @@ async function main(): Promise<void> {
     // Not an event — the process is on its way out and per-signal shutdown
     // notifications would only clutter the structured stream.
     console.log(`[orchestrator] ${signal} received, shutting down.`);
+    // Stop retention sweeper timers first so an in-flight sweep doesn't fight
+    // shutdown for the file lock.
+    if (retentionSweepInterval !== undefined) clearInterval(retentionSweepInterval);
+    if (retentionSweepInitialTimer !== undefined) clearTimeout(retentionSweepInitialTimer);
     // Drop warm-pool entries first — they own session records in the store,
     // and we want those deleted before the process exits so nothing leaks
     // into a long-lived backend (when one eventually replaces in-memory).

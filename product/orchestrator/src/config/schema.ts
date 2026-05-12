@@ -175,6 +175,46 @@ export const configSchema = z
       .transform((s) => s.toLowerCase() !== 'false' && s !== '0'),
     SMTP_USER: z.string().trim().default(''),
     SMTP_PASS: z.string().trim().default(''),
+
+    // --- Handoff retention sweeper (E.t6) -------------------------------
+    //
+    // Off by default. When enabled, the orchestrator registers an
+    // `setInterval` that calls `sweepHandoffs` from `@swoop/connector` on
+    // a fixed cadence (default daily). A first sweep fires
+    // `HANDOFF_RETENTION_SWEEP_INITIAL_DELAY_MS` after boot so the boot
+    // logs stay clean.
+    //
+    // The CLI external-trigger path (`npm run sweep:handoffs --workspace
+    // @swoop/connector`) is independent of these flags — it always runs
+    // exactly one sweep against the configured store regardless of the
+    // env var. That's the prod-ready path (Cloud Scheduler → Cloud Run
+    // Job will call the CLI); the in-process timer is the dev-comfort
+    // path for the FS interim.
+    //
+    // Retention windows themselves are not env-tunable — they live in
+    // `product/cms/legal/compliance-bundle/05-retention-policy.md` and are
+    // mirrored in `DEFAULT_RETENTION_POLICY` (sweeper.ts). A change to the
+    // window is a planning-doc decision + a code edit, not a runtime tweak.
+    HANDOFF_RETENTION_SWEEP_ENABLED: z
+      .string()
+      .default('false')
+      .transform((s) => s.toLowerCase() === 'true' || s === '1'),
+    /** Cadence of the in-process sweep interval. Default 24h. */
+    HANDOFF_RETENTION_SWEEP_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(24 * 60 * 60 * 1000),
+    /**
+     * Delay after orchestrator boot before the first sweep fires. Default
+     * 60s — keeps the boot log clean and avoids fighting other startup
+     * work for the first interval tick. Ratified per HITL Q3 (2026-05-12).
+     */
+    HANDOFF_RETENTION_SWEEP_INITIAL_DELAY_MS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(60_000),
   })
   // Warm-pool TTL must be strictly shorter than the idle-session TTL.
   // A warm entry outliving the session sweeper is a footgun: the pool could

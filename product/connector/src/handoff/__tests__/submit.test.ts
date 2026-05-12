@@ -72,6 +72,29 @@ function inMemoryStore(): {
     async list() {
       return saved.map((p) => p.handoffId).sort();
     },
+    async delete(handoffId: string) {
+      const before = saved.length;
+      const filtered = saved.filter((p) => p.handoffId !== handoffId);
+      saved.length = 0;
+      saved.push(...filtered);
+      return { ok: true, deleted: filtered.length !== before };
+    },
+    async sweep() {
+      // submit-path tests don't exercise retention; satisfy the interface
+      // with a no-op success.
+      return {
+        ok: true,
+        scanned: saved.length,
+        deleted: 0,
+        perVerdict: {
+          qualified: 0,
+          referred_out: 0,
+          disqualified: 0,
+          inconclusive: 0,
+        },
+        skipped: [],
+      };
+    },
   };
   return { store, saved, get failOnSave() {
     return obj.failOnSave;
@@ -291,6 +314,23 @@ describe('submitHandoff — failure modes', () => {
       },
       async list() {
         return [];
+      },
+      async delete() {
+        return { ok: true, deleted: false };
+      },
+      async sweep() {
+        return {
+          ok: true,
+          scanned: 0,
+          deleted: 0,
+          perVerdict: {
+            qualified: 0,
+            referred_out: 0,
+            disqualified: 0,
+            inconclusive: 0,
+          },
+          skipped: [],
+        };
       },
     };
     const mailer = makeStubMailerDeps();

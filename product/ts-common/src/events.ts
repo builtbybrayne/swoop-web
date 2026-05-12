@@ -250,6 +250,77 @@ export const HandoffEmailFailedEventSchema = z.object({
   }),
 });
 
+// -----------------------------------------------------------------------------
+// Handoff retention sweeper lifecycle (E.t6, 2026-05-12).
+//
+// Emitted by `sweepHandoffs` (connector) around each sweep pass. One
+// `started` event at the run kickoff, one `completed` event on success with
+// per-verdict deletion counts + duration, or one `failed` event on error
+// with `errorCategory` + sanitisedContext.
+//
+// PII discipline: counts only — no handoffIds, no email addresses, no record
+// content. Same posture as the `handoff.email.*` family. Counsel-facing
+// implication: retention enforcement is observably running without leaking
+// which visitors got deleted.
+//
+// The `sessionId` envelope field is hard-coded to `'system'` — the sweep is
+// not visitor-scoped. The actor is `'connector'` because the side-effect
+// owner is `@swoop/connector` per E.11.
+// -----------------------------------------------------------------------------
+
+export const HandoffRetentionSweepStartedEventSchema = z.object({
+  eventType: z.literal("handoff.retention.sweep.started"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    runId: z.string().uuid(),
+    /** sha256 of the policy values; a config change is visible in the stream. */
+    policyDigest: z.string(),
+    /** Today: 'fs' (FsHandoffStore interim). Post-IAM: 'postgres'. */
+    storeKind: z.enum(["fs", "postgres"]),
+  }),
+});
+
+export const HandoffRetentionSweepCompletedEventSchema = z.object({
+  eventType: z.literal("handoff.retention.sweep.completed"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    runId: z.string().uuid(),
+    scanned: z.number().int().nonnegative(),
+    deleted: z.number().int().nonnegative(),
+    perVerdict: z.object({
+      qualified: z.number().int().nonnegative(),
+      referred_out: z.number().int().nonnegative(),
+      disqualified: z.number().int().nonnegative(),
+      inconclusive: z.number().int().nonnegative(),
+    }),
+    skippedCount: z.number().int().nonnegative(),
+    durationMs: z.number().int().nonnegative(),
+  }),
+});
+
+export const HandoffRetentionSweepFailedEventSchema = z.object({
+  eventType: z.literal("handoff.retention.sweep.failed"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    runId: z.string().uuid(),
+    /**
+     * `list_failed`  — store.list() threw.
+     * `sweep_failed` — store.sweep() returned `{ ok: false, … }` (or threw —
+     *                  the wrapper catches and tags `unknown`).
+     * `unknown`      — caught error outside the documented contract.
+     */
+    errorCategory: z.enum(["list_failed", "sweep_failed", "unknown"]),
+    /** Truncated to ≤500 chars; no PII per the "counts-only" posture. */
+    sanitisedContext: z.string().max(500),
+    partial: z
+      .object({
+        scanned: z.number().int().nonnegative(),
+        deleted: z.number().int().nonnegative(),
+      })
+      .optional(),
+  }),
+});
+
 /**
  * Emitted when the ADK skill primitive loads a skill file. B.t9 territory —
  * deferred — but the schema slot lands now so G's skill authors can write
@@ -297,6 +368,58 @@ export const SessionExpiredEventSchema = z.object({
   ...EventEnvelopeBase,
   payload: z.object({
     cause: z.enum(["idle_timeout", "archive_to_delete"]),
+  }),
+});
+
+// -----------------------------------------------------------------------------
+// D.t9-mount-rehydrate — UI-side rehydrate-on-mount lifecycle events.
+//
+// Mirrors B.t11's server-side `session.rehydrated` / `session.replay.empty` /
+// `session.expired` family from the UI's vantage point. Four kinds:
+//
+//   ui.session.rehydrate.requested — fetch started (after sessionId + consent
+//                                     gate cleared).
+//   ui.session.rehydrate.applied   — 200 OK; `partCount` is the size of the
+//                                     replayed projection. 0 is a valid value
+//                                     (consented + zero turns, e.g. warm-pool
+//                                     hit; per HITL ratification 2026-05-12
+//                                     this is treated as a fresh chat, not a
+//                                     special case).
+//   ui.session.rehydrate.expired   — 404 session_not_found; sessionStorage
+//                                     cleared and OpeningScreen surface routed.
+//   ui.session.rehydrate.failed    — 5xx / network. `stage` discriminates the
+//                                     bucket so analytics can split server
+//                                     fault from network fault.
+//
+// All four pass `actor: "ui"` per envelope conventions.
+// -----------------------------------------------------------------------------
+
+export const UiSessionRehydrateRequestedEventSchema = z.object({
+  eventType: z.literal("ui.session.rehydrate.requested"),
+  ...EventEnvelopeBase,
+  payload: z.object({}),
+});
+
+export const UiSessionRehydrateAppliedEventSchema = z.object({
+  eventType: z.literal("ui.session.rehydrate.applied"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    partCount: z.number().int().nonnegative(),
+    durationMs: z.number().int().nonnegative().optional(),
+  }),
+});
+
+export const UiSessionRehydrateExpiredEventSchema = z.object({
+  eventType: z.literal("ui.session.rehydrate.expired"),
+  ...EventEnvelopeBase,
+  payload: z.object({}),
+});
+
+export const UiSessionRehydrateFailedEventSchema = z.object({
+  eventType: z.literal("ui.session.rehydrate.failed"),
+  ...EventEnvelopeBase,
+  payload: z.object({
+    stage: z.enum(["fetch", "network", "replay"]),
   }),
 });
 
@@ -382,6 +505,10 @@ export const EventSchema = z.discriminatedUnion("eventType", [
   HandoffEmailSentEventSchema,
   HandoffEmailSkippedEventSchema,
   HandoffEmailFailedEventSchema,
+  // E.t6 — handoff retention sweeper lifecycle
+  HandoffRetentionSweepStartedEventSchema,
+  HandoffRetentionSweepCompletedEventSchema,
+  HandoffRetentionSweepFailedEventSchema,
   SkillLoadedEventSchema,
   UiWidgetRenderedEventSchema,
   UiConversationOpenedEventSchema,
@@ -391,6 +518,11 @@ export const EventSchema = z.discriminatedUnion("eventType", [
   WarmPoolMissEventSchema,
   // C.t4 — connector-side tool invocation summary
   ToolInvokedEventSchema,
+  // D.t9-mount-rehydrate — UI-side rehydrate lifecycle (paired with B.t11)
+  UiSessionRehydrateRequestedEventSchema,
+  UiSessionRehydrateAppliedEventSchema,
+  UiSessionRehydrateExpiredEventSchema,
+  UiSessionRehydrateFailedEventSchema,
 ]);
 export type Event = z.infer<typeof EventSchema>;
 
@@ -411,6 +543,15 @@ export type HandoffTriggeredEvent = z.infer<typeof HandoffTriggeredEventSchema>;
 export type HandoffEmailSentEvent = z.infer<typeof HandoffEmailSentEventSchema>;
 export type HandoffEmailSkippedEvent = z.infer<typeof HandoffEmailSkippedEventSchema>;
 export type HandoffEmailFailedEvent = z.infer<typeof HandoffEmailFailedEventSchema>;
+export type HandoffRetentionSweepStartedEvent = z.infer<
+  typeof HandoffRetentionSweepStartedEventSchema
+>;
+export type HandoffRetentionSweepCompletedEvent = z.infer<
+  typeof HandoffRetentionSweepCompletedEventSchema
+>;
+export type HandoffRetentionSweepFailedEvent = z.infer<
+  typeof HandoffRetentionSweepFailedEventSchema
+>;
 export type SkillLoadedEvent = z.infer<typeof SkillLoadedEventSchema>;
 export type UiWidgetRenderedEvent = z.infer<typeof UiWidgetRenderedEventSchema>;
 export type UiConversationOpenedEvent = z.infer<typeof UiConversationOpenedEventSchema>;
@@ -418,3 +559,15 @@ export type UiConversationClosedEvent = z.infer<typeof UiConversationClosedEvent
 export type SessionExpiredEvent = z.infer<typeof SessionExpiredEventSchema>;
 export type WarmPoolHitEvent = z.infer<typeof WarmPoolHitEventSchema>;
 export type WarmPoolMissEvent = z.infer<typeof WarmPoolMissEventSchema>;
+export type UiSessionRehydrateRequestedEvent = z.infer<
+  typeof UiSessionRehydrateRequestedEventSchema
+>;
+export type UiSessionRehydrateAppliedEvent = z.infer<
+  typeof UiSessionRehydrateAppliedEventSchema
+>;
+export type UiSessionRehydrateExpiredEvent = z.infer<
+  typeof UiSessionRehydrateExpiredEventSchema
+>;
+export type UiSessionRehydrateFailedEvent = z.infer<
+  typeof UiSessionRehydrateFailedEventSchema
+>;
