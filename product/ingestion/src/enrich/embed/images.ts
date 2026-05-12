@@ -13,7 +13,7 @@
 import type pg from 'pg';
 import type { CostLedger } from '../cost.js';
 import { approxTokenCount } from '../cost.js';
-import { embedInBatches, VoyageClient } from '../voyage.js';
+import { embedInBatches, GeminiClient } from '../gemini.js';
 import { toPgVectorLiteral } from '../pool.js';
 
 interface ImageRow {
@@ -24,7 +24,7 @@ interface ImageRow {
 
 export interface EmbedImagesOptions {
   client: pg.PoolClient;
-  voyage: VoyageClient;
+  embeddingClient: GeminiClient;
   ledger: CostLedger;
   limit?: number;
   dryRun?: boolean;
@@ -96,16 +96,16 @@ export async function embedImages(opts: EmbedImagesOptions): Promise<EmbedImages
     };
   }
 
-  const out = await embedInBatches(opts.voyage, todo, imageEmbeddingInputText, {
-    batchSize: 128,
+  const out = await embedInBatches(opts.embeddingClient, todo, imageEmbeddingInputText, {
+    batchSize: 100,
     concurrency: 4,
     shouldAbort: () => opts.ledger.shouldAbort(),
-    onBatchComplete: (t) => opts.ledger.recordVoyage('voyage:image', t, 1),
+    onBatchComplete: (t) => opts.ledger.recordEmbedding('gemini:image', t, 1),
   });
 
   for (const { item, embedding } of out) {
     await opts.client.query(
-      `UPDATE image SET embedding = $1::vector(1024), modified_at = NOW() WHERE id = $2`,
+      `UPDATE image SET embedding = $1::halfvec(3072), modified_at = NOW() WHERE id = $2`,
       [toPgVectorLiteral(embedding), item.id],
     );
   }

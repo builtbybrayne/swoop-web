@@ -19,7 +19,7 @@
 import type pg from 'pg';
 import type { CostLedger } from '../cost.js';
 import { approxTokenCount } from '../cost.js';
-import { embedInBatches, VoyageClient } from '../voyage.js';
+import { embedInBatches, GeminiClient } from '../gemini.js';
 import { toPgVectorLiteral } from '../pool.js';
 import { chunkBlogHtml, type SourceChunk } from '../chunk.js';
 import { contentHash } from '../hash.js';
@@ -40,7 +40,7 @@ interface PendingChunk {
 
 export interface EmbedBlogChunksOptions {
   client: pg.PoolClient;
-  voyage: VoyageClient;
+  embeddingClient: GeminiClient;
   ledger: CostLedger;
   limit?: number;
   dryRun?: boolean;
@@ -140,18 +140,18 @@ export async function embedBlogChunks(
     };
   }
 
-  const out = await embedInBatches(opts.voyage, pending, (c) => c.text, {
-    batchSize: 128,
+  const out = await embedInBatches(opts.embeddingClient, pending, (c) => c.text, {
+    batchSize: 100,
     concurrency: 4,
     shouldAbort: () => opts.ledger.shouldAbort(),
-    onBatchComplete: (t) => opts.ledger.recordVoyage('voyage:blog_chunk', t, 1),
+    onBatchComplete: (t) => opts.ledger.recordEmbedding('gemini:blog_chunk', t, 1),
   });
 
   let chunksWritten = 0;
   for (const { item, embedding } of out) {
     await opts.client.query(
       `INSERT INTO blog_chunk (blog_post_id, chunk_index, text, embedding, content_hash)
-       VALUES ($1, $2, $3, $4::vector(1024), $5)`,
+       VALUES ($1, $2, $3, $4::halfvec(3072), $5)`,
       [item.blog_post_id, item.chunk_index, item.text, toPgVectorLiteral(embedding), item.content_hash],
     );
     chunksWritten += 1;

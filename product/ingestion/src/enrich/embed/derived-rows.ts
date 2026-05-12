@@ -19,7 +19,7 @@
 import type pg from 'pg';
 import type { CostLedger } from '../cost.js';
 import { approxTokenCount, type LedgerPassKey } from '../cost.js';
-import { embedInBatches, VoyageClient } from '../voyage.js';
+import { embedInBatches, GeminiClient } from '../gemini.js';
 import { toPgVectorLiteral } from '../pool.js';
 
 interface DerivedRow {
@@ -29,7 +29,7 @@ interface DerivedRow {
 
 export interface EmbedDerivedTableOptions {
   client: pg.PoolClient;
-  voyage: VoyageClient;
+  embeddingClient: GeminiClient;
   ledger: CostLedger;
   /** e.g. 'inspire_passage' */
   table: string;
@@ -83,11 +83,11 @@ export async function embedDerivedTable(
     return { table: opts.table, rowsConsidered: 0, rowsEmbedded: 0, estimatedTokens: 0 };
   }
 
-  const out = await embedInBatches(opts.voyage, todo, (row) => row.text, {
-    batchSize: 128,
+  const out = await embedInBatches(opts.embeddingClient, todo, (row) => row.text, {
+    batchSize: 100,
     concurrency: 4,
     shouldAbort: () => opts.ledger.shouldAbort(),
-    onBatchComplete: (t) => opts.ledger.recordVoyage(opts.ledgerKey, t, 1),
+    onBatchComplete: (t) => opts.ledger.recordEmbedding(opts.ledgerKey, t, 1),
   });
 
   // Cast id literal: UUID needs ::uuid, INTEGER cast inferred.
@@ -97,7 +97,7 @@ export async function embedDerivedTable(
     if (opts.populateTsv) {
       await opts.client.query(
         `UPDATE ${opts.table}
-         SET ${opts.embedColumn} = $1::vector(1024),
+         SET ${opts.embedColumn} = $1::halfvec(3072),
              tsv = to_tsvector('english', ${opts.textColumn}),
              modified_at = NOW()
          WHERE id = $2${idCast}`,
@@ -106,7 +106,7 @@ export async function embedDerivedTable(
     } else {
       await opts.client.query(
         `UPDATE ${opts.table}
-         SET ${opts.embedColumn} = $1::vector(1024),
+         SET ${opts.embedColumn} = $1::halfvec(3072),
              modified_at = NOW()
          WHERE id = $2${idCast}`,
         [toPgVectorLiteral(embedding), item.id],
