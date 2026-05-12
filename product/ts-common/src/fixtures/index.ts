@@ -35,8 +35,12 @@ export {
   SampleEventUiConversationOpened,
   SampleEventUiConversationClosed,
   SampleEventSessionExpired,
+  SampleEventSessionExpiredRehydrate,
   SampleEventWarmPoolHit,
   SampleEventWarmPoolMiss,
+  SampleEventSessionRehydrated,
+  SampleEventSessionReplayEmpty,
+  SampleEventSessionReplayFailed,
 } from "./event.sample.js";
 
 // -----------------------------------------------------------------------------
