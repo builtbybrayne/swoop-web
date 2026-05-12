@@ -387,21 +387,59 @@ The "12-month outer bound uses 360 days" note from §2.2 above gets a short foot
 
 ---
 
-## 5. Open HITL questions
+## 5. HITL ratification record (2026-05-12)
 
-1. **Soft-delete vs hard-delete.** Plan locks to **hard-delete**. Rationale: (a) GDPR Art. 17 "right to erasure" favours hard-delete on principle; (b) auto-expiry has no user-action to audit (no "user clicked delete" event to recover from); (c) backup retention provides the genuine accident-recovery path; (d) the event stream gives counsel + ops a non-PII signal that retention is running. Surface to Al for confirmation; if counsel later asks for soft-delete-to-`var/handoffs/.expired/` with secondary retention, the interface is unchanged — `FsHandoffStore.delete()` rename-to-quarantine is a single-implementation tweak.
+All six items reviewed with Al on 2026-05-12. None remain open. Verbatim decisions below.
 
-2. **In-process interval vs OS cron vs Node CLI on schedule.** Plan locks to **in-process interval** for the FS interim. Rationale: simplicity, survives Postgres swap as a code change in one file. The Node CLI side-product exists for manual triggers (operator runbook step 2) but is not the runtime carrier. Surface to Al if he prefers a different interim posture — e.g. an explicit "no automatic sweep ever; operator runs the CLI weekly" stance might be acceptable pre-launch.
+1. **Soft-delete vs hard-delete.** ✅ **Ratified: hard-delete.** Reversible without interface change if counsel later requires quarantine — `FsHandoffStore.delete()` would rename-to-quarantine instead of unlink; sweeper code unchanged. **Counsel-review note added** (see §5a below) so that this design choice is surfaced to Swoop's legal counsel at E.t9 review.
 
-3. **Initial delay of 60 seconds after boot.** Plan picks 60s arbitrarily. Counsel + ops are unlikely to care; flagged only because the right number is "long enough that boot stabilises, short enough that a frequently-restarted dev process still sees a sweep occasionally". Defensible default; not a HITL gate.
+2. **In-process interval (dev) AND CLI external-trigger (prod-ready) — BOTH first-class.** ✅ **Ratified.** Both call paths share the same `sweepHandoffs(deps)` function and are tested in lockstep. The in-process timer is the dev-comfort path (orchestrator boot wires it; restart cycles re-fire it within the orchestrator's process). The CLI binary (`bin/sweep.ts` invoked via `npm run sweep:handoffs --workspace @swoop/connector`) is the external-trigger path that Cloud Scheduler → Cloud Run Job calls in prod, and that an operator can fire ad-hoc today (already in §2.9 runbook step 2). Tests cover both: §"Verification" gains an explicit short-TTL CLI smoke test step (5a below) that emulates the Cloud Scheduler trigger.
 
-4. **Runbook CLI command name.** `npm run sweep:handoffs --workspace @swoop/connector` — needs a `bin/sweep.ts` or a `scripts` entry in `connector/package.json`. Plan recommends `bin/sweep.ts` invoked via `tsx`, mirroring the ingestion CLI pattern. Surface as HITL only if Al has a strong preference for a different shape.
+3. **Initial delay of 60 seconds after boot.** ✅ **Ratified.** Defensible default.
 
-5. **Whether `parse_failed` records should be moved to `var/handoffs/.corrupt/` instead of left in place.** Plan says "leave for operator inspection". Corrupt records on disk today are a near-zero-likelihood scenario (the only way to produce one is to manually edit the JSON file, since `save()` round-trip-validates on write). If the FS interim runs longer than expected (Postgres swap delayed by months), this becomes a question worth re-opening.
+4. **Runbook CLI command name.** ✅ **Ratified.** `npm run sweep:handoffs --workspace @swoop/connector` wrapping `bin/sweep.ts` via `tsx`, mirroring the ingestion CLI pattern.
 
-6. **Event delivery target.** The `handoff.retention.sweep.*` events emit through the existing `emitEvent` channel (chunk F). If F's event sink is still in-memory / log-only at the time this lands, the events surface in `console.log` and Cloud Logging only. That's acceptable; flagged for awareness.
+5. **`parse_failed` records left in place** (not moved to `var/handoffs/.corrupt/`). ✅ **Ratified.** Re-open if FS interim runs longer than expected.
 
-None of the retention windows themselves (12mo / 90d) are HITL-open — the compliance bundle's `05-retention-policy.md` has them as ✅ FILLED, decisions E.6/E.7/E.8 are closed.
+6. **Event delivery target.** ✅ **Acknowledged.** F's event sink may be log-only at land time; that's acceptable.
+
+The retention windows themselves (12mo / 90d) are sourced from the compliance bundle's `05-retention-policy.md` ✅ FILLED entries — not HITL-open (decisions E.6/E.7/E.8 closed).
+
+---
+
+## 5a. Counsel-review note (added 2026-05-12 per HITL Q1)
+
+The hard-delete posture chosen here is a design choice that will land in code without prior legal counsel sign-off. Surface for E.t9 counsel review:
+
+> Puma's interim handoff retention enforcement (E.t6) implements hard-deletion of expired records on schedule. Per GDPR Art. 17 right-to-erasure, hard-deletion aligns with the data-subject's expectation that expired records are removed. Auto-expiry signals are emitted via the observability event stream (counts only, no PII). Accident recovery is provided by deployment-level backup retention.
+>
+> If counsel prefers a soft-delete posture with secondary retention (e.g. quarantine to `var/handoffs/.expired/` with separate retention window), the change is a single-implementation tweak: `FsHandoffStore.delete()` renames-to-quarantine instead of `unlink()`. The sweeper interface, scheduling, observability events, and operator runbook are all unchanged. No re-architecture required.
+
+This note belongs in `product/cms/legal/compliance-bundle/05-retention-policy.md` as a footnote to the "Enforcement" section, and surfaced at E.t9 review.
+
+---
+
+## 5b. CLI smoke-test verification (added 2026-05-12 per HITL Q2)
+
+Beyond the unit + integration test set in §6, the verification gains one explicit CLI smoke step to prove the external-trigger path works end-to-end against a real `FsHandoffStore`:
+
+```bash
+# Set up: drop a hand-crafted expired record under product/orchestrator/var/handoffs/
+# with session.handoffSubmittedAt set to a year ago, verdict 'qualified'.
+# Override the policy to a 1-second outer bound so all records are expired.
+HANDOFF_RETENTION_QUALIFIED_WINDOW_SECONDS=1 \
+HANDOFF_RETENTION_REFERRED_OUT_WINDOW_SECONDS=1 \
+HANDOFF_RETENTION_DISQUALIFIED_WINDOW_SECONDS=1 \
+HANDOFF_RETENTION_INCONCLUSIVE_WINDOW_SECONDS=1 \
+  npm run sweep:handoffs --workspace @swoop/connector
+
+# Expected stdout (JSON SweepResult):
+# { ok: true, scanned: 1, deleted: 1, perVerdict: { qualified: 1, … }, skipped: [] }
+# Expected: record file is gone from var/handoffs/
+# Expected: handoff.retention.sweep.{started,completed} events in stdout/log
+```
+
+This step emulates what Cloud Scheduler will do in prod: external process invokes the CLI, returns synchronously, exits 0 on success. Anything that breaks here breaks the prod path.
 
 ---
 
