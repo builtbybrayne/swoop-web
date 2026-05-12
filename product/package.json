@@ -5,7 +5,7 @@
   "description": "Swoop Web Discovery (Puma release) — code monorepo root. See product/CLAUDE.md.",
   "packageManager": "npm@10.9.0",
   "engines": {
-    "node": ">=20.0.0 <21.0.0"
+    "node": ">=20.0.0"
   },
   "workspaces": [
     "ts-common",

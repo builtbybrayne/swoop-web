@@ -4,12 +4,14 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-05-02 — **B.t3a closed** (orchestrator → real connector; eight intent-named tools registered); **C.t3 implemented**; **C.t6 + C.t3a folded into one Vision call**; review fix-wave fully landed; chunk-C tier-3 plans HITL-ratified; C.t1 implemented)
+## Status (2026-05-12 — chunk-C implementation fully merged to `main`; C.t1 / C.t3 / C.t3a / C.t4 / C.t5 / C.t6 / C.t8 + B.t3a all closed; partial enrich pass underway; sync-classifier escape hatch being planned via Claude Code)
 
-**2026-05-02 (later)**: C.t6 + C.t3a image-annotation fold landed per Al's HITL ratification. One Claude Vision call per image now produces all six outputs (description + annotation + 4 tag arrays); C.t3a's separate Haiku image-annotation classifier retired. Migration 008 adds GIN-indexed tag-array columns; C.t6's prompt bumps to version 2; the C.t3a `image-annotation` classifier and `--source=image-annotation` CLI argument retire. Decision **C.40** logged.
+**2026-05-12 (today)**: `claude/magical-johnson-3b07a1` (67 commits ahead of `main`, holding the full chunk-C swarm + B.t3a) manually merged to `main` after a week's gap. Branch was at a natural inflection point — `C.t8` commit message reads "closes chunk C". Environment changes: engine pin in `product/package.json` + `product/harness/package.json` loosened from `>=20.0.0 <21.0.0` to `>=20.0.0` (no recorded rationale for the upper cap; CI continues to use `.nvmrc` at 20). **Operational state**: C.t3 domain load live-verified via psql (852 trips, 13,012 images, 906 FAQ, 2,160 customerreviews, 79 tags); 5 derived tables all 0 rows pending the enrich run. Partial `--mode=embed` pass kicked off this session (synchronous Voyage-3, no Batches API, minutes-not-24h). Full `--mode=all` deferred pending a sync-classifier carve-out from HITL Q4 — planning that work via Claude Code in parallel.
+
+**2026-05-02**: C.t6 + C.t3a image-annotation fold landed per Al's HITL ratification. One Claude Vision call per image now produces all six outputs (description + annotation + 4 tag arrays); C.t3a's separate Haiku image-annotation classifier retired. Migration 008 adds GIN-indexed tag-array columns; C.t6's prompt bumps to version 2; the C.t3a `image-annotation` classifier and `--source=image-annotation` CLI argument retire. Decision **C.40** logged.
 
 
-M1 live + chunk D closed + mock-host shipped + **C.t1 done + C.t2 done + C.t3 done** + **C.26 graduated** + **2026-04-30 review fix-wave fully merged**. **2026-05-02**: C.t3 implemented across 4 atomic commits — `@swoop/ingestion` now hosts a Node CLI (`etl:sql`) that streams the MariaDB SQL dumps into 19 domain tables in `puma_dev` in ~10s. Idempotent re-run produces zero row-count delta. End-to-end live counts: 852 trips, 79 tags, 13K images, 906 FAQ items, 2,160 published customerreviews. See [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) §"Execution log" for the full breakdown. **2026-05-01**: C.t1 + 14 review-fix items + 7 chunk-C plans (all HITL-ratified). Earlier: **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits — `@swoop/connector` is now a runnable service at `:3002` (Postgres pool + Express + MCP-HTTP transport + health endpoints + migration runner + no-op `ping` tool). Boots clean against `puma_dev`; SIGTERM closes pool gracefully; orchestrator-stub-connector at `:3001` continues to back the orchestrator until B.t3a swaps it post-C.t4. See [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) §"Execution log" + [progress.md](progress.md) §"C.t1 implemented (2026-05-01)" for the full breakdown.
+M1 live + chunk D closed + mock-host shipped + **chunk-C implementation spine closed (C.t0/t1/t2/t3/t3a/t4/t5/t6/t8 + C.26 graduated)** + **2026-04-30 review fix-wave fully merged** + **B.t3a closed (orchestrator → real connector)**. **2026-05-02**: C.t3 implemented across 4 atomic commits — `@swoop/ingestion` now hosts a Node CLI (`etl:sql`) that streams the MariaDB SQL dumps into 19 domain tables in `puma_dev` in ~10s. Idempotent re-run produces zero row-count delta. C.t3a (Voyage-3 embeddings + Haiku batch classifiers + composers) and C.t4 (eight intent-named tool handlers over data primitives) and C.t5 (image utility) and C.t6 (Vision annotation) and C.t8 (ops runbooks) all merged the same day. **2026-05-01**: C.t1 + 14 review-fix items + 7 chunk-C plans (all HITL-ratified). See [planning/03-exec-c-t*.md](planning/) for per-task execution logs.
 
 2026-05-01 (earlier) work landed across 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new chunk-C tier-3 plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored + HITL-ratified.
 
@@ -53,27 +55,34 @@ Master ledger + checklist: [planning/reviews/2026-04-30-code-level.md](planning/
 
 ## Next up
 
-### 0. Dispatch chunk-C implementation [first thing next session]
+### 0. Run the C.t3a enrich pass — operational, not code-writing [first thing next session]
 
-The 2026-05-01 swarm authored seven new tier-3 plans covering the chunk-C implementation spine. **All seven are HITL-ratified 2026-05-01.** **C.t1 is now done** (commits `735c585`, `5bab8c4`, `1f7ade8`, `3d42175`); the remaining six are ready for execution. Each plan has a `## 2026-05-01 HITL ratification` addendum at the bottom resolving every open question.
+The chunk-C implementation spine closed 2026-05-02 and merged to `main` 2026-05-12. All seven Tier 3 plans executed, every per-task execution log captured. What remains is **operational**: run the enrich pipeline against the populated domain tables to fill the 5 job-shaped derived tables.
 
-Dispatch order (C.t3 / C.t3a / C.t4 chain in sequence; C.t5 / C.t6 / C.t8 parallelisable side-streams off the others):
+Chunk-C tasks — historical status:
 
-1. ~~**C.t1** — connector skeleton + Postgres pool wiring~~ ✅ **done 2026-05-01.** Service runs at `:3002`; `getPool` / `withPgClient` / migration runner all available to downstream tasks. Execution log in [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md) §"Execution log".
-2. ~~**C.t3** — SQL-dump → Postgres transform~~ ✅ **done 2026-05-02.** ~0.5 day (under estimate). 19 domain tables populated from the two dumps in ~10s; idempotent. CLI at `npm run -w @swoop/ingestion etl:sql -- --dump <path>`. Execution log in [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) §"Execution log". Decisions C.38 + C.39 logged.
-3. **C.t3a** — [planning/03-exec-c-t3a.md](planning/03-exec-c-t3a.md) — Voyage-3 embeddings + Haiku ETL classifiers. ~2 days. **Next up.** All domain tables populated; ready for the embedding pass + classifier passes. 12 numbered open questions; persona-aggregation grouping is load-bearing.
-4. **C.t4** — [planning/03-exec-c-t4.md](planning/03-exec-c-t4.md) — eight intent-named tool handlers over data primitives. ~2 days. **Removes the no-op `ping` tool** stood up by C.t1 and registers the eight real tools on the existing `createConnectorMcpServer` factory. 7 numbered open questions.
-5. **C.t5** — [planning/03-exec-c-t5.md](planning/03-exec-c-t5.md) — `@swoop/common` image URL utility + page-as-hub resolver. ~0.5 day. 5 open questions.
-6. **C.t6** — [planning/03-exec-c-t6.md](planning/03-exec-c-t6.md) — Claude Vision annotation pipeline over ~6.3K images. ~1 day setup. 6 open questions.
-7. **C.t8** — [planning/03-exec-c-t8.md](planning/03-exec-c-t8.md) — ETL + annotation runbooks at `product/cms/ops/`. ~0.5 day. Last task in chunk-C. **Should reference the 3 C.t1 execution-log notable findings** (libpq options for pool tunables, node-pg-migrate "Can't determine timestamp" warnings are benign, npm-doesn't-propagate-SIGTERM-to-tsx local-dev concern). 7 numbered open questions.
+1. ~~**C.t1** — connector skeleton + Postgres pool wiring~~ ✅ **done 2026-05-01.** Service runs at `:3002`; `getPool` / `withPgClient` / migration runner all available. Execution log in [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md).
+2. ~~**C.t3** — SQL-dump → Postgres transform~~ ✅ **done 2026-05-02.** 19 domain tables populated; idempotent. CLI: `npm run -w @swoop/ingestion etl:sql -- --dump <path>`. Decisions C.38 + C.39. Execution log in [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md).
+3. ~~**C.t3a** — Voyage-3 embeddings + Haiku ETL classifiers~~ ✅ **code done 2026-05-02; run still pending.** Persona aggregation, blog-post job classifier, blog-tag normalisation all in `product/ingestion/src/enrich/`. CLI: `npm run -w @swoop/ingestion enrich -- --mode={embed|classify|compose|all}`. Execution log in [planning/03-exec-c-t3a.md](planning/03-exec-c-t3a.md).
+4. ~~**C.t4** — eight intent-named tool handlers over data primitives~~ ✅ **done 2026-05-02.** Handlers in `product/connector/src/tools/`, data primitives in `product/connector/src/data/` (vector + RRF + hybrid search). No-op `ping` removed; eight tools registered on `createConnectorMcpServer`. Execution log in [planning/03-exec-c-t4.md](planning/03-exec-c-t4.md).
+5. ~~**C.t5** — `@swoop/common` image URL utility + page-as-hub resolver~~ ✅ **done 2026-05-02.** Shared in `@swoop/common/image.ts`. Decisions C.41 + C.42.
+6. ~~**C.t6** — Claude Vision annotation pipeline~~ ✅ **done 2026-05-02; run still pending.** Folded with C.t3a's image-annotation pass per decision C.40. Code in `product/ingestion/src/images/`. Cost estimate refined down from original £30–£150: ~6.7K images need annotation (vs ~13K total), `image.description` is 47.5% pre-populated upstream.
+7. ~~**C.t8** — ETL + annotation runbooks~~ ✅ **done 2026-05-02.** Six runbooks at `product/cms/ops/`: `etl-rerun.md`, `embedding-rerun.md`, `image-annotation-rerun.md`, `migration-management.md`, `prompt-version-rollback.md`, `troubleshooting.md`. Plus index `README.md`.
+8. ~~**B.t3a** — orchestrator's connector adapter rewrite~~ ✅ **done 2026-05-02.** Stub at `:3001` retired; orchestrator now talks to real connector at `:3002`; deprecated `Search*` / `GetDetail*` schemas swept. Six atomic commits.
 
-**Downstream augments triggered by C.t4** (live in their owning chunks; not authored as tier-3 plans yet):
-- ~~**B.t3a** — orchestrator's connector adapter rewrite. Drop `@deprecated` `Search*` / `GetDetail*` schemas; register the eight intent-named tools.~~ ✅ **done 2026-05-02**, ~0.5 day. Six atomic commits (`d697007`, `f9e81f9`, `d75df3f`, `33ccd42`, `30de639`, plus the docs commit). Stub at `:3001` retired (option a); orchestrator now talks to the real connector at `:3002` by default. Execution log in [planning/03-exec-agent-runtime-t3.md §"B.t3a — connector adapter sunset"](planning/03-exec-agent-runtime-t3.md#bt3a--connector-adapter-sunset-2026-05-02-execution-log).
-- **D.t9** — chat-surface widget rewrite. **Now actionable** — B.t3a deleted the orphaned `search-results.tsx` + `item-detail.tsx`; D.t9 builds the new widgets for the five intent-named tool outputs from `*PublicSchema` shapes. `inspiration` and `lead-capture` survive from D.t3 (rendering `illustrate` and `handoff`). The `AttributeTable` primitive in `product/ui/src/shared/` is currently consumer-less and likely needed for D.t9's per-tool widgets (e.g. trip cards). ~1–2 days.
+**The actual outstanding operational work:**
 
-**Coordination point with cross-cuts**: H1 (`messageOf` helper) and H2 (`emitErrorRaised` helper) are deferred until they pair with chunk-C work. Whoever picks up C.t4 first should land H1 + H2 in `@swoop/common` as the same agent's first commits — they're consumed by the new tool handlers' error envelopes anyway.
+- **Partial enrich (`--mode=embed`)** — **in flight 2026-05-12.** Populates embedding columns on domain tables (`tag`, `faqitem`, `image`, `blog_chunk`). Synchronous Voyage-3, no Batches API, runs in minutes. Verification pass for the embedding layer before committing to the full pipeline.
+- **Full enrich (`--mode=all`)** — gated on the sync-classifier escape hatch (see below). Without it, classify step uses Anthropic Batches API with up-to-24h SLA — fine for production runs, friction for dev-loop iteration.
+- **Sync-classifier escape hatch** — deliberate carve-out from HITL Q4 (which locked all classifiers to Batches for the 50% discount). Adds a `SyncMessageClient` implementing the existing `BatchClient` interface via `messages.create`, plus a `--no-batch` CLI flag. ~Half a day of work; classifier modules don't change (interface is the abstraction). Planning being scoped via Claude Code in a parallel session 2026-05-12.
 
-**Method discipline**: every Tier 3 plan above gets a "★ Read this first" pointer that calibrates the executing agent against theme 11 (top-down from sales, not bottom-up from data) before they touch code. The chunk-C plan's anchor section in [02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md) is the canonical calibration text — refer to it from each Tier 3 brief.
+**Downstream of chunk-C closure (now actionable):**
+
+- **D.t9** — chat-surface widget rewrite for the five intent-named tool outputs from `*PublicSchema` shapes. B.t3a deleted the orphaned `search-results.tsx` + `item-detail.tsx`; `inspiration` and `lead-capture` survive from D.t3 (render `illustrate` and `handoff`). `AttributeTable` primitive in `product/ui/src/shared/` is consumer-less and likely needed for trip-card-style widgets. ~1–2 days. Not yet authored as a Tier 3 plan.
+
+**Cross-cuts**: H1 (`messageOf` helper) and H2 (`emitErrorRaised` helper) from the 2026-04-30 review — status to confirm against the chunk-C swarm's actual deliveries. If not picked up, they remain in the deferred queue.
+
+**Method discipline**: theme 11 (top-down from sales, not bottom-up from data) is now load-bearing in three places. Future agents picking up D.t9 or any chunk-G work hit the calibration layer before they touch a Zod schema or React component. The chunk-C plan's anchor section in [02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md) is the canonical calibration text.
 
 ### 1. Discovery design HITL [active thread; partly absorbed by C.t2 closure]
 
@@ -85,19 +94,23 @@ Dispatch order (C.t3 / C.t3a / C.t4 chain in sequence; C.t5 / C.t6 / C.t8 parall
 - **G.t5** — refinement pass when Luke + Lane's sales-thinking doc lands (~May 4).
 - **E.t1 schema extension**: add `inconclusive` 4th verdict + per-verdict reason enum from §3.2 Path 7 (`low_engagement` / `mixed_signals` / `extended_no_convergence` / `comparison_shopping` / `off_offer_in_region` / `drive_by` / `inconclusive_other`).
 
-### 2. Chunk C — Retrieval & data implementation [post-#0 plan authoring]
+### 2. Chunk C — Retrieval & data implementation [✅ implementation spine closed 2026-05-02; merged to main 2026-05-12]
 
-- **C.t0** ✅ done 2026-04-29 — local MariaDB inspection + 9 first-pass-overturning findings + ontology rewrite + 8 questions closed + 3 new questions raised. Plan + execution log: [planning/03-exec-c-t0.md](planning/03-exec-c-t0.md).
-- **C.t2** ✅ done 2026-04-30 — entity model + tool I/O schemas + migrations 001–006 + production-quality tool descriptions + fixtures. C.26 graduated alongside; `find_someone_who` live; 2,563 customer reviews + 163 trip junctions in domain layer; customertip pending separate Swoop delivery. Plan + execution log: [planning/03-exec-c-t2.md](planning/03-exec-c-t2.md).
-- **C.t1** ✅ done 2026-05-01 — connector skeleton + Postgres pool + MCP-HTTP transport + health endpoints + migration runner + no-op `ping` tool. Plan + execution log: [planning/03-exec-c-t1.md](planning/03-exec-c-t1.md).
-- **C.t3** ✅ done 2026-05-02 — SQL-dump → Postgres transform end-to-end; 19 domain tables populated; idempotent. Plan + execution log: [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md). Decisions C.38 + C.39 logged.
-- **C.t3a** — HITL-ratified plan ready. **Next up.** Carry forward Phase 1's load-bearing finding: aggregate by reviewer `name` before generating `persona_summary` (~80% of customerreview rows are short snippets that compose into coherent personas only when grouped by author). Domain tables fully populated and ready to read.
-- **C.t4** — HITL-ratified plan ready. Removes the no-op `ping` tool stood up by C.t1.
-- **C.t5** — HITL-ratified plan ready (small).
-- **C.t6** — HITL-ratified plan ready; Phase 0 cost estimate ~£30–£150 one-time at ~$0.005/image Claude Vision over the ~6.3K images without upstream `image.description`.
-- **C.t8** — HITL-ratified plan ready; runbook authoring task. Should reference the 3 C.t1 execution-log notable findings (libpq pool tunables / node-pg-migrate timestamp warnings / npm SIGTERM propagation).
-- **Blog ingest** ✅ implemented; running in `@swoop/ingestion`. Per-post-classification at C.t3a.
-- **Downstream augments**: B.t3a + D.t9 fan out from C.t4 in parallel.
+All chunk-C tasks landed in code. **Operational state**: domain tables populated (live-verified 2026-05-12 via psql); 5 derived tables empty pending the enrich run. Per-task execution logs in [planning/03-exec-c-t*.md](planning/).
+
+- **C.t0** ✅ done 2026-04-29 — local MariaDB inspection + 9 first-pass-overturning findings + ontology rewrite + 8 questions closed + 3 new questions raised.
+- **C.t2** ✅ done 2026-04-30 — entity model + tool I/O schemas + migrations 001–006 + production-quality tool descriptions + fixtures. C.26 graduated alongside; `find_someone_who` live.
+- **C.t1** ✅ done 2026-05-01 — connector skeleton + Postgres pool + MCP-HTTP transport + health endpoints + migration runner.
+- **C.t3** ✅ done 2026-05-02 — SQL-dump → Postgres transform end-to-end; 19 domain tables populated; idempotent. Decisions C.38 + C.39.
+- **C.t3a** ✅ done 2026-05-02 (code); ⏳ **enrich run still pending operationally**. Voyage-3 embeddings + Haiku batch classifiers + composers all in `product/ingestion/src/enrich/`. Persona aggregation by reviewer name implemented per Phase 1's load-bearing finding.
+- **C.t4** ✅ done 2026-05-02 — eight intent-named tool handlers + data primitives (vector + RRF + hybrid search). No-op `ping` removed.
+- **C.t5** ✅ done 2026-05-02 — `@swoop/common/image.ts` shared utility. Decisions C.41 + C.42.
+- **C.t6** ✅ done 2026-05-02 (code); ⏳ **annotation run still pending operationally**. Folded with C.t3a's image-annotation pass per decision C.40 — one Claude Vision call produces description + annotation + 4 tag arrays.
+- **C.t8** ✅ done 2026-05-02 — six ops runbooks at `product/cms/ops/`.
+- **Blog ingest** ✅ implemented in `@swoop/ingestion`; per-post-classification slated for the C.t3a enrich run.
+- **Downstream augments**: B.t3a ✅ done 2026-05-02 (orchestrator → real connector). D.t9 (chat-surface widget rewrite) now actionable.
+
+**Carve-out being scoped via Claude Code 2026-05-12**: a synchronous classifier escape hatch (`SyncMessageClient` implementing the existing `BatchClient` interface, plus `--no-batch` CLI flag). Deliberate carve-out from HITL Q4. Production continues to use Batches API for the 50% cost discount; sync path is dev-only.
 
 ### 3. Chunk G — Content (bulk) [~3–4 days incl. HITL session]
 

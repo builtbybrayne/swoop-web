@@ -15,6 +15,7 @@
     "etl:sql": "tsx src/sql-transform/index.ts",
     "annotate-images": "tsx src/images/annotate.ts",
     "enrich": "tsx src/enrich/index.ts",
+    "enrich:embed": "tsx src/enrich/index.ts --mode=embed",
     "enrich:dry-run": "tsx src/enrich/index.ts --mode=all --dry-run"
   },
   "dependencies": {
