@@ -82,7 +82,7 @@ Chunk-C tasks — historical status:
 - **Full enrich (`--mode=all --sync`)** — once both smokes pass, this fills all 5 derived tables (`inspire_passage`, `customer_story`, `trust_proof`, `inform_chunk`, `trip_card`) in minutes, end-to-end. Cost estimate ~£5–10 once-off at full Gemini + full-rate Haiku pricing. From this point M1 has real retrieval data behind the tool surface for the first time.
 - **Partial Voyage embed run** that fired earlier this morning is now superseded — migration 009 dropped + re-added the embedding columns at the new dimension, so any 1024d data is gone. Single complete Gemini-3072d pass replaces it.
 
-**Sibling task — sync image annotation** (provisionally `03-exec-c-t11.md` or similar): the C.t10 ratification appendix defers `--sync` on `annotate-images` (the Vision pipeline) to a separate plan. A "complete sync run of everything" workflow runs `enrich --sync` + `annotate-images --sync` in two parallel shells. Until the image-side sync lands, the second shell falls back to the Vision Batches default with up-to-24h SLA.
+**Parallel-shells full-sync workflow**: `annotate-images --mode=live --max-budget=N` is the existing sync image annotation path (built by C.t6 / decision C.40 fold). Operators doing a full sync run invoke both CLIs in parallel shells: `enrich --mode=all --sync` and `annotate-images --mode=live --max-budget=15`. *Correction 2026-05-12 post-closure*: the c-t10 ratification originally framed this as a deferred sibling task — Al pointed out the live mode already exists; no sibling task to author.
 
 **Downstream of chunk-C closure (now actionable):**
 

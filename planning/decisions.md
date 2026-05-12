@@ -18,7 +18,7 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 **Rationale**: the `BatchClient` interface in `haiku.ts` was deliberately shaped to admit this swap (see the file header). Carve-out cost is half a day. Cost ratio (2× batch full rate) means a complete sync run is ~£1–£2 vs ~£0.50–£1 batched — both well within the £10 dev cap. Retry layer: kept our own `[1000, 2000, 4000]` ms backoff on top of the SDK's built-in retries (per Al's preference for dev iteration: failures stalling the loop are more painful than the rare over-retried request).
 
-**Image annotation sync** is a sibling task (provisionally `03-exec-c-t11.md`), not part of this decision. An initial complete sync run uses two parallel shells: `enrich --sync` here, plus a future `annotate-images --sync` once that task lands.
+**Image annotation sync** is **the existing `--mode=live` of `annotate-images`** (built by C.t6 / decision C.40 fold), not a deferred task. An initial complete sync run uses two parallel shells: `enrich --sync` from this decision, plus `annotate-images --mode=live --max-budget=N` from the existing CLI. *Correction 2026-05-12 post-closure*: the c-t10 draft originally framed image annotation sync as a future "sibling task" — Al pointed out the live mode already does this. No sibling plan needed.
 
 **Swap cost**: Low. Single class (`SyncMessageClient`), single CLI flag, no schema change. Retiring sync mode = deleting one file + one flag handler.
 

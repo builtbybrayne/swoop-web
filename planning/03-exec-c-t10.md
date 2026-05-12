@@ -560,7 +560,7 @@ Al ratified the plan in conversation 2026-05-12. The body above is preserved as 
 ### Open questions — resolutions
 
 1. **Default concurrency**: **5**.
-2. **Sync extension to image annotation**: **OUT of scope** for this plan. Al wants to run an initial complete sync of everything by **invoking `enrich --sync` and a future `annotate-images --sync` in parallel shells**. A separate task (provisionally `03-exec-c-t11.md` or similar) will land `--sync` on the image annotation CLI. **Action for c-t10**: leave `annotate-images` untouched. Add a one-sentence pointer in the c-t10 ops runbook entry (Step 6) noting that image annotation sync is a sibling task running in a separate shell — operators doing a full sync run start both CLIs.
+2. **Sync extension to image annotation**: **OUT of scope** for this plan — sync image annotation is already shipped. *Correction 2026-05-12 post-closure*: the original wording here framed sync image annotation as a future task. Al caught the misread post-closure. The Vision pipeline at `product/ingestion/src/images/annotate.ts` has had `--mode=live` (5-up concurrent `messages.create` with retries) since C.t6 / decision C.40 fold. No sibling task to author; no `03-exec-c-t11.md`. Operators doing a full sync run invoke both CLIs in parallel shells: `enrich --sync` here, plus `annotate-images --mode=live --max-budget=N` against the existing image CLI. **Action for c-t10**: leave `annotate-images` untouched (correct as originally written, just for the wrong stated reason).
 3. **`isBatched` naming**: **confirmed**. Boolean read-only property on the `BatchClient` interface. The cost ledger's discount logic keys off it. Per Al, this is an additive change to a going-forward interface — within the spirit of the immutability discipline because the plan that established the interface (`03-exec-c-t3a.md`) remains an unedited record of what was built at the time. The change is documented here and the plan body's Step 5 already shows the extension.
 4. **Mutually-exclusive flags**: `--sync` + `--dry-run` rejected at arg-parse time. `--sync` + `--mode=embed` **silently accepted** (the flag is a no-op for the embed branch since that branch is sync regardless of provider).
 5. **CLI flag name**: **`--sync`**.
@@ -568,20 +568,20 @@ Al ratified the plan in conversation 2026-05-12. The body above is preserved as 
 ### Cross-cutting decisions confirmed in conversation
 
 - **SDK retry policy**: **keep our own retry layer** (`[1000, 2000, 4000]` ms with jitter on 429 / 5xx / network) **on top of the Anthropic SDK's built-in retries**. Rationale (Al): dev iteration loops are the use case; failures that stall the loop are more painful than the rare case of an over-retried request. The combined worst-case attempt count is bounded by the SDK's default retry count × 3 outer retries; Anthropic's per-request idempotency keys ensure no double-billing on retried 5xx (SDK and our layer both pass them). Document the choice + worst-case attempt count inline in `sync-message-client.ts` so a future reader doesn't strip a layer out under "this looks redundant".
-- **Image annotation parallel dev workflow**: an operator running an initial complete sync invokes both CLIs in parallel shells (provisional shape):
+- **Image annotation parallel dev workflow**: an operator running an initial complete sync invokes both CLIs in parallel shells:
   ```sh
   # shell 1
   npm run -w @swoop/ingestion enrich -- --mode=all --sync
-  # shell 2 (after the sibling task lands the flag)
-  npm run -w @swoop/ingestion annotate-images -- --sync
+  # shell 2
+  npm run -w @swoop/ingestion annotate-images -- --mode=live --max-budget=15
   ```
-  Until the image-side `--sync` exists, the second shell uses the batch-default `annotate-images` invocation and operators tolerate the up-to-24h Vision Batches SLA.
+  `--mode=live` is the existing sync path of `annotate-images` (5-up concurrency `messages.create`, retries; built by C.t6 / decision C.40 fold). No deferred task — both sync paths exist today. *Original wording here referred to a future image-side `--sync` flag — that framing was wrong; corrected 2026-05-12 post-closure.*
 
 ### Plan is **READY FOR EXECUTION**
 
 Dispatch posture: independent of `03-exec-c-t9.md` — parallel-OK. Worktree-isolation pattern per the dispatch hardening lesson; Step 0 hash gate is mandatory.
 
-A **sibling Tier-3 plan for sync image annotation** is not authored as part of this engagement; Al will author it separately when ready.
+~~A **sibling Tier-3 plan for sync image annotation** is not authored as part of this engagement; Al will author it separately when ready.~~ — *Correction 2026-05-12 post-closure*: no sibling plan needed. `annotate-images --mode=live` (built by C.t6 / decision C.40 fold) already does this; the c-t10 draft missed that the feature existed. See the ratification appendix Q2 + the cross-cutting decisions section above for the corrected workflow.
 
 ---
 
@@ -628,6 +628,6 @@ The `SyncMessageClient` test count: 9 (per the plan). Per-workspace test count d
 ### Open follow-ups
 
 - **Step 7 smoke**: Al runs the reproduction command above with `ANTHROPIC_API_KEY` set.
-- **Sibling sync-image-annotation task** (`03-exec-c-t11.md` or similar): authored separately by Al per the ratification appendix. The pattern is the shape `SyncMessageClient` lays down — implement a sync sibling to the Vision Batches path with a `--sync` flag on `annotate-images`. Reuses `parseSdkSuccessMessage` directly.
+- ~~**Sibling sync-image-annotation task** (`03-exec-c-t11.md` or similar): authored separately by Al per the ratification appendix.~~ — *Correction 2026-05-12 post-closure*: no sibling task. `annotate-images --mode=live` already does Vision synchronously (5-up concurrent `messages.create` per image, retries; built by C.t6 / decision C.40 fold). Operators reach for `npm run -w @swoop/ingestion annotate-images -- --mode=live --max-budget=N` directly. The c-t10 plan + ratification originally missed that the live mode existed.
 - **Worst-case attempt count** of the doubled retry layer (SDK retries × our `[1s, 2s, 4s]`): the agent should have documented this inline in `sync-message-client.ts` per the appendix. Verify the comment is present; if not, add it as a small follow-up.
 
