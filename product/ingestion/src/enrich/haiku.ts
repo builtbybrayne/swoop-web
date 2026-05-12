@@ -86,6 +86,19 @@ export interface BatchResultEntry {
 }
 
 export interface BatchClient {
+  /**
+   * True if calls are routed through a batched / discount-pricing path.
+   *
+   * Added by C.t10 (ratified 2026-05-12, decision C.47) so the cost
+   * ledger keys its discount logic off the client rather than off a
+   * per-call boolean each classifier module has to remember to pass.
+   *
+   * - Production batch adapter (`AnthropicBatchClient`): true.
+   * - Sync adapter (`SyncMessageClient`, C.t10 `--sync` flag): false.
+   * - Dry-run stub: true (a dry-run estimates what a real *batch* run
+   *   would cost — that's the production posture).
+   */
+  readonly isBatched: boolean;
   submit(requests: ReadonlyArray<BatchRequest>): Promise<BatchSubmitResult>;
   poll(batchId: string): Promise<BatchPollResult>;
   fetchResults(batchId: string): Promise<BatchResultEntry[]>;

@@ -71,6 +71,13 @@ interface BatchSdkResult {
 }
 
 export class AnthropicBatchClient implements BatchClient {
+  /**
+   * Calls route through Anthropic's Batches API, which applies the 50%
+   * discount per the published pricing. The cost ledger keys discount
+   * logic off this flag — see `CostLedger.recordHaiku(..., batched)`.
+   */
+  readonly isBatched = true;
+
   constructor(private readonly sdk: AnthropicBatchSdk) {}
 
   async submit(requests: ReadonlyArray<BatchRequest>): Promise<BatchSubmitResult> {

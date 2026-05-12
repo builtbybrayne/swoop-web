@@ -119,7 +119,13 @@ export async function classifyBlogTagNormalisation(
 
   if (opts.dryRun || posts.length === 0) {
     if (opts.dryRun) {
-      opts.ledger.recordHaiku('haiku:blog_tag_normalisation', 0, 0, requests.length, true);
+      opts.ledger.recordHaiku(
+        'haiku:blog_tag_normalisation',
+        0,
+        0,
+        requests.length,
+        opts.batch.isBatched,
+      );
     }
     return {
       postsConsidered: posts.length,
@@ -182,7 +188,7 @@ export async function classifyBlogTagNormalisation(
     actualInputTokens,
     actualOutputTokens,
     succeeded + errored,
-    true,
+    opts.batch.isBatched,
   );
 
   // Persist unmapped tags for periodic review.

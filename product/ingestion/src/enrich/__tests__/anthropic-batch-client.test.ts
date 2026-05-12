@@ -124,6 +124,7 @@ describe('waitForBatch', () => {
     let polls = 0;
     const r = await waitForBatch(
       {
+        isBatched: true,
         submit: async () => ({ batchId: 'x', count: 0 }),
         poll: async () => {
           polls += 1;
@@ -146,6 +147,7 @@ describe('waitForBatch', () => {
     await expect(
       waitForBatch(
         {
+          isBatched: true,
           submit: async () => ({ batchId: 'x', count: 0 }),
           poll: async () => ({
             batchId: 'x',

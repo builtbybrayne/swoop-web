@@ -122,6 +122,14 @@ function errorMessage(err: unknown): string {
 }
 
 export class SyncMessageClient implements BatchClient {
+  /**
+   * Sync calls hit the full-rate `messages.create` endpoint. The cost
+   * ledger reads this flag in `recordHaiku(..., batched)` to apply (or
+   * not apply) the 50% batch discount. Per C.47 / HITL 2026-05-12: false
+   * here = full-rate accounting in the ledger.
+   */
+  readonly isBatched = false;
+
   private readonly sdk: AnthropicSyncSdk;
   private readonly concurrency: number;
   private readonly random: () => number;

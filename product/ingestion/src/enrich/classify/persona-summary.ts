@@ -141,7 +141,13 @@ export async function classifyPersonaSummary(
 
   if (opts.dryRun || requests.length === 0) {
     if (opts.dryRun) {
-      opts.ledger.recordHaiku('haiku:persona_summary', 0, 0, requests.length, true);
+      opts.ledger.recordHaiku(
+        'haiku:persona_summary',
+        0,
+        0,
+        requests.length,
+        opts.batch.isBatched,
+      );
     }
     return {
       reviewsConsidered: reviews.length,
@@ -193,7 +199,7 @@ export async function classifyPersonaSummary(
     actualInputTokens,
     actualOutputTokens,
     succeeded + errored,
-    true,
+    opts.batch.isBatched,
   );
 
   return {

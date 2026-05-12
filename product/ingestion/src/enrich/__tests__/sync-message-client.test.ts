@@ -259,4 +259,61 @@ describe('SyncMessageClient', () => {
     });
     expect(parsed).toEqual({ output: { x: 1 }, inputTokens: 7, outputTokens: 8 });
   });
+
+  it('isBatched is false (cost ledger reads non-discounted rate)', () => {
+    const { sdk } = makeMockSdk({});
+    const c = new SyncMessageClient({ sdk });
+    expect(c.isBatched).toBe(false);
+  });
+});
+
+describe('SyncMessageClient × CostLedger interaction', () => {
+  /**
+   * The full discount-keying flow: a classifier sees `batch.isBatched === false`
+   * (because we constructed a SyncMessageClient) and passes that through to
+   * `ledger.recordHaiku(..., batched=false)`. The ledger applies the full
+   * (no-discount) rate. Verifying the contract here so a future refactor
+   * that strips `isBatched` would break this test loudly.
+   */
+  it('records full-rate Haiku spend when called via SyncMessageClient', async () => {
+    const { CostLedger, HAIKU_INPUT_PER_MILLION_USD, HAIKU_OUTPUT_PER_MILLION_USD, USD_TO_GBP } =
+      await import('../cost.js');
+    const ledger = new CostLedger({ hardCapGbp: 1000, warn: () => {}, err: () => {} });
+    const { sdk } = makeMockSdk({
+      responder: async (um) => ({
+        content: [{ type: 'tool_use', name: 'do_thing', input: { result: um } }],
+        usage: { input_tokens: 1_000_000, output_tokens: 1_000_000 },
+      }),
+    });
+    const c = new SyncMessageClient({ sdk, sleep: () => Promise.resolve() });
+    const sub = await c.submit([buildRequest('r1')]);
+    const out = await c.fetchResults(sub.batchId);
+    // Mimic what a classifier module does: read `c.isBatched`, pass through.
+    ledger.recordHaiku(
+      'haiku:blog_post_job',
+      out[0]!.inputTokens,
+      out[0]!.outputTokens,
+      1,
+      c.isBatched,
+    );
+    const expectedUsd =
+      (1_000_000 / 1_000_000) * HAIKU_INPUT_PER_MILLION_USD +
+      (1_000_000 / 1_000_000) * HAIKU_OUTPUT_PER_MILLION_USD;
+    // No 50% discount because isBatched === false.
+    const expectedGbp = expectedUsd * USD_TO_GBP;
+    expect(ledger.summary().totalGbp).toBeCloseTo(expectedGbp, 6);
+  });
+
+  it('records discounted Haiku spend when isBatched === true (regression for batch path)', async () => {
+    const { CostLedger, HAIKU_INPUT_PER_MILLION_USD, HAIKU_OUTPUT_PER_MILLION_USD, USD_TO_GBP, BATCH_DISCOUNT } =
+      await import('../cost.js');
+    const ledger = new CostLedger({ hardCapGbp: 1000, warn: () => {}, err: () => {} });
+    ledger.recordHaiku('haiku:blog_post_job', 1_000_000, 1_000_000, 1, true);
+    const expectedUsd =
+      ((1_000_000 / 1_000_000) * HAIKU_INPUT_PER_MILLION_USD +
+        (1_000_000 / 1_000_000) * HAIKU_OUTPUT_PER_MILLION_USD) *
+      BATCH_DISCOUNT;
+    const expectedGbp = expectedUsd * USD_TO_GBP;
+    expect(ledger.summary().totalGbp).toBeCloseTo(expectedGbp, 6);
+  });
 });
