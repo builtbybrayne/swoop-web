@@ -187,6 +187,53 @@ export const SampleEventWarmPoolMiss: Event = {
   },
 };
 
+// D.t9-mount-rehydrate — UI-side rehydrate lifecycle (paired with B.t11) -----
+
+export const SampleEventUiSessionRehydrateRequested: Event = {
+  eventType: "ui.session.rehydrate.requested",
+  eventVersion: 1,
+  timestamp: "2026-05-12T09:00:00.000Z",
+  sessionId: "sess_puma_demo_001",
+  turnIndex: null,
+  actor: "ui",
+  payload: {},
+};
+
+export const SampleEventUiSessionRehydrateApplied: Event = {
+  eventType: "ui.session.rehydrate.applied",
+  eventVersion: 1,
+  timestamp: "2026-05-12T09:00:00.180Z",
+  sessionId: "sess_puma_demo_001",
+  turnIndex: null,
+  actor: "ui",
+  payload: {
+    partCount: 7,
+    durationMs: 142,
+  },
+};
+
+export const SampleEventUiSessionRehydrateExpired: Event = {
+  eventType: "ui.session.rehydrate.expired",
+  eventVersion: 1,
+  timestamp: "2026-05-12T09:00:00.180Z",
+  sessionId: "sess_puma_demo_002",
+  turnIndex: null,
+  actor: "ui",
+  payload: {},
+};
+
+export const SampleEventUiSessionRehydrateFailed: Event = {
+  eventType: "ui.session.rehydrate.failed",
+  eventVersion: 1,
+  timestamp: "2026-05-12T09:00:00.180Z",
+  sessionId: "sess_puma_demo_003",
+  turnIndex: null,
+  actor: "ui",
+  payload: {
+    stage: "fetch",
+  },
+};
+
 /**
  * Back-compat alias. Existing consumers import `SampleEvent`; new tests use
  * the named fixtures above.

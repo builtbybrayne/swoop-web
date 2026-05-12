@@ -34,6 +34,26 @@ describe("classifyError", () => {
     expect(r.retryable).toBe(true);
   });
 
+  it("routes [rehydrate_failed:network_error] to unreachable (D.t9)", () => {
+    const r = classifyError(
+      new Error(
+        "Rehydrate failed [rehydrate_failed:network_error]: fetch rejected",
+      ),
+    );
+    expect(r.surface).toBe("unreachable");
+    expect(r.retryable).toBe(true);
+  });
+
+  it("routes [rehydrate_failed:fetch_failed] to unknown (D.t9)", () => {
+    const r = classifyError(
+      new Error(
+        "Rehydrate failed [rehydrate_failed:fetch_failed]: 500 internal_error",
+      ),
+    );
+    expect(r.surface).toBe("unknown");
+    expect(r.retryable).toBe(true);
+  });
+
   it("routes TypeError fetch failures to unreachable", () => {
     const r = classifyError(new TypeError("Failed to fetch"));
     expect(r.surface).toBe("unreachable");

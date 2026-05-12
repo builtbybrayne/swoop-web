@@ -35,7 +35,12 @@ type UiEvent = Extract<
       | "ui.conversation_closed"
       | "ui.widget_rendered"
       | "consent.granted"
-      | "consent.declined";
+      | "consent.declined"
+      // D.t9-mount-rehydrate — UI-side rehydrate lifecycle (paired w/ B.t11)
+      | "ui.session.rehydrate.requested"
+      | "ui.session.rehydrate.applied"
+      | "ui.session.rehydrate.expired"
+      | "ui.session.rehydrate.failed";
   }
 >;
 

@@ -45,6 +45,14 @@ interface OpeningScreenProps {
   hasDeclined: boolean;
   grantConsent: () => Promise<void>;
   declineConsent: () => void;
+  /**
+   * Optional small notification to surface at the top of the disclosure card.
+   * D.t9-mount-rehydrate uses this to acknowledge "Your previous conversation
+   * expired — please start a new one." per HITL Q1 ratification 2026-05-12
+   * (soft-fail to OpeningScreen with notification, no manual click required).
+   * Renders only when truthy.
+   */
+  notification?: string;
 }
 
 /**
@@ -59,6 +67,7 @@ export function OpeningScreen({
   hasDeclined,
   grantConsent,
   declineConsent,
+  notification,
 }: OpeningScreenProps) {
 
   const continueRef = useRef<HTMLButtonElement | null>(null);
@@ -103,6 +112,17 @@ export function OpeningScreen({
       className="flex h-full w-full items-center justify-center bg-slate-50 p-4 transition-opacity duration-200"
     >
       <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        {notification ? (
+          <div
+            role="status"
+            aria-live="polite"
+            data-testid="opening-screen-notification"
+            data-swoop-part="opening-notification"
+            className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+          >
+            {notification}
+          </div>
+        ) : null}
         <h2
           id="swoop-disclosure-heading"
           className="text-lg font-semibold text-slate-900"

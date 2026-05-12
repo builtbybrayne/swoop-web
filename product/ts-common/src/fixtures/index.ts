@@ -37,6 +37,10 @@ export {
   SampleEventSessionExpired,
   SampleEventWarmPoolHit,
   SampleEventWarmPoolMiss,
+  SampleEventUiSessionRehydrateRequested,
+  SampleEventUiSessionRehydrateApplied,
+  SampleEventUiSessionRehydrateExpired,
+  SampleEventUiSessionRehydrateFailed,
 } from "./event.sample.js";
 
 // -----------------------------------------------------------------------------

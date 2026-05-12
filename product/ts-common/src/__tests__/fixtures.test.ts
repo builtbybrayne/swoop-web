@@ -64,6 +64,10 @@ import {
   SampleEventSessionExpired,
   SampleEventWarmPoolHit,
   SampleEventWarmPoolMiss,
+  SampleEventUiSessionRehydrateRequested,
+  SampleEventUiSessionRehydrateApplied,
+  SampleEventUiSessionRehydrateExpired,
+  SampleEventUiSessionRehydrateFailed,
   SampleFindInspiringInput,
   SampleFindInspiringOutput,
   SampleFindOptionsInput,
@@ -221,6 +225,13 @@ describe("fixtures round-trip through their Zod schemas", () => {
     ["session.expired", SampleEventSessionExpired],
     ["warm_pool.hit", SampleEventWarmPoolHit],
     ["warm_pool.miss", SampleEventWarmPoolMiss],
+    [
+      "ui.session.rehydrate.requested",
+      SampleEventUiSessionRehydrateRequested,
+    ],
+    ["ui.session.rehydrate.applied", SampleEventUiSessionRehydrateApplied],
+    ["ui.session.rehydrate.expired", SampleEventUiSessionRehydrateExpired],
+    ["ui.session.rehydrate.failed", SampleEventUiSessionRehydrateFailed],
   ];
 
   it.each(EVENT_FIXTURES)("%s parses against EventSchema", (_label, fixture) => {

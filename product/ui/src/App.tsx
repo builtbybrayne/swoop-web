@@ -44,7 +44,7 @@ import {
   useConsent,
 } from "./disclosure";
 import { ErrorBanner, useRuntimeErrors } from "./errors";
-import { usePreflight } from "./session";
+import { usePreflight, useRehydrate } from "./session";
 
 /**
  * Per-message renderer. Delegates every part kind to the registry exported
@@ -228,6 +228,39 @@ export default function App() {
       consent.status.state === "granted" ? consent.status.sessionId : null,
   });
 
+  // D.t9-mount-rehydrate: on mount, if sessionStorage holds a session id and
+  // consent is granted, fetch history from B.t11's `GET /session/:id/history`
+  // and replay the parts into the assistant-ui thread so the visitor lands on
+  // the conversation surface — no OpeningScreen flash. Per HITL Q1
+  // ratification 2026-05-12: 404 soft-fails to OpeningScreen with a small
+  // notification (no manual click required).
+  //
+  // The notification copy lives inline per plan default (HITL Q3 still open;
+  // executor's call). Renders only on the next OpeningScreen render after
+  // `onExpired` runs.
+  const [rehydrateNotification, setRehydrateNotification] = useState<
+    string | undefined
+  >(undefined);
+  useRehydrate({
+    enabled: hasConsented,
+    sessionId:
+      consent.status.state === "granted" ? consent.status.sessionId : null,
+    onExpired: () => {
+      // Per HITL ratification: clear sessionStorage automatically, route to
+      // OpeningScreen, surface a brief notification. No manual click required.
+      // `clearSilently` wipes storage + flips status back to "pending" without
+      // emitting `consent.declined` (the visitor never declined).
+      setRehydrateNotification(
+        "Your previous conversation expired — please start a new one.",
+      );
+      consent.clearSilently();
+      // Churn the assistant-ui runtime so any stale thread state can't carry
+      // across the OpeningScreen boundary. The runtime is reconstructed on
+      // the next post-consent render.
+      setResetKey((k) => k + 1);
+    },
+  });
+
   // Pre-consent visitors can still open the privacy modal from the opening
   // screen's disclosure link. Post-consent, the `<ChromeBadge />` manages
   // its own modal state.
@@ -266,8 +299,14 @@ export default function App() {
             status={consent.status}
             isGranting={consent.isGranting}
             hasDeclined={consent.hasDeclined}
-            grantConsent={consent.grantConsent}
+            grantConsent={async () => {
+              // Clear the rehydrate notification on a fresh consent action so
+              // it doesn't linger after the visitor has started over.
+              setRehydrateNotification(undefined);
+              await consent.grantConsent();
+            }}
             declineConsent={consent.declineConsent}
+            notification={rehydrateNotification}
           />
           <PrivacyInfoModal
             open={privacyOpen}

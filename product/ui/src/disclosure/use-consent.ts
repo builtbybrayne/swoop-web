@@ -70,6 +70,16 @@ export interface UseConsentResult {
    */
   reset: () => void;
   /**
+   * D.t9-mount-rehydrate path. Wipes sessionStorage entries the same way
+   * `reset` does and flips local state back to "pending", but DOES NOT emit
+   * any user-facing event (no `consent.declined`, no analytics churn). Used
+   * by the 404 rehydrate path where the server forgot the session — the
+   * visitor never declined anything, they just have a stale id. The
+   * 404-expired notification is the parent's responsibility (toast / banner /
+   * preamble per HITL ratification 2026-05-12).
+   */
+  clearSilently: () => void;
+  /**
    * Soft-restart handler for the "Fresh chat" button: bootstraps a new
    * server-side session and re-records consent against the stored copy
    * version, writing the new session id over the old one in sessionStorage.
@@ -296,6 +306,22 @@ export function useConsent(): UseConsentResult {
     setStatus({ state: "pending" });
   }, []);
 
+  // D.t9-mount-rehydrate: same storage wipe + state flip as `reset`, but
+  // without any user-facing emission. The 404 rehydrate path is "the server
+  // forgot you" not "you declined". The parent surfaces the notification.
+  const clearSilently = useCallback((): void => {
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        window.sessionStorage.removeItem(CONSENT_STORAGE_KEY);
+        window.sessionStorage.removeItem(CONSENT_COPY_VERSION_KEY);
+      } catch {
+        // Storage locked down — local state still drives UI.
+      }
+    }
+    setStatus({ state: "pending" });
+  }, []);
+
   return {
     status,
     hasConsented: status.state === "granted",
@@ -304,6 +330,7 @@ export function useConsent(): UseConsentResult {
     grantConsent,
     declineConsent,
     reset,
+    clearSilently,
     refreshSession,
   };
 }

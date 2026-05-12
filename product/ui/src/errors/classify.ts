@@ -7,11 +7,16 @@
 // Detection rules — first match wins:
 //   1. Message contains `[session_not_found]` OR response status 404 → session_expired
 //   2. Message contains `[rate_limited]` OR response status 429 → rate_limited
-//   3. Message contains `[stream]` prefix → stream_drop
+//   3. Message contains `[rehydrate_failed:network_error]` → unreachable
+//      (D.t9 — rehydrate mount-time fetch reached the browser fetch boundary
+//      but the network leg failed; D.29 marker convention extends D.12).
+//   4. Message contains `[rehydrate_failed]` (any other reason) → unknown
+//      (D.t9 — server-side 5xx / parse failure / unexpected shape.)
+//   5. Message contains `[stream]` prefix → stream_drop
 //      (adapter prefixes mid-stream catch errors with this marker)
-//   4. `TypeError` with 'fetch' / 'NetworkError' / 'Failed to fetch' → unreachable
+//   6. `TypeError` with 'fetch' / 'NetworkError' / 'Failed to fetch' → unreachable
 //      — browser-standard shape for "couldn't reach the server".
-//   5. Any other Error → unknown
+//   7. Any other Error → unknown
 //
 // The orchestrator-adapter is responsible for embedding the code markers via
 // `throw new Error("Orchestrator /chat failed [session_not_found]: ...")`.
@@ -66,6 +71,18 @@ export function classifyError(err: unknown): RuntimeError {
       cooloffMs: RATE_LIMIT_COOLOFF_MS,
       detail,
     };
+  }
+  // D.t9 — `[rehydrate_failed:<reason>]` marker convention (D.29). The
+  // network_error variant routes through the existing `unreachable` surface
+  // because that's the same "couldn't reach the server" affordance the
+  // visitor already understands; any other reason falls through to `unknown`.
+  // Keep this check ABOVE the generic `[stream]` and TypeError branches —
+  // a rehydrate failure has its own marker and shouldn't get reclassified.
+  if (lower.includes("[rehydrate_failed:network_error]")) {
+    return { surface: "unreachable", retryable: true, cooloffMs: 0, detail };
+  }
+  if (lower.includes("[rehydrate_failed")) {
+    return { surface: "unknown", retryable: true, cooloffMs: 0, detail };
   }
   if (lower.includes("[stream]")) {
     return { surface: "stream_drop", retryable: true, cooloffMs: 0, detail };
