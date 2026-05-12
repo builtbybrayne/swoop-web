@@ -33,9 +33,9 @@ import { z } from "zod";
 
 import {
   CustomerStoryPublicSchema,
+  DerivedImageSchema,
   InformChunkPublicSchema,
   InspirePassagePublicSchema,
-  TripCardPublicSchema,
   TrustProofPublicSchema,
   TrustProofTopicSchema,
 } from "./derived.js";
@@ -242,14 +242,133 @@ export type LookupOutput = z.infer<typeof LookupOutputSchema>;
 // -----------------------------------------------------------------------------
 // find_options — Propose options job.
 //
-// Used when the visitor is ready to consider concrete trips. Returns 2–4
-// trip cards: image, headline, vibe-line, region, headline price, duration.
-// Filters are structured (region, duration, budget band, activity, accom
-// style) — the agent constructs these from conversation signal.
+// Used when the visitor is ready to consider concrete options. Returns 2–4
+// *proposal cards* — polymorphic over four variants:
+//   trip         | flexible package; today's default
+//   tour         | guided fixed-itinerary group product (Luke upsell priority)
+//   hotel        | accommodation as a concrete option (per-night pricing)
+//   region_base  | a region framed as a launchpad ("use this as a base")
+//
+// The discriminator is the `type` literal on every card. The UI dispatches
+// per-variant renderers from that discriminator. Filters are structured
+// (region, duration, budget band, activity, accommodation style) plus an
+// optional `preferredType` steer when the conversational signal is decisive.
+//
+// Per crosscut plan `03-exec-crosscut-find-options-polymorphism.md` + decisions
+// C.48 – C.51 (HITL-ratified 2026-05-12). v1 tranche wires only `type: 'trip'`
+// live; the day-one contract carries all four variants so the UI is forward
+// compatible. v2 (tours, Swoop-data-gated) and v3 (hotels + region_bases)
+// follow on the same contract without further schema work.
 // -----------------------------------------------------------------------------
 
 export const BudgetBandSchema = z.enum(["budget", "mid", "premium", "luxury"]);
 export type BudgetBand = z.infer<typeof BudgetBandSchema>;
+
+/**
+ * `preferredType` lets the agent steer the tool toward one variant when the
+ * conversational signal is decisive. When unset the handler picks based on
+ * filter-to-data alignment. v1 tranche: schema-only (no dispatch logic);
+ * decision C.51.
+ */
+export const ProposalTypeSchema = z.enum([
+  "trip",
+  "tour",
+  "hotel",
+  "region_base",
+]);
+export type ProposalType = z.infer<typeof ProposalTypeSchema>;
+
+// -----------------------------------------------------------------------------
+// ProposalCardPublicSchema — the discriminated union.
+//
+// Shared base = what every card renders (image + headline + vibe-line +
+// deep-link CTA + region context). Per-variant extensions carry only the
+// affordances unique to that card type.
+// -----------------------------------------------------------------------------
+
+const ProposalCardBaseFields = {
+  id: z.string().min(1),
+  slug: z.string().min(1).optional(),
+  headline: z.string().min(1),
+  vibeLine: z.string().optional(),
+  region: z.string().optional(),
+  fromPrice: z.number().nullable().optional(),
+  currencyCode: z.string().optional(),
+  canonicalUrl: z.string().url(),
+  image: DerivedImageSchema.optional(),
+} as const;
+
+/** Trip — flexible package. Today's shape (preserved); migrated to discriminated. */
+export const TripProposalCardSchema = z
+  .object({
+    type: z.literal("trip"),
+    ...ProposalCardBaseFields,
+    durationDays: z.number().int().positive().optional(),
+    accommodationStyle: z.string().optional(),
+    activityTags: z.array(z.string()).default([]),
+  })
+  .strict();
+export type TripProposalCard = z.infer<typeof TripProposalCardSchema>;
+
+/**
+ * Tour — guided fixed-itinerary group product (per source `tour` + `tour_item`).
+ * Group-size + day-by-day count are the discriminators vs trip.
+ *
+ * Luke's upsell priority. See cms/prompts/tools/find_options/description.md.
+ */
+export const TourProposalCardSchema = z
+  .object({
+    type: z.literal("tour"),
+    ...ProposalCardBaseFields,
+    durationDays: z.number().int().positive().optional(),
+    groupSizeMax: z.number().int().positive().optional(),
+    dayCount: z.number().int().positive().optional(),
+    accommodationStyle: z.string().optional(),
+    activityTags: z.array(z.string()).default([]),
+  })
+  .strict();
+export type TourProposalCard = z.infer<typeof TourProposalCardSchema>;
+
+/**
+ * Hotel — accommodation as a concrete option (location-anchored, /night
+ * pricing). `pricingUnit` literal carries the per-night discriminator so the
+ * UI can branch the price line deterministically.
+ */
+export const HotelProposalCardSchema = z
+  .object({
+    type: z.literal("hotel"),
+    ...ProposalCardBaseFields,
+    location: z.string().optional(),
+    starRating: z.number().int().min(1).max(5).optional(),
+    accommodationStyle: z.string().optional(),
+    pricingUnit: z.literal("per_night").default("per_night"),
+  })
+  .strict();
+export type HotelProposalCard = z.infer<typeof HotelProposalCardSchema>;
+
+/**
+ * Region-base — a region/area framed as a launchpad ("use this as a base,
+ * explore around"). `nearbyTripsCount` is derivable from `trip` + `area`;
+ * `baseFraming` is the prose framing the agent / ETL composes.
+ */
+export const RegionBaseProposalCardSchema = z
+  .object({
+    type: z.literal("region_base"),
+    ...ProposalCardBaseFields,
+    nearbyTripsCount: z.number().int().nonnegative().optional(),
+    baseFraming: z.string().optional(),
+  })
+  .strict();
+export type RegionBaseProposalCard = z.infer<typeof RegionBaseProposalCardSchema>;
+
+/** The discriminated union over all four variants. */
+export const ProposalCardPublicSchema = z.discriminatedUnion("type", [
+  TripProposalCardSchema,
+  TourProposalCardSchema,
+  HotelProposalCardSchema,
+  RegionBaseProposalCardSchema,
+]);
+export type ProposalCardPublic = z.infer<typeof ProposalCardPublicSchema>;
 
 export const FindOptionsInputSchema = z
   .object({
@@ -259,6 +378,12 @@ export const FindOptionsInputSchema = z
     budgetBand: BudgetBandSchema.optional(),
     activity: z.string().optional(),
     accommodationStyle: z.string().optional(),
+    /**
+     * Optional preferred proposal type. v1 tranche: schema-only — the handler
+     * does not yet dispatch off this field (only `trip` is wired live).
+     * Decision C.51.
+     */
+    preferredType: ProposalTypeSchema.optional(),
     /** Cap on returned cards. Defaults to 4. */
     limit: z.number().int().positive().max(6).default(4),
   })
@@ -267,7 +392,7 @@ export type FindOptionsInput = z.infer<typeof FindOptionsInputSchema>;
 
 export const FindOptionsOutputSchema = z
   .object({
-    cards: z.array(TripCardPublicSchema),
+    cards: z.array(ProposalCardPublicSchema),
     count: z.number().int().nonnegative(),
   })
   .strict();
