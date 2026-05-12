@@ -18,7 +18,7 @@ import type {
   BatchResultEntry,
   BatchSubmitResult,
 } from './haiku.js';
-import { buildBatchPayload } from './haiku.js';
+import { buildBatchPayload, parseSdkSuccessMessage } from './haiku.js';
 import { zodToToolInputSchema } from './zod-to-json-schema.js';
 
 /**
@@ -71,6 +71,13 @@ interface BatchSdkResult {
 }
 
 export class AnthropicBatchClient implements BatchClient {
+  /**
+   * Calls route through Anthropic's Batches API, which applies the 50%
+   * discount per the published pricing. The cost ledger keys discount
+   * logic off this flag — see `CostLedger.recordHaiku(..., batched)`.
+   */
+  readonly isBatched = true;
+
   constructor(private readonly sdk: AnthropicBatchSdk) {}
 
   async submit(requests: ReadonlyArray<BatchRequest>): Promise<BatchSubmitResult> {
@@ -114,16 +121,13 @@ export class AnthropicBatchClient implements BatchClient {
 
   private mapSdkResult(r: BatchSdkResult): BatchResultEntry {
     if (r.result.type === 'succeeded') {
-      const msg = r.result.message;
-      // Find the tool_use block — the structured output the classifier wants.
-      const toolUse = (msg.content ?? []).find((c) => c.type === 'tool_use');
-      const usage = msg.usage ?? {};
+      const parsed = parseSdkSuccessMessage(r.result.message);
       return {
         customId: r.custom_id,
         status: 'succeeded',
-        output: toolUse?.input ?? null,
-        inputTokens: usage.input_tokens ?? 0,
-        outputTokens: usage.output_tokens ?? 0,
+        output: parsed.output,
+        inputTokens: parsed.inputTokens,
+        outputTokens: parsed.outputTokens,
       };
     }
     const errStr =

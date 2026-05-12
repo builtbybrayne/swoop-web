@@ -35,6 +35,12 @@ interface Args {
   source: string | undefined;
   limit: number | undefined;
   dryRun: boolean;
+  /**
+   * Sync mode — route classifier passes through Anthropic's synchronous
+   * `messages.create` API instead of Batches. Carve-out from HITL Q4
+   * for dev iteration (decision C.47). Mutually exclusive with --dry-run.
+   */
+  sync: boolean;
   databaseUrl: string | undefined;
   budgetGbp: number | undefined;
 }
@@ -44,6 +50,7 @@ function parseArgs(argv: string[]): Args {
   let source: string | undefined;
   let limit: number | undefined;
   let dryRun = false;
+  let sync = false;
   let databaseUrl: string | undefined;
   let budgetGbp: number | undefined;
 
@@ -66,6 +73,8 @@ function parseArgs(argv: string[]): Args {
       limit = Number(argv[++i]);
     } else if (a === '--dry-run') {
       dryRun = true;
+    } else if (a === '--sync') {
+      sync = true;
     } else if (a.startsWith('--database-url=')) {
       databaseUrl = a.slice('--database-url='.length);
     } else if (a === '--database-url') {
@@ -83,8 +92,11 @@ function parseArgs(argv: string[]): Args {
   if (!['embed', 'classify', 'compose', 'all'].includes(mode)) {
     throw new Error(`Invalid --mode: ${mode}`);
   }
+  if (sync && dryRun) {
+    throw new Error('--sync and --dry-run are mutually exclusive');
+  }
 
-  return { mode, source, limit, dryRun, databaseUrl, budgetGbp };
+  return { mode, source, limit, dryRun, sync, databaseUrl, budgetGbp };
 }
 
 function printHelp(): void {
@@ -100,6 +112,11 @@ Options:
                         (default: all)
   --limit N             per-pass row cap (testing)
   --dry-run             estimate cost + plan operations; no API calls / writes
+  --sync                route classifier passes through synchronous
+                        messages.create (full-rate, no 50% batch discount)
+                        instead of Anthropic Batches. Dev iteration only;
+                        per decision C.47. Mutually exclusive with --dry-run.
+                        No-op for --mode=embed (embed is sync regardless).
   --database-url <url>  override DATABASE_URL env
   --budget-gbp N        override ENRICH_BUDGET_GBP env (default £10 dev / £15 prod)`);
 }
@@ -136,11 +153,19 @@ async function main(): Promise<void> {
 
   const gemini = new GeminiClient({ apiKey: geminiApiKey ?? 'dry-run' });
 
+  if (args.sync) {
+    console.log(
+      '[enrich] sync mode — full-rate Anthropic API; classifier passes will not benefit from the 50% Batch discount',
+    );
+  }
+
   // Anthropic SDK lookup. If not installed, fall back to a no-op client that
   // throws on actual submit/poll/results so dry-runs still work.
   let batch: import('./haiku.js').BatchClient;
   if (args.dryRun) {
     batch = makeDryRunBatchClient();
+  } else if (args.sync) {
+    batch = await makeSyncBatchClient();
   } else {
     batch = await makeProdBatchClient();
   }
@@ -191,6 +216,9 @@ function redactOutputs(obj: unknown): unknown {
 
 function makeDryRunBatchClient(): import('./haiku.js').BatchClient {
   return {
+    // Dry-run estimates what a real batch run would cost; ledger treats
+    // it as batched so the projection matches the production posture.
+    isBatched: true,
     submit: async (reqs) => ({ batchId: 'dry-run-batch', count: reqs.length }),
     poll: async () => ({
       batchId: 'dry-run-batch',
@@ -200,6 +228,27 @@ function makeDryRunBatchClient(): import('./haiku.js').BatchClient {
     }),
     fetchResults: async () => [],
   };
+}
+
+async function makeSyncBatchClient(): Promise<import('./haiku.js').BatchClient> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY not set; required for non-dry-run classifier passes');
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let Anthropic: any;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mod: any = await import('@anthropic-ai/sdk');
+    Anthropic = mod.default ?? mod.Anthropic ?? mod;
+  } catch (err) {
+    throw new Error(
+      `[enrich] @anthropic-ai/sdk not installed in @swoop/ingestion. Install it and retry. (${err instanceof Error ? err.message : err})`,
+    );
+  }
+  const sdk = new Anthropic({ apiKey }) as import('./sync-message-client.js').AnthropicSyncSdk;
+  const { SyncMessageClient } = await import('./sync-message-client.js');
+  return new SyncMessageClient({ sdk });
 }
 
 async function makeProdBatchClient(): Promise<import('./haiku.js').BatchClient> {

@@ -12,6 +12,7 @@ If you're new here, read [`troubleshooting.md`](troubleshooting.md) first to ori
 |---|---|
 | [`etl-rerun.md`](etl-rerun.md) | Swoop sent a fresh SQL dump, or the derived store needs to catch up to the live website. |
 | [`embedding-rerun.md`](embedding-rerun.md) | After ETL re-runs; a classifier prompt changed; the agent's retrieval surface returns empty results. |
+| [`sync-mode.md`](sync-mode.md) | Iterating on a classifier prompt / schema and you don't want to wait up to 24 h for Anthropic Batches. Dev-loop only. |
 | [`image-annotation-rerun.md`](image-annotation-rerun.md) | New images arrived in the source dump; the image-annotation prompt changed; you're prepping the corpus before a demo. |
 | [`migration-management.md`](migration-management.md) | A schema change is pending; boot complains about migrations; you need a full rebuild. |
 | [`troubleshooting.md`](troubleshooting.md) | Something's wrong and you don't know which pipeline is at fault. Symptom-indexed. |

@@ -86,6 +86,19 @@ export interface BatchResultEntry {
 }
 
 export interface BatchClient {
+  /**
+   * True if calls are routed through a batched / discount-pricing path.
+   *
+   * Added by C.t10 (ratified 2026-05-12, decision C.47) so the cost
+   * ledger keys its discount logic off the client rather than off a
+   * per-call boolean each classifier module has to remember to pass.
+   *
+   * - Production batch adapter (`AnthropicBatchClient`): true.
+   * - Sync adapter (`SyncMessageClient`, C.t10 `--sync` flag): false.
+   * - Dry-run stub: true (a dry-run estimates what a real *batch* run
+   *   would cost — that's the production posture).
+   */
+  readonly isBatched: boolean;
   submit(requests: ReadonlyArray<BatchRequest>): Promise<BatchSubmitResult>;
   poll(batchId: string): Promise<BatchPollResult>;
   fetchResults(batchId: string): Promise<BatchResultEntry[]>;
@@ -112,6 +125,10 @@ export { zodToToolInputSchema } from './zod-to-json-schema.js';
  * Build a BatchRequest's payload portion for submission. Used by both the
  * production SDK adapter and the test mock — keeping the construction in
  * one place avoids drift.
+ *
+ * SyncMessageClient (C.t10) reuses this exact `params` block as the argument
+ * to `messages.create`, so the request shape is identical between the
+ * batch and sync paths. The `custom_id` envelope is batch-only.
  */
 export function buildBatchPayload(req: BatchRequest, jsonSchema: object): {
   custom_id: string;
@@ -142,5 +159,27 @@ export function buildBatchPayload(req: BatchRequest, jsonSchema: object): {
       ],
       tool_choice: { type: 'tool', name: req.outputToolName },
     },
+  };
+}
+
+/**
+ * Parse a successful Anthropic Messages-API response into the shape the
+ * `BatchResultEntry` carries — the tool_use input + token usage. Extracted
+ * here (C.t10) so the batch adapter (`AnthropicBatchClient.mapSdkResult`)
+ * and the sync adapter (`SyncMessageClient`) share one parser.
+ *
+ * The caller wraps this output in a `BatchResultEntry` with the right
+ * `customId` and `status: 'succeeded'`.
+ */
+export function parseSdkSuccessMessage(message: {
+  content: Array<{ type: string; name?: string; input?: unknown }>;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}): { output: unknown | null; inputTokens: number; outputTokens: number } {
+  const toolUse = (message.content ?? []).find((c) => c.type === 'tool_use');
+  const usage = message.usage ?? {};
+  return {
+    output: toolUse?.input ?? null,
+    inputTokens: usage.input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
   };
 }

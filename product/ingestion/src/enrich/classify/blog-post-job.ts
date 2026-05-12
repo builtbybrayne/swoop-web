@@ -114,13 +114,15 @@ export async function classifyBlogPostJob(
 
   if (opts.dryRun || posts.length === 0) {
     if (opts.dryRun) {
-      // Estimate batched cost upfront so dry-run reports a number.
+      // Estimate cost upfront so dry-run reports a number. The discount
+      // applied depends on whether the resolved batch client is itself
+      // batched (production) or not (C.t10 --sync mode).
       opts.ledger.recordHaiku(
         'haiku:blog_post_job',
         0,
         0,
         requests.length,
-        true,
+        opts.batch.isBatched,
       );
     }
     return {
@@ -176,13 +178,15 @@ export async function classifyBlogPostJob(
     }
   }
 
-  // Record actual usage on the ledger (replaces estimate).
+  // Record actual usage on the ledger (replaces estimate). Discount logic
+  // keys off the client: batch path gets the 50% discount, sync path
+  // (C.t10 --sync flag) pays full rate.
   opts.ledger.recordHaiku(
     'haiku:blog_post_job',
     actualInputTokens,
     actualOutputTokens,
     succeeded + errored,
-    true,
+    opts.batch.isBatched,
   );
 
   return {
