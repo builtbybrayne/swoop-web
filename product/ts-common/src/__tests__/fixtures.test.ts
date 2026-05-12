@@ -25,6 +25,7 @@ import {
   FindSomeoneWhoInputSchema,
   FindSomeoneWhoOutputSchema,
   HandoffPayloadSchema,
+  HotelProposalCardSchema,
   type HandoffPayload,
   type Event,
   ImageSchema,
@@ -34,15 +35,18 @@ import {
   InspirePassagePublicSchema,
   LookupInputSchema,
   LookupOutputSchema,
+  ProposalCardPublicSchema,
+  RegionBaseProposalCardSchema,
   RegionSchema,
   SessionStateSchema,
   TriageStateSchema,
   type TriageState,
   StorySchema,
+  TourProposalCardSchema,
   TourSchema,
+  TripProposalCardSchema,
   TripSchema,
   TripCardSchema,
-  TripCardPublicSchema,
   TrustProofSchema,
   TrustProofPublicSchema,
 } from "../index.js";
@@ -68,6 +72,7 @@ import {
   SampleFindInspiringOutput,
   SampleFindOptionsInput,
   SampleFindOptionsOutput,
+  SampleFindOptionsOutputMixed,
   SampleFindProofInput,
   SampleFindProofOutput,
   SampleFindSomeoneWhoInput,
@@ -76,6 +81,7 @@ import {
   SampleHandoffQualified,
   SampleHandoffReferredOut,
   SampleHandoffDisqualified,
+  SampleHotelProposalCard,
   SampleImage,
   SampleInformChunk,
   SampleInformChunkPublic,
@@ -84,12 +90,14 @@ import {
   SampleLookupInput,
   SampleLookupOutput,
   SampleRegion,
+  SampleRegionBaseProposalCard,
   SampleSession,
   SampleStory,
   SampleTour,
+  SampleTourProposalCard,
   SampleTrip,
   SampleTripCard,
-  SampleTripCardPublic,
+  SampleTripProposalCard,
   SampleTrustProof,
   SampleTrustProofPublic,
 } from "../fixtures/index.js";
@@ -283,10 +291,57 @@ describe("fixtures round-trip through their Zod schemas", () => {
     expect(TripCardSchema.parse(SampleTripCard)).toEqual(SampleTripCard);
   });
 
-  it("SampleTripCardPublic parses against TripCardPublicSchema", () => {
-    expect(TripCardPublicSchema.parse(SampleTripCardPublic)).toEqual(
-      SampleTripCardPublic,
+  // ---------------------------------------------------------------------------
+  // Crosscut C.48 — ProposalCardPublic discriminated-union round-tripping.
+  // Each variant parses against its sub-schema AND against the parent union
+  // (which is how the connector + UI consume it). Per crosscut plan
+  // `03-exec-crosscut-find-options-polymorphism.md` §2.1 + §5.
+  // ---------------------------------------------------------------------------
+
+  it("SampleTripProposalCard parses against TripProposalCardSchema", () => {
+    expect(TripProposalCardSchema.parse(SampleTripProposalCard)).toEqual(
+      SampleTripProposalCard,
     );
+  });
+
+  it("SampleTourProposalCard parses against TourProposalCardSchema", () => {
+    expect(TourProposalCardSchema.parse(SampleTourProposalCard)).toEqual(
+      SampleTourProposalCard,
+    );
+  });
+
+  it("SampleHotelProposalCard parses against HotelProposalCardSchema", () => {
+    expect(HotelProposalCardSchema.parse(SampleHotelProposalCard)).toEqual(
+      SampleHotelProposalCard,
+    );
+  });
+
+  it("SampleRegionBaseProposalCard parses against RegionBaseProposalCardSchema", () => {
+    expect(
+      RegionBaseProposalCardSchema.parse(SampleRegionBaseProposalCard),
+    ).toEqual(SampleRegionBaseProposalCard);
+  });
+
+  it.each([
+    ["trip", SampleTripProposalCard],
+    ["tour", SampleTourProposalCard],
+    ["hotel", SampleHotelProposalCard],
+    ["region_base", SampleRegionBaseProposalCard],
+  ])(
+    "ProposalCardPublicSchema discriminates on type=%s",
+    (_label, fixture) => {
+      expect(ProposalCardPublicSchema.parse(fixture)).toEqual(fixture);
+    },
+  );
+
+  it("ProposalCardPublicSchema rejects a card with an unknown type", () => {
+    const bad = { ...SampleTripProposalCard, type: "package" as const };
+    expect(ProposalCardPublicSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("ProposalCardPublicSchema rejects a card missing the type discriminator", () => {
+    const { type: _omit, ...rest } = SampleTripProposalCard;
+    expect(ProposalCardPublicSchema.safeParse(rest).success).toBe(false);
   });
 
   // ---------------------------------------------------------------------------
@@ -325,12 +380,31 @@ describe("fixtures round-trip through their Zod schemas", () => {
     expect(LookupOutputSchema.parse(SampleLookupOutput)).toEqual(SampleLookupOutput);
   });
 
-  it("find_options I/O round-trips clean", () => {
+  it("find_options I/O round-trips clean (v1 — trips only)", () => {
     expect(FindOptionsInputSchema.parse(SampleFindOptionsInput)).toEqual(
       SampleFindOptionsInput,
     );
     expect(FindOptionsOutputSchema.parse(SampleFindOptionsOutput)).toEqual(
       SampleFindOptionsOutput,
     );
+    for (const card of SampleFindOptionsOutput.cards) {
+      expect(card.type).toBe("trip");
+    }
+  });
+
+  it("find_options mixed-variant output round-trips clean", () => {
+    expect(FindOptionsOutputSchema.parse(SampleFindOptionsOutputMixed)).toEqual(
+      SampleFindOptionsOutputMixed,
+    );
+    const types = SampleFindOptionsOutputMixed.cards.map((c) => c.type).sort();
+    expect(types).toEqual(["hotel", "region_base", "tour", "trip"]);
+  });
+
+  it("FindOptionsInputSchema accepts an optional preferredType discriminator", () => {
+    const withPreferred = {
+      ...SampleFindOptionsInput,
+      preferredType: "tour" as const,
+    };
+    expect(FindOptionsInputSchema.parse(withPreferred)).toEqual(withPreferred);
   });
 });
