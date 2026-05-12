@@ -1,0 +1,23 @@
+-- 010_session_history_observability.sql
+--
+-- Placeholder migration for B.t11 — server-side session history projection.
+--
+-- Phase 1 session state is in-memory (ADK SessionService backed by an
+-- in-process Map; see SESSION_BACKEND="in-memory"). B.t11 does not introduce
+-- a Postgres table — the endpoint reads from the in-memory ADK event log.
+--
+-- This file exists to keep the C.31 forward-only zero-padded migration chain
+-- continuous and to flag the next free prefix for B.22 ('Postgres-backed
+-- SessionService — single-store-with-retrieval-and-handoff per C.18+E.10+C.23')
+-- which will add `session`, `session_event`, and `consent_record` tables.
+--
+-- Prefix shift (2026-05-12 execution log): the B.t11 plan named prefix 009.
+-- After ratification, C.t9's Voyage→Gemini swap landed first and claimed
+-- 009 (`009_embeddings_dim_3072.sql`, commit 8268700 on main). The next
+-- free prefix at execution time was 010, so this file takes 010. The plan
+-- has been amended inline with the actual prefix used.
+--
+-- node-pg-migrate accepts empty SQL files cleanly; the migrations test bumps
+-- the expected count by one to keep the chain honest.
+
+-- intentionally empty; see comment.

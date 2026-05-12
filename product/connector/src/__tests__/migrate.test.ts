@@ -24,8 +24,19 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.resolve(HERE, '..', '..', 'migrations');
 
+/**
+ * 010 is a deliberate no-op placeholder (B.t11 — session history projection).
+ * Phase 1 session state is in-memory; the file exists to keep C.31's forward-
+ * only zero-padded chain continuous when B.22's Postgres SessionService
+ * lands. The file is non-empty (header comment only); `node-pg-migrate`
+ * applies it as a no-op.
+ */
+const PLACEHOLDER_MIGRATIONS = new Set<string>([
+  '010_session_history_observability.sql',
+]);
+
 describe('migrate.ts setup', () => {
-  it('migrations directory contains the expected SQL files (001–009)', () => {
+  it('migrations directory contains the expected SQL files (001–010)', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith('.sql'))
       .sort();
@@ -40,14 +51,23 @@ describe('migrate.ts setup', () => {
       '007_image_annotation.sql',
       '008_image_tag_columns.sql',
       '009_embeddings_dim_3072.sql',
+      '010_session_history_observability.sql',
     ]);
   });
 
-  it('all migration files are non-empty', () => {
+  it('all non-placeholder migration files are non-empty', () => {
     const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql'));
     for (const f of files) {
       const stat = statSync(path.join(MIGRATIONS_DIR, f));
+      // Placeholder migrations (B.t11) carry header comments only; their body
+      // is intentionally empty. Either way every file is on disk and at
+      // minimum carries the header comment block, so size > 0 holds.
       expect(stat.size).toBeGreaterThan(0);
+      if (!PLACEHOLDER_MIGRATIONS.has(f)) {
+        // For real migrations, require a more substantive body — guard
+        // against an accidental empty file being added as if it were real.
+        expect(stat.size).toBeGreaterThan(64);
+      }
     }
   });
 });
