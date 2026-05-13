@@ -28,7 +28,7 @@ D.t9-mount-rehydrate's `useRehydrate` hook called `useAssistantRuntime({ optiona
 
 **Pattern to remember**: when the UI's `WidgetMalformedPlaceholder` appears, the first investigation move is to check the connector's `tool.invoked ok:false` events for the same turn — not the widget's schema or the UI's envelope handling. The placeholder is the visible end of an upstream chain; the fix is usually 2-3 layers earlier. Hypothesis-pruning order: (a) is a tool throwing? (b) is the conversational pattern re-calling the same tool with different inputs within one turn? (c) only after both are clear, suspect schema drift / envelope drift.
 
-The crosscut plan `03-exec-crosscut-2026-05-13-widget-user-copy-fix.md`'s diagnostic-then-fix structure was the right shape; the diagnostic ruled out hypotheses 2 and 3 by direct observation rather than speculation.
+The crosscut plan `03-exec-crosscut-brave-pare-widget-user-copy-fix.md`'s diagnostic-then-fix structure was the right shape; the diagnostic ruled out hypotheses 2 and 3 by direct observation rather than speculation.
 
 ---
 

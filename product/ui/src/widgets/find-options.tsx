@@ -66,7 +66,7 @@ export function FindOptionsWidget(
   // Empty result is the agent's job to handle in prose, not a widget surface.
   // Match the find-proof / lookup pattern — render nothing; the conversational
   // layer says "I couldn't find anything that fits — [follow-up]" in voice.
-  // Per crosscut plan 03-exec-crosscut-2026-05-13-widget-user-copy-fix.md.
+  // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md.
   if (cards.length === 0) return null;
 
   return (

@@ -125,7 +125,7 @@ describe("FindOptionsWidget", () => {
   });
 
   it("renders nothing when the cards list is empty (agent handles in prose)", () => {
-    // Per crosscut plan 03-exec-crosscut-2026-05-13-widget-user-copy-fix.md
+    // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md
     // — empty results yield to the conversational agent, no widget chrome.
     const { container } = render(
       <FindOptionsWidget

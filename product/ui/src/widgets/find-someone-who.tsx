@@ -61,7 +61,7 @@ export function FindSomeoneWhoWidget(
   const { stories } = parsed.data;
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
-  // Per crosscut plan 03-exec-crosscut-2026-05-13-widget-user-copy-fix.md.
+  // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md.
   if (stories.length === 0) return null;
 
   return (

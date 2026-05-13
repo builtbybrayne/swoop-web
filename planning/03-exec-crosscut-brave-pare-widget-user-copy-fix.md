@@ -2,7 +2,7 @@
 
 **Status**: Tier 3 execution plan. Draft, 2026-05-13.
 **Chunk**: Crosscut — touches the five conversational widgets and the shared widget shell. No single chunk home.
-**Filename suffix `-2026-05-13-`**: date-stamped to avoid collisions with parallel-agent crosscut filenames. Two related concerns are bundled because they share the same surface (`product/ui/src/widgets/`) and the same trigger (live HITL feedback from Al, 2026-05-13).
+**Filename suffix `-brave-pare-`**: worktree-slug-stamped to avoid collisions with parallel-agent crosscut filenames (date alone isn't enough — multiple agents land on the same calendar day). Two related concerns are bundled because they share the same surface (`product/ui/src/widgets/`) and the same trigger (live HITL feedback from Al, 2026-05-13).
 **Depends on**: nothing — read-only against the live `claude/brave-pare-5e0eba` tip. Touches UI only.
 **Produces**: zero user-visible widget chrome for empty results, and a tightened malformed-placeholder path so it never surfaces in normal operation.
 **Estimate**: ~1.5 hours.
@@ -113,7 +113,7 @@ The `tool_error` key in `cms/errors/en.json` stays — but its purpose narrows t
 
 ## Parallel-agent collision notes
 
-- Filename includes `2026-05-13-` so a concurrent crosscut won't claim the same slug.
+- Filename includes the agent's worktree slug `brave-pare-` (genuinely unique per dispatch, not date-based — multiple agents may be active on the same date) so a concurrent crosscut won't claim the same slug.
 - Decision number left as TBD.
 - Touches files (`find-options.tsx`, `find-inspiring.tsx`, `find-someone-who.tsx`, `inspiration.tsx`, `widget-shell.tsx`, `cms/errors/en.json`) that the D.t9 widget rewrite already shipped to. If another agent is mid-flight on a chunk-D widget pass, merge order needs Al's coordination — the empty-state edits are localised but the malformed-gate change in `widget-shell.tsx` is shared infrastructure.
 
