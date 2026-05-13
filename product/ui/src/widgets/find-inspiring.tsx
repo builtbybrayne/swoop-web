@@ -50,19 +50,9 @@ export function FindInspiringWidget(
   if (!parsed.ok) return <WidgetMalformedPlaceholder />;
   const { passages } = parsed.data;
 
-  if (passages.length === 0) {
-    return (
-      <div
-        data-testid="find-inspiring-empty"
-        data-swoop-part="widget"
-        data-swoop-widget="find-inspiring"
-        data-swoop-widget-state="empty"
-        className="my-2 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600"
-      >
-        No passages to surface right now.
-      </div>
-    );
-  }
+  // Empty result is the agent's job to handle in prose, not a widget surface.
+  // Per crosscut plan 03-exec-crosscut-2026-05-13-widget-user-copy-fix.md.
+  if (passages.length === 0) return null;
 
   return (
     <section

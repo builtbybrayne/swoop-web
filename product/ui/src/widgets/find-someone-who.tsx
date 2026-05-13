@@ -60,19 +60,9 @@ export function FindSomeoneWhoWidget(
   if (!parsed.ok) return <WidgetMalformedPlaceholder />;
   const { stories } = parsed.data;
 
-  if (stories.length === 0) {
-    return (
-      <div
-        data-testid="find-someone-who-empty"
-        data-swoop-part="widget"
-        data-swoop-widget="find-someone-who"
-        data-swoop-widget-state="empty"
-        className="my-2 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600"
-      >
-        No matching stories surfaced.
-      </div>
-    );
-  }
+  // Empty result is the agent's job to handle in prose, not a widget surface.
+  // Per crosscut plan 03-exec-crosscut-2026-05-13-widget-user-copy-fix.md.
+  if (stories.length === 0) return null;
 
   return (
     <section

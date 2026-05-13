@@ -66,19 +66,9 @@ export function InspirationWidget(
     return () => window.removeEventListener("keydown", onKey);
   }, [expandedId]);
 
-  if (images.length === 0) {
-    return (
-      <div
-        data-testid="inspiration-empty"
-        data-swoop-part="widget"
-        data-swoop-widget="inspiration"
-        data-swoop-widget-state="empty"
-        className="my-2 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600"
-      >
-        No imagery to surface right now.
-      </div>
-    );
-  }
+  // Empty result is the agent's job to handle in prose, not a widget surface.
+  // Per crosscut plan 03-exec-crosscut-2026-05-13-widget-user-copy-fix.md.
+  if (images.length === 0) return null;
 
   const expanded = expandedId
     ? images.find((img) => img.id === expandedId) ?? null

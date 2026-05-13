@@ -78,13 +78,15 @@ describe("FindSomeoneWhoWidget", () => {
     expect(persona.textContent).not.toEqual(story.textContent);
   });
 
-  it("shows empty state when the stories list is empty", () => {
-    render(
+  it("renders nothing when the stories list is empty (agent handles in prose)", () => {
+    // Per crosscut plan 03-exec-crosscut-2026-05-13-widget-user-copy-fix.md
+    // — empty results yield to the conversational agent, no widget chrome.
+    const { container } = render(
       <FindSomeoneWhoWidget
         {...mockProps({ result: { stories: [], count: 0 } })}
       />,
     );
-    expect(screen.getByTestId("find-someone-who-empty")).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
   it("falls back to the placeholder on a malformed result", () => {
