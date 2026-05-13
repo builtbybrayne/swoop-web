@@ -60,7 +60,14 @@ export async function postHandoffSubmit(
     };
   }
 
-  const fullBody: HandoffSubmitRequest = { ...body, sessionId };
+  // VERDICT-E.t1 (2026-05-13): HandoffSubmitRequest is now a discriminated
+  // union; spreading `body` (Omit<...,"sessionId">) widens the verdict
+  // literal beyond what the union's exact variant narrowing accepts. The
+  // runtime POST is wire-validated by HandoffSubmitRequestSchema at the
+  // route boundary; the cast here is just the TS workaround for the
+  // discriminator-through-spread limitation. Same pattern as the
+  // orchestrator's `validRequestBody` helper.
+  const fullBody = { ...body, sessionId } as HandoffSubmitRequest;
   let res: Response;
   try {
     res = await fetch(`${resolveOrchestratorUrl()}/handoff/submit`, {
