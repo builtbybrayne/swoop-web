@@ -155,9 +155,11 @@ describe('queryHotelCardsByFilter', () => {
     expect(card.id).toBe('12');
     expect(card.slug).toBe('tierra-patagonia');
     expect(card.headline).toBe('Tierra Patagonia');
-    // First sentence becomes vibeLine (capped, trimmed).
+    // Full pass-through (UI handles clamping + expansion) per
+    // planning/03-exec-crosscut-brave-pare-card-expandable-prose.md.
     expect(card.vibeLine).toBe(
-      'A wilderness lodge perched on the edge of Torres del Paine.',
+      'A wilderness lodge perched on the edge of Torres del Paine. ' +
+        'The bar has a fireplace.',
     );
     expect(card.starRating).toBe(5);
     expect(card.location).toBe('Torres del Paine');

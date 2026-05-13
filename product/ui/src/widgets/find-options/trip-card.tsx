@@ -19,7 +19,13 @@
 // =============================================================================
 
 import type { TripProposalCard } from "@swoop/common";
-import { AttributeTable, Card, CtaButton, ImageBlock } from "../../shared";
+import {
+  AttributeTable,
+  Card,
+  CtaButton,
+  ExpandableProse,
+  ImageBlock,
+} from "../../shared";
 import type { AttributeRow } from "../../shared";
 import { formatFromPriceTotal } from "./price";
 
@@ -57,9 +63,14 @@ export function TripCard({ card }: { card: TripProposalCard }) {
               {card.headline}
             </h3>
             {card.vibeLine ? (
-              <p className="text-sm leading-relaxed text-slate-600">
-                {card.vibeLine}
-              </p>
+              // trip_card.vibe_line is Haiku-composed (clean text). Clamp
+              // visually, expand on click. Per
+              // planning/03-exec-crosscut-brave-pare-card-expandable-prose.md.
+              <ExpandableProse
+                content={card.vibeLine}
+                maxLines={3}
+                className="text-sm leading-relaxed text-slate-600"
+              />
             ) : null}
           </header>
           <AttributeTable rows={rows} />

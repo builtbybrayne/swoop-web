@@ -18,7 +18,13 @@
 // =============================================================================
 
 import type { HotelProposalCard } from "@swoop/common";
-import { AttributeTable, Card, CtaButton, ImageBlock } from "../../shared";
+import {
+  AttributeTable,
+  Card,
+  CtaButton,
+  ExpandableProse,
+  ImageBlock,
+} from "../../shared";
 import type { AttributeRow } from "../../shared";
 import { formatFromPricePerNight } from "./price";
 
@@ -79,9 +85,14 @@ export function HotelCard({ card }: { card: HotelProposalCard }) {
               {card.headline}
             </h3>
             {card.vibeLine ? (
-              <p className="text-sm leading-relaxed text-slate-600">
-                {card.vibeLine}
-              </p>
+              // hotel.description is plain text today (0 of 44 carry HTML
+              // per 2026-05-13 audit). Clamp visually, expand on click. Per
+              // planning/03-exec-crosscut-brave-pare-card-expandable-prose.md.
+              <ExpandableProse
+                content={card.vibeLine}
+                maxLines={3}
+                className="text-sm leading-relaxed text-slate-600"
+              />
             ) : null}
           </header>
           <AttributeTable rows={rows} />

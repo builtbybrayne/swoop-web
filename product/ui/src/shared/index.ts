@@ -14,3 +14,6 @@ export type { AttributeRow, AttributeTableProps } from "./AttributeTable";
 
 export { CtaButton } from "./CtaButton";
 export type { CtaButtonProps } from "./CtaButton";
+
+export { ExpandableProse } from "./ExpandableProse";
+export type { ExpandableProseProps } from "./ExpandableProse";

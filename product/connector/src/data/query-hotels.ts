@@ -43,25 +43,17 @@ const BUDGET_CEILING: Record<BudgetBand, number> = {
   luxury: Number.POSITIVE_INFINITY,
 };
 
-const VIBE_LINE_MAX_CHARS = 140;
-
 /**
- * Extract the first sentence from a free-text description as the vibe line.
- * Returns `undefined` for null / empty input so the caller omits the field
- * (per the spread-when-present pattern in `query-trips.ts`).
+ * Pass the source description through full (trim + empty→undefined only).
+ * The UI handles visible clamping + an inline "Read more" affordance per
+ * planning/03-exec-crosscut-brave-pare-card-expandable-prose.md. Server-side
+ * truncation was the previous behaviour and is removed here: cards must not
+ * silently truncate without an option to expand.
  */
 function vibeLineFromDescription(text: string | null | undefined): string | undefined {
   if (text === null || text === undefined) return undefined;
   const trimmed = String(text).trim();
-  if (trimmed.length === 0) return undefined;
-  // Match up to the first sentence-ending punctuation. If none, take the
-  // whole string (capped). Multiline aware: \s matches newlines too.
-  const match = trimmed.match(/^[^.!?]+[.!?]/);
-  const candidate = (match ? match[0] : trimmed).trim();
-  if (candidate.length === 0) return undefined;
-  return candidate.length <= VIBE_LINE_MAX_CHARS
-    ? candidate
-    : candidate.slice(0, VIBE_LINE_MAX_CHARS).trim() + '…';
+  return trimmed.length === 0 ? undefined : trimmed;
 }
 
 /**

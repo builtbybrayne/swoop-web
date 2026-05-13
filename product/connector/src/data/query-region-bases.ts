@@ -25,20 +25,21 @@ export interface QueryRegionBaseCardsOptions {
   limit: number;
 }
 
-const VIBE_LINE_MAX_CHARS = 140;
-
+/**
+ * Pass the source prose through full (trim + empty→undefined only). The UI
+ * handles visible clamping + an inline "Read more" affordance per
+ * planning/03-exec-crosscut-brave-pare-card-expandable-prose.md. Server-side
+ * truncation was the previous behaviour and is removed here: cards must not
+ * silently truncate without an option to expand. Whitespace normalisation
+ * stays here because empty/whitespace-only strings should land as
+ * `undefined` on the schema, not as `""`.
+ */
 function vibeLineFromSource(
   text: string | null | undefined,
 ): string | undefined {
   if (text === null || text === undefined) return undefined;
   const trimmed = String(text).trim();
-  if (trimmed.length === 0) return undefined;
-  const match = trimmed.match(/^[^.!?]+[.!?]/);
-  const candidate = (match ? match[0] : trimmed).trim();
-  if (candidate.length === 0) return undefined;
-  return candidate.length <= VIBE_LINE_MAX_CHARS
-    ? candidate
-    : candidate.slice(0, VIBE_LINE_MAX_CHARS).trim() + '…';
+  return trimmed.length === 0 ? undefined : trimmed;
 }
 
 export async function queryRegionBaseCardsByFilter(
