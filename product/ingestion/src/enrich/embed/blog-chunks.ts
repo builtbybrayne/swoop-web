@@ -141,8 +141,8 @@ export async function embedBlogChunks(
   }
 
   const out = await embedInBatches(opts.embeddingClient, pending, (c) => c.text, {
-    batchSize: 100,
-    concurrency: 4,
+    // batchSize + concurrency intentionally unset — defer to env-var-overridable
+    // defaults so operators can dial down for rate-limit windows.
     shouldAbort: () => opts.ledger.shouldAbort(),
     onBatchComplete: (t) => opts.ledger.recordEmbedding('gemini:blog_chunk', t, 1),
   });
