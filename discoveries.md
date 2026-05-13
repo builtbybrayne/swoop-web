@@ -6,6 +6,99 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-13 — CMS WYSIWYG decorative whitespace is systemic; strip at the boundary
+
+50% of pages in `puma_dev` (296 of 590 with content) carry trailing `&nbsp;<br></p>` or similar decorative whitespace from the editor team's WYSIWYG output — someone presses Enter at the end of writing and the editor preserves the trailing newline as `<br>` inside the closing tag. The San Pedro de Atacama page is the canonical example: `"<p>This tiny desert town … Atacama Desert.&nbsp;<br></p>"`.
+
+This is *invisible* to a reader (it just renders as a blank line) but *visible* to overflow-detection logic: a trailing `<br>` adds a full line-height to the rendered DOM. With a `<ExpandableProse maxLines={3}>` wrapper, the unclamped `scrollHeight` measures 4 lines (3 of text + 1 of `<br>`) while the clamped `clientHeight` measures 3 — so the overflow check flips true and a "Read more" toggle appears on content that visually fits.
+
+A naive `String.trim()` doesn't catch this — `<br>`, `&nbsp;`, and empty trailing `<p></p>` blocks are HTML decoration, not whitespace at the string level.
+
+**Pattern to remember**: when reading CMS-authored prose at the connector boundary, route every reader through a shared `trimCmsDecorativeWhitespace` helper (`product/connector/src/data/text-utils.ts`) that layers regex strips for `<br>`, `&nbsp;`, and empty closing-tag blocks at both ends. Iterate to a fixed point so nested patterns (`<br>&nbsp;</p>`) all clean up. Interior decoration stays — only edge artefacts go.
+
+Trust posture (load-bearing): the strip operates on CMS-authored content where authors meant the inner `<strong>` / `<em>` / `<a href>` / `<br>` formatting. Don't extend it to a generic HTML sanitiser. Visitor-typed surfaces (e.g. `customerreview.content`) have a different trust boundary and should not pass through this path.
+
+Concrete fix: commit `f9b1d1d` (2026-05-13 brave-pare wave), planning addendum [planning/03-exec-crosscut-brave-pare-card-expandable-prose.md](planning/03-exec-crosscut-brave-pare-card-expandable-prose.md).
+
+---
+
+## 2026-05-13 — Tailwind `line-clamp-N`: `scrollHeight === clientHeight`; temp-unclamp to detect overflow
+
+Tailwind 3.4's `line-clamp-N` utility compiles to `display: -webkit-box` + `-webkit-line-clamp: N` + `overflow: hidden`. Under this layout, modern browsers (Chrome/Safari) normalise the computed `display` to `flow-root` while still applying `-webkit-line-clamp` for the visual clamp. The textual content IS clamped visually, but **both** `scrollHeight` and `clientHeight` come back equal to the clamped height — there's no way to detect overflow with the naive `scrollHeight > clientHeight` check.
+
+This bites any "show a Read more button when content overflows" pattern. First attempt at `<ExpandableProse>` used the naive check; result was that overflow was never detected (or, with trailing CMS `<br>` decoration, falsely detected — see the entry above).
+
+**Pattern to remember**: temporarily remove the `line-clamp-N` class inside `useLayoutEffect` to read the *unclamped* `scrollHeight`, then restore. `useLayoutEffect` runs synchronously before paint, so the visitor never sees the unclamped frame. Compare unclamped `scrollHeight` to clamped `clientHeight` for the actual overflow signal. Snippet:
+
+```ts
+useLayoutEffect(() => {
+  const el = proseRef.current;
+  if (!el || expanded) return;
+  const original = el.className;
+  const unclamped = original.replace(/\bline-clamp-\d+\b/g, '').trim();
+  if (unclamped !== original) el.className = unclamped;
+  const uHeight = el.scrollHeight;
+  if (unclamped !== original) el.className = original;
+  const cHeight = el.clientHeight;
+  setOverflowing(uHeight > cHeight + 1);
+}, [content, expanded, maxLines]);
+```
+
+Alternative shapes (probe div, ResizeObserver, character-count heuristic) all add complexity or false-precision; the temp-unclamp is the cheapest robust option for content that doesn't change after first paint.
+
+Concrete fix: `product/ui/src/shared/ExpandableProse.tsx`, commit `1bb679d`, planning addendum [planning/03-exec-crosscut-brave-pare-card-expandable-prose.md](planning/03-exec-crosscut-brave-pare-card-expandable-prose.md).
+
+---
+
+## 2026-05-13 — ETL "via X" comments without implementations silently break downstream surfaces
+
+`product/ingestion/src/sql-transform/transformations.ts` line 368 (pre-fix) read:
+
+```ts
+region_id: null, // Trip → region via ntags_lookup (area-typed tag), not direct FK.
+```
+
+The comment correctly named the intended source. The implementation set `null`. The trip table loaded fine, tests passed (they didn't assert region_id non-null because there was no source data fixture for it). 24 days later the BF-FO-v3 wave built a complete data primitive + dispatch + widget + tests for `region_base` that all worked correctly against the (NULL) data — and the user-facing region_base widget produced empty results on every call because the upstream column was empty.
+
+**Pattern to remember**: when an ETL transform leaves a column as `null` with a comment naming the eventual source (`// via X`), that's a load-bearing punt — it WILL block a downstream consumer one day. Either implement the derivation immediately, or raise the gap visibly in the plan + a TODO with an explicit owner. Comments alone do not block bugs.
+
+**Discipline going forward**:
+- Periodic `grep -n "null, // " product/ingestion/src/sql-transform/transformations.ts` to enumerate similar punts (currently `trip.country_id` is one).
+- When auditing a downstream consumer, verify the *populated* state of the columns it filters on, not just the *existence* of the column.
+- Add a probe step to the chunk-C runbook: `SELECT column_name, COUNT(*) FROM trip WHERE column IS NOT NULL` for every column that's NOT NULL-OPT in the schema but pops null at ETL time.
+
+The C.t3 plan's emphasis on idempotency + speed prioritised correctness-of-shape over completeness-of-fields. Both matter; the latter is now load-bearing for chunk-D widget surfaces.
+
+Concrete fix: 2026-05-13 commit `aa72202`, planning addendum [planning/03-exec-crosscut-brave-pare-trip-region-id-backfill.md](planning/03-exec-crosscut-brave-pare-trip-region-id-backfill.md).
+
+---
+
+## 2026-05-13 — Three live-smoke discoveries from the brave-pare-5e0eba wave
+
+A single afternoon-session boot-and-poke against the live stack surfaced three patterns worth pinning. None of them were caught by the existing test surface — each needed real component mounting + real tool dispatch + real visitor flow to trigger.
+
+### 1. C.t9-style provider swaps need a corpus-AND-query checklist
+
+C.t9 swapped Voyage → Gemini across `@swoop/ingestion` (corpus passes) but left `product/connector/src/data/embed-query.ts` (visitor-query embedder) on Voyage-3 / 1024d. The visitor-query path is consumed by `find_inspiring`, `find_someone_who`, and `illustrate` via `deps.embedQuery`. Live smoke surfaced the gap as `tool_handler_threw:illustrate` errors with `[connector/embed-query] VOYAGE_API_KEY not configured` on every invocation. Worse than the throw: even with a Voyage key restored, the resulting 1024d query vector wouldn't match the corpus's `halfvec(3072)` columns post-migration 009 — silent retrieval noise, not a clean error.
+
+**Pattern to remember**: any embedding-provider swap (or dim change) MUST sweep both halves of the retrieval contract: (a) corpus-side ingestion + storage, (b) query-side visitor utterance embedder. Grep for the model name and dim constant across the entire tree before declaring the swap complete. C.t9's plan body said "ingestion-side swap" without enumerating the query-side; the agents executing the swap took that scoping literally. Fix shipped as the 2026-05-13 addendum to `03-exec-c-t9.md`.
+
+### 2. Mocking `@assistant-ui/react`'s `useAssistantRuntime` hides the provider-scope crash
+
+D.t9-mount-rehydrate's `useRehydrate` hook called `useAssistantRuntime({ optional: true })` and trusted the `optional` flag to return null when no `AssistantRuntimeProvider` was in scope. The hook's test file mocks `useAssistantRuntime` directly via `vi.mock("@assistant-ui/react", ...)`, returning a fake runtime regardless of provider context. All tests passed; the live runtime crashed on every mount because assistant-ui v0.12.25's implementation calls `useAui()` *first*, whose proxy throws on `.threads()` when no provider is mounted — the `optional` check happens after.
+
+**Pattern to remember**: when a test mocks the very hook whose contract you depend on, the mock IS the contract — the real implementation's quirks (e.g. throws-before-checking-options) become invisible. For any hook that grabs from React context, the discipline is: mount the test harness through the same provider tree the live app uses, OR avoid context-grabbing entirely by passing the dependency as an explicit prop (the fix shipped: `useRehydrate` now takes `runtime: AssistantRuntime | null` as an option). When a hook lives at App-level (above its provider), prop-passing is the right shape; reaching into context from above the provider is a category error the `optional` flag cannot rescue.
+
+### 3. Upstream tool throws cascade into the WidgetMalformedPlaceholder surface
+
+146 `[swoop.ui] widget schema validation failed` warnings inside a 30-second window during the morning smoke, with the user-facing "Couldn't load that — we can still keep talking" placeholder flickering across multiple widgets. After fixing the underlying `illustrate` Voyage throw (issue 1 above) AND removing widget empty-state chrome (Part 1 of the crosscut plan), the same exercise produces **zero** `safeParse` failures. The schema-parse path was never broken; it was downstream of an upstream tool failure (`{ok: false, error: {...}}` envelope reaching a widget that expects the success shape) and downstream of empty-state widget renders (find_options-on-strict-filters returning 0 rows, the widget rendering its own placeholder card, then re-rendering on the same turn's relaxed-filter retry).
+
+**Pattern to remember**: when the UI's `WidgetMalformedPlaceholder` appears, the first investigation move is to check the connector's `tool.invoked ok:false` events for the same turn — not the widget's schema or the UI's envelope handling. The placeholder is the visible end of an upstream chain; the fix is usually 2-3 layers earlier. Hypothesis-pruning order: (a) is a tool throwing? (b) is the conversational pattern re-calling the same tool with different inputs within one turn? (c) only after both are clear, suspect schema drift / envelope drift.
+
+The crosscut plan `03-exec-crosscut-brave-pare-widget-user-copy-fix.md`'s diagnostic-then-fix structure was the right shape; the diagnostic ruled out hypotheses 2 and 3 by direct observation rather than speculation.
+
+---
+
 ## 2026-05-13 — Background-spawned agents need names + "continue" nudges, not manual takeover
 
 A 5-agent parallel batch this session (crosscut v1, B.t11, D.t9-mount-rehydrate, E.t6, D.t9 widget) surfaced two related operator-side discipline gaps:

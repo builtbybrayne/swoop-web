@@ -1,8 +1,8 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-13 (five-plan parallel-batch landed + BF-FO-v3 + BATCH-C.t6 + VERDICT-E.t1 landed in sequence; tests now 958 + 3 DB-gated skipped across all 6 workspaces on fresh `npm install`)
+**Snapshot date**: 2026-05-13 (four sequenced waves today — morning five-plan batch + BF-FO-v3 + BATCH-C.t6/VERDICT-E.t1 landed on `main`; the `claude/brave-pare-5e0eba` live-smoke wave is the fourth and final, still pending merge: D.t9-mount-rehydrate App-level crash fix + C.t9 visitor-query Voyage cleanup + widget empty-state silence + malformed-placeholder diagnosis + trip.region_id backfill + CMS HTML rendering + ExpandableProse + WYSIWYG decorative-whitespace strip + CTA copy fix. With `brave-pare` merged on top all four ProposalCard variants except `tour` are end-to-end live with clean prose and working expansion affordance.)
 
-## 2026-05-13 — BATCH-C.t6 (image annotation batches submission wired) + VERDICT-E.t1 (handoff wire-tightening)
+## 2026-05-13 (afternoon, mid) — BATCH-C.t6 + VERDICT-E.t1 (landed on `main` after BF-FO-v3)
 
 Two follow-on tasks landed in the same in-session pass after BF-FO-v3:
 
@@ -14,7 +14,6 @@ Closed the deliberate C.t6 scope-cut (decision C.52). `runBatches` in [product/i
 - `runBatches` end-to-ends: build → submit → `waitForVisionBatch` → fetchResults → per-result `parseAndValidate` + `writeAnnotation` + checkpoint. +5 integration tests.
 - Operator runbook ([product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md)) flipped from "deferred" to "preferred for full re-runs (~$17/£14 vs ~$34/£27 at live rate)".
 - [gotchas.md](gotchas.md) "annotate-images --mode=batches builds the payload then bails" entry rewritten as a closed-historical note.
-- **Live run NOT required** — per Al's instruction (live runs already done; the script just needs to exist for later).
 
 ### VERDICT-E.t1 — agent + wire `reasonCode` constrained to per-verdict enums
 
@@ -26,25 +25,45 @@ Closed the upstream gap left by the original E.t1 landing (durable-record was al
 - Connector MCP tool registration extended with `extractDiscriminatedUnionShape` helper (decision E.verdict-5) so the SDK's `registerTool` API can carry the union — falls back to the first variant's shape with the discriminator widened to all literals; runtime narrowing preserved by `runHandler.safeParse`.
 - +10 fixture round-trip + reject-path tests on `@swoop/common`.
 
-### Test totals after both landings (fresh `rm -rf node_modules + npm install`, all green)
+### Pending — needs Al (BATCH-C.t6 / VERDICT-E.t1 batch)
 
-- `@swoop/common` **170** (was 160 → +10 VERDICT-E.t1)
-- `@swoop/orchestrator` 170 (unchanged; 2 tests updated for new discriminated wire shape)
-- `@swoop/connector` **149 + 3 DB-gated skipped** (was 126+3 → +23 from BF-FO-v3 earlier; +0 additional from VERDICT-E.t1; 1 test fixture updated)
-- `@swoop/ui` 112 (unchanged)
-- `@swoop/ingestion` **283** (was 266 → +17 from BATCH-C.t6)
-- `@swoop/harness` 74 (unchanged)
-- **Total: 958 + 3 skipped (was 908 + 3 → +50 from today's three landings)**
-
-### Pending — needs Al
-
-- **Live-data smoke for BF-FO-v3** per the v3 plan §5 (find_options hotel + region_base branches against `puma_dev`).
+- **Live-data smoke for BF-FO-v3** per the v3 plan §5 (find_options hotel + region_base branches against `puma_dev`). **Now closed by the brave-pare wave** (see below — hotel + region_base both verified live, region_base after a trip.region_id backfill closed the upstream data gap).
 - **No live invocation for BATCH-C.t6** — the unit tests cover the wiring; live runs already done in `--mode=live`.
 - **`@swoop/ui` typecheck regression** (pre-existing on main; flagged in `inbox.md`) — broader than originally noted, now 24 errors across 7 widget files. NOT introduced by today's work; revisit as a discrete cleanup.
 
 ---
 
-## 2026-05-13 — Crosscut find_options v3 backfill (BF-FO-v3)
+## 2026-05-13 (afternoon, late) — brave-pare-5e0eba live-smoke fix wave
+
+Picked up the brave-pare-5e0eba worktree to verify the morning's five-plan batch ran end-to-end. Surface immediately crashed; chain-reaction surfaced three more issues. All fixed with Tier 3 plans authored first per HITL.
+
+**Commits on `claude/brave-pare-5e0eba`:**
+
+| Commit | Change |
+|---|---|
+| `34af1de` | `fix(ui): D.t9-mount-rehydrate — pass runtime as prop, don't grab from context` (real crash, App.tsx blew up on mount because `useAssistantRuntime({optional:true})` throws when no provider is in scope) |
+| `9178d54` | `docs(planning): Tier 3 plans for 2026-05-13 live-smoke fixes` (C.t9 addendum + new crosscut) |
+| `67c2dda` | `fix(connector): C.t9 fix-up — visitor-query embedder swaps Voyage → Gemini (3072d)` (closes the visitor-query Voyage holdover that C.t9 originally missed) |
+| `58d65f2` | `fix(ui): widget empty-state silence — yield to agent prose, no widget chrome` |
+| `873ae33` | `docs(planning): close Plan B Part 2 — malformed-placeholder root cause named` |
+| `0dd5452` | `docs(orientation): 2026-05-13 afternoon — live-smoke fix wave` |
+| `928aec4` | `docs(planning): rename crosscut to worktree-slug-stamped filename` (date-suffix wasn't unique enough — other agents on the same calendar day) |
+| `1bbabe2` | `docs(planning): promote the 30 Mar proposal back out of archive` (project_proposal.md + project_proposal_notes.md → `planning/00-project-proposal*.md`) |
+
+**Live smoke verification**: stack booted (connector :3002, orchestrator :8080, UI :5173 via preview_start); consent → message → tool calls → widgets render. Real Patagonia kayaking query produced a real TripCard widget for "Multisport Rafting Adventure on Rio Futaleufu" with image, duration, price, and "See this trip" CTA — actual D.t9 widget rendering for the first time against the populated derived tables.
+
+**Tests** (pre-BF-FO-v3-merge): `@swoop/connector` 129 + 3 DB-gated skipped (was 126 + 3, +6 from new `embed-query.test.ts`); `@swoop/ui` 112 (unchanged count, 4 cases converted to assert `container.firstChild === null`). Post-merge re-count happens once both branches share node_modules.
+
+**Tier 3 plans authored / amended in this session:**
+
+- `planning/03-exec-c-t9.md` — 2026-05-13 addendum: "visitor-query Voyage holdover (the half C.t9 missed)". Decision number TBD per Al's 2026-05-13 parallel-agent-collision note. The C.t9 chunk-home plan absorbs the fix as an addendum (not a new file) because the visitor-query embedder was always in scope of C.t9's "Voyage → Gemini swap" intent — execution scoped it too narrowly.
+- `planning/03-exec-crosscut-brave-pare-widget-user-copy-fix.md` — new crosscut covering: (Part 1) empty-state silence across four widgets to yield to agent prose, (Part 2) diagnose-then-fix the WidgetMalformedPlaceholder firing. Worktree-slug-stamped filename per Al's 2026-05-13 collision-avoidance discipline (date-based isn't unique enough). Part 2 outcome captured as an execution log in the same file: root cause was downstream of upstream tool throws + empty-state widget churn; no additional fix needed beyond the Voyage swap + empty-state silence.
+
+**Orientation-file updates**: `discoveries.md` gains a 2026-05-13 entry with three patterns (provider-swap corpus+query checklist, mocking-hook-hides-provider-scope-crash, upstream-throw cascades into WidgetMalformedPlaceholder). The 30 Mar `project_proposal.md` + quoting notes promoted back out of archive into the main planning folder per Al's flag.
+
+**Pending Al action**: review-and-merge of the brave-pare-5e0eba branch to `main` (now sitting on top of the BF-FO-v3 merge). Tier 3 plans' TBD decision numbers want assignment at merge.
+
+## 2026-05-13 (afternoon, mid) — Crosscut find_options v3 backfill (BF-FO-v3) — merged on `main`
 
 Backfill task picked up by a parallel session (`jolly-pasteur-77252a` worktree) after the five-plan batch closed. User-instruction: *"identify and work on backfill data items… The first data type handled was trips. But there's also tours and other stuff. That's not wired up yet."* The crosscut find_options polymorphism plan §2.4 had named the v3 tranche (hotels + region_bases, NOT gated on Swoop) and the v2 tranche (tours, Swoop-gated). v3 was the natural pickup — schema, fixtures, and UI renderers all shipped polymorphic day-one in v1, only the backend data primitives were missing.
 
@@ -60,7 +79,7 @@ Backfill task picked up by a parallel session (`jolly-pasteur-77252a` worktree) 
 | `queryRegionBaseCardsByFilter` data primitive | `@swoop/connector` | `src/data/query-region-bases.ts` + `src/data/__tests__/query-region-bases.test.ts` | +7 |
 | `find_options` handler dispatch + `blendCards` | `@swoop/connector` | `src/tools/find_options.ts` + `src/tools/__tests__/find_options.test.ts` | +9 (was 5 → now 14) |
 
-**Test totals after the batch (fresh `rm -rf node_modules + npm install`, all green)**:
+**Test totals after BF-FO-v3 (fresh `rm -rf node_modules + npm install`, all green, pre-brave-pare-merge)**:
 - `@swoop/common` 160 (unchanged)
 - `@swoop/orchestrator` 170 (unchanged)
 - `@swoop/connector` **149 (was 126) + 3 DB-gated skipped** — +23 net (one v1 test consolidated into the new dispatch suite)
@@ -85,8 +104,8 @@ Backfill task picked up by a parallel session (`jolly-pasteur-77252a` worktree) 
 - Tour-preference prompts continue to return trips (v2 fallback, decision C.bf-6) — no breakage, no empty results.
 
 **Pending — needs Al**:
-- **Live-data smoke** against `puma_dev` per plan §5: `npm run dev -w @swoop/connector` then exercise each `preferredType` branch via the MCP surface. Hotel + region_base SQL hasn't been verified against the live row counts yet (44 hotels, 16 areas in `puma_dev`); the unit tests covered shape correctness, not SQL semantics. Especially worth verifying: the page-hub heuristic (alias match → URL-suffix fallback) finds enough bases for the 16-area corpus.
-- **UI typecheck regression note**: when running `npm run typecheck`, the `@swoop/ui` workspace errors with `'args' is of type 'unknown'` (lead-capture.tsx + lookup.tsx + widget-shell.tsx). These errors are pre-existing on `main` HEAD (confirmed by stashing v3 changes and re-checking) — likely the parallel UI agent's WIP. Not caused by v3; flagged so reviewers don't blame v3 work.
+- **Live-data smoke** against `puma_dev` per plan §5: exercise each `preferredType` branch. Hotel + region_base SQL hasn't been verified against the live row counts yet (44 hotels, 16 areas in `puma_dev`); the unit tests covered shape correctness, not SQL semantics. Worth verifying: the page-hub heuristic (alias match → URL-suffix fallback) finds enough bases for the 16-area corpus.
+- **UI typecheck regression note**: when running `npm run typecheck`, the `@swoop/ui` workspace errors with `'args' is of type 'unknown'` (lead-capture.tsx + lookup.tsx + widget-shell.tsx). These errors were pre-existing on `main` HEAD per the BF-FO-v3 author's note (confirmed by stashing v3 changes); the `brave-pare` widget-shell touch did not introduce or fix them.
 
 **Crosscut tranche queue updated**:
 - v2 (tours) — still gated on Swoop; tour-content ask continues to live in [questions.md](questions.md).

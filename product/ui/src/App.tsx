@@ -245,6 +245,7 @@ export default function App() {
     enabled: hasConsented,
     sessionId:
       consent.status.state === "granted" ? consent.status.sessionId : null,
+    runtime,
     onExpired: () => {
       // Per HITL ratification: clear sessionStorage automatically, route to
       // OpeningScreen, surface a brief notification. No manual click required.

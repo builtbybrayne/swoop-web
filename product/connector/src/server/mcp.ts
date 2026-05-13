@@ -37,7 +37,7 @@ function readPackageVersion(): string {
 export interface CreateMcpServerDeps {
   /** Connector's Postgres pool — borrowed inside each tool body. */
   readonly pool: pg.Pool;
-  /** Voyage-bound embedding helper. */
+  /** Gemini-bound embedding helper (gemini-embedding-001 / 3072d). */
   readonly embedQuery: EmbedQueryFn;
   /** Loaded tool descriptions (one per tool, fail-fast at app-build time). */
   readonly descriptions: ToolDescriptions;

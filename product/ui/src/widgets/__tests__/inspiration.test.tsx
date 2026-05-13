@@ -72,8 +72,12 @@ describe("InspirationWidget", () => {
     expect(screen.getByTestId("widget-malformed")).toBeInTheDocument();
   });
 
-  it("shows empty state when the image list is empty", () => {
-    render(<InspirationWidget {...mockProps({ result: { images: [] } })} />);
-    expect(screen.getByTestId("inspiration-empty")).toBeInTheDocument();
+  it("renders nothing when the image list is empty (agent handles in prose)", () => {
+    // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md
+    // — empty results yield to the conversational agent, no widget chrome.
+    const { container } = render(
+      <InspirationWidget {...mockProps({ result: { images: [] } })} />,
+    );
+    expect(container.firstChild).toBeNull();
   });
 });

@@ -63,19 +63,11 @@ export function FindOptionsWidget(
   if (!parsed.ok) return <WidgetMalformedPlaceholder />;
   const { cards } = parsed.data;
 
-  if (cards.length === 0) {
-    return (
-      <div
-        data-testid="find-options-empty"
-        data-swoop-part="widget"
-        data-swoop-widget="find-options"
-        data-swoop-widget-state="empty"
-        className="my-2 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-600"
-      >
-        No options match those filters right now.
-      </div>
-    );
-  }
+  // Empty result is the agent's job to handle in prose, not a widget surface.
+  // Match the find-proof / lookup pattern — render nothing; the conversational
+  // layer says "I couldn't find anything that fits — [follow-up]" in voice.
+  // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md.
+  if (cards.length === 0) return null;
 
   return (
     <section

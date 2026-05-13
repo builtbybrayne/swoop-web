@@ -359,13 +359,26 @@ export function transformTrip(
   const tagIds = lookups.ntagsByEntity.get('trip')?.get(id) ?? [];
   const slug = strOrNull(row.values.alias);
 
+  // Derive region_id from area-typed tags via `lookups.areaIdByTagId`.
+  // Multi-area trips (94 of 852 in puma_dev) pick the lowest area.id (most
+  // canonical / oldest in the Swoop taxonomy). Trips with no area-typed tag
+  // — typically meta/index pages like /adventure-travel-in-patagonia — get
+  // null. Per Tier 3 plan
+  // `03-exec-crosscut-brave-pare-trip-region-id-backfill.md`.
+  let region_id: number | null = null;
+  for (const tagId of tagIds) {
+    const areaId = lookups.areaIdByTagId.get(tagId);
+    if (areaId === undefined) continue;
+    if (region_id === null || areaId < region_id) region_id = areaId;
+  }
+
   return {
     row: {
       id,
       slug,
       title,
       subtitle: null,
-      region_id: null, // Trip → region via ntags_lookup (area-typed tag), not direct FK.
+      region_id,
       country_id: null,
       duration_days: parseDurationDays(row.values.duration),
       from_price: basePrice,

@@ -4,7 +4,44 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-05-13 — five-plan parallel batch landed: D.t9 widget rewrite + D.t9-mount-rehydrate + B.t11 + E.t6 + crosscut find_options polymorphism v1; chunk-C voyage→Gemini swap (C.t9) + sync classifier (C.t10) merged earlier; chunk-C implementation spine fully closed; chunk-D fully closed; chunk-E retention enforcement live)
+## Status (2026-05-13 — four sequenced waves landed today; `claude/brave-pare-5e0eba` is the fourth, pending merge to `main`)
+
+**Today's four waves in landing order:**
+
+1. **Morning five-plan batch** — D.t9 widget rewrite + D.t9-mount-rehydrate + B.t11 + E.t6 + crosscut find_options polymorphism v1. (Detailed in the §"Status (earlier)" section below.)
+2. **BF-FO-v3** — find_options v3 backfill: hotels + region_bases data primitives wired live ([planning/03-exec-crosscut-find-options-v3-backfill.md](planning/03-exec-crosscut-find-options-v3-backfill.md), decisions C.bf-1..6).
+3. **BATCH-C.t6 + VERDICT-E.t1** — image-annotation batches submission path wired ([planning/03-exec-c-t6-batches-submission.md](planning/03-exec-c-t6-batches-submission.md), decisions C.batch-1..4) + handoff schema discriminated-union tightening ([planning/03-exec-e-t1-wire-tightening.md](planning/03-exec-e-t1-wire-tightening.md), decisions E.verdict-1..5).
+4. **brave-pare live-smoke wave** (this branch, pending merge) — boot-and-poke verification surfaced four follow-on defects, each fixed with a Tier-3 plan authored first:
+
+| Fix | Plan | What landed |
+|---|---|---|
+| App-level crash on mount | (D.t9-mount-rehydrate addendum; commit `34af1de`) | `useRehydrate` takes `runtime` as an explicit prop instead of grabbing it from context above the provider (where assistant-ui v0.12.25's `useAui` Proxy throws). |
+| Visitor-query Voyage holdover | [03-exec-c-t9.md addendum — Gemini visitor-query embedder](planning/03-exec-c-t9.md) | `connector/src/data/embed-query.ts` swapped Voyage→Gemini at halfvec(3072), matching the corpus side. +6 tests. |
+| Widget empty-state silence + malformed-placeholder churn diagnosis | [03-exec-crosscut-brave-pare-widget-user-copy-fix.md](planning/03-exec-crosscut-brave-pare-widget-user-copy-fix.md) | Four widgets yield to agent prose on empty results; malformed-placeholder root cause traced to upstream tool throws + empty-state churn (no widget code change needed). |
+| `trip.region_id` backfill (closes C.t3 ETL punt) | [03-exec-crosscut-brave-pare-trip-region-id-backfill.md](planning/03-exec-crosscut-brave-pare-trip-region-id-backfill.md) | `transformTrip` derives `region_id` from area-typed tag intersection with `area.alias`; multi-area picks lowest `area.id`. 617/852 trips populated. Closes BF-FO-v3's live-data smoke pending-Al item (region_base now renders live). |
+| Render CMS-authored HTML | [03-exec-crosscut-brave-pare-render-cms-html.md](planning/03-exec-crosscut-brave-pare-render-cms-html.md) | `RegionBaseCard.vibeLine` / `baseFraming` render via `dangerouslySetInnerHTML` (trust boundary: internal CMS, not visitor input). Wrapper switched `<p>` → `<div>` so nested `<p>` is valid. |
+| Cards never silently truncate | [03-exec-crosscut-brave-pare-card-expandable-prose.md](planning/03-exec-crosscut-brave-pare-card-expandable-prose.md) | New `<ExpandableProse>` shared component (line-clamp + inline "Read more" toggle, overflow detection via temp-unclamp pass in `useLayoutEffect`). Applied to RegionBaseCard / TripCard / HotelCard. Connector stops server-side 140-char truncation. +6 tests. |
+| WYSIWYG decorative whitespace strip | (folded into the expandable-prose plan; commit `f9b1d1d`) | New `trimCmsDecorativeWhitespace` helper at the connector boundary strips trailing `<br>`/`&nbsp;`/empty `<p></p>` from CMS prose. Closes a false-positive overflow detection caused by trailing `<br>` inflating unclamped `scrollHeight`. +11 tests. |
+| CTA copy update | (commit `db2365f`) | RegionBaseCard CTA: "Use as a base" → "Explore {region}". Mirrors agent prose framing; aria-label matches. |
+
+**Tests after brave-pare wave merged**: 984 + 3 DB-gated skipped on fresh-ish `npm install` — `@swoop/common` 170, `@swoop/orchestrator` 170, `@swoop/connector` 166 + 3, `@swoop/ui` 118, `@swoop/ingestion` 286, `@swoop/harness` 74.
+
+**Decisions logged this wave**: still TBD (see plan files for context); Al to assign numeric IDs at merge.
+
+**HITL items closed by the brave-pare wave**:
+- BF-FO-v3 region_base live-data smoke → done (Santiago + Buenos Aires + Torres del Paine + Tierra del Fuego cards verified rendering live; trip.region_id backfill closed the upstream data gap).
+- C.t9 visitor-query Voyage holdover → done.
+
+**Newly-open follow-ups from the brave-pare wave**:
+- **trip.country_id backfill** — same source as `region_id` (via `area.country_id`), separate user-visible value. Plan called out as scope-cut. ~30 min when needed.
+- **find_options tour variant** — still gated on Swoop populating the `tour` table (questions.md). v2 fallback to trips remains in place.
+- **Truncation HTML-awareness** — `vibeLineFromSource` could split mid-tag if Swoop's CMS ever populates >3-line content. Park; revisit if HITL surfaces a real case.
+- **Strict CMS-HTML sanitiser** for defence-in-depth (e.g. allow-listed tags via DOMPurify) — currently rely on the trust boundary; revisit if Swoop legal counsel asks for it pre-M5.
+- **`@swoop/ui` typecheck regression** (pre-existing on main, broader than originally noted: ~24 errors across 7 widget files) — flagged in inbox.md.
+
+---
+
+## Status (earlier — 2026-05-13 — five-plan parallel batch landed: D.t9 widget rewrite + D.t9-mount-rehydrate + B.t11 + E.t6 + crosscut find_options polymorphism v1; chunk-C voyage→Gemini swap (C.t9) + sync classifier (C.t10) merged earlier; chunk-C implementation spine fully closed; chunk-D fully closed; chunk-E retention enforcement live)
 
 **2026-05-13 (today)**: HITL ratification batch from 2026-05-12 fully executed. Five Tier-3 plans authored, ratified, executed, and merged in parallel:
 

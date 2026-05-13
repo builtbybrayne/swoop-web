@@ -109,8 +109,11 @@ describe('queryRegionBaseCardsByFilter', () => {
     expect(card.slug).toBe('el-calafate');
     expect(card.headline).toBe('El Calafate');
     expect(card.region).toBe('Argentina');
+    // Full pass-through (UI handles clamping + expansion) per
+    // planning/03-exec-crosscut-brave-pare-card-expandable-prose.md.
     expect(card.vibeLine).toBe(
-      'A glacier town on the southern edge of Lago Argentino.',
+      'A glacier town on the southern edge of Lago Argentino. ' +
+        'Great base for Perito Moreno.',
     );
     expect(card.canonicalUrl).toBe(
       'https://www.swoop-patagonia.com/argentina/el-calafate',

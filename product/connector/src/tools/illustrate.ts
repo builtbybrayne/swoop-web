@@ -28,9 +28,7 @@ export async function illustrateBody(
   deps: ToolHandlerDeps,
 ): Promise<IllustrateOutput> {
   const limit = input.count ?? DEFAULT_COUNT;
-  // Embed the joined keywords as a single search vector — Voyage handles
-  // natural-language phrasing better than concatenated tokens, but this is
-  // close enough for the keyword shape `illustrate` carries.
+  // Embed the joined keywords as a single search vector.
   const embedding = await deps.embedQuery(input.keywords.join(' '));
   const images = await deps.withClient((client) =>
     findImagesByKeywords(client, embedding, input.keywords, {

@@ -18,7 +18,13 @@
 // =============================================================================
 
 import type { RegionBaseProposalCard } from "@swoop/common";
-import { AttributeTable, Card, CtaButton, ImageBlock } from "../../shared";
+import {
+  AttributeTable,
+  Card,
+  CtaButton,
+  ExpandableProse,
+  ImageBlock,
+} from "../../shared";
 import type { AttributeRow } from "../../shared";
 import { formatFromPriceTotal } from "./price";
 
@@ -58,18 +64,29 @@ export function RegionBaseCard({ card }: { card: RegionBaseProposalCard }) {
               {card.headline}
             </h3>
             {card.vibeLine ? (
-              <p className="text-sm leading-relaxed text-slate-600">
-                {card.vibeLine}
-              </p>
+              // CMS-authored prose from Swoop's internal team (sourced from
+              // page.summary / page.intro_text via query-region-bases.ts).
+              // Trust boundary: CMS, NOT visitor input — render as HTML so
+              // authored formatting surfaces. See
+              // planning/03-exec-crosscut-brave-pare-render-cms-html.md +
+              // planning/03-exec-crosscut-brave-pare-card-expandable-prose.md.
+              <ExpandableProse
+                html
+                content={card.vibeLine}
+                maxLines={3}
+                className="text-sm leading-relaxed text-slate-600 [&_p]:m-0 [&_p+p]:mt-2"
+              />
             ) : null}
           </header>
           {card.baseFraming ? (
-            <p
-              data-testid="find-options-region-base-framing"
-              className="rounded bg-slate-50 px-3 py-2 text-xs italic leading-relaxed text-slate-700"
-            >
-              {card.baseFraming}
-            </p>
+            // Same trust posture as vibeLine.
+            <ExpandableProse
+              html
+              content={card.baseFraming}
+              maxLines={3}
+              testId="find-options-region-base-framing"
+              className="rounded bg-slate-50 px-3 py-2 text-xs italic leading-relaxed text-slate-700 [&_p]:m-0 [&_p+p]:mt-2"
+            />
           ) : null}
           <AttributeTable rows={rows} />
           <div
@@ -78,9 +95,9 @@ export function RegionBaseCard({ card }: { card: RegionBaseProposalCard }) {
           >
             <CtaButton
               href={card.canonicalUrl}
-              ariaLabel={`Read more about ${card.headline}`}
+              ariaLabel={`Explore ${card.headline}`}
             >
-              Use as a base
+              Explore {card.headline}
             </CtaButton>
           </div>
         </div>

@@ -35,6 +35,18 @@ export interface Lookups {
   ntagsByEntity: Map<string, Map<number, number[]>>; // entity_type → (entity_id → [tag_ids])
   imageTripFirst: Map<number, number>; // trip_id → image_id (lowest position)
   imagePageFirst: Map<number, number>; // page_id → image_id (lowest position)
+  /**
+   * Area-typed ntag.id → area.id, joined by alias. Used by `transformTrip` to
+   * derive `trip.region_id` from the trip's area-typed tags. Only entries
+   * where an area-typed ntag's alias matches a real `area` row's alias are
+   * included; the 5 sub-area / campaign tags (Welsh, Atlantic, Fjords,
+   * Multi-region tour, Valparaíso, etc.) fall out cleanly.
+   *
+   * Per Tier 3 plan `03-exec-crosscut-brave-pare-trip-region-id-backfill.md`
+   * and decision (TBD at merge) — closes C.t3's `transformTrip` `region_id: null`
+   * placeholder.
+   */
+  areaIdByTagId: Map<number, number>;
 }
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'png', 'jpeg', 'heic', 'gif', 'webp']);
@@ -47,6 +59,11 @@ export async function loadLookups(dumpPath: string): Promise<Lookups> {
   const ntagsByEntity = new Map<string, Map<number, number[]>>();
   const imageTripFirstWithPos = new Map<number, { imageId: number; pos: number }>();
   const imagePageFirstWithPos = new Map<number, { imageId: number; pos: number }>();
+  // Transient maps to derive `areaIdByTagId` post-stream. Stream order is
+  // not guaranteed (area rows may arrive before or after the area-typed
+  // ntag rows), so we capture both halves and join after streaming completes.
+  const areaIdByAlias = new Map<string, number>();
+  const areaTagAliasByTagId = new Map<number, string>();
 
   for await (const row of streamDump(dumpPath)) {
     switch (row.table) {
@@ -116,6 +133,33 @@ export async function loadLookups(dumpPath: string): Promise<Lookups> {
         }
         break;
       }
+      case 'area': {
+        // Capture area aliases for the post-stream areaIdByTagId join.
+        // Soft-deleted areas are excluded — they wouldn't surface in `area`
+        // table anyway, so a tag pointing to them should resolve to null.
+        if (isDeleted(row.values.deleted)) break;
+        const id = numOrNull(row.values.id);
+        const alias = strOrNull(row.values.alias);
+        if (id !== null && alias !== null) {
+          areaIdByAlias.set(alias, id);
+        }
+        break;
+      }
+      case 'ntag': {
+        // Capture area-typed ntag aliases for the post-stream join. Mirrors
+        // `transformNtag`'s filter (type='area'); other types contribute
+        // nothing to area-id resolution.
+        const type = strOrNull(row.values.type);
+        if (type !== 'area') break;
+        const id = numOrNull(row.values.id);
+        const alias = strOrNull(row.values.alias);
+        const isActive = numOrNull(row.values.is_active);
+        const active = isActive === null ? true : isActive !== 0;
+        if (id !== null && alias !== null && active) {
+          areaTagAliasByTagId.set(id, alias);
+        }
+        break;
+      }
     }
   }
 
@@ -124,6 +168,16 @@ export async function loadLookups(dumpPath: string): Promise<Lookups> {
   const imagePageFirst = new Map<number, number>();
   for (const [pageId, { imageId }] of imagePageFirstWithPos) imagePageFirst.set(pageId, imageId);
 
+  // Post-stream area-tag → area-id join. Tags whose alias has no
+  // corresponding `area` row (sub-area / campaign tags like Welsh, Atlantic,
+  // Fjords, Multi-region tour, Valparaíso) are silently dropped — there's no
+  // single area to map them to.
+  const areaIdByTagId = new Map<number, number>();
+  for (const [tagId, alias] of areaTagAliasByTagId) {
+    const areaId = areaIdByAlias.get(alias);
+    if (areaId !== undefined) areaIdByTagId.set(tagId, areaId);
+  }
+
   return {
     currencyById,
     fileById,
@@ -131,6 +185,7 @@ export async function loadLookups(dumpPath: string): Promise<Lookups> {
     ntagsByEntity,
     imageTripFirst,
     imagePageFirst,
+    areaIdByTagId,
   };
 }
 
@@ -140,6 +195,16 @@ function numOrNull(v: unknown): number | null {
 
 function strOrNull(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
+// Mirror of `transformations.isDeleted` to avoid the cross-module import.
+// Source columns use `deleted: 1` (number) or non-empty string for the
+// soft-delete signal; null / 0 / empty string mean live.
+function isDeleted(v: unknown): boolean {
+  if (v === null || v === undefined) return false;
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') return v.length > 0 && v !== '0';
+  return false;
 }
 
 export { numOrNull, strOrNull };

@@ -27,8 +27,8 @@ function makeThrowingPool(): pg.Pool {
   });
 }
 
-/** Fixed-vector embedQuery for tests — never calls Voyage. */
-const stubEmbedQuery: EmbedQueryFn = async () => new Array(1024).fill(0);
+/** Fixed-vector embedQuery for tests — never calls Gemini. */
+const stubEmbedQuery: EmbedQueryFn = async () => new Array(3072).fill(0);
 
 /** Synthetic descriptions covering all eight tools. */
 function makeStubDescriptions(): ToolDescriptions {

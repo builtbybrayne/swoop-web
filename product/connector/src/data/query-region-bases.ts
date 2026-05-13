@@ -19,26 +19,29 @@ import {
 } from '@swoop/common';
 
 import { resolveImagesByIds } from './resolve-image.js';
+import { trimCmsDecorativeWhitespace } from './text-utils.js';
 
 export interface QueryRegionBaseCardsOptions {
   region?: string | null;
   limit: number;
 }
 
-const VIBE_LINE_MAX_CHARS = 140;
-
+/**
+ * Pass the source prose through full (trim + empty→undefined only). The UI
+ * handles visible clamping + an inline "Read more" affordance per
+ * planning/03-exec-crosscut-brave-pare-card-expandable-prose.md. Server-side
+ * truncation was the previous behaviour and is removed here: cards must not
+ * silently truncate without an option to expand.
+ *
+ * Trailing/leading decorative whitespace from the WYSIWYG editor (e.g.
+ * `&nbsp;<br></p>` from the San Pedro de Atacama page — 296 of 590 pages
+ * carry this kind of artefact) is stripped to keep both the rendered output
+ * and the UI's overflow detection clean.
+ */
 function vibeLineFromSource(
   text: string | null | undefined,
 ): string | undefined {
-  if (text === null || text === undefined) return undefined;
-  const trimmed = String(text).trim();
-  if (trimmed.length === 0) return undefined;
-  const match = trimmed.match(/^[^.!?]+[.!?]/);
-  const candidate = (match ? match[0] : trimmed).trim();
-  if (candidate.length === 0) return undefined;
-  return candidate.length <= VIBE_LINE_MAX_CHARS
-    ? candidate
-    : candidate.slice(0, VIBE_LINE_MAX_CHARS).trim() + '…';
+  return trimCmsDecorativeWhitespace(text);
 }
 
 export async function queryRegionBaseCardsByFilter(

@@ -124,13 +124,15 @@ describe("FindOptionsWidget", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("shows empty state when the cards list is empty", () => {
-    render(
+  it("renders nothing when the cards list is empty (agent handles in prose)", () => {
+    // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md
+    // — empty results yield to the conversational agent, no widget chrome.
+    const { container } = render(
       <FindOptionsWidget
         {...mockProps({ result: { cards: [], count: 0 } })}
       />,
     );
-    expect(screen.getByTestId("find-options-empty")).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
   it("falls back to the placeholder on a malformed result", () => {

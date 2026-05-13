@@ -2,7 +2,7 @@
  * Per-tool handler dependency bag — the surface every handler body consumes.
  *
  * Wired once at registration time (`tools/index.ts`); tests inject their own
- * implementations and never touch the pool / Voyage client.
+ * implementations and never touch the pool / Gemini client.
  */
 
 import type pg from 'pg';
@@ -14,6 +14,6 @@ export interface ToolHandlerDeps {
    * once per primitive composition; the runtime guarantees release on throw.
    */
   withClient<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T>;
-  /** Embed a visitor utterance into the 1024d Voyage-3 search vector. */
+  /** Embed a visitor utterance into the 3072d gemini-embedding-001 search vector. */
   embedQuery: EmbedQueryFn;
 }

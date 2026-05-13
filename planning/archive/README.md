@@ -7,9 +7,9 @@ These docs were the pre-reset working planning set. They became historical when 
 **They are not deleted because the thinking in them is still useful source material**:
 - 20/21 Apr meeting capture (in `meetings/`) — non-derivable client voice
 - Research docs (in `research/`) — UI library analysis, eval-harness options, discovery-agent architecture brief
-- 30 Mar proposal (`project_proposal.md`) — the commercial fence
-- Quoting notes (`project_proposal_notes.md`) — scope deferrals, time calibration, Julie's production bar
 - 00–07 docs — mixture of good substrate (decisions, PoC carry-forward inventory) and over-specification (prescribed file paths, env var shapes) that the new tiered plans deliberately avoid
+
+**Promoted back out of archive 2026-05-13**: the 30 Mar proposal + quoting notes now live in the main `planning/` folder as `00-project-proposal.md` + `00-project-proposal-notes.md`. They were never historical — the proposal is the live commercial fence and remains the load-bearing scope reference. Archiving them was a 2026-04-22 mistake.
 
 ## Why the reset
 

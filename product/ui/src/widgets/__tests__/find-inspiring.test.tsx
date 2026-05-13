@@ -50,13 +50,15 @@ describe("FindInspiringWidget", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("shows empty state when the passage list is empty", () => {
-    render(
+  it("renders nothing when the passage list is empty (agent handles in prose)", () => {
+    // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md
+    // — empty results yield to the conversational agent, no widget chrome.
+    const { container } = render(
       <FindInspiringWidget
         {...mockProps({ result: { passages: [], count: 0 } })}
       />,
     );
-    expect(screen.getByTestId("find-inspiring-empty")).toBeInTheDocument();
+    expect(container.firstChild).toBeNull();
   });
 
   it("falls back to the placeholder on a malformed result", () => {
