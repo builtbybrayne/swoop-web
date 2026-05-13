@@ -97,8 +97,9 @@ export async function embedImages(opts: EmbedImagesOptions): Promise<EmbedImages
   }
 
   const out = await embedInBatches(opts.embeddingClient, todo, imageEmbeddingInputText, {
-    batchSize: 100,
-    concurrency: 4,
+    // batchSize + concurrency intentionally unset — defer to DEFAULT_BATCH_SIZE /
+    // DEFAULT_CONCURRENCY (or the GEMINI_BATCH_SIZE / GEMINI_CONCURRENCY env-var
+    // overrides) so operators can dial down for rate-limit windows.
     shouldAbort: () => opts.ledger.shouldAbort(),
     onBatchComplete: (t) => opts.ledger.recordEmbedding('gemini:image', t, 1),
   });
