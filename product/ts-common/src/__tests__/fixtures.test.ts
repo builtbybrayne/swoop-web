@@ -24,7 +24,9 @@ import {
   FindProofOutputSchema,
   FindSomeoneWhoInputSchema,
   FindSomeoneWhoOutputSchema,
+  HandoffInputSchema,
   HandoffPayloadSchema,
+  HandoffSubmitRequestSchema,
   HotelProposalCardSchema,
   type HandoffPayload,
   type Event,
@@ -217,6 +219,137 @@ describe("fixtures round-trip through their Zod schemas", () => {
       contact: { name: "x", email: "x@y.z" },
     };
     expect(HandoffPayloadSchema.safeParse(bad).success).toBe(false);
+  });
+
+  // ---------------------------------------------------------------------------
+  // E.t1 wire-tightening (VERDICT-E.t1, 2026-05-13) —
+  // HandoffInputSchema + HandoffSubmitRequestSchema are now discriminated
+  // unions over `verdict` with per-verdict reason-code enums. These tests
+  // pin (a) the round-trip for each variant and (b) the reject paths the
+  // schema-as-contract is designed to catch.
+  // ---------------------------------------------------------------------------
+
+  it("HandoffInputSchema accepts a qualified input with a qualified reasonCode", () => {
+    const ok = {
+      verdict: "qualified" as const,
+      reasonCode: "ready_booking_named_trip" as const,
+      conversationSummary: "summary",
+      motivationAnchor: "anchor",
+    };
+    expect(HandoffInputSchema.parse(ok)).toEqual(ok);
+  });
+
+  it("HandoffInputSchema rejects a qualified input with an inconclusive reasonCode", () => {
+    const bad = {
+      verdict: "qualified" as const,
+      reasonCode: "low_engagement",
+      conversationSummary: "summary",
+      motivationAnchor: "anchor",
+    };
+    expect(HandoffInputSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("HandoffInputSchema rejects an unknown reasonCode regardless of verdict", () => {
+    const bad = {
+      verdict: "disqualified" as const,
+      reasonCode: "unknown_code_123",
+      conversationSummary: "summary",
+      motivationAnchor: "anchor",
+    };
+    expect(HandoffInputSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("HandoffInputSchema accepts an inconclusive input with all 7 inconclusive reason codes", () => {
+    const codes = [
+      "low_engagement",
+      "mixed_signals",
+      "extended_no_convergence",
+      "comparison_shopping",
+      "off_offer_in_region",
+      "drive_by",
+      "inconclusive_other",
+    ] as const;
+    for (const code of codes) {
+      const ok = {
+        verdict: "inconclusive" as const,
+        reasonCode: code,
+        conversationSummary: "summary",
+        motivationAnchor: "anchor",
+      };
+      expect(HandoffInputSchema.safeParse(ok).success).toBe(true);
+    }
+  });
+
+  it("HandoffSubmitRequestSchema accepts qualified WITH contact", () => {
+    const ok = {
+      sessionId: "sess-1",
+      verdict: "qualified" as const,
+      reasonCode: "ready_booking_named_trip" as const,
+      reasonText: "named the W trek, asked about availability in March",
+      contact: { name: "Alex", email: "alex@example.com" },
+      consent: {
+        handoffGranted: true,
+        handoffTimestamp: "2026-05-13T12:00:00.000Z",
+      },
+    };
+    expect(HandoffSubmitRequestSchema.parse(ok)).toEqual(ok);
+  });
+
+  it("HandoffSubmitRequestSchema rejects qualified WITHOUT contact", () => {
+    const bad = {
+      sessionId: "sess-1",
+      verdict: "qualified",
+      reasonCode: "ready_booking_named_trip",
+      reasonText: "x",
+      consent: { handoffGranted: true, handoffTimestamp: "2026-05-13T12:00:00.000Z" },
+    };
+    expect(HandoffSubmitRequestSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("HandoffSubmitRequestSchema accepts disqualified WITHOUT contact", () => {
+    const ok = {
+      sessionId: "sess-2",
+      verdict: "disqualified" as const,
+      reasonCode: "backpacker_no_budget" as const,
+      reasonText: "self-identified backpacker, no budget",
+      consent: { handoffGranted: true, handoffTimestamp: "2026-05-13T12:00:00.000Z" },
+    };
+    expect(HandoffSubmitRequestSchema.parse(ok)).toEqual(ok);
+  });
+
+  it("HandoffSubmitRequestSchema rejects disqualified WITH a contact (.strict bites)", () => {
+    const bad = {
+      sessionId: "sess-2",
+      verdict: "disqualified",
+      reasonCode: "backpacker_no_budget",
+      reasonText: "x",
+      contact: { name: "Alex", email: "alex@example.com" },
+      consent: { handoffGranted: true, handoffTimestamp: "2026-05-13T12:00:00.000Z" },
+    };
+    expect(HandoffSubmitRequestSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("HandoffSubmitRequestSchema rejects inconclusive WITH a contact (.strict bites)", () => {
+    const bad = {
+      sessionId: "sess-3",
+      verdict: "inconclusive",
+      reasonCode: "low_engagement",
+      reasonText: "x",
+      contact: { name: "Alex", email: "alex@example.com" },
+      consent: { handoffGranted: true, handoffTimestamp: "2026-05-13T12:00:00.000Z" },
+    };
+    expect(HandoffSubmitRequestSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("HandoffSubmitRequestSchema rejects mismatched (verdict, reasonCode)", () => {
+    const bad = {
+      sessionId: "sess-4",
+      verdict: "disqualified",
+      reasonCode: "ready_booking_named_trip", // qualified code on disqualified verdict
+      reasonText: "x",
+      consent: { handoffGranted: true, handoffTimestamp: "2026-05-13T12:00:00.000Z" },
+    };
+    expect(HandoffSubmitRequestSchema.safeParse(bad).success).toBe(false);
   });
 
   // ---------------------------------------------------------------------------

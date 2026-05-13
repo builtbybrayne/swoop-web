@@ -39,6 +39,12 @@ import {
   TrustProofPublicSchema,
   TrustProofTopicSchema,
 } from "./derived.js";
+import {
+  DisqualifiedReasonCodeSchema,
+  InconclusiveReasonCodeSchema,
+  QualifiedReasonCodeSchema,
+  ReferredOutReasonCodeSchema,
+} from "./handoff.js";
 
 // =============================================================================
 // CARRIED FORWARD — unchanged from the A.t2 stub. Match the eight-tool surface.
@@ -71,19 +77,61 @@ export type IllustrateOutput = z.infer<typeof IllustrateOutputSchema>;
 // handoff — trigger the lead-capture widget. Tier-1 (conversation) consent is
 // a precondition; tier-2 (handoff) consent is captured inside the widget
 // before handoff_submit fires.
+//
+// Per VERDICT-E.t1 (2026-05-13, decisions E.verdict-1..4): the tool input is
+// a discriminated union over `verdict`, with per-verdict `reasonCode`
+// constrained to the matching enum from `handoff.ts`. Catches invalid
+// `(verdict, reasonCode)` combinations at the agent tool-call boundary,
+// not late at the server-side `HandoffPayloadSchema` parse.
 // -----------------------------------------------------------------------------
 
-export const HandoffInputSchema = z.object({
-  verdict: z.enum([
-    "qualified",
-    "referred_out",
-    "disqualified",
-    "inconclusive",
-  ]),
-  reasonCode: z.string(),
+const HandoffInputCommonFields = {
   conversationSummary: z.string(),
   motivationAnchor: z.string(),
-});
+} as const;
+
+export const HandoffInputQualifiedSchema = z
+  .object({
+    verdict: z.literal("qualified"),
+    reasonCode: QualifiedReasonCodeSchema,
+    ...HandoffInputCommonFields,
+  })
+  .strict();
+export type HandoffInputQualified = z.infer<typeof HandoffInputQualifiedSchema>;
+
+export const HandoffInputReferredOutSchema = z
+  .object({
+    verdict: z.literal("referred_out"),
+    reasonCode: ReferredOutReasonCodeSchema,
+    ...HandoffInputCommonFields,
+  })
+  .strict();
+export type HandoffInputReferredOut = z.infer<typeof HandoffInputReferredOutSchema>;
+
+export const HandoffInputDisqualifiedSchema = z
+  .object({
+    verdict: z.literal("disqualified"),
+    reasonCode: DisqualifiedReasonCodeSchema,
+    ...HandoffInputCommonFields,
+  })
+  .strict();
+export type HandoffInputDisqualified = z.infer<typeof HandoffInputDisqualifiedSchema>;
+
+export const HandoffInputInconclusiveSchema = z
+  .object({
+    verdict: z.literal("inconclusive"),
+    reasonCode: InconclusiveReasonCodeSchema,
+    ...HandoffInputCommonFields,
+  })
+  .strict();
+export type HandoffInputInconclusive = z.infer<typeof HandoffInputInconclusiveSchema>;
+
+export const HandoffInputSchema = z.discriminatedUnion("verdict", [
+  HandoffInputQualifiedSchema,
+  HandoffInputReferredOutSchema,
+  HandoffInputDisqualifiedSchema,
+  HandoffInputInconclusiveSchema,
+]);
 export type HandoffInput = z.infer<typeof HandoffInputSchema>;
 
 export const HandoffOutputSchema = z.object({
