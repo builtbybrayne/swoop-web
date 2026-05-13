@@ -120,7 +120,23 @@ async function bootstrapConsentedSession(): Promise<{
   return { sessionStore, sessionId: state.sessionId };
 }
 
-function validRequestBody(sessionId: string, overrides: Partial<HandoffSubmitRequest> = {}): HandoffSubmitRequest {
+/**
+ * Build a valid `HandoffSubmitRequest` body. Defaults to a qualified
+ * variant; callers pass overrides to swap to another variant.
+ *
+ * Per VERDICT-E.t1 (2026-05-13): the schema is now a discriminated union
+ * over `verdict`. Spreading `Partial<HandoffSubmitRequest>` over an object
+ * literal widens the inferred type beyond what the union's exact variant
+ * narrowing accepts. The `as` cast at the return site says "the call site
+ * is responsible for passing overrides consistent with the resulting
+ * variant"; the actual runtime parse against `HandoffSubmitRequestSchema`
+ * is what enforces correctness — and the existing test cases pin every
+ * verdict + reasonCode + contact-required combination.
+ */
+function validRequestBody(
+  sessionId: string,
+  overrides: Record<string, unknown> = {},
+): HandoffSubmitRequest {
   return {
     sessionId,
     verdict: 'qualified',
@@ -139,7 +155,7 @@ function validRequestBody(sessionId: string, overrides: Partial<HandoffSubmitReq
       consentCopyVersion: 'consent-handoff/v1',
     },
     ...overrides,
-  };
+  } as HandoffSubmitRequest;
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +330,13 @@ describe('POST /handoff/submit — failure modes', () => {
     expect(res.status).toBe(400);
     if (!res.body.ok) {
       expect(res.body.reason).toBe('invalid_request');
-      expect(res.body.detail).toContain('contact is required');
+      // Per VERDICT-E.t1 (2026-05-13): the schema is a discriminated union,
+      // so a qualified payload missing `contact` fails with the Zod path-
+      // prefixed `contact: Required` (variant-specific) rather than a
+      // custom "contact is required" string. Both phrasings point at the
+      // same shape mismatch.
+      expect(res.body.detail).toMatch(/contact/i);
+      expect(res.body.detail).toMatch(/required/i);
     }
   });
 

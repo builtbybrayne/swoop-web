@@ -6,24 +6,20 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
-## `annotate-images --mode=batches` builds the payload then bails — submission is unwired
+## `annotate-images --mode=batches` builds the payload then bails — submission is unwired *(CLOSED 2026-05-13 by BATCH-C.t6; entry preserved for git-blame readers hitting old logs)*
 
-Symptom: `npm run -w @swoop/ingestion annotate-images -- --mode=batches --max-budget=20` runs through the cost projection + budget gate + 80MB request-payload build, then logs
+**Status**: ✅ CLOSED 2026-05-13. The submit + poll + result-stream wiring landed via [planning/03-exec-c-t6-batches-submission.md — BATCH-C.t6](planning/03-exec-c-t6-batches-submission.md), decisions C.batch-1..4. `--mode=batches` now POSTs to Anthropic, polls until the batch ends, fetches results, and writes back per-result. The operator-facing runbook at [product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md) now recommends `--mode=batches` for full re-runs.
+
+**Historical symptom** (kept for searchability — anyone hitting an old log will find this entry): `npm run -w @swoop/ingestion annotate-images -- --mode=batches --max-budget=20` ran through the cost projection + budget gate + 80MB request-payload build, then logged
 
     [annotate] --mode=batches: request-build verified; submission deferred to C.t8 runbook step. Use --mode=live for the small-sample verification.
     [annotate] complete: succeeded=0 skipped=0 failed=6894.
 
-…and exits non-zero with every candidate marked `batches_submission_deferred` in the checkpoint at `product/ingestion/data/image-annotations/default/checkpoint.json`. No request was sent to Anthropic.
+…and exited non-zero with every candidate marked `batches_submission_deferred` in the checkpoint. No request was sent.
 
-Cause: `runBatches` in [product/ingestion/src/images/run.ts](product/ingestion/src/images/run.ts) (lines ~435–476) is a deliberate **C.t6 scope-cut**. The function ratifies the request shape against the schema but stops before `client.messages.batches.create({ requests })`. The "follow-up PR for C.t8" referenced in the inline comment hadn't been queued anywhere visible until 2026-05-13 — only the operator runbook at [product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md) carried the caveat, and only readers who opened the runbook before running the command saw it.
+**Historical cause**: `runBatches` in [product/ingestion/src/images/run.ts](product/ingestion/src/images/run.ts) was a deliberate **C.t6 scope-cut** (decision C.52). The function ratified the request shape against the schema but stopped before `client.messages.batches.create({ requests })`. The follow-up task tracked in `next-steps.md` was closed by BATCH-C.t6.
 
-Fix today: use `--mode=live` instead — supported full-run path. ~$0.005/image at 5-up concurrency, 30–60 min wall-clock for the full ~6.9K-image Puma backfill, ~$34 USD / £27 vs batches mode's hypothetical ~$17 / £14.
-
-```sh
-npm run -w @swoop/ingestion annotate-images -- --mode=live --max-budget=40
-```
-
-Fix forward: implement the submit + poll + result-stream wiring. Pattern to copy: [product/ingestion/src/enrich/anthropic-batch-client.ts](product/ingestion/src/enrich/anthropic-batch-client.ts) — the Haiku-classifier batches client built in C.t10 (sync enrich mode). Backlog item lives in [next-steps.md §2 — Chunk C](next-steps.md). Decision context in [planning/decisions.md — C.52](planning/decisions.md). Estimated ~1–2 hrs TDD work; saves ~$17 / £13 per full image-annotation re-run.
+**Today**: pick whichever mode fits the task — `--mode=batches` for full re-runs (50% discount, ~$17 / £14 for the full ~6.9K corpus), `--mode=live` for small-slice prompt iteration. No more bail-out.
 
 ---
 

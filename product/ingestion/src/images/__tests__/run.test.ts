@@ -456,4 +456,235 @@ describe('run() — annotation pipeline', () => {
     expect(result.candidatesCount).toBe(0);
     expect(pg.writes).toHaveLength(0);
   });
+
+  // -------------------------------------------------------------------------
+  // BATCH-C.t6 — batches-mode wiring tests
+  // -------------------------------------------------------------------------
+
+  function fakeBatchClient(opts: {
+    submit?: () => Promise<{ batchId: string; count: number }>;
+    poll?: () => Promise<{
+      batchId: string;
+      status: 'in_progress' | 'canceling' | 'ended';
+      endedAt?: Date | null;
+      counts: {
+        processing: number;
+        succeeded: number;
+        errored: number;
+        canceled: number;
+        expired: number;
+      };
+      resultsUrl?: string | null;
+    }>;
+    fetchResults: () => Promise<
+      Array<{
+        customId: string;
+        status: 'succeeded' | 'errored' | 'canceled' | 'expired';
+        rawText: string | null;
+        error?: string;
+        inputTokens: number;
+        outputTokens: number;
+      }>
+    >;
+  }) {
+    return {
+      submit:
+        opts.submit ??
+        (async () => ({ batchId: 'batch_fake', count: 0 })),
+      poll:
+        opts.poll ??
+        (async () => ({
+          batchId: 'batch_fake',
+          status: 'ended' as const,
+          counts: {
+            processing: 0,
+            succeeded: 0,
+            errored: 0,
+            canceled: 0,
+            expired: 0,
+          },
+        })),
+      fetchResults: opts.fetchResults,
+    };
+  }
+
+  it('batches mode happy path: submits, waits, writes back, records done', async () => {
+    const pg = new FakePgClient([
+      { id: 1, canonical_url: 'https://x/1.jpg', description: null, annotation: null },
+      { id: 2, canonical_url: 'https://x/2.jpg', description: null, annotation: null },
+    ]);
+    const batchClient = fakeBatchClient({
+      submit: async () => ({ batchId: 'batch_abc', count: 2 }),
+      poll: async () => ({
+        batchId: 'batch_abc',
+        status: 'ended',
+        counts: { processing: 0, succeeded: 2, errored: 0, canceled: 0, expired: 0 },
+      }),
+      fetchResults: async () => [
+        {
+          customId: 'image-1',
+          status: 'succeeded',
+          rawText: JSON.stringify({ description: 'Glacier face.', annotation: 'Blue ice wall.' }),
+          inputTokens: 100,
+          outputTokens: 50,
+        },
+        {
+          customId: 'image-2',
+          status: 'succeeded',
+          rawText: JSON.stringify({ description: 'Andean peaks.', annotation: 'Sunset light.' }),
+          inputTokens: 100,
+          outputTokens: 50,
+        },
+      ],
+    });
+    const result = await run({
+      client: pg as never,
+      mode: 'batches',
+      maxBudgetUsd: 10,
+      apiKey: 'fake-key',
+      // visionClient won't be used by the batches path because batchClient is injected.
+      visionClient: fakeVision('{}'),
+      batchClient,
+      checkpointBaseDir: tmpDir,
+      log: (l) => logs.push(l),
+    });
+    expect(result.succeeded).toBe(2);
+    expect(result.failed).toBe(0);
+    expect(pg.writes).toHaveLength(2);
+    expect(pg.writes[0]?.description).toMatch(/Glacier/);
+    expect(pg.writes[1]?.description).toMatch(/Andean/);
+    expect(logs.some((l) => l.includes('batch submitted'))).toBe(true);
+    expect(logs.some((l) => l.includes('batch ended'))).toBe(true);
+  });
+
+  it('batches mode: errored result records failed with reason; succeeded result writes back', async () => {
+    const pg = new FakePgClient([
+      { id: 1, canonical_url: 'https://x/1.jpg', description: null, annotation: null },
+      { id: 2, canonical_url: 'https://x/2.jpg', description: null, annotation: null },
+    ]);
+    const batchClient = fakeBatchClient({
+      submit: async () => ({ batchId: 'batch_mix', count: 2 }),
+      fetchResults: async () => [
+        {
+          customId: 'image-1',
+          status: 'succeeded',
+          rawText: JSON.stringify({ description: 'd', annotation: 'a' }),
+          inputTokens: 100,
+          outputTokens: 50,
+        },
+        {
+          customId: 'image-2',
+          status: 'errored',
+          rawText: null,
+          error: 'overloaded_error: server is busy',
+          inputTokens: 0,
+          outputTokens: 0,
+        },
+      ],
+    });
+    const result = await run({
+      client: pg as never,
+      mode: 'batches',
+      maxBudgetUsd: 10,
+      apiKey: 'fake-key',
+      visionClient: fakeVision('{}'),
+      batchClient,
+      checkpointBaseDir: tmpDir,
+      log: (l) => logs.push(l),
+    });
+    expect(result.succeeded).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(pg.writes).toHaveLength(1);
+    expect(pg.writes[0]?.id).toBe(1);
+  });
+
+  it('batches mode: schema-violating rawText records failed without write', async () => {
+    const pg = new FakePgClient([
+      { id: 1, canonical_url: 'https://x/1.jpg', description: null, annotation: null },
+    ]);
+    const batchClient = fakeBatchClient({
+      submit: async () => ({ batchId: 'batch_bad', count: 1 }),
+      fetchResults: async () => [
+        {
+          customId: 'image-1',
+          status: 'succeeded',
+          rawText: '{not valid json',
+          inputTokens: 100,
+          outputTokens: 50,
+        },
+      ],
+    });
+    const result = await run({
+      client: pg as never,
+      mode: 'batches',
+      maxBudgetUsd: 10,
+      apiKey: 'fake-key',
+      visionClient: fakeVision('{}'),
+      batchClient,
+      checkpointBaseDir: tmpDir,
+      log: () => {},
+    });
+    expect(result.failed).toBe(1);
+    expect(result.succeeded).toBe(0);
+    expect(pg.writes).toHaveLength(0);
+  });
+
+  it('batches mode: skip-signal records skipped without write', async () => {
+    const pg = new FakePgClient([
+      { id: 1, canonical_url: 'https://x/1.jpg', description: null, annotation: null },
+    ]);
+    const batchClient = fakeBatchClient({
+      submit: async () => ({ batchId: 'batch_skip', count: 1 }),
+      fetchResults: async () => [
+        {
+          customId: 'image-1',
+          status: 'succeeded',
+          rawText: JSON.stringify({ description: '', annotation: '' }),
+          inputTokens: 100,
+          outputTokens: 50,
+        },
+      ],
+    });
+    const result = await run({
+      client: pg as never,
+      mode: 'batches',
+      maxBudgetUsd: 10,
+      apiKey: 'fake-key',
+      visionClient: fakeVision('{}'),
+      batchClient,
+      checkpointBaseDir: tmpDir,
+      log: () => {},
+    });
+    expect(result.skipped).toBe(1);
+    expect(result.succeeded).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(pg.writes).toHaveLength(0);
+  });
+
+  it('batches mode without exposed messages.batches surface AND no batchClient: bails with SDK-missing reason', async () => {
+    const pg = new FakePgClient([
+      { id: 1, canonical_url: 'https://x/1.jpg', description: null, annotation: null },
+    ]);
+    // vision client without messages.batches → adapter returns null → bail
+    const result = await run({
+      client: pg as never,
+      mode: 'batches',
+      maxBudgetUsd: 10,
+      apiKey: 'fake-key',
+      visionClient: fakeVision('{}'),
+      // no batchClient injected
+      checkpointBaseDir: tmpDir,
+      log: (l) => logs.push(l),
+    });
+    expect(result.failed).toBe(1);
+    expect(result.succeeded).toBe(0);
+    expect(pg.writes).toHaveLength(0);
+    expect(
+      logs.some((l) =>
+        l.includes(
+          "doesn't expose messages.batches.{create,retrieve,results}",
+        ),
+      ),
+    ).toBe(true);
+  });
 });

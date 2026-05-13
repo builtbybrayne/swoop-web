@@ -117,14 +117,23 @@ describe("LeadCaptureWidget", () => {
 
     await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));
 
+    // VERDICT-E.t1 (2026-05-13): HandoffSubmitRequest is now a
+    // discriminated union; `contact` lives on qualified/referred_out
+    // variants but not on disqualified/inconclusive. SampleHandoff is the
+    // qualified fixture, so narrowing through the discriminator gives us
+    // the contact field — the assertion below pins the verdict before
+    // accessing contact-bearing fields.
     const body = postHandoffSubmitMock.mock.calls[0]![0];
     expect(body.verdict).toBe(SampleHandoff.verdict);
     expect(body.reasonCode).toBe(SampleHandoff.reason.code);
     expect(body.reasonText).toBe(SampleHandoff.reason.text);
     expect(body.motivationAnchor).toBe(SampleHandoff.motivationAnchor);
-    expect(body.contact?.name).toBe("Ada Ríos");
-    expect(body.contact?.email).toBe("ada@example.com");
-    expect(body.contact?.preferredMethod).toBe("email");
+    if (body.verdict !== "qualified" && body.verdict !== "referred_out") {
+      throw new Error(`expected contact-bearing verdict, got ${body.verdict}`);
+    }
+    expect(body.contact.name).toBe("Ada Ríos");
+    expect(body.contact.email).toBe("ada@example.com");
+    expect(body.contact.preferredMethod).toBe("email");
     expect(body.consent.handoffGranted).toBe(true);
     expect(body.consent.marketingGranted).toBe(false);
     expect(body.consent.consentCopyVersion).toBe("consent-handoff/v1");

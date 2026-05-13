@@ -8,7 +8,76 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
-> **Numbering note (2026-05-13)** — entries `C.bf-1` … `C.bf-6` below use a non-numeric `bf-` suffix (read: "backfill") rather than `C.53` … `C.58`. The rationale is collision avoidance: parallel Tier-3 plan authors were running concurrently the day these landed, and several were independently allocating numeric ids `C.43+`. The `bf-` prefix keeps the backfill provenance discoverable and side-steps the allocation race entirely. Future renumbering to standard `C.N` form is a doc-only refactor with zero swap cost.
+> **Numbering note (2026-05-13)** — entries below use non-numeric suffixes (`C.bf-*` for the BF-FO-v3 backfill landing, `C.batch-*` for the BATCH-C.t6 batches-submission landing, `E.verdict-*` for the VERDICT-E.t1 wire-tightening) rather than continuing the numeric `C.43+` / `E.16+` sequences. The rationale is collision avoidance: parallel Tier-3 plan authors were running concurrently the day these landed, and several were independently allocating numeric ids. The semantic-suffix prefixes keep task provenance discoverable and side-step the allocation race entirely. Future renumbering to standard `C.N` / `E.N` form is a doc-only refactor with zero swap cost.
+
+## E.verdict-1 — `HandoffInputSchema` is a discriminated union over `verdict`; `reasonCode` is per-verdict enum
+
+**Decided**: 2026-05-13
+**Owner**: VERDICT-E.t1 execution ([planning/03-exec-e-t1-wire-tightening.md](03-exec-e-t1-wire-tightening.md))
+**Rationale**: prior `HandoffInputSchema` carried `verdict: z.enum(...)` + `reasonCode: z.string()` (freeform). Invalid `(verdict, reasonCode)` combinations were only caught late at the server-side `HandoffPayloadSchema` parse. Tightening to a discriminated union over `verdict` — each variant carrying the matching per-verdict reason-code enum from `handoff.ts` — surfaces those failures at the agent tool-call boundary. Mirrors the durable record's structure; uses the SAME reason-code enums (single source of truth in `handoff.ts`).
+**Swap cost**: Low. The runtime tool registration handles the union via `extractDiscriminatedUnionShape` (decision E.verdict-5). Loosening back to freeform is a one-line revert; tightening further (e.g. constraining `conversationSummary` length) is a per-field add.
+
+## E.verdict-2 — `HandoffSubmitRequestSchema` mirrors the same shape; `contact` becomes required-on-qualified/referred_out + absent-on-disqualified/inconclusive
+
+**Decided**: 2026-05-13
+**Owner**: VERDICT-E.t1 execution
+**Rationale**: the prior wire schema carried `contact: HandoffContactSchema.optional()` — a buggy widget could POST a `disqualified` payload with a contact block (visitor PII leak surface). After tightening, `.strict()` on each variant rejects contact on disqualified/inconclusive at the wire boundary. `reasonText` cap of 500 chars mirrors the durable record's cap.
+**Swap cost**: Low. The route handler's existing `HandoffSubmitRequestSchema.safeParse` path surfaces variant-specific failures with `reason: 'invalid_request'`.
+
+## E.verdict-3 — Session-side `reasonCode` and event-log `reasonCode` stay freeform `z.string()`
+
+**Decided**: 2026-05-13
+**Owner**: VERDICT-E.t1 execution
+**Rationale**: `session.ts:51,58,65,78`'s triage state and `events.ts:112`'s event-log have different concerns. The session-side field is the classifier placeholder (decision B.15 — the classifier evolves independently via G.t0); freezing it now would couple the classifier prematurely. The event-log field is an observability surface — freeform is the right shape for analytics that may want to ingest novel reason strings without a code change. Wire/handoff-side tightening is the right scope; broader tightening costs more than it buys.
+**Swap cost**: Low. If G.t0 lands a classifier taxonomy that aligns with the handoff codes, tightening session.ts to the same per-verdict enum is mechanical.
+
+## E.verdict-4 — Tool description lists all 21 valid `(verdict, reasonCode)` combinations; pattern is "schema as validator + prose as teacher"
+
+**Decided**: 2026-05-13
+**Owner**: VERDICT-E.t1 execution
+**Rationale**: the `cms/prompts/tools/handoff/description.md` prose now lists every valid combination so Sonnet learns the constraint via the description it reads at tool-selection time. The schema enforces compliance at runtime. Same pattern G.11 applied for all tool descriptions: schema = ground truth, prose = how to teach the model.
+**Swap cost**: Zero. Adding/removing a code is a description edit + a `handoff.ts` enum edit in lockstep.
+
+## E.verdict-5 — MCP tool registration handles `ZodDiscriminatedUnion` via `extractDiscriminatedUnionShape`
+
+**Decided**: 2026-05-13
+**Owner**: VERDICT-E.t1 execution
+**Rationale**: the MCP SDK's `registerTool` API takes a `ZodRawShape` (the `.shape` of a `z.object()`). For `z.discriminatedUnion(...)` schemas, `.shape` is undefined — the union itself isn't a ZodObject. Falling back to `{}` (the prior behaviour) caused the SDK to strip all incoming keys and fail downstream variant parsing. `extractDiscriminatedUnionShape(schema)` in `product/connector/src/tools/index.ts` returns the first variant's shape with the discriminator field widened to `z.enum([…all-literals])` — permissive MCP-side surface, strict runtime narrowing via `runHandler.safeParse` against the full union.
+**Swap cost**: Low. The helper is local to `tools/index.ts` and only fires when the input schema is a discriminated union. Non-union schemas continue to use `.shape` as before.
+
+---
+
+## C.batch-1 — Vision batches submission wired in-line with the Haiku batches pattern; one parsing path for live + batch
+
+**Decided**: 2026-05-13
+**Owner**: BATCH-C.t6 execution ([planning/03-exec-c-t6-batches-submission.md](03-exec-c-t6-batches-submission.md))
+**Rationale**: closes the deliberate C.t6 scope-cut named in decision C.52. `runBatches` in [product/ingestion/src/images/run.ts](../product/ingestion/src/images/run.ts) now end-to-ends: build → submit → wait → fetch → per-result parse + write-back. The request payload shape (`BatchCreateParams.Request`) was already built by `vision-client.ts:buildBatchRequest` — only the SDK round-trip was missing. Image-annotation parsing reuses the existing `parseAndValidate` + `isSkipSignal` helpers from the runner, not a separate batch-side parser. **One parsing path for live + batch**: maintenance + behaviour drift between the two modes is minimised.
+**Swap cost**: Low. The Haiku pattern (`AnthropicBatchClient` in [product/ingestion/src/enrich/anthropic-batch-client.ts](../product/ingestion/src/enrich/anthropic-batch-client.ts)) is the canonical shape; the Vision variant is the same shape minus the tool-call parsing.
+
+## C.batch-2 — `VisionBatchClient` interface is local to `product/ingestion/src/images/`, not pulled from `BatchClient` in `enrich/haiku.ts`
+
+**Decided**: 2026-05-13
+**Owner**: BATCH-C.t6 execution
+**Rationale**: the Haiku `BatchClient` interface is tool_use-shaped (results carry parsed structured outputs); the Vision variant is text-shaped (results carry raw assistant text the runner then parses). Sharing would force a generic over the result type that costs more clarity than it buys. Two clients, same SDK surface, distinct interfaces — easier to read, easier to test, easier to tune independently if the Vision pass ever wants per-prompt tweaks Haiku doesn't need.
+**Swap cost**: Low. If a third surface ever wanted the same shape, abstracting later is straightforward.
+
+## C.batch-3 — `waitForVisionBatch` is a local copy of `enrich/anthropic-batch-client.ts:waitForBatch` rather than a shared helper
+
+**Decided**: 2026-05-13
+**Owner**: BATCH-C.t6 execution
+**Rationale**: ~15 lines of duplication; allows independent tuning of poll intervals + log prefixes for the Vision pass without touching the Haiku path. Sharing would require either a parameterised wrapper or a higher-order combinator — both more cognitive overhead than two short functions.
+**Swap cost**: Low. Pulling into a shared `waitForBatch<TClient>` helper is mechanical if maintenance drift surfaces.
+
+## C.batch-4 — Defensive fallback when the SDK client doesn't expose `messages.batches.{create,retrieve,results}`
+
+**Decided**: 2026-05-13
+**Owner**: BATCH-C.t6 execution
+**Rationale**: older SDKs and test stubs may not expose the batches surface. Rather than crashing with an opaque error, the runner detects the missing surface via `adaptVisionSdkForBatches(client)` returning `null`, then falls back to recording every candidate as `failed` with reason `batches_sdk_missing` and surfacing a clear operator-facing log line: *"the runtime client doesn't expose messages.batches.{create,retrieve,results}. Upgrade the SDK or use --mode=live for the small-sample verification."* Mirrors the pre-BATCH-C.t6 scope-cut behaviour shape so operators who hit this on an upgrade path get a predictable failure mode.
+**Swap cost**: Low. If SDK detection grows beyond shape-checking (e.g. version range probe), extend `adaptVisionSdkForBatches`. The bail-out path stays the same.
+
+---
+
+## C.bf-1 — `find_options` v3 wires hotels + region_bases as live data primitives; v2 (tours) remains gated on Swoop content population
 
 ## C.bf-1 — `find_options` v3 wires hotels + region_bases as live data primitives; v2 (tours) remains gated on Swoop content population
 

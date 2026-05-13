@@ -70,7 +70,7 @@ The `--max-budget=N` is in **USD** (not GBP — distinct from the embedding pass
 
 Other flags:
 - `--mode=live` (default when `--max-budget` is supplied) — fires Vision calls one-at-a-time with 5-up concurrency.
-- `--mode=batches` — Anthropic Batches API path. Currently *request-build verified, submission deferred* per the C.t6 plan; use `--mode=live` for production work today.
+- `--mode=batches` — Anthropic Batches API path. ✅ Wired by BATCH-C.t6 (2026-05-13, decisions C.batch-1..4). 50% cost discount + up to 24h SLA. Use for full-corpus re-runs; `--mode=live` remains the supported path for small slices during prompt iteration. Cost: ~$17 / £14 for a full ~6.9K-image batch vs ~$34 / £27 at live rate.
 - `--mode=dry-run` — explicit dry-run, equivalent to omitting `--max-budget`.
 - `--model=<id>` — override the Vision model (default: the constant in `product/orchestrator/src/config/schema.ts`).
 - `--retry-failed` — re-process items that failed in a prior run.
@@ -168,7 +168,7 @@ Annotation works at the data layer; retrieval correctness is a derived-table-com
 
 ## Open items for Al
 
-1. **Batches mode**. `--mode=batches` is request-build-verified but submission is deferred to a follow-up Tier 3 task (per the C.t6 plan). Once submission is wired up, this runbook gets a *"prefer batches for full re-runs"* recommendation.
+1. **Batches mode** ✅ wired 2026-05-13 by BATCH-C.t6 (decisions C.batch-1..4). **Prefer `--mode=batches` for full re-runs**: 50% discount + up to 24h SLA. For small prompt-iteration slices, stay on `--mode=live`. Full ~6.9K corpus: ~$17 / £14 batches vs ~$34 / £27 live.
 2. **Production corpus size**. Today's estimate (~6,700 candidates at ~$0.005 each) is from local fixtures. Production prod-scale corpora may shift the cost envelope; first prod run will calibrate.
 3. **Vision model selection**. The default model lives in `config/schema.ts`; if Anthropic ships a more cost-effective Vision model, pin it via `--model` and consider promoting the new default after a quality compare.
 

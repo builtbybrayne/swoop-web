@@ -100,10 +100,17 @@ function registerOne<S extends z.ZodTypeAny, T extends z.ZodTypeAny>(
   runtimeDeps: HandlerRuntimeDeps,
 ): void {
   // The SDK accepts a ZodRawShape; for our z.object().strict() schemas the
-  // .shape is what we want. Cast through `any` because the schema
-  // discriminator the SDK exposes is more general than what we feed.
-  const shape =
-    (inputSchema as unknown as { shape?: z.ZodRawShape }).shape ?? {};
+  // .shape is what we want. For z.discriminatedUnion(...) schemas (the
+  // HandoffInputSchema family post VERDICT-E.t1) `.shape` is undefined —
+  // the union itself isn't a ZodObject. Fall back to the first variant's
+  // shape, which is structurally representative (all variants carry the
+  // same field names; only the literal `verdict` differs). The strict
+  // per-variant runtime validation still fires via runHandler's
+  // `inputSchema.safeParse` below.
+  const rawShape =
+    (inputSchema as unknown as { shape?: z.ZodRawShape }).shape ??
+    extractDiscriminatedUnionShape(inputSchema);
+  const shape = rawShape ?? {};
   server.registerTool(
     name,
     { description, inputSchema: shape },
@@ -125,6 +132,69 @@ function registerOne<S extends z.ZodTypeAny, T extends z.ZodTypeAny>(
       >;
     },
   );
+}
+
+/**
+ * For `z.discriminatedUnion(<key>, [variant1, variant2, ...])` schemas,
+ * build a permissive `ZodRawShape` for MCP `registerTool` advertising:
+ *
+ *  - takes the first variant's shape as the structural base (all variants
+ *    share field names by design — the union discriminator is what differs);
+ *  - widens the discriminator field to `z.enum([...all-literals])` so the
+ *    SDK's input-validation layer accepts any variant's payload;
+ *  - keeps strict per-variant validation downstream — `runHandler`'s
+ *    `inputSchema.safeParse(rawInput)` against the full union narrows to
+ *    the correct variant and rejects invalid `(discriminator, fields)` combos.
+ *
+ * Returns `undefined` for non-discriminated-union schemas; the caller falls
+ * back to `{}` in that case.
+ *
+ * Added by VERDICT-E.t1 (2026-05-13, decision E.verdict-5) to keep the
+ * MCP-side tool registration working after HandoffInputSchema became a
+ * discriminated union.
+ */
+function extractDiscriminatedUnionShape(
+  schema: z.ZodTypeAny,
+): z.ZodRawShape | undefined {
+  const def = (
+    schema as unknown as {
+      _def?: {
+        typeName?: string;
+        discriminator?: string;
+        options?: unknown[];
+      };
+    }
+  )._def;
+  if (def?.typeName !== 'ZodDiscriminatedUnion') return undefined;
+  const variants = (def.options ?? []) as Array<{ shape?: z.ZodRawShape }>;
+  const firstVariant = variants[0];
+  if (!firstVariant?.shape) return undefined;
+  // Collect the literal values across every variant's discriminator field.
+  const discriminator = def.discriminator;
+  const literals = discriminator
+    ? variants
+        .map(
+          (v) =>
+            (
+              (v.shape ?? {}) as Record<
+                string,
+                { _def?: { value?: string } }
+              >
+            )[discriminator]?._def?.value,
+        )
+        .filter((v): v is string => typeof v === 'string')
+    : [];
+  const baseShape = { ...firstVariant.shape };
+  if (discriminator && literals.length > 0) {
+    // Cast to satisfy the ZodRawShape index — the constructed enum is
+    // shape-compatible with the field's z.literal at the MCP advertising
+    // layer; runtime narrowing is preserved by the discriminated-union
+    // parse in runHandler.
+    baseShape[discriminator] = z.enum(
+      literals as [string, ...string[]],
+    ) as unknown as z.ZodTypeAny;
+  }
+  return baseShape;
 }
 
 /**

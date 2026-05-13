@@ -1,6 +1,37 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-13 (afternoon — two parallel waves landed: (a) BF-FO-v3 backfill on `main` — hotels + region_bases data primitives wired live; (b) `claude/brave-pare-5e0eba` live-smoke fix wave still pending merge — D.t9-mount-rehydrate App-level crash fix + C.t9 visitor-query Voyage cleanup + widget empty-state silence + malformed-placeholder root-cause diagnosis. With `brave-pare` merged on top of BF-FO-v3 the third proposal-card variant `tour` is the only ProposalCard type without live data; everything else is end-to-end.)
+**Snapshot date**: 2026-05-13 (four sequenced waves today — morning five-plan batch + BF-FO-v3 + BATCH-C.t6/VERDICT-E.t1 landed on `main`; the `claude/brave-pare-5e0eba` live-smoke wave is the fourth and final, still pending merge: D.t9-mount-rehydrate App-level crash fix + C.t9 visitor-query Voyage cleanup + widget empty-state silence + malformed-placeholder diagnosis + trip.region_id backfill + CMS HTML rendering + ExpandableProse + WYSIWYG decorative-whitespace strip + CTA copy fix. With `brave-pare` merged on top all four ProposalCard variants except `tour` are end-to-end live with clean prose and working expansion affordance.)
+
+## 2026-05-13 (afternoon, mid) — BATCH-C.t6 + VERDICT-E.t1 (landed on `main` after BF-FO-v3)
+
+Two follow-on tasks landed in the same in-session pass after BF-FO-v3:
+
+### BATCH-C.t6 — annotate-images `--mode=batches` now POSTs + polls + writes back
+
+Closed the deliberate C.t6 scope-cut (decision C.52). `runBatches` in [product/ingestion/src/images/run.ts](product/ingestion/src/images/run.ts) was previously a request-build-only path; the executing agent had stopped before `messages.batches.create`. After BATCH-C.t6 (Tier-3 plan: [03-exec-c-t6-batches-submission.md](planning/03-exec-c-t6-batches-submission.md), decisions C.batch-1..4):
+
+- `product/ingestion/src/images/vision-batch-client.ts` — new `AnthropicVisionBatchClient` mirroring the Haiku batches pattern from `enrich/anthropic-batch-client.ts`. +12 unit tests.
+- `runBatches` end-to-ends: build → submit → `waitForVisionBatch` → fetchResults → per-result `parseAndValidate` + `writeAnnotation` + checkpoint. +5 integration tests.
+- Operator runbook ([product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md)) flipped from "deferred" to "preferred for full re-runs (~$17/£14 vs ~$34/£27 at live rate)".
+- [gotchas.md](gotchas.md) "annotate-images --mode=batches builds the payload then bails" entry rewritten as a closed-historical note.
+
+### VERDICT-E.t1 — agent + wire `reasonCode` constrained to per-verdict enums
+
+Closed the upstream gap left by the original E.t1 landing (durable-record was already strict; agent + wire schemas were freeform). Tier-3 plan: [03-exec-e-t1-wire-tightening.md](planning/03-exec-e-t1-wire-tightening.md), decisions E.verdict-1..5:
+
+- `HandoffInputSchema` (agent tool-call args) → `z.discriminatedUnion('verdict', […])` with per-variant `reasonCode` typed against the matching enum from `handoff.ts`. Same shape for `HandoffSubmitRequestSchema` (widget → orchestrator wire); `contact` now required-on-qualified/referred_out + absent-on-disqualified/inconclusive via `.strict()`.
+- Invalid `(verdict, reasonCode)` combinations now surface at the agent boundary (and the wire boundary), not late at the server-side `HandoffPayloadSchema` parse.
+- Tool description (`cms/prompts/tools/handoff/description.md`) lists all 21 valid combinations — schema-as-validator + prose-as-teacher pattern (per G.11).
+- Connector MCP tool registration extended with `extractDiscriminatedUnionShape` helper (decision E.verdict-5) so the SDK's `registerTool` API can carry the union — falls back to the first variant's shape with the discriminator widened to all literals; runtime narrowing preserved by `runHandler.safeParse`.
+- +10 fixture round-trip + reject-path tests on `@swoop/common`.
+
+### Pending — needs Al (BATCH-C.t6 / VERDICT-E.t1 batch)
+
+- **Live-data smoke for BF-FO-v3** per the v3 plan §5 (find_options hotel + region_base branches against `puma_dev`). **Now closed by the brave-pare wave** (see below — hotel + region_base both verified live, region_base after a trip.region_id backfill closed the upstream data gap).
+- **No live invocation for BATCH-C.t6** — the unit tests cover the wiring; live runs already done in `--mode=live`.
+- **`@swoop/ui` typecheck regression** (pre-existing on main; flagged in `inbox.md`) — broader than originally noted, now 24 errors across 7 widget files. NOT introduced by today's work; revisit as a discrete cleanup.
+
+---
 
 ## 2026-05-13 (afternoon, late) — brave-pare-5e0eba live-smoke fix wave
 
