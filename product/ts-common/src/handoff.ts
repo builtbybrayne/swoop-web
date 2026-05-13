@@ -328,24 +328,75 @@ export type HandoffSubmitConsentGate = Pick<
 //   - `visitorProfile` + `wishlist` — read from session state.
 // -----------------------------------------------------------------------------
 
-export const HandoffSubmitRequestSchema = z
+/**
+ * Per VERDICT-E.t1 (2026-05-13, decisions E.verdict-1..4): the wire schema is
+ * a discriminated union over `verdict`. Each variant carries the per-verdict
+ * `reasonCode` enum from above, mirroring `HandoffPayloadSchema`'s shape.
+ * `contact` is required on qualified / referred_out and absent (rejected by
+ * `.strict()`) on disqualified / inconclusive. `reasonText` is capped at 500
+ * chars to mirror the durable record's cap.
+ */
+const HandoffSubmitRequestConsentSchema = z.object({
+  handoffGranted: z.boolean(),
+  handoffTimestamp: z.string().datetime(),
+  marketingGranted: z.boolean().optional(),
+  marketingTimestamp: z.string().datetime().optional(),
+  consentCopyVersion: z.string().optional(),
+});
+
+const HandoffSubmitRequestCommonFields = {
+  sessionId: z.string().min(1),
+  reasonText: z.string().min(1).max(500),
+  motivationAnchor: z.string().optional(),
+  consent: HandoffSubmitRequestConsentSchema,
+} as const;
+
+export const HandoffSubmitRequestQualifiedSchema = z
   .object({
-    sessionId: z.string().min(1),
-    verdict: HandoffVerdictSchema,
-    reasonCode: z.string().min(1),
-    reasonText: z.string().min(1),
-    motivationAnchor: z.string().optional(),
-    /** Required on qualified / referred_out; absent on disqualified. */
-    contact: HandoffContactSchema.optional(),
-    consent: z.object({
-      handoffGranted: z.boolean(),
-      handoffTimestamp: z.string().datetime(),
-      marketingGranted: z.boolean().optional(),
-      marketingTimestamp: z.string().datetime().optional(),
-      consentCopyVersion: z.string().optional(),
-    }),
+    verdict: z.literal("qualified"),
+    reasonCode: QualifiedReasonCodeSchema,
+    contact: HandoffContactSchema,
+    ...HandoffSubmitRequestCommonFields,
   })
   .strict();
+export type HandoffSubmitRequestQualified = z.infer<typeof HandoffSubmitRequestQualifiedSchema>;
+
+export const HandoffSubmitRequestReferredOutSchema = z
+  .object({
+    verdict: z.literal("referred_out"),
+    reasonCode: ReferredOutReasonCodeSchema,
+    contact: HandoffContactSchema,
+    ...HandoffSubmitRequestCommonFields,
+  })
+  .strict();
+export type HandoffSubmitRequestReferredOut = z.infer<typeof HandoffSubmitRequestReferredOutSchema>;
+
+export const HandoffSubmitRequestDisqualifiedSchema = z
+  .object({
+    verdict: z.literal("disqualified"),
+    reasonCode: DisqualifiedReasonCodeSchema,
+    // No contact — `.strict()` rejects if a buggy client supplies one.
+    ...HandoffSubmitRequestCommonFields,
+  })
+  .strict();
+export type HandoffSubmitRequestDisqualified = z.infer<typeof HandoffSubmitRequestDisqualifiedSchema>;
+
+export const HandoffSubmitRequestInconclusiveSchema = z
+  .object({
+    verdict: z.literal("inconclusive"),
+    reasonCode: InconclusiveReasonCodeSchema,
+    // No contact (matches HandoffPayloadInconclusiveSchema).
+    ...HandoffSubmitRequestCommonFields,
+  })
+  .strict();
+export type HandoffSubmitRequestInconclusive = z.infer<typeof HandoffSubmitRequestInconclusiveSchema>;
+
+export const HandoffSubmitRequestSchema = z.discriminatedUnion("verdict", [
+  HandoffSubmitRequestQualifiedSchema,
+  HandoffSubmitRequestReferredOutSchema,
+  HandoffSubmitRequestDisqualifiedSchema,
+  HandoffSubmitRequestInconclusiveSchema,
+]);
 export type HandoffSubmitRequest = z.infer<typeof HandoffSubmitRequestSchema>;
 
 export const HandoffSubmitResponseSchema = z.discriminatedUnion("ok", [
