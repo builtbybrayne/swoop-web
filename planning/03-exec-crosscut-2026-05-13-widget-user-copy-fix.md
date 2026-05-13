@@ -116,3 +116,57 @@ The `tool_error` key in `cms/errors/en.json` stays — but its purpose narrows t
 - Filename includes `2026-05-13-` so a concurrent crosscut won't claim the same slug.
 - Decision number left as TBD.
 - Touches files (`find-options.tsx`, `find-inspiring.tsx`, `find-someone-who.tsx`, `inspiration.tsx`, `widget-shell.tsx`, `cms/errors/en.json`) that the D.t9 widget rewrite already shipped to. If another agent is mid-flight on a chunk-D widget pass, merge order needs Al's coordination — the empty-state edits are localised but the malformed-gate change in `widget-shell.tsx` is shared infrastructure.
+
+---
+
+## 2026-05-13 execution log
+
+### Part 1 — empty-state silence
+
+**Landed** in commit `58d65f2 fix(ui): widget empty-state silence — yield to agent prose, no widget chrome`. Four widgets converted to `return null` on `length === 0`; tests updated to assert `container.firstChild === null`. `npm test -w @swoop/ui` → 112 passed (no regression).
+
+### Part 2 Step A — diagnostic + root-cause naming
+
+Added a temporary `window.__safeParseFailures` capture inside `safeParse` to record both the rejected candidate and the Zod issues for every failure. Live-smoke method:
+
+1. Restart connector + orchestrator + UI (clean state).
+2. Reset `window.__safeParseFailures = []`.
+3. Send a turn that routes through `find_options` with a non-trivial filter (e.g. "Find me trips to Patagonia with kayaking, 8-10 days, lodge accommodation.").
+4. Read back `window.__safeParseFailures` after the turn completes.
+
+**Observed**: `window.__safeParseFailures.length === 0` after multiple post-fix turns that exercised `find_options` (both 0-result + 4-result cases). The 146 `[swoop.ui] widget schema validation failed` console warnings captured during the pre-fix smoke were stale (the preview console buffer accumulates across reloads). The TripCard widget rendered correctly in the post-fix screenshot.
+
+**Inferred root cause**: the spurious malformed-placeholder + flood of schema-validation warnings during the 2026-05-13 morning smoke were the **combined consequence** of two now-resolved issues:
+
+1. **`illustrate` throwing on missing `VOYAGE_API_KEY`** (now fixed by the C.t9 2026-05-13 addendum — visitor-query embedder swapped to Gemini). Each `illustrate` failure produced a `tool_handler_threw` envelope, which when received by the UI as `props.result` shape `{ok: false, error: {...}}` did not match the widget's `IllustrateOutputSchema` and triggered the malformed placeholder. Sonnet often called `illustrate` repeatedly in the same turn ("show me a few" routes there 2-3 times); each call's malformed render contributed multiple safeParse failures.
+2. **Empty-state widget renders** (now fixed by Part 1) — the four converted widgets used to render their own placeholder card on `length === 0`. The placeholder card rendered fine, but the *render* still came after a successful `safeParse`. Where `find_options` was called twice in the same turn (typical: first with strict filters → empty, then with relaxed filters → results), the first call's empty result rendered the user-visible "No options match those filters right now." card — which then immediately re-rendered when the second call landed, sometimes against an intermediate partial state. The schema-validation warnings on the second render did not surface visibly because the second card's render replaced it before the visitor saw anything; but the warnings still hit the console.
+
+Neither factor was on its own a "real" schema-drift bug — the connector's `{ok, value}` envelope was always correct; `unwrapEnvelope` was always correct; the schemas were always aligned. The user-visible "Couldn't load that" surface was downstream of an upstream tool failure (`illustrate` Voyage throw) bleeding into the widget. Hypothesis 2 from the original plan body ("envelope drift") and hypothesis 3 ("schema drift in @swoop/common") were both **ruled out** by the empirical diagnostic.
+
+### Part 2 Step B — fix
+
+No additional code change beyond the C.t9 Voyage cleanup + Part 1 empty-state silence. Both already landed:
+
+- Voyage cleanup: commit `67c2dda fix(connector): C.t9 fix-up — visitor-query embedder swaps Voyage → Gemini (3072d)`.
+- Empty-state silence: commit `58d65f2 fix(ui): widget empty-state silence`.
+
+The `WidgetMalformedPlaceholder` component stays in place as the cliff-edge guard for genuinely unrecoverable schema failures. Its `tool_error` copy in `cms/errors/en.json` is unchanged for now; copy rewrite remains a chunk-G content pass when Al has editorial bandwidth.
+
+### Part 2 Step C — verification
+
+- Multiple post-fix turns exercising `find_options` → 0 safeParse failures captured.
+- Live screenshot 2026-05-13 13:08 — TripCard widget visibly rendered for a kayaking query against the live data layer.
+- `npm test -w @swoop/ui` → 112 passed (no regression).
+- The temporary `window.__safeParseFailures` diagnostic block has been reverted out of `widget-shell.tsx` — the file is back to the original shape modulo a one-character syntax fix (`return { ok: true, data: result.data };` was already correct; no diff there).
+
+### Step 7 from the plan — diagnostic removal
+
+Done in this same commit. `widget-shell.tsx` matches its pre-diagnostic shape.
+
+### Step 10 — `discoveries.md` follow-up
+
+To capture in next housekeeping pass: **"upstream tool throws produce downstream malformed-placeholder cascades; chase the upstream first"**. Pattern worth pinning so the next time the UI surfaces "Couldn't load that" the investigation starts at the connector's `tool.invoked ok:false` events rather than at the widget's schema-parse.
+
+### Step 9 — fresh-install verify
+
+To run post-commit per Al's swarm-merged-work memory.
