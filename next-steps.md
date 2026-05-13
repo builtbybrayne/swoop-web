@@ -32,8 +32,8 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 - E.t6 — counsel-review note in `05-retention-policy.md` to surface at E.t9 (hard-delete posture).
 
 **Crosscut tranche queue**:
-- v2 (find_options tours backend) — gated on Swoop populating the `tour` table per [questions.md](questions.md) tour content ask. Renderer + schema already shipping against fixtures.
-- v3 (hotels + region_bases backend) — not gated; second priority after v2.
+- v2 (find_options tours backend) — still gated on Swoop populating the `tour` table per [questions.md](questions.md) tour content ask. Renderer + schema shipping against fixtures; `preferredType: 'tour'` falls back to the trip primitive (decision C.bf-6) so Sonnet's tour-preference always produces *something*.
+- v3 (find_options hotels + region_bases backend) — ✅ **landed 2026-05-13** ([planning/03-exec-crosscut-find-options-v3-backfill.md — find_options v3 backfill (hotels + region_bases)](planning/03-exec-crosscut-find-options-v3-backfill.md), decisions C.bf-1..6). `queryHotelCardsByFilter` + `queryRegionBaseCardsByFilter` data primitives wired; handler dispatches on `preferredType`; blended-output path when unset. 26 new tests on `@swoop/connector` (was 126+3 → 149+3 skipped). Live-data smoke pending (Al to run against `puma_dev`).
 
 ---
 
