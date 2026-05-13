@@ -10,18 +10,19 @@
 //   5. sets status="failed" and emits adapter error on 5xx
 //   6. status="empty" on 200 + empty parts (no replay invoked)
 //
-// Mocks `@assistant-ui/react`'s `useAssistantRuntime` so the hook can run
-// without an `AssistantRuntimeProvider` in scope — keeps the test runtime-free
-// (matches `preflight.test.ts`'s posture of a pure harness component).
+// Passes a fake runtime directly in via the hook's `runtime` option, so the
+// hook can run without an `AssistantRuntimeProvider` in scope — keeps the
+// test runtime-free (matches `preflight.test.ts`'s posture of a pure harness
+// component).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import React from "react";
 
-// --- Mock @assistant-ui/react ----------------------------------------------
-// `useAssistantRuntime({optional:true})` is what the hook calls. The runtime
-// surface we exercise is `runtime.thread.reset(messages)` — that's it. A
-// minimal stub is sufficient.
+// --- Fake runtime ----------------------------------------------------------
+// The hook now takes `runtime` as an option (parents pass it from
+// `useChatRuntime`). The runtime surface we exercise is
+// `runtime.thread.reset(messages)` — that's it. A minimal stub is sufficient.
 
 type FakeRuntime = {
   thread: { reset: ReturnType<typeof vi.fn> };
@@ -31,11 +32,6 @@ const fakeRuntime: FakeRuntime = {
   thread: { reset: vi.fn() },
 };
 
-vi.mock("@assistant-ui/react", () => ({
-  useAssistantRuntime: (_opts?: { optional?: boolean }) => fakeRuntime,
-}));
-
-// Imports below come AFTER the mock is registered.
 import { useRehydrate } from "../use-rehydrate";
 import { subscribeAdapterErrors } from "../../runtime/orchestrator-adapter";
 
@@ -69,6 +65,8 @@ function Harness(props: HarnessProps): null {
   const result = useRehydrate({
     enabled: props.enabled,
     sessionId: props.sessionId,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    runtime: fakeRuntime as any,
     onApplied: props.onApplied,
     onExpired: props.onExpired,
   });

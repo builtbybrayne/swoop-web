@@ -34,7 +34,7 @@
 //     chat from the visitor's POV.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAssistantRuntime } from "@assistant-ui/react";
+import type { AssistantRuntime } from "@assistant-ui/react";
 import { emitAdapterError } from "../runtime/orchestrator-adapter";
 import { emitUiEvent } from "../runtime/emit-ui-event";
 import { fetchSessionHistory, type FetchHistoryResult } from "./rehydrate";
@@ -60,6 +60,15 @@ export interface UseRehydrateOptions {
    * `null` while pending bootstrap or after a clear.
    */
   sessionId: string | null;
+  /**
+   * The assistant-ui runtime to replay parts into. Passed in by the parent
+   * because this hook runs at App-level (outside `AssistantRuntimeProvider`)
+   * where `useAssistantRuntime` would crash — the v0.12 implementation calls
+   * `useAui()` first, whose Proxy throws on `.threads()` when no provider is
+   * mounted. Parents already hold the runtime from `useChatRuntime`; passing
+   * it down here is cleaner than restructuring the tree.
+   */
+  runtime: AssistantRuntime | null;
   /**
    * Called after a successful non-empty replay lands. `partCount` carries
    * the rehydrated projection size. Optional — App.tsx uses it for the
@@ -98,10 +107,8 @@ function buildRehydrateError(reason: "fetch_failed" | "network_error"): Error {
 }
 
 export function useRehydrate(opts: UseRehydrateOptions): UseRehydrateResult {
-  const { enabled, sessionId, onApplied, onExpired } = opts;
+  const { enabled, sessionId, runtime, onApplied, onExpired } = opts;
   const [status, setStatus] = useState<RehydrateStatus>("idle");
-
-  const runtime = useAssistantRuntime({ optional: true });
 
   // Fire-once guard keyed on sessionId: when the id changes (e.g. fresh chat
   // mints a new one), we want to fire again. Stored as ref so changing it
