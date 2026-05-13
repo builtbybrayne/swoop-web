@@ -119,9 +119,11 @@ Implementation notes:
 
 ---
 
-## Decision marker (TBD)
+## Decision marker — D.brave-pare-3 (+ C.brave-pare-3 for the connector-side whitespace strip)
 
-**Decision-pending — cards never silently truncate prose; where content exceeds the visible clamp, a per-instance expander affords reading the full content.** Decision number assigned at merge. Captures the principle as a UI/UX rule alongside the existing "widgets with no useful content render nothing" rule (commit `58d65f2`).
+**Decision — cards never silently truncate prose; where content exceeds the visible clamp, a per-instance expander affords reading the full content.** Logged as **D.brave-pare-3** in [decisions.md](decisions.md). Captures the principle as a UI/UX rule alongside the existing "widgets with no useful content render nothing" rule (D.brave-pare-1, commit `58d65f2`).
+
+The connector-side CMS WYSIWYG decorative-whitespace strip (`trimCmsDecorativeWhitespace` helper, commit `f9b1d1d`) lands under a companion entry **C.brave-pare-3** — same plan, separate decision because it sits on the connector boundary rather than the UI surface. Together they make truncation-with-expansion an honest contract from data layer through render.
 
 ---
 

@@ -105,9 +105,9 @@ The `tool_error` key in `cms/errors/en.json` stays — but its purpose narrows t
 
 ---
 
-## Decision marker (TBD)
+## Decision marker — D.brave-pare-1
 
-**Decision-pending — widget empty-state silence + malformed-placeholder gate tightening.** Decision number to be assigned at merge so parallel-agent decisions don't collide. Captures the principle: widgets with no useful content render nothing; the conversational agent handles the visitor's experience of "nothing" in prose; the malformed placeholder is the cliff-edge for genuinely unrecoverable schema failures only, not for streaming partial frames or envelope drift.
+**Decision — widget empty-state silence + malformed-placeholder gate tightening.** Logged as **D.brave-pare-1** in [decisions.md](decisions.md). Captures the principle: widgets with no useful content render nothing; the conversational agent handles the visitor's experience of "nothing" in prose; the malformed placeholder is the cliff-edge for genuinely unrecoverable schema failures only, not for streaming partial frames or envelope drift.
 
 ---
 

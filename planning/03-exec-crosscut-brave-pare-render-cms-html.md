@@ -69,9 +69,9 @@ Done live against `puma_dev` 2026-05-13:
 
 ---
 
-## Decision marker (TBD)
+## Decision marker — D.brave-pare-2
 
-**Decision-pending — CMS-authored prose from Swoop's internal team renders as HTML via `dangerouslySetInnerHTML`; the trust boundary is the source's authorship (internal CMS, not visitor input).** Number assigned at merge. Companion to the 2026-05-13 region_id backfill: that plan put real data behind the widget; this plan makes the widget show that data the way its authors meant.
+**Decision — CMS-authored prose from Swoop's internal team renders as HTML via `dangerouslySetInnerHTML`; the trust boundary is the source's authorship (internal CMS, not visitor input).** Logged as **D.brave-pare-2** in [decisions.md](decisions.md). Companion to the 2026-05-13 region_id backfill: that plan put real data behind the widget; this plan makes the widget show that data the way its authors meant.
 
 ---
 

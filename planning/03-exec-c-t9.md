@@ -836,9 +836,9 @@ grep -rEn "Voyage|VOYAGE|voyage" product/connector/src/ | grep -v node_modules
 10. Update [discoveries.md](../discoveries.md): "C.t9 had a second embedder, easy to miss" note so the next C.t9-style sweep includes a corpus-and-query grep checklist.
 11. Update [gotchas.md](../gotchas.md): the new error string under "Gemini embeddings" so an operator who sees it knows where to look.
 
-### Decision marker (TBD)
+### Decision marker — C.brave-pare-1
 
-**Decision-pending** — Visitor-query embedder swaps to Gemini-embedding-001 / 3072d, matching corpus storage. Removes the last Voyage dependency from the live system. Supersedes the residual Voyage references in C.t9's plan body that were missed during the original execution (the body said "ingestion-side swap" without explicitly naming the query-side embedder). Number to be assigned at merge to avoid collisions with parallel-agent decisions.
+**Decision** — Visitor-query embedder swaps to Gemini-embedding-001 / 3072d, matching corpus storage. Removes the last Voyage dependency from the live system. Supersedes the residual Voyage references in C.t9's plan body that were missed during the original execution (the body said "ingestion-side swap" without explicitly naming the query-side embedder). Logged as **C.brave-pare-1** in [decisions.md](decisions.md).
 
 ### Estimated effort
 

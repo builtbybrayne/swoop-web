@@ -128,9 +128,9 @@ Tag-typed area mapping versus URL parsing — coverage measured live against `pu
 
 ---
 
-## Decision marker (TBD)
+## Decision marker — C.brave-pare-2
 
-**Decision-pending — `trip.region_id` derived from area-typed `ntag` intersection with `area.alias`; multi-area trips pick the lowest `area.id` as the primary representative.** Decision number to be assigned at merge so parallel-agent decisions don't collide. The choice closes C.t3's `transformTrip` placeholder comment and unblocks BF-FO-v3's region_base path against live data.
+**Decision — `trip.region_id` derived from area-typed `ntag` intersection with `area.alias`; multi-area trips pick the lowest `area.id` as the primary representative.** Logged as **C.brave-pare-2** in [decisions.md](decisions.md). Closes C.t3's `transformTrip` placeholder comment and unblocks BF-FO-v3's region_base path against live data.
 
 ---
 
