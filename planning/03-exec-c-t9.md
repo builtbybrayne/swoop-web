@@ -762,3 +762,85 @@ The `@swoop/orchestrator` test `POST /chat ... R4-server > returns 400 when the 
 - **Pricing constants verification**: `GEMINI_EMBEDDING_INPUT_PER_MILLION_USD = 0.15` was the ratification value; verify against published Gemini pricing if anything looks off on the first real billing cycle.
 - **HNSW dimension cap note** propagates to `discoveries.md` so the next dim-changing plan won't get caught by the same surprise.
 
+---
+
+## 2026-05-13 addendum — visitor-query Voyage holdover (the half C.t9 missed)
+
+> **Parallel-agent collision note**: this addendum was authored 2026-05-13 in-session as a fix to a live smoke discovery; decision number deliberately marked TBD so another agent's concurrent C.5x assignment doesn't clash. User to assign on merge.
+
+### What was wrong
+
+Live smoke against the booted stack (this session) surfaced the gap. C.t9's seven commits swept the **ingestion** side of the embedding pipeline (corpus passes through `@swoop/ingestion`) but did not touch the **query-time** embedder used by the connector at request time. That second function lives at [product/connector/src/data/embed-query.ts](../product/connector/src/data/embed-query.ts) and is consumed by `find_inspiring`, `find_someone_who`, and `illustrate` via the shared `deps.embedQuery` injection.
+
+Concrete consequences observed during smoke:
+
+- `illustrate` threw `Error: [connector/embed-query] VOYAGE_API_KEY not configured; cannot embed visitor input.` on every invocation. The orchestrator logged it as `tool_handler_threw:illustrate` and Sonnet recovered with prose, so the bug was visible only in the structured logs — not the user-facing surface.
+- `find_inspiring` / `find_someone_who` would hit the same failure mode if Sonnet routed to them.
+- Worse, even if a `VOYAGE_API_KEY` were available again, the visitor's vector would be **1024d** while the stored corpus vectors are **halfvec(3072)** via migration 009. Cosine similarity across mismatched dimensions doesn't return useful results — the retrieval would silently degrade to noise, not surface an error.
+
+### Scope of the fix
+
+> Per HITL (Al, 2026-05-13): **zero Voyage dependency in the live system.** The user query embedder must be Gemini (`gemini-embedding-001`, output dim 3072), matching the corpus vectors and the C.t9 ingestion-side decision.
+
+| File | What changes |
+|---|---|
+| [product/connector/src/data/embed-query.ts](../product/connector/src/data/embed-query.ts) | Rewrite as `GeminiQueryEmbedder`: call `gemini-embedding-001` via `@google/genai` (or `fetch` direct against `generativelanguage.googleapis.com:embedContent`), output dim 3072, expose `GEMINI_QUERY_DIM = 3072 as const`. Keep the in-process cache. Constants renamed `VOYAGE_*` → `GEMINI_*`. |
+| [product/connector/src/config/schema.ts](../product/connector/src/config/schema.ts) | Replace `VOYAGE_API_KEY` field with `GEMINI_API_KEY`. Same `.optional()` posture — the connector still boots without a key; the embed call throws clearly when missing. Same call-time fail-fast pattern. |
+| [product/connector/src/tools/illustrate.ts](../product/connector/src/tools/illustrate.ts) — comment | Update the line-31–33 comment to drop the "Voyage handles natural-language phrasing better than concatenated tokens" remark (anchors to a retired model). Replace with one neutral sentence: "Embed the joined keywords as a single search vector." |
+| [product/connector/src/server/__tests__/mcp.test.ts](../product/connector/src/server/__tests__/mcp.test.ts) | Update test fixture builders that synthesise a Config to use `GEMINI_API_KEY` not `VOYAGE_API_KEY`. |
+| [product/connector/src/server/app.ts](../product/connector/src/server/app.ts) + [server/mcp.ts](../product/connector/src/server/mcp.ts) | Sweep any inline Voyage references. Boot wiring already takes the `Config` and an injected `embedQuery` function via `buildEmbedQuery(config)` — no public-surface changes, just constant renames if they appear. |
+| `@swoop/connector` unit tests covering the embedder | Update to match the new shape: mock the Gemini single-content embed endpoint, assert 3072-element output. Mirror the existing Voyage test's structure (status-200 ok path, 400 throw path, 200-but-wrong-dim throw path, cache hit, missing-key throw). |
+| Plain-text documentation references | `cms/ops/embedding-rerun.md` already covers the ingestion-side swap (C.t9); add one sentence noting that the query-side embedder shares the model — operators don't need a separate `GEMINI_QUERY_*` env. |
+
+### What does NOT change
+
+- Migrations 002 / 004 / 009 (immutable history — historical Voyage references inside `.sql` files stay where they are; future migrations that read them know they are descriptive headers, not active code).
+- `ingestion/` — already on Gemini per C.t9 itself.
+- Storage dim (halfvec(3072)) — query-side dim now matches.
+- `BatchClient` interface or Anthropic batch routing (unrelated chunk).
+- `ts-common/src/derived.ts` — the references there are docstring rationale on derived-table fields; refresh the wording in passing only if a touch is otherwise needed.
+
+### Diagnostic before merge
+
+After implementation, the reproduction smoke is:
+
+```sh
+# 1. Connector boots without GEMINI_API_KEY → tool call throws with the new clear error message
+npm run -w @swoop/connector dev
+
+# In another shell:
+# 2. Send a /chat turn that routes through illustrate. Expected (until step 3 lands):
+#    {"errorType":"tool_handler_threw:illustrate", "sanitisedContext":"[connector/embed-query] GEMINI_API_KEY not configured; cannot embed visitor input."}
+
+# 3. Set GEMINI_API_KEY in product/connector/.env and restart:
+#    Same /chat turn now succeeds. Expected logs:
+#    [orchestrator] tool.invoked illustrate ok latencyMs:<400-1500>
+#    No "VOYAGE" string anywhere in connector startup / runtime logs.
+
+# 4. Grep verifier (run from worktree root):
+grep -rEn "Voyage|VOYAGE|voyage" product/connector/src/ | grep -v node_modules
+#    Expected: zero hits in TypeScript code (.sql historical references are out of scope and stay).
+```
+
+### Step-by-step execution
+
+1. **Hash-verification gate** (per the standard agent dispatch pattern, but this fix is small enough to run in-session — no isolation worktree needed).
+2. Failing test: extend the connector `embed-query.test.ts` (or add one if absent) to assert that with `GEMINI_API_KEY` and a mocked fetcher returning 3072-element vectors, `embedQuery(text)` returns the vector and caches it; with `GEMINI_API_KEY=undefined`, it throws with the new error string.
+3. Implement `GeminiQueryEmbedder` in `embed-query.ts`. Reuse the existing module-level cache + `_resetEmbedCacheForTesting`. Constants `GEMINI_API_URL`, `GEMINI_QUERY_DIM = 3072`, `GEMINI_MODEL = 'gemini-embedding-001'`. Throw shape: `[connector/embed-query] GEMINI_API_KEY not configured; cannot embed visitor input.` (mirrors the existing message, keyword swap).
+4. Update [config/schema.ts](../product/connector/src/config/schema.ts) — `VOYAGE_API_KEY` → `GEMINI_API_KEY`. Same `optional()`.
+5. Sweep callers — should be zero non-test sites since `buildEmbedQuery(config)` is the only entry point. Verify via `grep VOYAGE_API_KEY product/connector/src/ | grep -v test`.
+6. Update test fixtures across `connector/src/**/__tests__` that synthesise a `Config` to use the new field.
+7. Drop the Voyage-flavoured comment in `illustrate.ts:31-33`.
+8. Run `npm test -w @swoop/connector` — green.
+9. Run the smoke from §Diagnostic above against a real `GEMINI_API_KEY`.
+10. Update [discoveries.md](../discoveries.md): "C.t9 had a second embedder, easy to miss" note so the next C.t9-style sweep includes a corpus-and-query grep checklist.
+11. Update [gotchas.md](../gotchas.md): the new error string under "Gemini embeddings" so an operator who sees it knows where to look.
+
+### Decision marker (TBD)
+
+**Decision-pending** — Visitor-query embedder swaps to Gemini-embedding-001 / 3072d, matching corpus storage. Removes the last Voyage dependency from the live system. Supersedes the residual Voyage references in C.t9's plan body that were missed during the original execution (the body said "ingestion-side swap" without explicitly naming the query-side embedder). Number to be assigned at merge to avoid collisions with parallel-agent decisions.
+
+### Estimated effort
+
+~1 hour. Mostly mechanical — the shape of `buildEmbedQuery` is already right; only the HTTP body, headers, response parsing, and the API key env var name change. Tests update is the larger of the two.
+
