@@ -89,7 +89,8 @@ To find every open review-driven item: `grep "code-review fixes" planning/03-exe
 | PoC product code | `chatgpt_poc/product/` — `mcp-ts/`, `ts-common/`, `ui-react/`, `cms/`, `scripts/` |
 | PoC sales material | `chatgpt_poc/sales docs/extracted/` — tone of voice, brand platform, sales process |
 | Commercials (engagement + quote) | Obsidian vault: `Projects/Clients/Swoop/commercials/` |
-| 30 Mar quote (the commercial fence) | `planning/archive/project_proposal.md` |
+| 30 Mar quote (the commercial fence) | [planning/00-project-proposal.md](planning/00-project-proposal.md) |
+| Quoting notes (scope deferrals, time calibration, Julie's production bar) | [planning/00-project-proposal-notes.md](planning/00-project-proposal-notes.md) |
 | Meeting capture (20/21 Apr) | `planning/archive/meetings/` |
 | Research pack (UI, eval harness, agent architecture) | `planning/archive/research/` |
 | Swoop data ontology (first-pass, transient) | `data-ontology.md` + `planning/02-impl-retrieval-and-data-source-exploration.md`. Retires when Monday 2026-04-27 SQL dump is modelled. |
