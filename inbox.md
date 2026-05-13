@@ -6,6 +6,14 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-05-13 — `@swoop/ui` typecheck errors are NOT from the parallel UI agent — pre-existing on main; revisit later
+
+When BF-FO-v3 (find_options v3 backfill — [03-exec-crosscut-find-options-v3-backfill.md](planning/03-exec-crosscut-find-options-v3-backfill.md)) ran `npm run typecheck --workspaces --if-present`, `@swoop/ui` errored with `'args' is of type 'unknown'` across `lead-capture.tsx`, `lookup.tsx`, and `widget-shell.tsx` (`Cannot find name 'ZodType'`). Initial assumption was these came from the 2026-05-13 parallel UI agent's WIP. **Al's correction (2026-05-13)**: that's wrong; the errors have nothing to do with the parallel agent. Confirmed pre-existing by stashing v3 changes and re-running `tsc -p product/ui/tsconfig.json` — same errors on main HEAD `39652aa`.
+
+The errors may resolve incidentally if the parallel agent's UI rewrite touches these files. If they don't, they need an explicit fix sweep — `lookup.tsx` line 64 `Property 'chunks' does not exist on type 'unknown'` suggests assistant-ui's `ToolUIProps['args']` type widened to `unknown` somewhere (likely a library version bump that lost the generic narrowing). Adding a typed cast or a `safeParse` against `LookupOutputSchema` would fix it; the same pattern for `lead-capture` against `HandoffInputSchema`. `widget-shell.tsx` `Cannot find name 'ZodType'` looks like a missing import.
+
+**Action**: revisit after the parallel UI agent's work merges. If still broken, file a discrete cleanup task — small, ~30 min TDD.
+
 ## 2026-04-29 — Blog ETL `data/` lands in worktree, not main repo
 
 The `resolveDataRoot()` walk in `product/ingestion/src/blog/fetch.ts` walks parents looking for the first `.git` directory or `.gitignore` file. In a git worktree, `.git` is a *file* (not a directory) at the worktree root, and a `.gitignore` lives there too — so the walk stops at the worktree, not the main repo. Net: every `npm run blog:fetch:backfill` from a worktree creates `data/blog/raw/<stamp>/` *inside that worktree*, gitignored locally and invisible to other worktrees / the main repo. That's why the snapshots from agent worktrees `agent-a84896f740d205018` and `agent-a0b7dfee4cfcd79d3` weren't findable today — they were stranded in their respective worktree dirs.
