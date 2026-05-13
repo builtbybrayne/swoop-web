@@ -1,6 +1,35 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-13 (five-plan parallel-batch landed: D.t9 widget rewrite + D.t9-mount-rehydrate + B.t11 + E.t6 + crosscut find_options polymorphism v1; tests now 908 + 3 DB-gated skipped across all 6 workspaces on fresh `npm install`; chunk-D fully closed; chunk-E retention enforcement live; orientation-file housekeeping complete)
+**Snapshot date**: 2026-05-13 (afternoon — live-smoke-driven fix wave on `claude/brave-pare-5e0eba`: D.t9-mount-rehydrate App-level crash fix + C.t9 visitor-query Voyage cleanup + widget empty-state silence + malformed-placeholder root-cause diagnosis. Live UI verified end-to-end against real data: agent calls real tools, widgets render real trip cards. Tier 3 plans authored / addended in advance per Al's discipline.)
+
+## 2026-05-13 (afternoon) — brave-pare-5e0eba live-smoke fix wave
+
+Picked up the brave-pare-5e0eba worktree to verify the morning's five-plan batch ran end-to-end. Surface immediately crashed; chain-reaction surfaced three more issues. All fixed with Tier 3 plans authored first per HITL.
+
+**Commits on `claude/brave-pare-5e0eba` (ahead of `main` by 6):**
+
+| Commit | Change |
+|---|---|
+| `34af1de` | `fix(ui): D.t9-mount-rehydrate — pass runtime as prop, don't grab from context` (real crash, App.tsx blew up on mount because `useAssistantRuntime({optional:true})` throws when no provider is in scope) |
+| `9178d54` | `docs(planning): Tier 3 plans for 2026-05-13 live-smoke fixes` (C.t9 addendum + new crosscut) |
+| `67c2dda` | `fix(connector): C.t9 fix-up — visitor-query embedder swaps Voyage → Gemini (3072d)` (closes the visitor-query Voyage holdover that C.t9 originally missed) |
+| `58d65f2` | `fix(ui): widget empty-state silence — yield to agent prose, no widget chrome` |
+| `873ae33` | `docs(planning): close Plan B Part 2 — malformed-placeholder root cause named` |
+
+**Live smoke verification**: stack booted (connector :3002, orchestrator :8080, UI :5173 via preview_start); consent → message → tool calls → widgets render. Real Patagonia kayaking query produced a real TripCard widget for "Multisport Rafting Adventure on Rio Futaleufu" with image, duration, price, and "See this trip" CTA — actual D.t9 widget rendering for the first time against the populated derived tables.
+
+**Tests**: `@swoop/connector` 129 + 3 DB-gated skipped (was 126 + 3, +6 new tests from `embed-query.test.ts`); `@swoop/ui` 112 (unchanged count, 4 cases converted to assert `container.firstChild === null`). Other workspaces untouched this session.
+
+**Tier 3 plans authored / amended in this session:**
+
+- `planning/03-exec-c-t9.md` — 2026-05-13 addendum: "visitor-query Voyage holdover (the half C.t9 missed)". Decision number TBD per Al's 2026-05-13 parallel-agent-collision note. The C.t9 chunk-home plan absorbs the fix as an addendum (not a new file) because the visitor-query embedder was always in scope of C.t9's "Voyage → Gemini swap" intent — execution scoped it too narrowly.
+- `planning/03-exec-crosscut-2026-05-13-widget-user-copy-fix.md` — new crosscut covering: (Part 1) empty-state silence across four widgets to yield to agent prose, (Part 2) diagnose-then-fix the WidgetMalformedPlaceholder firing. Date-suffixed filename per Al's collision-avoidance note. Part 2 outcome captured as an execution log in the same file: root cause was downstream of upstream tool throws + empty-state widget churn; no additional fix needed beyond the Voyage swap + empty-state silence.
+
+**Orientation-file updates**: `discoveries.md` gains a 2026-05-13 entry with three patterns (provider-swap corpus+query checklist, mocking-hook-hides-provider-scope-crash, upstream-throw cascades into WidgetMalformedPlaceholder). `next-steps.md` to be updated separately when this wave lands on `main`.
+
+**Pending Al action**: review-and-merge of the brave-pare-5e0eba branch to `main`. The Tier 3 plans' TBD decision numbers want assignment at merge time. The diagnostic block in `widget-shell.tsx` was reverted out — the file matches its pre-diagnostic shape; no leftover dev-only code.
+
+---
 
 ## 2026-05-13 — Five-plan parallel batch (HITL-ratified 2026-05-12)
 

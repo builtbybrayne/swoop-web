@@ -6,6 +6,32 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-13 — Three live-smoke discoveries from the brave-pare-5e0eba wave
+
+A single afternoon-session boot-and-poke against the live stack surfaced three patterns worth pinning. None of them were caught by the existing test surface — each needed real component mounting + real tool dispatch + real visitor flow to trigger.
+
+### 1. C.t9-style provider swaps need a corpus-AND-query checklist
+
+C.t9 swapped Voyage → Gemini across `@swoop/ingestion` (corpus passes) but left `product/connector/src/data/embed-query.ts` (visitor-query embedder) on Voyage-3 / 1024d. The visitor-query path is consumed by `find_inspiring`, `find_someone_who`, and `illustrate` via `deps.embedQuery`. Live smoke surfaced the gap as `tool_handler_threw:illustrate` errors with `[connector/embed-query] VOYAGE_API_KEY not configured` on every invocation. Worse than the throw: even with a Voyage key restored, the resulting 1024d query vector wouldn't match the corpus's `halfvec(3072)` columns post-migration 009 — silent retrieval noise, not a clean error.
+
+**Pattern to remember**: any embedding-provider swap (or dim change) MUST sweep both halves of the retrieval contract: (a) corpus-side ingestion + storage, (b) query-side visitor utterance embedder. Grep for the model name and dim constant across the entire tree before declaring the swap complete. C.t9's plan body said "ingestion-side swap" without enumerating the query-side; the agents executing the swap took that scoping literally. Fix shipped as the 2026-05-13 addendum to `03-exec-c-t9.md`.
+
+### 2. Mocking `@assistant-ui/react`'s `useAssistantRuntime` hides the provider-scope crash
+
+D.t9-mount-rehydrate's `useRehydrate` hook called `useAssistantRuntime({ optional: true })` and trusted the `optional` flag to return null when no `AssistantRuntimeProvider` was in scope. The hook's test file mocks `useAssistantRuntime` directly via `vi.mock("@assistant-ui/react", ...)`, returning a fake runtime regardless of provider context. All tests passed; the live runtime crashed on every mount because assistant-ui v0.12.25's implementation calls `useAui()` *first*, whose proxy throws on `.threads()` when no provider is mounted — the `optional` check happens after.
+
+**Pattern to remember**: when a test mocks the very hook whose contract you depend on, the mock IS the contract — the real implementation's quirks (e.g. throws-before-checking-options) become invisible. For any hook that grabs from React context, the discipline is: mount the test harness through the same provider tree the live app uses, OR avoid context-grabbing entirely by passing the dependency as an explicit prop (the fix shipped: `useRehydrate` now takes `runtime: AssistantRuntime | null` as an option). When a hook lives at App-level (above its provider), prop-passing is the right shape; reaching into context from above the provider is a category error the `optional` flag cannot rescue.
+
+### 3. Upstream tool throws cascade into the WidgetMalformedPlaceholder surface
+
+146 `[swoop.ui] widget schema validation failed` warnings inside a 30-second window during the morning smoke, with the user-facing "Couldn't load that — we can still keep talking" placeholder flickering across multiple widgets. After fixing the underlying `illustrate` Voyage throw (issue 1 above) AND removing widget empty-state chrome (Part 1 of the crosscut plan), the same exercise produces **zero** `safeParse` failures. The schema-parse path was never broken; it was downstream of an upstream tool failure (`{ok: false, error: {...}}` envelope reaching a widget that expects the success shape) and downstream of empty-state widget renders (find_options-on-strict-filters returning 0 rows, the widget rendering its own placeholder card, then re-rendering on the same turn's relaxed-filter retry).
+
+**Pattern to remember**: when the UI's `WidgetMalformedPlaceholder` appears, the first investigation move is to check the connector's `tool.invoked ok:false` events for the same turn — not the widget's schema or the UI's envelope handling. The placeholder is the visible end of an upstream chain; the fix is usually 2-3 layers earlier. Hypothesis-pruning order: (a) is a tool throwing? (b) is the conversational pattern re-calling the same tool with different inputs within one turn? (c) only after both are clear, suspect schema drift / envelope drift.
+
+The crosscut plan `03-exec-crosscut-2026-05-13-widget-user-copy-fix.md`'s diagnostic-then-fix structure was the right shape; the diagnostic ruled out hypotheses 2 and 3 by direct observation rather than speculation.
+
+---
+
 ## 2026-05-13 — Background-spawned agents need names + "continue" nudges, not manual takeover
 
 A 5-agent parallel batch this session (crosscut v1, B.t11, D.t9-mount-rehydrate, E.t6, D.t9 widget) surfaced two related operator-side discipline gaps:
