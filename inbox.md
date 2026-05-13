@@ -6,13 +6,21 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
-## 2026-05-13 — `@swoop/ui` typecheck errors are NOT from the parallel UI agent — pre-existing on main; revisit later
+## 2026-05-13 — `@swoop/ui` typecheck broken across all D.t9 widgets (NOT from parallel agent) — revisit
 
-When BF-FO-v3 (find_options v3 backfill — [03-exec-crosscut-find-options-v3-backfill.md](planning/03-exec-crosscut-find-options-v3-backfill.md)) ran `npm run typecheck --workspaces --if-present`, `@swoop/ui` errored with `'args' is of type 'unknown'` across `lead-capture.tsx`, `lookup.tsx`, and `widget-shell.tsx` (`Cannot find name 'ZodType'`). Initial assumption was these came from the 2026-05-13 parallel UI agent's WIP. **Al's correction (2026-05-13)**: that's wrong; the errors have nothing to do with the parallel agent. Confirmed pre-existing by stashing v3 changes and re-running `tsc -p product/ui/tsconfig.json` — same errors on main HEAD `39652aa`.
+When BF-FO-v3 ran `npm run typecheck --workspaces --if-present`, `@swoop/ui` errored. **Al's 2026-05-13 correction**: not from the parallel agent. Confirmed pre-existing on main HEAD (`git stash` + re-typecheck on `39652aa` and `a29001c`: same errors).
 
-The errors may resolve incidentally if the parallel agent's UI rewrite touches these files. If they don't, they need an explicit fix sweep — `lookup.tsx` line 64 `Property 'chunks' does not exist on type 'unknown'` suggests assistant-ui's `ToolUIProps['args']` type widened to `unknown` somewhere (likely a library version bump that lost the generic narrowing). Adding a typed cast or a `safeParse` against `LookupOutputSchema` would fix it; the same pattern for `lead-capture` against `HandoffInputSchema`. `widget-shell.tsx` `Cannot find name 'ZodType'` looks like a missing import.
+**Scope (24 errors total)**:
+- `lead-capture.tsx`: 12 × `'args' is of type 'unknown'` + 2 × `'resultParsed.data' is of type 'unknown'`.
+- `find-inspiring.tsx` / `find-options.tsx` / `find-proof.tsx` / `find-someone-who.tsx`: each errors with `Property '<key>' does not exist on type 'unknown'` + `Parameter 'X' implicitly has an 'any' type`.
+- `lookup.tsx`: `Property 'chunks' does not exist on type 'unknown'`.
+- `widget-shell.tsx`: `Cannot find name 'ZodType'`.
 
-**Action**: revisit after the parallel UI agent's work merges. If still broken, file a discrete cleanup task — small, ~30 min TDD.
+Same root cause across all of them — assistant-ui's tool-result / tool-args generic widened to `unknown` somewhere (likely a library version bump that lost the narrowing). The widgets all consume `props.result` / `props.args` and project against a Zod schema; the widget-shell's `safeParse` lost its `ZodType` import.
+
+**Fix shape**: probably 30–60 min sweep — re-import `ZodType` in `widget-shell.tsx`, then add the same `safeParse(Schema, props.args/result)` narrowing pattern across the affected widgets. Tests still pass because they don't hit `tsc --noEmit` the same way.
+
+**Status**: not a regression from BF-FO-v3 or VERDICT-E.t1; ALL 24 errors are pre-existing. May resolve incidentally if the parallel UI agent's work touches these files. Otherwise needs a discrete cleanup task.
 
 ## 2026-04-29 — Blog ETL `data/` lands in worktree, not main repo
 

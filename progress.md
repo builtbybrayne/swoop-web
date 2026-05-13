@@ -1,6 +1,48 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-13 (five-plan parallel-batch landed + crosscut find_options v3 backfill landed: hotels + region_bases data primitives wired live; tests now 931 + 3 DB-gated skipped across all 6 workspaces on fresh `npm install`)
+**Snapshot date**: 2026-05-13 (five-plan parallel-batch landed + BF-FO-v3 + BATCH-C.t6 + VERDICT-E.t1 landed in sequence; tests now 958 + 3 DB-gated skipped across all 6 workspaces on fresh `npm install`)
+
+## 2026-05-13 — BATCH-C.t6 (image annotation batches submission wired) + VERDICT-E.t1 (handoff wire-tightening)
+
+Two follow-on tasks landed in the same in-session pass after BF-FO-v3:
+
+### BATCH-C.t6 — annotate-images `--mode=batches` now POSTs + polls + writes back
+
+Closed the deliberate C.t6 scope-cut (decision C.52). `runBatches` in [product/ingestion/src/images/run.ts](product/ingestion/src/images/run.ts) was previously a request-build-only path; the executing agent had stopped before `messages.batches.create`. After BATCH-C.t6 (Tier-3 plan: [03-exec-c-t6-batches-submission.md](planning/03-exec-c-t6-batches-submission.md), decisions C.batch-1..4):
+
+- `product/ingestion/src/images/vision-batch-client.ts` — new `AnthropicVisionBatchClient` mirroring the Haiku batches pattern from `enrich/anthropic-batch-client.ts`. +12 unit tests.
+- `runBatches` end-to-ends: build → submit → `waitForVisionBatch` → fetchResults → per-result `parseAndValidate` + `writeAnnotation` + checkpoint. +5 integration tests.
+- Operator runbook ([product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md)) flipped from "deferred" to "preferred for full re-runs (~$17/£14 vs ~$34/£27 at live rate)".
+- [gotchas.md](gotchas.md) "annotate-images --mode=batches builds the payload then bails" entry rewritten as a closed-historical note.
+- **Live run NOT required** — per Al's instruction (live runs already done; the script just needs to exist for later).
+
+### VERDICT-E.t1 — agent + wire `reasonCode` constrained to per-verdict enums
+
+Closed the upstream gap left by the original E.t1 landing (durable-record was already strict; agent + wire schemas were freeform). Tier-3 plan: [03-exec-e-t1-wire-tightening.md](planning/03-exec-e-t1-wire-tightening.md), decisions E.verdict-1..5:
+
+- `HandoffInputSchema` (agent tool-call args) → `z.discriminatedUnion('verdict', […])` with per-variant `reasonCode` typed against the matching enum from `handoff.ts`. Same shape for `HandoffSubmitRequestSchema` (widget → orchestrator wire); `contact` now required-on-qualified/referred_out + absent-on-disqualified/inconclusive via `.strict()`.
+- Invalid `(verdict, reasonCode)` combinations now surface at the agent boundary (and the wire boundary), not late at the server-side `HandoffPayloadSchema` parse.
+- Tool description (`cms/prompts/tools/handoff/description.md`) lists all 21 valid combinations — schema-as-validator + prose-as-teacher pattern (per G.11).
+- Connector MCP tool registration extended with `extractDiscriminatedUnionShape` helper (decision E.verdict-5) so the SDK's `registerTool` API can carry the union — falls back to the first variant's shape with the discriminator widened to all literals; runtime narrowing preserved by `runHandler.safeParse`.
+- +10 fixture round-trip + reject-path tests on `@swoop/common`.
+
+### Test totals after both landings (fresh `rm -rf node_modules + npm install`, all green)
+
+- `@swoop/common` **170** (was 160 → +10 VERDICT-E.t1)
+- `@swoop/orchestrator` 170 (unchanged; 2 tests updated for new discriminated wire shape)
+- `@swoop/connector` **149 + 3 DB-gated skipped** (was 126+3 → +23 from BF-FO-v3 earlier; +0 additional from VERDICT-E.t1; 1 test fixture updated)
+- `@swoop/ui` 112 (unchanged)
+- `@swoop/ingestion` **283** (was 266 → +17 from BATCH-C.t6)
+- `@swoop/harness` 74 (unchanged)
+- **Total: 958 + 3 skipped (was 908 + 3 → +50 from today's three landings)**
+
+### Pending — needs Al
+
+- **Live-data smoke for BF-FO-v3** per the v3 plan §5 (find_options hotel + region_base branches against `puma_dev`).
+- **No live invocation for BATCH-C.t6** — the unit tests cover the wiring; live runs already done in `--mode=live`.
+- **`@swoop/ui` typecheck regression** (pre-existing on main; flagged in `inbox.md`) — broader than originally noted, now 24 errors across 7 widget files. NOT introduced by today's work; revisit as a discrete cleanup.
+
+---
 
 ## 2026-05-13 — Crosscut find_options v3 backfill (BF-FO-v3)
 
