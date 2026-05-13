@@ -19,6 +19,7 @@ import {
 } from '@swoop/common';
 
 import { resolveImagesByIds } from './resolve-image.js';
+import { trimCmsDecorativeWhitespace } from './text-utils.js';
 
 export interface QueryRegionBaseCardsOptions {
   region?: string | null;
@@ -30,16 +31,17 @@ export interface QueryRegionBaseCardsOptions {
  * handles visible clamping + an inline "Read more" affordance per
  * planning/03-exec-crosscut-brave-pare-card-expandable-prose.md. Server-side
  * truncation was the previous behaviour and is removed here: cards must not
- * silently truncate without an option to expand. Whitespace normalisation
- * stays here because empty/whitespace-only strings should land as
- * `undefined` on the schema, not as `""`.
+ * silently truncate without an option to expand.
+ *
+ * Trailing/leading decorative whitespace from the WYSIWYG editor (e.g.
+ * `&nbsp;<br></p>` from the San Pedro de Atacama page — 296 of 590 pages
+ * carry this kind of artefact) is stripped to keep both the rendered output
+ * and the UI's overflow detection clean.
  */
 function vibeLineFromSource(
   text: string | null | undefined,
 ): string | undefined {
-  if (text === null || text === undefined) return undefined;
-  const trimmed = String(text).trim();
-  return trimmed.length === 0 ? undefined : trimmed;
+  return trimCmsDecorativeWhitespace(text);
 }
 
 export async function queryRegionBaseCardsByFilter(

@@ -23,6 +23,7 @@ import {
 } from '@swoop/common';
 
 import { resolveImagesByIds } from './resolve-image.js';
+import { trimCmsDecorativeWhitespace } from './text-utils.js';
 
 export interface QueryHotelCardsOptions {
   region?: string | null;
@@ -48,12 +49,12 @@ const BUDGET_CEILING: Record<BudgetBand, number> = {
  * The UI handles visible clamping + an inline "Read more" affordance per
  * planning/03-exec-crosscut-brave-pare-card-expandable-prose.md. Server-side
  * truncation was the previous behaviour and is removed here: cards must not
- * silently truncate without an option to expand.
+ * silently truncate without an option to expand. WYSIWYG decorative-whitespace
+ * artefacts (`<br>`, `&nbsp;`, empty trailing paragraphs) are stripped via the
+ * shared `trimCmsDecorativeWhitespace` helper.
  */
 function vibeLineFromDescription(text: string | null | undefined): string | undefined {
-  if (text === null || text === undefined) return undefined;
-  const trimmed = String(text).trim();
-  return trimmed.length === 0 ? undefined : trimmed;
+  return trimCmsDecorativeWhitespace(text);
 }
 
 /**
