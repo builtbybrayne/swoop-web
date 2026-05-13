@@ -95,9 +95,9 @@ export function RegionBaseCard({ card }: { card: RegionBaseProposalCard }) {
           >
             <CtaButton
               href={card.canonicalUrl}
-              ariaLabel={`Read more about ${card.headline}`}
+              ariaLabel={`Explore ${card.headline}`}
             >
-              Use as a base
+              Explore {card.headline}
             </CtaButton>
           </div>
         </div>
