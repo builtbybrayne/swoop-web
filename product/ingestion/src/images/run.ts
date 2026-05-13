@@ -57,6 +57,12 @@ import {
 } from './vision-client.js';
 import { ImageAnnotationOutputSchema, isSkipSignal } from './output-schema.js';
 import { writeAnnotation } from './write-back.js';
+import {
+  AnthropicVisionBatchClient,
+  adaptVisionSdkForBatches,
+  waitForVisionBatch,
+  type VisionBatchClient,
+} from './vision-batch-client.js';
 
 export type RunMode = 'dry-run' | 'live' | 'batches';
 
@@ -79,6 +85,14 @@ export interface RunOptions {
   apiKey?: string;
   /** Optional client double for tests. */
   visionClient?: AnthropicClientLike;
+  /**
+   * Optional batches-mode client double for tests. When omitted in
+   * `--mode=batches`, the runner adapts the Anthropic SDK client into a
+   * `VisionBatchClient`; when present, this overrides that (useful for unit
+   * tests that don't want to mount `messages.batches` on the vision-client
+   * fake). Per BATCH-C.t6 / decision C.batch-1.
+   */
+  batchClient?: VisionBatchClient;
   /** Vision model id; defaults to claude-sonnet-4-5-20250929. */
   model?: string;
   /** Custom log sink — defaults to console.log. */
@@ -224,6 +238,7 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       candidates: filtered,
       systemPrompt,
       visionClient,
+      batchClient: opts.batchClient,
       model: opts.model ?? DEFAULT_MODEL,
       pgClient: opts.client,
       checkpointFile: checkpoint.file,
@@ -410,6 +425,8 @@ interface BatchesArgs {
   candidates: Candidate[];
   systemPrompt: string;
   visionClient: AnthropicClientLike;
+  /** Test-injected override; production path adapts visionClient. */
+  batchClient?: VisionBatchClient;
   model: string;
   pgClient: pg.PoolClient;
   checkpointFile: CheckpointFile;
@@ -420,17 +437,14 @@ interface BatchesArgs {
 }
 
 /**
- * Build the batch request payload only. The actual `messages.batches`
- * SDK call lives behind a runtime check because the live SDK exposes
- * the surface as `client.messages.batches`. Tests can swap this via
- * `visionClient` typed as `AnthropicClientLike & { messages: { batches: ... } }`.
+ * Submit the candidate set to Anthropic's Message Batches API, wait for the
+ * batch to end, fetch results, and per-result either run the parse +
+ * write-back chain or record `failed`/`canceled`/`expired`.
  *
- * For the current C.t6 ratification window, the executing agent runs
- * the small-sample live path (5-up live calls on 10–20 images) to
- * verify the prompt + Zod parse + write-back round-trip. Full-catalogue
- * unbounded runs are an operator concern (C.t8 runbook), at which point
- * Batches mode can be exercised. The skeleton below builds the
- * `requests` array correctly so wiring is mechanical.
+ * Wired by BATCH-C.t6 (decision C.batch-1). Defensive fallback: when the
+ * runtime client doesn't expose `messages.batches.{create,retrieve,results}`
+ * AND no `batchClient` was injected, the runner returns to the scope-cut
+ * bail rather than crashing — supports older SDKs + small test surfaces.
  */
 async function runBatches(args: BatchesArgs): Promise<void> {
   const requests = args.candidates.map((c) =>
@@ -441,37 +455,139 @@ async function runBatches(args: BatchesArgs): Promise<void> {
       model: args.model,
     }),
   );
-  args.log(`[annotate] batch built: ${requests.length} requests; payload bytes ~${roughPayloadBytes(requests)}`);
+  args.log(
+    `[annotate] batch built: ${requests.length} requests; payload bytes ~${roughPayloadBytes(requests)}`,
+  );
 
-  // Defensive runtime: the live SDK has `client.messages.batches`; our
-  // narrow `AnthropicClientLike` type doesn't model it (the C.t6 plan
-  // says batches is the canonical full-catalogue path but the
-  // integration with poll + result-stream is documented in the C.t8
-  // runbook, not implemented in this commit). Surface a clear message
-  // for the operator who picks `--mode=batches` ahead of that runbook.
-  const batches = (args.visionClient as unknown as {
-    messages: { batches?: { create?: unknown } };
-  }).messages.batches;
-  if (!batches || typeof batches.create !== 'function') {
-    const msg =
-      `[annotate] --mode=batches: the runtime client doesn't expose messages.batches.create. ` +
-      `For the small-sample verification (10–20 images) use --mode=live; ` +
-      `the unbounded Batches submission is documented in the C.t8 runbook.`;
-    args.log(msg);
+  // Resolve the batch client: caller-injected wins; otherwise adapt the
+  // runtime Anthropic SDK client. If neither path produces a client, bail
+  // with a clear operator-facing message (mirrors the pre-BATCH-C.t6
+  // scope-cut behaviour for callers who haven't wired the batches surface).
+  const batchClient: VisionBatchClient | null =
+    args.batchClient ??
+    (() => {
+      const sdk = adaptVisionSdkForBatches(args.visionClient);
+      return sdk ? new AnthropicVisionBatchClient(sdk) : null;
+    })();
+
+  if (!batchClient) {
+    args.log(
+      `[annotate] --mode=batches: the runtime client doesn't expose messages.batches.{create,retrieve,results}. ` +
+        `Upgrade the SDK or use --mode=live for the small-sample verification.`,
+    );
     args.summary.failed = args.candidates.length;
     for (const c of args.candidates) {
-      recordEntry(args.checkpointFile, c.id, 'failed', 'batches_not_wired');
+      recordEntry(args.checkpointFile, c.id, 'failed', 'batches_sdk_missing');
     }
     return;
   }
-  // The full Batches submission + poll + result-stream wiring lives in
-  // a follow-up PR for C.t8. Keep the request-build path tested here.
+
+  // 1) Submit.
+  let submit;
+  try {
+    submit = await batchClient.submit(requests);
+  } catch (err) {
+    const reason = messageOf(err);
+    args.log(`[annotate] --mode=batches: submit failed: ${reason}`);
+    args.summary.failed = args.candidates.length;
+    for (const c of args.candidates) {
+      recordEntry(args.checkpointFile, c.id, 'failed', `submit_failed: ${reason}`);
+    }
+    return;
+  }
   args.log(
-    `[annotate] --mode=batches: request-build verified; submission deferred to C.t8 runbook step. Use --mode=live for the small-sample verification.`,
+    `[annotate] batch submitted: id=${submit.batchId} count=${submit.count}`,
   );
-  args.summary.failed = args.candidates.length;
-  for (const c of args.candidates) {
-    recordEntry(args.checkpointFile, c.id, 'failed', 'batches_submission_deferred');
+
+  // 2) Wait for the batch to end (honours abort signal via shouldAbort).
+  let polled;
+  try {
+    polled = await waitForVisionBatch(batchClient, submit.batchId, {
+      log: args.log,
+      shouldAbort: () => args.signal?.aborted ?? false,
+    });
+  } catch (err) {
+    const reason = messageOf(err);
+    args.log(`[annotate] --mode=batches: wait failed: ${reason}`);
+    args.summary.failed = args.candidates.length;
+    for (const c of args.candidates) {
+      recordEntry(args.checkpointFile, c.id, 'failed', `wait_failed: ${reason}`);
+    }
+    return;
+  }
+  args.log(
+    `[annotate] batch ended: status=${polled.status} succeeded=${polled.counts.succeeded} errored=${polled.counts.errored} expired=${polled.counts.expired} canceled=${polled.counts.canceled}`,
+  );
+
+  // 3) Fetch results + per-result write-back.
+  let results;
+  try {
+    results = await batchClient.fetchResults(submit.batchId);
+  } catch (err) {
+    const reason = messageOf(err);
+    args.log(`[annotate] --mode=batches: fetchResults failed: ${reason}`);
+    args.summary.failed = args.candidates.length;
+    for (const c of args.candidates) {
+      recordEntry(args.checkpointFile, c.id, 'failed', `fetch_failed: ${reason}`);
+    }
+    return;
+  }
+  args.log(`[annotate] batch results: ${results.length} entries`);
+
+  for (const r of results) {
+    const candidateId = parseInt(r.customId.replace(/^image-/, ''), 10);
+    if (!Number.isFinite(candidateId)) {
+      args.log(
+        `[annotate] batch result has malformed custom_id=${r.customId}; skipping`,
+      );
+      continue;
+    }
+    if (r.status !== 'succeeded' || r.rawText === null) {
+      const reason = `batch_${r.status}: ${r.error ?? 'no text'}`;
+      recordEntry(args.checkpointFile, candidateId, 'failed', reason);
+      args.summary.failed += 1;
+      args.log(`[annotate] image=${candidateId} FAILED: ${reason}`);
+      continue;
+    }
+    const parsed = parseAndValidate(r.rawText);
+    if (!parsed.ok) {
+      recordEntry(args.checkpointFile, candidateId, 'failed', parsed.reason);
+      args.summary.failed += 1;
+      args.log(`[annotate] image=${candidateId} FAILED parse: ${parsed.reason}`);
+      continue;
+    }
+    if (isSkipSignal(parsed.value)) {
+      recordEntry(args.checkpointFile, candidateId, 'skipped', 'model_emitted_empty');
+      args.summary.skipped += 1;
+      args.log(`[annotate] image=${candidateId} skipped: model_emitted_empty`);
+      continue;
+    }
+    try {
+      const wb = await writeAnnotation(args.pgClient, {
+        imageId: candidateId,
+        description: parsed.value.description,
+        annotation: parsed.value.annotation,
+        subjectTags: parsed.value.subject_tags,
+        moodTags: parsed.value.mood_tags,
+        regionTags: parsed.value.region_tags,
+        tags: parsed.value.tags,
+      });
+      recordEntry(args.checkpointFile, candidateId, 'done', null);
+      args.summary.succeeded += 1;
+      args.log(
+        `[annotate] image=${candidateId} done desc_written=${wb.descriptionWritten} ann_written=${wb.annotationWritten} tags_written=${wb.tagsWritten}`,
+      );
+    } catch (err) {
+      const reason = messageOf(err);
+      recordEntry(
+        args.checkpointFile,
+        candidateId,
+        'failed',
+        `write_back: ${reason}`,
+      );
+      args.summary.failed += 1;
+      args.log(`[annotate] image=${candidateId} write_back FAILED: ${reason}`);
+    }
   }
 }
 
