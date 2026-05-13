@@ -6,6 +6,42 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-13 — Background-spawned agents need names + "continue" nudges, not manual takeover
+
+A 5-agent parallel batch this session (crosscut v1, B.t11, D.t9-mount-rehydrate, E.t6, D.t9 widget) surfaced two related operator-side discipline gaps:
+
+**Gap 1 — agents dispatched without `name`**. The Agent tool accepts a `name` parameter that makes the agent addressable via `SendMessage(to: name, …)`. None of the five dispatches passed one. The orchestrator-loaded skill `unsticking-stalled-background-agents` says explicitly: *"Whenever `run_in_background: true` (or you're spawning multiple agents in parallel that you'll later need to ping), pass a stable, descriptive `name`."* Skipping the name leaves the only fallback as the agent's internal id (which works, but isn't the supported pattern).
+
+**Gap 2 — silent agent ≠ done agent**. Two of the five agents (B.t11, D.t9 widget) reported "completed" with truncated single-line summaries (`"While that runs, let me append the execution log…"` / `"Now update safeParse to use the schema's inferred output type:"`). Both had non-trivial uncommitted work in their worktrees. The temptation is to take over: cd into the worktree, commit on the agent's behalf, declare done. **The right move is `SendMessage(to: name, "continue")`** — almost always unsticks the agent so it finishes its own commits, runs its own fresh-install verification, appends its own execution log. The skill's red flags are explicit: *"Reporting an agent as 'failed' or 'timed out' without ever sending continue."* Done it twice this session before catching it.
+
+**Discipline going forward** — invoke `unsticking-stalled-background-agents` *before* dispatching any background or parallel batch. Pass `name: <kebab-case-role>` to every `Agent` call in such batches (e.g. `name: "executor-b-t11"`). When an agent's summary looks truncated or absent: send `"continue"` first; only take over if two nudges fail (then `TaskOutput` → `TaskStop` → respawn with new name).
+
+Bonus observation from the same batch: of 5 agents, 3 used their isolation worktrees correctly (crosscut, B.t11, D.t9 widget); 2 wrote into the main repo working tree instead (E.t6 wrote+committed there directly to main; D.t9-mount-rehydrate wrote uncommitted into main). The 2026-04-29 hash-verification gate doesn't catch the wrong-cwd failure mode — it only catches wrong-HEAD-hash. Plausible cause: agents `cd`'d to `/Users/al/Studio/projects/swoop_web` (the documented project root) rather than to their isolation worktree path. Brief fix: add a `pwd` check to the agent prompt's first action that asserts the path ends in `.claude/worktrees/agent-<hash>/`. Implemented in the D.t9 widget brief; that one used isolation correctly.
+
+---
+
+## 2026-05-13 — `find_options` is polymorphic: one tool, discriminated `ProposalCard` output
+
+The C.t2-settled `FindOptionsOutput` had `cards: TripCardPublic[]` — trip-only. HITL on 2026-05-12 surfaced the gap: the *propose-options* conversational moment can land on tours (group-guided, fixed-itinerary), hotels (location-anchored, per-night pricing), or region-bases ("use as a launchpad") as well as trips. Fragmenting the surface into `find_trips` / `find_tours` / `find_hotels` / etc. would dilute the eight-tool architecture and confuse Sonnet's tool-selection logic. The right shape is one tool with a polymorphic output.
+
+`ProposalCardPublicSchema` is now a `z.discriminatedUnion('type', […])` over `trip | tour | hotel | region_base`. Each variant carries the type-specific affordances that earn their visual register (group-size badge for tours, per-night pricing for hotels, base-and-explore framing for region-bases). The UI's `find-options.tsx` parent polymorphic-dispatches over `card.type`; four sub-renderers under `find-options/` handle each variant. v1 (trips) is live end-to-end; v2 (tours, Luke's upsell priority) and v3 (hotels + region_bases) land in subsequent crosscut tranches as the data primitives mature.
+
+**Pattern to remember**: when one conversational job has multiple proposal shapes, prefer one tool with discriminated output over multiple narrow tools. The discriminator carries; the journey moment stays singular. The deleted `SearchResultsWidget` had bottom-up uniform polymorphism ("any hit looks like a hit"); this one is top-down per-variant ("each proposal type renders to its right register"). Different shape, opposite reasoning.
+
+Decisions C.48 (polymorphic contract), C.49 (Tours-as-distinct-from-Trips), C.50 (tranche strategy), C.51 (`preferredType` input steer) capture the rationale.
+
+---
+
+## 2026-05-13 — `session.expired` payload widened to a union; UI consumers must check `'gate' in payload`
+
+`session.expired` already existed pre-B.t11 — emitted by the handoff-retention sweeper with payload `{cause}`. B.t11's session-history projection endpoint also needs to emit `session.expired` (when the rehydration request hits a 404), but with a different shape: `{gate: 'puma' | 'adk' | 'consent'}` to distinguish unknown-id from desync from pre-consent.
+
+Rather than introduce a fifth event kind, the schema widens to a Zod union of `{cause}` and `{gate}`. Backwards-compatible with existing emit sites; no migration on the consumer side. **But** UI-side analytics consumers must check `'gate' in payload` to discriminate the rehydrate-404 path from the sweeper path. Captured here so the next analytics-touching agent doesn't conflate them.
+
+This is an exception to the usual "one event kind per emit site" pattern — earned its keep because the rehydrate-404 case has the same semantic weight as sweeper-expiry (the session is gone, surface accordingly), differing only in which gate detected it.
+
+---
+
 ## 2026-05-12 — Retention sweep lives at the interface, not the implementation — survives the Postgres swap unchanged
 
 E.t6 (handoff retention sweeper) faced the same Postgres-swap-survival question every chunk-E artefact does: today's `FsHandoffStore` is interim, tomorrow's `PostgresHandoffStore` lands post-IAM. Where does the deletion loop live?

@@ -4,7 +4,40 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
-## Status (2026-05-12 — chunk-C implementation fully merged to `main`; C.t1 / C.t3 / C.t3a / C.t4 / C.t5 / C.t6 / C.t8 + B.t3a all closed; **C.t9 (Gemini embeddings @ halfvec(3072), decision C.46) + C.t10 (`--sync` enrich mode, decision C.47) landed afternoon session, pending Al's API-key smokes**; derived tables still 0 rows pending the (now-sync) full enrich run)
+## Status (2026-05-13 — five-plan parallel batch landed: D.t9 widget rewrite + D.t9-mount-rehydrate + B.t11 + E.t6 + crosscut find_options polymorphism v1; chunk-C voyage→Gemini swap (C.t9) + sync classifier (C.t10) merged earlier; chunk-C implementation spine fully closed; chunk-D fully closed; chunk-E retention enforcement live)
+
+**2026-05-13 (today)**: HITL ratification batch from 2026-05-12 fully executed. Five Tier-3 plans authored, ratified, executed, and merged in parallel:
+
+| Plan | What landed | Tests |
+|---|---|---|
+| **E.t6** | Handoff retention sweeper — interface-level `HandoffStore.sweep()` + in-process timer + CLI external-trigger + operator runbook + counsel-review note | +22 |
+| **D.t9-mount-rehydrate** | UI-side `useRehydrate` hook + `replayPartsIntoThread` + 4 UI event kinds + 404 soft-fail with notification | +14 |
+| **Crosscut: find_options polymorphism v1** | `ProposalCardPublicSchema` discriminated union (trip\|tour\|hotel\|region_base) in `@swoop/common`; trip variant wired live; description.md rewritten with Tours upsell instruction | +15 |
+| **B.t11** | Server-side `GET /session/:id/history` endpoint + 4 event kinds + migration 010 placeholder | +14 |
+| **D.t9 widget rewrite** | 5 conversational-tool widgets + 4 polymorphic ProposalCard variant renderers; AttributeTable consumer wired | +50 |
+
+**Tests**: 818 → **908** (+90, all 6 workspaces green on fresh `rm -rf node_modules + npm install`). Per-workspace: `@swoop/common` 160, `@swoop/orchestrator` 170, `@swoop/connector` 126 (+ 3 DB-gated skipped), `@swoop/ui` 112, `@swoop/ingestion` 266, `@swoop/harness` 74.
+
+**Decisions logged**: B.25–B.29 (B.t11), C.48–C.51 (find_options polymorphism), D.26–D.30 (D.t9-mount-rehydrate), D.t9 widget per-tool decisions, E.t6 retention-sweeper decisions in plans.
+
+**Operator-side learning** (also captured in [discoveries.md](discoveries.md) 2026-05-13): always pass `name` to background `Agent` calls and invoke `unsticking-stalled-background-agents` skill *before* any parallel/background dispatch batch. When an agent's summary looks truncated: send `SendMessage(to: name, "continue")` first; only take over if two nudges fail. Two of five agents this session needed manual takeover that "continue" would have avoided.
+
+**Open HITL queued from this batch**:
+- D.t9 Q3 — persona-summary visual treatment in `find_someone_who` (italic with "Someone like…" preface / italic no preface / "Why this story?" header). Executor's choice carries forward; check the file for which option landed.
+- B.t11 — auth posture (session-id-as-secret vs short-lived bearer token) needs Swoop-legal input via E.t9.
+- B.t11 — `session.expired{gate:'consent'}` analytics-noise tuning.
+- B.t11 — rate-limiting per session id in Phase 1.
+- B.t11 — paginated history endpoint post-M4.
+- D.t9-mount-rehydrate — notification copy location (inline vs `cms/errors/`), 5xx retry behaviour, visibilitychange trigger, latency telemetry, in-progress form rehydration.
+- E.t6 — counsel-review note in `05-retention-policy.md` to surface at E.t9 (hard-delete posture).
+
+**Crosscut tranche queue**:
+- v2 (find_options tours backend) — gated on Swoop populating the `tour` table per [questions.md](questions.md) tour content ask. Renderer + schema already shipping against fixtures.
+- v3 (hotels + region_bases backend) — not gated; second priority after v2.
+
+---
+
+## Earlier status (2026-05-12 — chunk-C implementation fully merged to `main`; C.t1 / C.t3 / C.t3a / C.t4 / C.t5 / C.t6 / C.t8 + B.t3a all closed; **C.t9 (Gemini embeddings @ halfvec(3072), decision C.46) + C.t10 (`--sync` enrich mode, decision C.47) landed afternoon session, pending Al's API-key smokes**; derived tables still 0 rows pending the (now-sync) full enrich run)
 
 **2026-05-12 (today)**: `claude/magical-johnson-3b07a1` (67 commits ahead of `main`, holding the full chunk-C swarm + B.t3a) manually merged to `main` after a week's gap. Branch was at a natural inflection point — `C.t8` commit message reads "closes chunk C". Environment changes: engine pin in `product/package.json` + `product/harness/package.json` loosened from `>=20.0.0 <21.0.0` to `>=20.0.0` (no recorded rationale for the upper cap; CI continues to use `.nvmrc` at 20). **Operational state**: C.t3 domain load live-verified via psql (852 trips, 13,012 images, 906 FAQ, 2,160 customerreviews, 79 tags); 5 derived tables all 0 rows pending the enrich run. Partial `--mode=embed` pass kicked off this session (synchronous Voyage-3, no Batches API, minutes-not-24h). Full `--mode=all` deferred pending a sync-classifier carve-out from HITL Q4 — planning that work via Claude Code in parallel.
 

@@ -1,6 +1,49 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-12 (chunk-C implementation fully merged to `main`; C.t1 / C.t3 / C.t3a / C.t4 / C.t5 / C.t6 / C.t8 + B.t3a all closed; engine pin loosened to no upper cap; afternoon session landed **C.t9** (Voyage-3 → Gemini-embedding-001 at `halfvec(3072)`, decision C.46 supersedes the Voyage-3 sub-bullet in C.18) + **C.t10** (`--sync` enrich mode for dev iteration, decision C.47 carve-out from HITL Q4); two parallel agents dispatched + closure landed in spawning session; real-API smokes for both pending Al's GCP / Anthropic credentials)
+**Snapshot date**: 2026-05-13 (five-plan parallel-batch landed: D.t9 widget rewrite + D.t9-mount-rehydrate + B.t11 + E.t6 + crosscut find_options polymorphism v1; tests now 908 + 3 DB-gated skipped across all 6 workspaces on fresh `npm install`; chunk-D fully closed; chunk-E retention enforcement live; orientation-file housekeeping complete)
+
+## 2026-05-13 — Five-plan parallel batch (HITL-ratified 2026-05-12)
+
+After a long HITL design conversation on 2026-05-12, the four pre-existing Tier-3 plans (E.t6, D.t9, B.t11, D.t9-mount-rehydrate) were ratified and a new crosscut plan was authored (find_options polymorphism — discriminated `ProposalCardPublicSchema` over `trip|tour|hotel|region_base`, settling the contract day-one with v1 trips-only backend). All five then ran in parallel via background agents from worktrees branched off `867af2d` (the post-ratification merge to main).
+
+**Outcomes**:
+
+| Plan | Decisions | Tests | Notable contract change |
+|---|---|---|---|
+| **E.t6** — handoff retention sweeper | E.t6 internal | +22 | `HandoffStore.delete()` + `sweep()` interface methods; both call paths (in-process timer + CLI) tested |
+| **D.t9-mount-rehydrate** — UI replay-on-mount | D.26–D.30 | +14 | `useRehydrate` hook fires once on mount; replays through `replayPartsIntoThread` (assistant-ui-version-isolated) |
+| **Crosscut: find_options polymorphism v1** | C.48–C.51 | +15 | `TripCardPublicSchema` retired (zero hits sweep); discriminated union ships day-one even though only trip variant is wired live |
+| **B.t11** — server-side session history projection | B.25–B.29 | +14 | `GET /session/:id/history`; `session.expired` payload widened to a union `{cause}\|{gate}` |
+| **D.t9 widget rewrite** | D.t9 per-tool | +50 | 5 conversational widgets + 4 polymorphic ProposalCard variants (trip live, tour/hotel/region_base against fixtures pending v2/v3) |
+
+**Test totals after the batch (fresh `rm -rf node_modules + npm install`, all green)**:
+- `@swoop/common` 160 (was 152) — 7 files
+- `@swoop/orchestrator` 170 (was 160) — 15 files
+- `@swoop/connector` 126 (was 102) + 3 DB-gated skipped — 13 files
+- `@swoop/ui` 112 (was 62) — 18 files
+- `@swoop/ingestion` 266 (unchanged) — 21 files
+- `@swoop/harness` 74 (unchanged) — 4 files
+- **Total: 908 + 3 skipped across 78 test files (was 818 + 3 skipped → +90 net)**
+
+**Operator findings worth carrying forward** (full detail in [discoveries.md](discoveries.md) 2026-05-13):
+- Background-spawned agents need `name: <kebab-case>` and the `unsticking-stalled-background-agents` skill should be invoked *before* dispatch. Truncated-summary completions are usually stalls, not done — send `"continue"` via `SendMessage` before taking over.
+- 2 of 5 agents this batch wrote into the main repo working tree instead of their isolation worktree. Hash-verification gate doesn't catch wrong-cwd; add a `pwd` assertion to the agent prompt's first action.
+- The `find_options` polymorphism is the canonical "one tool, discriminated output" pattern — preserve over fragmenting into multiple narrow tools.
+- `session.expired` payload now has two shapes; UI analytics consumers must check `'gate' in payload` to discriminate rehydrate-404 from sweeper-expiry.
+
+**HITL items still open** (queued in [next-steps.md](next-steps.md)):
+- D.t9 Q3 — persona-summary visual treatment in `find_someone_who` (executor's choice carries; verify in code).
+- B.t11 — auth posture (legal-counsel input via E.t9), `session.expired{gate:consent}` noise tuning, rate-limiting in Phase 1, post-M4 pagination.
+- D.t9-mount-rehydrate — notification copy location, 5xx retry, visibilitychange trigger, latency telemetry, in-progress form rehydration.
+- E.t6 — counsel-review note for E.t9 (hard-delete posture).
+
+**Crosscut tranche queue**:
+- v2 (tours backend) — Swoop-data-gated. Renderer + schema already shipping against fixtures.
+- v3 (hotels + region_bases backend) — not gated.
+
+---
+
+## Earlier snapshot (2026-05-12 — chunk-C implementation fully merged to `main`; C.t1 / C.t3 / C.t3a / C.t4 / C.t5 / C.t6 / C.t8 + B.t3a all closed; engine pin loosened to no upper cap; afternoon session landed **C.t9** (Voyage-3 → Gemini-embedding-001 at `halfvec(3072)`, decision C.46 supersedes the Voyage-3 sub-bullet in C.18) + **C.t10** (`--sync` enrich mode for dev iteration, decision C.47 carve-out from HITL Q4); two parallel agents dispatched + closure landed in spawning session; real-API smokes for both pending Al's GCP / Anthropic credentials)
 **Release**: Puma (Patagonian-animals naming convention; see [CLAUDE.md](CLAUDE.md#releases))
 **Status**: **M1 live + chunks D + mock-host shipped; chunk-C implementation spine closed (C.t0/t1/t2/t3/t3a/t4/t5/t6/t8 + C.26 graduated); B.t3a closed (orchestrator → real connector; eight intent-named tools registered); 2026-04-30 review wave fully landed; chunks B/E/F/G/H advancing.** **2026-05-01 (later)**: C.t1 implemented across 4 atomic commits (pool + config + URL validation, MCP-HTTP skeleton + ping tool, migration runner, libpq statement_timeout fix). Connector boots cleanly against `puma_dev`; `/healthz` + `/readyz` + `/mcp` (with no-op `ping`) all verified live; SIGTERM closes pool gracefully. Total tests now 519/519 (was 492; +27 for C.t1). 2026-05-01 (earlier) landed via 14 agent branches + 2 integration fixes: all fourteen pre-chunk-work review items closed (R1, R2, R3, R4-handoff, R4-server, Sec-1, Sec-2, Sec-3, Theme-A.1, H3, H4, H5, Perf-1, Perf-3, Test-1) + seven new tier-3 DRAFT plans (C.t1, C.t3, C.t3a, C.t4, C.t5, C.t6, C.t8) authored for chunk-C implementation. Sec-3 (`javascript:`/`data:` URL scheme rejection) was originally claimed-closed by Theme-A.1 but only validated against stale node_modules — actually closed by `be9ca95` adding a refine() check on top of `.url()`. The chat.ts-cluster agent (R2 + R4-server + Perf-3 + Test-1) also surfaced and fixed a latent Express 5 + Node 20 bug — `req.on('close')` fires synchronously after `express.json` drains, so the chat handler's mid-stream-disconnect listener never propagated to `abortController.abort()`; switched to `res.on('close')`. **Test count: 412 → 492 (+80)**. Earlier (2026-04-30): **C.t2** entity model + tool surface schemas (migrations 001–005 + 006; eight intent-named tools with five job-shaped derived tables); **C.26 graduated** with the customerreview supplementary dump (2,563 rows + 163 trip junctions); composer pattern removed (decision C.24); top-down-from-sales discipline elevated as theme 11. Earlier (2026-04-29): C.t0 + E.t8 + H.t7 + mock-host + blog ingest. Earlier (2026-04-28): G.11 / B.t1a + E.t2/E.t3/E.t4 + 12 new decisions. Next wave per [next-steps.md](next-steps.md).
 
