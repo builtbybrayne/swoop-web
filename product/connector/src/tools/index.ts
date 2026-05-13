@@ -54,7 +54,7 @@ export type { ToolHandlerDeps } from './deps.js';
 export interface RegisterToolsOptions {
   /** Pool — borrow-and-release happens inside the handler deps. */
   readonly pool: pg.Pool;
-  /** Voyage-bound embedQuery function. */
+  /** Gemini-bound embedQuery function (gemini-embedding-001 / 3072d). */
   readonly embedQuery: ToolHandlerDeps['embedQuery'];
   /** Loaded description map (one description.md per tool). */
   readonly descriptions: ToolDescriptions;

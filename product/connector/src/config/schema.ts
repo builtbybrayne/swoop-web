@@ -116,15 +116,17 @@ export const configSchema = z
     // path resolved against the package root at config-load time.
     TOOLS_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/tools'),
 
-    // --- Voyage embeddings (C.t4) ------------------------------------------
+    // --- Gemini embeddings (visitor queries) -------------------------------
     //
-    // Voyage-3 / 1024d (decision C.18). The connector's vector retrieval
-    // primitives call Voyage to embed visitor utterances into a search
-    // vector. Optional at config-load time so connector boot doesn't fail
-    // when Voyage is unavailable; primitives that need an embedding throw
-    // a typed error if VOYAGE_API_KEY is missing at call time. Tests inject
-    // their own embedQuery function and never touch this.
-    VOYAGE_API_KEY: z.string().trim().min(1).optional(),
+    // gemini-embedding-001 / halfvec(3072), matching corpus storage shape
+    // (decision C.46 + the C.t9 2026-05-13 visitor-query Voyage-holdover
+    // addendum). The connector's vector retrieval primitives call Gemini to
+    // embed visitor utterances into a search vector. Optional at config-load
+    // time so connector boot doesn't fail when Gemini is unavailable;
+    // primitives that need an embedding throw a typed error if
+    // GEMINI_API_KEY is missing at call time. Tests inject their own
+    // embedQuery function and never touch this.
+    GEMINI_API_KEY: z.string().trim().min(1).optional(),
 
     // --- Environment selector ----------------------------------------------
     NODE_ENV: z

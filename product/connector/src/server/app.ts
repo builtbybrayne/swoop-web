@@ -27,7 +27,7 @@ import { createConnectorMcpServer } from './mcp.js';
 export interface BuildAppDeps {
   /** Pool used for /readyz's SELECT 1 probe + tool body borrows. */
   readonly pool: pg.Pool;
-  /** Voyage-bound embedQuery — wired into every conversational tool. */
+  /** Gemini-bound embedQuery (gemini-embedding-001 / 3072d) — wired into every conversational tool. */
   readonly embedQuery: EmbedQueryFn;
   /** Loaded tool descriptions (one per registered tool). */
   readonly descriptions: ToolDescriptions;
