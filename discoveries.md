@@ -6,6 +6,29 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-13 — ETL "via X" comments without implementations silently break downstream surfaces
+
+`product/ingestion/src/sql-transform/transformations.ts` line 368 (pre-fix) read:
+
+```ts
+region_id: null, // Trip → region via ntags_lookup (area-typed tag), not direct FK.
+```
+
+The comment correctly named the intended source. The implementation set `null`. The trip table loaded fine, tests passed (they didn't assert region_id non-null because there was no source data fixture for it). 24 days later the BF-FO-v3 wave built a complete data primitive + dispatch + widget + tests for `region_base` that all worked correctly against the (NULL) data — and the user-facing region_base widget produced empty results on every call because the upstream column was empty.
+
+**Pattern to remember**: when an ETL transform leaves a column as `null` with a comment naming the eventual source (`// via X`), that's a load-bearing punt — it WILL block a downstream consumer one day. Either implement the derivation immediately, or raise the gap visibly in the plan + a TODO with an explicit owner. Comments alone do not block bugs.
+
+**Discipline going forward**:
+- Periodic `grep -n "null, // " product/ingestion/src/sql-transform/transformations.ts` to enumerate similar punts (currently `trip.country_id` is one).
+- When auditing a downstream consumer, verify the *populated* state of the columns it filters on, not just the *existence* of the column.
+- Add a probe step to the chunk-C runbook: `SELECT column_name, COUNT(*) FROM trip WHERE column IS NOT NULL` for every column that's NOT NULL-OPT in the schema but pops null at ETL time.
+
+The C.t3 plan's emphasis on idempotency + speed prioritised correctness-of-shape over completeness-of-fields. Both matter; the latter is now load-bearing for chunk-D widget surfaces.
+
+Concrete fix: 2026-05-13 commit `aa72202`, planning addendum [planning/03-exec-crosscut-brave-pare-trip-region-id-backfill.md](planning/03-exec-crosscut-brave-pare-trip-region-id-backfill.md).
+
+---
+
 ## 2026-05-13 — Three live-smoke discoveries from the brave-pare-5e0eba wave
 
 A single afternoon-session boot-and-poke against the live stack surfaced three patterns worth pinning. None of them were caught by the existing test surface — each needed real component mounting + real tool dispatch + real visitor flow to trigger.
