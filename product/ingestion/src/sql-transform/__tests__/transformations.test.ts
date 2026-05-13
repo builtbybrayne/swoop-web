@@ -40,6 +40,7 @@ function emptyLookups(): Lookups {
     ntagsByEntity: new Map(),
     imageTripFirst: new Map(),
     imagePageFirst: new Map(),
+    areaIdByTagId: new Map(),
   };
 }
 
@@ -282,6 +283,56 @@ describe('transformTrip', () => {
       new Map(),
     );
     expect(result.row?.image_id).toBe(null);
+  });
+
+  it('derives region_id from a single area-typed tag', () => {
+    const lookups = emptyLookups();
+    // Trip 700 has tag-ids [62] (= area-typed ntag with alias 'torres-del-paine').
+    // areaIdByTagId resolves 62 → area.id 60.
+    lookups.ntagsByEntity.set('trip', new Map([[700, [62]]]));
+    lookups.areaIdByTagId.set(62, 60);
+
+    const result = transformTrip(
+      { table: 'trip', values: { id: 700, title: 'W Trek', page_id: null } },
+      lookups,
+      new Map(),
+    );
+    expect(result.row?.region_id).toBe(60);
+  });
+
+  it('picks the lowest area.id for multi-area trips', () => {
+    const lookups = emptyLookups();
+    // Trip 422 ("south-america-wild-patagonia") has 7 area tags spanning
+    // Antarctica/Aysén/TdP/FTE & Chalten/etc. — lowest area.id wins per the
+    // multi-area rule.
+    lookups.ntagsByEntity.set('trip', new Map([[422, [73, 58, 62, 59]]]));
+    lookups.areaIdByTagId.set(73, 2); // Antarctica
+    lookups.areaIdByTagId.set(58, 4); // Aysén region
+    lookups.areaIdByTagId.set(62, 60); // Torres del Paine
+    lookups.areaIdByTagId.set(59, 73); // FTE & Chalten
+
+    const result = transformTrip(
+      { table: 'trip', values: { id: 422, title: 'Wild Patagonia' } },
+      lookups,
+      new Map(),
+    );
+    expect(result.row?.region_id).toBe(2);
+  });
+
+  it('leaves region_id null when no area-typed tags resolve', () => {
+    const lookups = emptyLookups();
+    // Trip 371 ("adventure-travel-in-patagonia") — meta page, no area tags,
+    // or tags whose alias has no corresponding area row (sub-area / campaign
+    // tags drop out of areaIdByTagId during loadLookups).
+    lookups.ntagsByEntity.set('trip', new Map([[371, [100, 122]]]));
+    // areaIdByTagId is empty — those tag ids don't resolve to any area.
+
+    const result = transformTrip(
+      { table: 'trip', values: { id: 371, title: 'Adventure travel in Patagonia' } },
+      lookups,
+      new Map(),
+    );
+    expect(result.row?.region_id).toBe(null);
   });
 });
 
