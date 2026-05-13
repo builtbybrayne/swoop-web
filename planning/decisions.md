@@ -8,6 +8,83 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## D.31 — Rehydrate runs even for warm-pool-empty sessions; empty replay is a happy path
+
+**Decided**: 2026-05-12
+**Owner**: D.t9-mount-rehydrate execution
+**Rationale**: B.t10's warm-pool sessions are valid + consented but turn-empty by construction. B.t11's projection returns `200 { parts: [] }` for them. Two options for the UI: special-case empty replay (placeholder) or treat it as a normal mount. Picked the latter — visitor lands directly on the empty thread surface ready to type. No "Welcome back" affordance, no "Restoring…" interstitial. Same UX as a fresh session, because semantically it is one.
+**Swap cost**: Zero.
+
+## D.30 — 404 path soft-fails to OpeningScreen with a one-line preamble — NOT a banner
+
+**Decided**: 2026-05-12 (HITL-ratified)
+**Owner**: D.t9-mount-rehydrate execution + paired B.t11
+**Rationale**: When the rehydrate endpoint returns 404 (`session_not_found`), consent must be re-granted before chat resumes — and the OpeningScreen is the consent surface. A D.t5-style banner with a "Start over" button would route the visitor *through* a click before reaching consent, costing one extra interaction for no information. Soft-fail clears `sessionStorage` and lands on OpeningScreen with a one-line "Your previous conversation expired — please start a new one." preamble. The branch flips trivially if HITL ever reverses; the wire contract doesn't change.
+**Swap cost**: Low. One UI branch swap.
+
+## D.29 — `[rehydrate_failed:<reason>]` marker extends the D.12 adapter-error pattern
+
+**Decided**: 2026-05-12
+**Owner**: D.t9-mount-rehydrate execution
+**Rationale**: 5xx and network failures during rehydrate route through D.t5's existing banner classifier via `emitAdapterError`. New `[rehydrate_failed:<reason>]` marker convention — classifier maps to `unknown` or `unreachable` based on `reason`. Reuses the established error-routing pattern instead of inventing a parallel surface.
+**Swap cost**: Low. Marker → classifier mapping is one switch arm.
+
+## D.28 — One synthetic assistant message holds the entire replayed history
+
+**Decided**: 2026-05-12
+**Owner**: D.t9-mount-rehydrate execution
+**Rationale**: assistant-ui at 0.12.25 has no first-class replay primitive. Per-turn reconstruction would require boundary detection across the projected `MessagePart[]` stream; one synthetic assistant message wrapping the full replay is simpler and meets the visitor's JTBD ("see my history"). If F-chunk telemetry later shows visitor confusion about message structure, revisit.
+**Swap cost**: Low. Replay-into-thread is isolated in one file (D.27); a per-turn rebuild swaps that file's body.
+
+## D.27 — Replay implementation isolated in `replay-into-thread.ts`
+
+**Decided**: 2026-05-12
+**Owner**: D.t9-mount-rehydrate execution
+**Rationale**: assistant-ui's pre-1.0 API surface is the single most likely upgrade-impact site in the UI. Isolating the assistant-ui-version-specific replay code in one file means a library upgrade re-touches one file, not the whole rehydrate path.
+**Swap cost**: Zero. Single-file isolation by design.
+
+## D.26 — Rehydrate is fire-once-on-mount via `useRehydrate`, not part of `useConsent` or the transport
+
+**Decided**: 2026-05-12
+**Owner**: D.t9-mount-rehydrate execution
+**Rationale**: Three plausible homes for the rehydrate trigger: (a) inside `useConsent` (couple it to consent lifecycle), (b) inside the custom `ChatTransport` (couple it to message-stream initialisation), (c) its own hook. Picked (c). Independent lifecycle, testable in isolation, mirrors `usePreflight`'s shape. Both alternatives would conflate rehydrate with a sibling concern and make testing harder.
+**Swap cost**: Low. Hook can collapse into `useConsent` or the transport later if their lifecycles converge.
+
+## B.29 — `SessionHistoryDeps` interface-typed against `SessionStore` + `BaseSessionService`
+
+**Decided**: 2026-05-12
+**Owner**: B.t11 execution
+**Rationale**: The post-M4 swap to a Postgres-backed `SessionService` (B.22) must require zero changes to `session-history.ts`. The handler takes `SessionStore` (Puma's abstraction) and `BaseSessionService` (ADK's abstraction) by interface, not by concrete impl. Mirrors the `FsHandoffStore` → `PostgresHandoffStore` interim-to-durable trajectory established by E.t2.
+**Swap cost**: Low. The B.22 swap re-points the concrete impls in `src/index.ts`; the handler doesn't change.
+
+## B.28 — Migration 010 (not 009) lands as a no-op placeholder so the C.31 chain stays continuous
+
+**Decided**: 2026-05-12
+**Owner**: B.t11 execution
+**Rationale**: Plan named 009 but C.t9's voyage→Gemini swap had already claimed 009 (`product/connector/migrations/009_embeddings_dim_3072.sql`). Shifted to the next free prefix (010). Placeholder body documents the shift inline. C.31's forward-only zero-padded chain stays uninterrupted; when B.22 lands the real `SessionService` Postgres schema, its agent doesn't have to negotiate the prefix.
+**Swap cost**: Zero. Empty migration; the chain assertion in `migrate.test.ts` is bumped by one.
+
+## B.27 — Four new F-a observability event kinds for the rehydration path
+
+**Decided**: 2026-05-12
+**Owner**: B.t11 execution
+**Rationale**: `session.rehydrated`, `session.replay.empty`, `session.replay.failed`, `session.expired` — emitted at the relevant points of the projection handler per B.18's "emit at the site" pattern. Supports post-launch rehydration metrics without retrofit. Note: `session.expired` already existed (sweeper path with payload `{cause}`); B.t11's emit path uses a `{gate}` payload to distinguish unknown-id from desync from pre-consent. The schema widens to a Zod union of `{cause}` and `{gate}`. UI analytics consumers must check `'gate' in payload` to discriminate — captured in `discoveries.md` 2026-05-13.
+**Swap cost**: Low. The union widening on `session.expired` is backwards-compatible with existing emit sites.
+
+## B.26 — 404 conflation: `puma | adk | consent` gates → one `session_not_found` code
+
+**Decided**: 2026-05-12
+**Owner**: B.t11 execution
+**Rationale**: All three 404 paths (Puma session unknown, ADK session desync, pre-consent edge case) collapse to one response shape: `{error.code: "session_not_found"}`. Mirrors D.16's posture on `/session/:id/ping` — the UI's classifier doesn't need to distinguish between them; all three route to the same "start a new conversation" affordance. Server-side observability does distinguish via the `gate` field on the `session.expired` event (post-launch analytics).
+**Swap cost**: Low.
+
+## B.25 — Session history projection reads the ADK event log, not Puma `conversationHistory`
+
+**Decided**: 2026-05-12
+**Owner**: B.t11 execution
+**Rationale**: Two candidate sources for the projection: (a) Puma's `conversationHistory` (lossy — just user/assistant text), (b) ADK's full event log (lossless — every part type including tool calls). Picked (b) so replay can rehydrate the full structured turn shape, not just text. The projection translator strips reasoning parts (chunk-B invariant) but preserves everything else: tool calls, fyi parts, adjunct parts. UI replay renders the same shape it would have rendered live.
+**Swap cost**: Low. Translator filter is centralised; switching to a Puma-side source is a handler rewrite if ever needed.
+
 ## C.51 — `findOptionsInput.preferredType` lets the agent steer the tool toward a specific proposal type
 
 **Decided**: 2026-05-12

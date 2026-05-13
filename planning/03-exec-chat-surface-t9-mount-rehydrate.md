@@ -440,6 +440,27 @@ docs(planning): D.t9-mount-rehydrate — Tier 3 plan for UI-side rehydrate on mo
 
 - Pairs with [`03-exec-agent-runtime-t11.md`](03-exec-agent-runtime-t11.md) (server half).
 - Side-quest origin: [`01-side-quest-persistence.md`](01-side-quest-persistence.md) §5 W2.
+
+---
+
+## Execution log
+
+### 2026-05-13 — Landed (5-plan batch)
+
+**What landed**:
+- `useRehydrate` hook fires once on mount via the D.27 isolation pattern (replay code lives in `replay-into-thread.ts`, one file scoped to assistant-ui 0.12.25 surface).
+- One synthetic assistant message holds the entire replayed history (D.28).
+- 4 UI-side event kinds: `ui.session.rehydrate.{requested,applied,expired,failed}`.
+- 404 path soft-fails to OpeningScreen with the D.30 one-line preamble.
+- 5xx + network errors route through D.t5's existing banner via `emitAdapterError` with the new `[rehydrate_failed:<reason>]` marker (D.29) and the classifier mapping it to `unknown` / `unreachable`.
+
+**Wire contract honoured** with B.t11 (paired plan): 200 happy paths (non-empty + empty), 404 → soft-fail, 500/503 → banner. `session.expired{gate}` payload discriminator preserved.
+
+**Tests delta**: `@swoop/ui` went 62 → 112 across the broader batch. UI workspace gained `rehydrate.test.ts`, `use-rehydrate.test.ts`, `replay-into-thread.test.ts` plus the 5 D.t9 widget test files.
+
+**HITL ratification record** (from the 2026-05-12 session): Q1 (404 UX = soft-fail + small notification, no manual click) and Q2 (empty replay UX = no special case) both closed. Five smaller specifics remain queued — notification copy location, retry behaviour, visibilitychange trigger, latency telemetry, in-progress form rehydration.
+
+**Operator note**: this plan's executor agent stalled mid-stream without committing (truncated summary `"Now update safeParse to use the schema's inferred output type:"`). The work was committed manually on the agent's behalf as `d4a59f7` per the agent-dispatch lesson captured in `discoveries.md` 2026-05-13. Future dispatches should pass `name:` to the Agent call and use `SendMessage(to: name, "continue")` to unstick a stalled agent before manual takeover.
 - Tier 2 home: [`02-impl-chat-surface.md`](02-impl-chat-surface.md) §2.5 (session id handling) + §2.6 (cross-page persistence; the field this plan unparks).
 - Pattern parallels:
   - D.12 (adapter error emitter — same channel for rehydrate failures).
