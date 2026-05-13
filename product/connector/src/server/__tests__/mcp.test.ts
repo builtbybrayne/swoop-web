@@ -103,7 +103,11 @@ describe('MCP /mcp endpoint', () => {
         name: 'handoff',
         arguments: {
           verdict: 'qualified',
-          reasonCode: 'ready_to_book',
+          // Per VERDICT-E.t1 (2026-05-13): reasonCode is constrained to the
+          // QualifiedReasonCodeSchema enum on the qualified variant. The
+          // pre-tightening test used a free-form placeholder which the
+          // discriminated union now rejects.
+          reasonCode: 'ready_booking_named_trip',
           conversationSummary: 'Visitor wants W trek in March',
           motivationAnchor: 'autumn light in Patagonia',
         },
