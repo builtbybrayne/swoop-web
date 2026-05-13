@@ -6,6 +6,50 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-13 — CMS WYSIWYG decorative whitespace is systemic; strip at the boundary
+
+50% of pages in `puma_dev` (296 of 590 with content) carry trailing `&nbsp;<br></p>` or similar decorative whitespace from the editor team's WYSIWYG output — someone presses Enter at the end of writing and the editor preserves the trailing newline as `<br>` inside the closing tag. The San Pedro de Atacama page is the canonical example: `"<p>This tiny desert town … Atacama Desert.&nbsp;<br></p>"`.
+
+This is *invisible* to a reader (it just renders as a blank line) but *visible* to overflow-detection logic: a trailing `<br>` adds a full line-height to the rendered DOM. With a `<ExpandableProse maxLines={3}>` wrapper, the unclamped `scrollHeight` measures 4 lines (3 of text + 1 of `<br>`) while the clamped `clientHeight` measures 3 — so the overflow check flips true and a "Read more" toggle appears on content that visually fits.
+
+A naive `String.trim()` doesn't catch this — `<br>`, `&nbsp;`, and empty trailing `<p></p>` blocks are HTML decoration, not whitespace at the string level.
+
+**Pattern to remember**: when reading CMS-authored prose at the connector boundary, route every reader through a shared `trimCmsDecorativeWhitespace` helper (`product/connector/src/data/text-utils.ts`) that layers regex strips for `<br>`, `&nbsp;`, and empty closing-tag blocks at both ends. Iterate to a fixed point so nested patterns (`<br>&nbsp;</p>`) all clean up. Interior decoration stays — only edge artefacts go.
+
+Trust posture (load-bearing): the strip operates on CMS-authored content where authors meant the inner `<strong>` / `<em>` / `<a href>` / `<br>` formatting. Don't extend it to a generic HTML sanitiser. Visitor-typed surfaces (e.g. `customerreview.content`) have a different trust boundary and should not pass through this path.
+
+Concrete fix: commit `f9b1d1d` (2026-05-13 brave-pare wave), planning addendum [planning/03-exec-crosscut-brave-pare-card-expandable-prose.md](planning/03-exec-crosscut-brave-pare-card-expandable-prose.md).
+
+---
+
+## 2026-05-13 — Tailwind `line-clamp-N`: `scrollHeight === clientHeight`; temp-unclamp to detect overflow
+
+Tailwind 3.4's `line-clamp-N` utility compiles to `display: -webkit-box` + `-webkit-line-clamp: N` + `overflow: hidden`. Under this layout, modern browsers (Chrome/Safari) normalise the computed `display` to `flow-root` while still applying `-webkit-line-clamp` for the visual clamp. The textual content IS clamped visually, but **both** `scrollHeight` and `clientHeight` come back equal to the clamped height — there's no way to detect overflow with the naive `scrollHeight > clientHeight` check.
+
+This bites any "show a Read more button when content overflows" pattern. First attempt at `<ExpandableProse>` used the naive check; result was that overflow was never detected (or, with trailing CMS `<br>` decoration, falsely detected — see the entry above).
+
+**Pattern to remember**: temporarily remove the `line-clamp-N` class inside `useLayoutEffect` to read the *unclamped* `scrollHeight`, then restore. `useLayoutEffect` runs synchronously before paint, so the visitor never sees the unclamped frame. Compare unclamped `scrollHeight` to clamped `clientHeight` for the actual overflow signal. Snippet:
+
+```ts
+useLayoutEffect(() => {
+  const el = proseRef.current;
+  if (!el || expanded) return;
+  const original = el.className;
+  const unclamped = original.replace(/\bline-clamp-\d+\b/g, '').trim();
+  if (unclamped !== original) el.className = unclamped;
+  const uHeight = el.scrollHeight;
+  if (unclamped !== original) el.className = original;
+  const cHeight = el.clientHeight;
+  setOverflowing(uHeight > cHeight + 1);
+}, [content, expanded, maxLines]);
+```
+
+Alternative shapes (probe div, ResizeObserver, character-count heuristic) all add complexity or false-precision; the temp-unclamp is the cheapest robust option for content that doesn't change after first paint.
+
+Concrete fix: `product/ui/src/shared/ExpandableProse.tsx`, commit `1bb679d`, planning addendum [planning/03-exec-crosscut-brave-pare-card-expandable-prose.md](planning/03-exec-crosscut-brave-pare-card-expandable-prose.md).
+
+---
+
 ## 2026-05-13 — ETL "via X" comments without implementations silently break downstream surfaces
 
 `product/ingestion/src/sql-transform/transformations.ts` line 368 (pre-fix) read:
