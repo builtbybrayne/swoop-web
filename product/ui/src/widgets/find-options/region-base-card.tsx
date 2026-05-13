@@ -58,18 +58,28 @@ export function RegionBaseCard({ card }: { card: RegionBaseProposalCard }) {
               {card.headline}
             </h3>
             {card.vibeLine ? (
-              <p className="text-sm leading-relaxed text-slate-600">
-                {card.vibeLine}
-              </p>
+              // CMS-authored prose from Swoop's internal team (sourced from
+              // page.summary / page.intro_text via query-region-bases.ts).
+              // Render as HTML so authored <strong>/<em>/<a>/<p> formatting
+              // surfaces as intended. Trust boundary: source is the Swoop
+              // CMS, NOT visitor input — no XSS surface here. See
+              // planning/03-exec-crosscut-brave-pare-render-cms-html.md.
+              // Wrapper is <div> not <p> because the CMS content frequently
+              // contains <p> elements and nesting <p> inside <p> is invalid.
+              <div
+                className="text-sm leading-relaxed text-slate-600 [&_p]:m-0 [&_p+p]:mt-2"
+                dangerouslySetInnerHTML={{ __html: card.vibeLine }}
+              />
             ) : null}
           </header>
           {card.baseFraming ? (
-            <p
+            // Same trust posture as vibeLine — CMS-authored if populated by
+            // a future composer. <p> → <div> for the same nesting reason.
+            <div
               data-testid="find-options-region-base-framing"
-              className="rounded bg-slate-50 px-3 py-2 text-xs italic leading-relaxed text-slate-700"
-            >
-              {card.baseFraming}
-            </p>
+              className="rounded bg-slate-50 px-3 py-2 text-xs italic leading-relaxed text-slate-700 [&_p]:m-0 [&_p+p]:mt-2"
+              dangerouslySetInnerHTML={{ __html: card.baseFraming }}
+            />
           ) : null}
           <AttributeTable rows={rows} />
           <div
