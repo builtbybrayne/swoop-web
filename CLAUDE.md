@@ -103,6 +103,7 @@ To find every open review-driven item: `grep "code-review fixes" planning/03-exe
 - Prefer evolving PoC artefacts over greenfield authoring. Reuse is margin.
 - Treat content (prompts, sales material, library data) as data, not code. Load at runtime; never inline.
 - Match Al's voice in client-facing work (Luke: punchy, no fluff. Julie: product-detailed, honest about risk).
+- **Inline comprehension for references.** When mentioning a commit sha, decision ID (`C.46`), Tier-3 task code (`D.t9`), plan filename, branch, or worktree, **always include the title or one-line context inline** — never the bare ID. Markdown links with descriptive titles are best (`[03-exec-c-t9.md — Gemini embeddings swap](planning/03-exec-c-t9.md)`). Tables of commits/decisions need a description column. If you don't know what an ID refers to, read it before parroting the reference. Al reviews dozens of in-flight items; bare IDs force a context-switch every time. Rationale + worked examples in [memory feedback_inline_comprehension_for_refs.md](../../.claude/projects/-Users-al-Studio-projects-swoop-web/memory/feedback_inline_comprehension_for_refs.md).
 
 **Never:**
 - Don't re-raise parked threads (Prompt Loom for Swoop, Platform48 joint pitch, original ChatGPT production launch workstream) unless Al explicitly opens them.
