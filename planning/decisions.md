@@ -8,6 +8,18 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## C.52 — Image-annotation `--mode=batches` submission wiring is a deliberate C.t6 scope-cut; `--mode=live` is the supported full-run path until the wiring lands
+
+**Decided**: 2026-05-02 (scope-cut during C.t6 execution); **surfaced as a discrete decision** 2026-05-13 after the gap caused operator confusion + a failed run.
+**Owner**: Al (decision); C.t6 executing agent (original scope-cut)
+**Rationale**: C.t6 — Claude Vision image annotation pipeline (decision C.40 — fold producing 6 outputs per image) — needed `--mode=live` for the small-sample prompt + Zod + write-back verification. The Anthropic Batches API submission + poll + result-stream wiring was a separate larger piece; the executing agent chose to ship the request-build path (verified by tests) and leave the actual `messages.batches.create` call for a follow-up tied to the C.t8 operator runbook. That follow-up never made it into `next-steps.md` or any backlog — only into the runbook's flag-description and a code comment in `runBatches` — so when operators (or assisting agents) reached for `--mode=batches`, they paid the cost of running the payload-build path before learning it's a no-op.
+
+**Decision**: name the carve-out explicitly. `--mode=live` is the supported full-run path. `--mode=batches` is **request-build-verified only** until the submit + poll + result-stream wiring is built. The follow-up task is now queued in [next-steps.md — Chunk C section](../next-steps.md) and the operator-facing gotcha is at [gotchas.md — annotate-images batches](../gotchas.md). The original runbook caveat at [product/cms/ops/image-annotation-rerun.md](../product/cms/ops/image-annotation-rerun.md) stays as the read-this-before-running gate.
+
+**Cost impact**: ~$17 USD / £13 per full ~6.9K-image annotation re-run (the difference between full live rate and 50%-off batches rate). At Puma's scale this is a small ongoing cost; at Antarctica + Arctic expansion scale (~3× corpus) it'd be ~$50 / £40 per backfill — still small but enough to justify ~1–2 hrs TDD work when scope opens. Pattern to copy: [product/ingestion/src/enrich/anthropic-batch-client.ts](../product/ingestion/src/enrich/anthropic-batch-client.ts) — the Haiku classifier batches client built in C.t10 (sync enrich mode).
+
+**Swap cost**: Low. Implementing the wiring is a clean follow-on; the pattern is established. Reverting (deleting the `--mode=batches` flag entirely) is also low-cost if we decide live-only is acceptable forever.
+
 ## D.31 — Rehydrate runs even for warm-pool-empty sessions; empty replay is a happy path
 
 **Decided**: 2026-05-12

@@ -6,6 +6,27 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## `annotate-images --mode=batches` builds the payload then bails — submission is unwired
+
+Symptom: `npm run -w @swoop/ingestion annotate-images -- --mode=batches --max-budget=20` runs through the cost projection + budget gate + 80MB request-payload build, then logs
+
+    [annotate] --mode=batches: request-build verified; submission deferred to C.t8 runbook step. Use --mode=live for the small-sample verification.
+    [annotate] complete: succeeded=0 skipped=0 failed=6894.
+
+…and exits non-zero with every candidate marked `batches_submission_deferred` in the checkpoint at `product/ingestion/data/image-annotations/default/checkpoint.json`. No request was sent to Anthropic.
+
+Cause: `runBatches` in [product/ingestion/src/images/run.ts](product/ingestion/src/images/run.ts) (lines ~435–476) is a deliberate **C.t6 scope-cut**. The function ratifies the request shape against the schema but stops before `client.messages.batches.create({ requests })`. The "follow-up PR for C.t8" referenced in the inline comment hadn't been queued anywhere visible until 2026-05-13 — only the operator runbook at [product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md) carried the caveat, and only readers who opened the runbook before running the command saw it.
+
+Fix today: use `--mode=live` instead — supported full-run path. ~$0.005/image at 5-up concurrency, 30–60 min wall-clock for the full ~6.9K-image Puma backfill, ~$34 USD / £27 vs batches mode's hypothetical ~$17 / £14.
+
+```sh
+npm run -w @swoop/ingestion annotate-images -- --mode=live --max-budget=40
+```
+
+Fix forward: implement the submit + poll + result-stream wiring. Pattern to copy: [product/ingestion/src/enrich/anthropic-batch-client.ts](product/ingestion/src/enrich/anthropic-batch-client.ts) — the Haiku-classifier batches client built in C.t10 (sync enrich mode). Backlog item lives in [next-steps.md §2 — Chunk C](next-steps.md). Decision context in [planning/decisions.md — C.52](planning/decisions.md). Estimated ~1–2 hrs TDD work; saves ~$17 / £13 per full image-annotation re-run.
+
+---
+
 ## Gemini embeddings 429 under our default concurrency — dial down with env vars
 
 Symptom: `npm run -w @swoop/ingestion enrich -- --mode=all --sync` immediately throws
