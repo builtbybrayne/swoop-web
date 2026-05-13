@@ -8,6 +8,50 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+> **Numbering note (2026-05-13)** — entries `C.bf-1` … `C.bf-6` below use a non-numeric `bf-` suffix (read: "backfill") rather than `C.53` … `C.58`. The rationale is collision avoidance: parallel Tier-3 plan authors were running concurrently the day these landed, and several were independently allocating numeric ids `C.43+`. The `bf-` prefix keeps the backfill provenance discoverable and side-steps the allocation race entirely. Future renumbering to standard `C.N` form is a doc-only refactor with zero swap cost.
+
+## C.bf-1 — `find_options` v3 wires hotels + region_bases as live data primitives; v2 (tours) remains gated on Swoop content population
+
+**Decided**: 2026-05-13
+**Owner**: BF-FO-v3 execution ([planning/03-exec-crosscut-find-options-v3-backfill.md](03-exec-crosscut-find-options-v3-backfill.md))
+**Rationale**: Hotels and region_bases are NOT Swoop-gated — `hotel` carries 44 live rows in `puma_dev` (per C.t3 ETL); `area` carries 16 rows; the page-as-hub pattern (2026-04-29 discoveries) supplies canonical URLs and image_ids. Tours are blocked on Swoop populating the `tour` table (15 rows, mostly NULL-titled). Don't bundle v3 with v2 — wiring hotels and region_bases NOW lights up two of the three remaining live ProposalCard variants without waiting for Swoop content.
+**Swap cost**: Zero. v2 lands behind the same dispatch switch when content is populated; the `'tour'` branch already routes through the trip primitive as a v2 fallback (decision C.bf-6).
+
+## C.bf-2 — Hotel image resolution goes via `hotel.page_id → page.image_id` (no direct `image_id` on `hotel`)
+
+**Decided**: 2026-05-13
+**Owner**: BF-FO-v3 execution
+**Rationale**: Confirms the 2026-04-29 inspection finding "Hotels have ONLY the page path" as the canonical resolution rule at the projection layer. The 002 migration schema has no `image_id` column on `hotel`; image association is via `hotel.page_id → page.image_id`. The hotel data primitive resolves images by joining through `page` and feeding the resulting `page.image_id` into `resolveImagesByIds`. Hotels without `page_id` (or with a `page_id` pointing at a `page` without `image_id`) surface a card with no `image` field — the UI renders without a hero image, the card still passes schema validation.
+**Swap cost**: Low. If Swoop ever adds direct `image_id` to `hotel` (or an `image_hotel` junction), the resolver swaps to "direct first, page fallback" matching the existing `query-trips.ts` pattern for trips.
+
+## C.bf-3 — When `preferredType` is unset, `find_options` returns a blended set across live variants; deficits redistribute toward trips
+
+**Decided**: 2026-05-13
+**Owner**: BF-FO-v3 execution
+**Rationale**: A typical visitor's request will be open-ended ("show me some Patagonia options"). Returning only trip cards trains Sonnet to default to that shape and starves the polymorphism contract. Default blend at `limit=4`: 2 trips + 1 hotel + 1 region_base. Proportional for other limits; primitives with 0 quota are skipped (no wasted round-trip). When the total comes back under `limit` AND at least one card was delivered, the handler tops up by querying extra trips (most-populous live source). When EVERY primitive returns empty, no top-up fires — there's no data to redistribute toward.
+**Swap cost**: Low. Adjusting the blend ratio is a constant tweak; switching to a uniform shuffle, or to a signal-aware blend (e.g. "if region is named, weight toward hotels"), is a single-function refactor.
+
+## C.bf-4 — Region-base canonical URL resolution: `area.alias = page.alias` first, `canonical_url` suffix match as fallback
+
+**Decided**: 2026-05-13
+**Owner**: BF-FO-v3 execution
+**Rationale**: An `area` row carries no `page_id`, `canonical_url`, or `image_id` directly; it has to borrow one from a page hub. The two-step heuristic — match `page.alias = area.alias` (with `parent_id IS NOT NULL` to skip the absolute root) first, then fall back to URL-suffix match (`canonical_url LIKE '%/' || area.alias`) — works for Patagonia's flat URL convention. Lowest `page.id` wins on ties (deterministic). Areas without any matching page hub are NOT surfaced as region_bases — a card without a deep-link CTA isn't useful to the visitor.
+**Swap cost**: Medium. If the heuristic misses obvious bases in production (visible via live-data smoke + operator feedback), a third fallback (parent_id walking) is plausible. Or — better — Swoop adds a `representative_page_id` column to `area` at ETL time, which collapses the heuristic to a direct join.
+
+## C.bf-5 — `nearbyTripsCount = 0` areas are NOT surfaced as region_bases; threshold is `>= 1`
+
+**Decided**: 2026-05-13
+**Owner**: BF-FO-v3 execution
+**Rationale**: The "use this as a base, explore around" framing implies things to explore. An area with no trip coverage breaks the value proposition — even if it has a beautiful page hub, the agent can't honestly say "you can do these trips from here". The SQL applies the floor via `INNER JOIN area_trip_count` rather than a `WHERE` clause so the join structure itself enforces it.
+**Swap cost**: Zero. If Patagonia areas with `trip_count = 0` are still worth surfacing (e.g. as inspiration-only "consider this region" cards), the threshold becomes a constant + the SQL flips from INNER to LEFT JOIN. But the surface would no longer be `region_base` semantically — that variant means "use as a launchpad for THESE trips".
+
+## C.bf-6 — `preferredType: 'tour'` routes through the trip primitive as a v2 fallback; v2 PR swaps the branch when Swoop populates tour content
+
+**Decided**: 2026-05-13
+**Owner**: BF-FO-v3 execution
+**Rationale**: The find_options polymorphism v1 contract (decision C.51) accepted `preferredType: 'tour'` schema-only without dispatching; the v1 test pinned that contract verbatim. v3 preserves that exact behaviour — `'tour'` continues to route to `queryTripCardsByFilter` — but does so via an explicit branch in the switch so the v2 PR's diff is a one-line swap to the future `queryTourCardsByFilter` primitive. Until then, Sonnet's tour-preference (per the find_options/description.md upsell instruction) still produces *something* — trip cards rather than an empty result. The operator-visible event `find_options.tour_fallback` was planned in §2.5 but **deferred from this implementation** (the `ToolHandlerDeps` shape doesn't yet expose an `emitEvent` channel; adding one is out of scope for v3). When the orchestrator's observability surface grows that affordance, the fallback branch emits.
+**Swap cost**: Low. The branch swap is mechanical when v2 lands; the event-emit is a one-line addition when the affordance arrives.
+
 ## C.52 — Image-annotation `--mode=batches` submission wiring is a deliberate C.t6 scope-cut; `--mode=live` is the supported full-run path until the wiring lands
 
 **Decided**: 2026-05-02 (scope-cut during C.t6 execution); **surfaced as a discrete decision** 2026-05-13 after the gap caused operator confusion + a failed run.

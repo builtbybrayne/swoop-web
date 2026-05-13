@@ -1,6 +1,56 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-13 (five-plan parallel-batch landed: D.t9 widget rewrite + D.t9-mount-rehydrate + B.t11 + E.t6 + crosscut find_options polymorphism v1; tests now 908 + 3 DB-gated skipped across all 6 workspaces on fresh `npm install`; chunk-D fully closed; chunk-E retention enforcement live; orientation-file housekeeping complete)
+**Snapshot date**: 2026-05-13 (five-plan parallel-batch landed + crosscut find_options v3 backfill landed: hotels + region_bases data primitives wired live; tests now 931 + 3 DB-gated skipped across all 6 workspaces on fresh `npm install`)
+
+## 2026-05-13 — Crosscut find_options v3 backfill (BF-FO-v3)
+
+Backfill task picked up by a parallel session (`jolly-pasteur-77252a` worktree) after the five-plan batch closed. User-instruction: *"identify and work on backfill data items… The first data type handled was trips. But there's also tours and other stuff. That's not wired up yet."* The crosscut find_options polymorphism plan §2.4 had named the v3 tranche (hotels + region_bases, NOT gated on Swoop) and the v2 tranche (tours, Swoop-gated). v3 was the natural pickup — schema, fixtures, and UI renderers all shipped polymorphic day-one in v1, only the backend data primitives were missing.
+
+**Tier-3 plan**: [planning/03-exec-crosscut-find-options-v3-backfill.md](planning/03-exec-crosscut-find-options-v3-backfill.md) — authored + executed in the same session against the merged-to-main branch.
+
+**Numbering note**: per Al's 2026-05-13 instruction (multiple parallel agents allocating decision ids), this plan's decisions use the non-numeric `bf-` suffix (`C.bf-1` … `C.bf-6`) to side-step numeric-id collisions with parallel Tier-3 authors who were independently allocating `C.43+`.
+
+**What landed**:
+
+| Component | Workspace | Files | Tests |
+|---|---|---|---|
+| `queryHotelCardsByFilter` data primitive | `@swoop/connector` | `src/data/query-hotels.ts` + `src/data/__tests__/query-hotels.test.ts` | +10 |
+| `queryRegionBaseCardsByFilter` data primitive | `@swoop/connector` | `src/data/query-region-bases.ts` + `src/data/__tests__/query-region-bases.test.ts` | +7 |
+| `find_options` handler dispatch + `blendCards` | `@swoop/connector` | `src/tools/find_options.ts` + `src/tools/__tests__/find_options.test.ts` | +9 (was 5 → now 14) |
+
+**Test totals after the batch (fresh `rm -rf node_modules + npm install`, all green)**:
+- `@swoop/common` 160 (unchanged)
+- `@swoop/orchestrator` 170 (unchanged)
+- `@swoop/connector` **149 (was 126) + 3 DB-gated skipped** — +23 net (one v1 test consolidated into the new dispatch suite)
+- `@swoop/ui` 112 (unchanged)
+- `@swoop/ingestion` 266 (unchanged)
+- `@swoop/harness` 74 (unchanged)
+- **Total: 931 + 3 skipped (was 908 + 3 skipped → +23 net)**
+
+**Decisions logged** (in `planning/decisions.md` with `bf-` suffix):
+- C.bf-1 — v3 wires hotels + region_bases live; v2 (tours) remains gated on Swoop content.
+- C.bf-2 — Hotel image resolution via `hotel.page_id → page.image_id` (confirms 2026-04-29 page-as-hub discovery).
+- C.bf-3 — Blended-output path when `preferredType` is unset (2 trips + 1 hotel + 1 region_base @ limit=4); deficits redistribute toward trips.
+- C.bf-4 — Region-base URL resolution: alias match first, URL-suffix fallback.
+- C.bf-5 — `nearbyTripsCount = 0` areas not surfaced (region_base value-prop requires trips to explore).
+- C.bf-6 — `preferredType: 'tour'` v2-fallback continues to route through trips; one-line swap when v2 Swoop-data lands.
+
+**Operator-visible behaviour after v3**:
+
+- Agent prompts like *"Where could we stay near Torres del Paine?"* trigger Sonnet's `preferredType: 'hotel'` selection → handler returns hotel cards with `pricingUnit: 'per_night'` + `starRating` + `location`. UI's existing polymorphic dispatch in `find-options.tsx` (D.t9, merged) renders the hotel card variant.
+- Agent prompts like *"What's the best region to base ourselves for a Patagonia trip?"* trigger `preferredType: 'region_base'` → handler returns up to 4 region-base cards (areas ranked by trip count, with page-hub canonical URL + image).
+- Open-ended prompts (no `preferredType`) trigger the blend — mostly trips, with one hotel + one region_base at the standard `limit: 4`.
+- Tour-preference prompts continue to return trips (v2 fallback, decision C.bf-6) — no breakage, no empty results.
+
+**Pending — needs Al**:
+- **Live-data smoke** against `puma_dev` per plan §5: `npm run dev -w @swoop/connector` then exercise each `preferredType` branch via the MCP surface. Hotel + region_base SQL hasn't been verified against the live row counts yet (44 hotels, 16 areas in `puma_dev`); the unit tests covered shape correctness, not SQL semantics. Especially worth verifying: the page-hub heuristic (alias match → URL-suffix fallback) finds enough bases for the 16-area corpus.
+- **UI typecheck regression note**: when running `npm run typecheck`, the `@swoop/ui` workspace errors with `'args' is of type 'unknown'` (lead-capture.tsx + lookup.tsx + widget-shell.tsx). These errors are pre-existing on `main` HEAD (confirmed by stashing v3 changes and re-checking) — likely the parallel UI agent's WIP. Not caused by v3; flagged so reviewers don't blame v3 work.
+
+**Crosscut tranche queue updated**:
+- v2 (tours) — still gated on Swoop; tour-content ask continues to live in [questions.md](questions.md).
+- v3 (hotels + region_bases) — ✅ **landed**. The third proposal-card variant (`tour`) is the only ProposalCard type still without live data; everything else is end-to-end.
+
+---
 
 ## 2026-05-13 — Five-plan parallel batch (HITL-ratified 2026-05-12)
 
