@@ -6,6 +6,18 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-14 — `tours.title` is vestigial; tour identity lives on the parent contentblock's page
+
+The `tours` table's own `title` column is empty — NULL or `''` — on **every** row in the 2026-04-27 dump (9 NULL, 6 `''`). A tour's real identity lives on the `page` the tour's `contentblock` belongs to: `tours.content_block_id → contentblock.page_id → page.{title, alias, canonical_url}`. C.t3's original `transformTour` filtered on `tours.title` being non-null and so dropped 100% of tours (`tour: 0/15`), cascading to `tour_item: 0/36` via the FK-drop guard. The README's "Expected output" even enshrined `tour: 0/15` as expected — a bug normalised into the runbook.
+
+There is **no self-describing "tour" signal** in Swoop's CMS. `tours`-table membership doesn't discriminate: the 15 rows hang off 4 different `contentblock.type_id` values (152 ×12, plus one each of 107 / 137 / 100 — a hotel / guidebook / "Swoop Says" block). And Swoop's `pagetype` vocabulary has no "Tour" — the sales-facing page type for a sellable multi-day product is `Itinerary` (id 19). The only precise discriminator is `contentblock.type_id = 152`, an app-level magic number with no defining table in the dump (open question for Swoop — see questions.md "Tour content population").
+
+**Pattern to remember**: when a source column looks empty across the board, don't filter on it — find where the real value lives (here, one join away, on the page). And don't let a surprising ETL count get rationalised into a runbook — a 0-count is a bug until proven otherwise.
+
+Concrete fix: the 2026-05-14 addendum in [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md), decision C.focused-shamir-1. `puma_dev` now carries 11 tours + 35 tour_items.
+
+---
+
 ## 2026-05-13 — CMS WYSIWYG decorative whitespace is systemic; strip at the boundary
 
 50% of pages in `puma_dev` (296 of 590 with content) carry trailing `&nbsp;<br></p>` or similar decorative whitespace from the editor team's WYSIWYG output — someone presses Enter at the end of writing and the editor preserves the trailing newline as `<br>` inside the closing tag. The San Pedro de Atacama page is the canonical example: `"<p>This tiny desert town … Atacama Desert.&nbsp;<br></p>"`.

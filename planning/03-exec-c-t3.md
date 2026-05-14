@@ -415,6 +415,8 @@ The C.t2 schema (`002_domain_tables.sql` `trip` table) doesn't carry a separate 
 
 ### Tour + tour_item
 
+> ⚠️ **Stale — superseded by the [2026-05-14 addendum](#2026-05-14-addendum--tour-title-from-page-the-0-tours-bug) at the foot of this file.** `tours` has no `deleted` column, the dump carries 15 rows (not 8), and tour identity comes from the parent contentblock's *page*, not `tours.title`. Implement from the addendum, not this block.
+
 - **Source**: `tour` + `tour_items` (junction).
 - **Filter**: `deleted IS NULL`.
 - **Compute**: `canonical_url` per page join (same as trip).
@@ -821,3 +823,119 @@ Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DR
 
 - C.t1's connector skeleton (and Postgres pool) must be live before this plan can run. Hard dependency.
 - The "Calibration check — every transformation traces to a job" table in this plan's body is the design-discipline test: re-run it post-implementation and call out anything that drifted.
+
+---
+
+## 2026-05-14 addendum — tour title from page (the 0-tours bug)
+
+> **Parallel-agent collision note**: authored 2026-05-14 in-session from a debugging discovery, not a review. Decision logged as **C.focused-shamir-1** (wave-named) so a concurrent C.5x assignment doesn't clash — see [decisions.md](decisions.md).
+>
+> **Supersedes the §"Tour + tour_item" body above** (lines ~416–421). That body said `Filter: deleted IS NULL` and "8 tours" — both wrong. `tours` has no `deleted` column, the dump carries 15 rows, and the body never specified where the title comes from. The implementer, faced with all-null `tours.title`, invented a `title === null` filter that drops 100% of tours. A forward-pointer has been added to that section.
+
+### What was wrong
+
+`puma_dev` ended up with **zero tours and zero tour_items** (`trip` = 852, healthy). The `ingestion/README.md` "Expected output" block even documents this as expected — `tour: 0/15 skipped=filter:15  # source tours rows mostly NULL-titled` — which is how the bug got normalised into the runbook instead of being treated as a bug.
+
+Root cause traced through the full pipeline (dump → [parser.ts](../product/ingestion/src/sql-transform/parser.ts) → [transformations.ts](../product/ingestion/src/sql-transform/transformations.ts) → upsert):
+
+- **Source data**: in MariaDB `swoop_patagonia` and the `.sql` dump, `tours` has 15 rows and **`tours.title` is empty on every single one** — 9 `NULL`, 6 `''`. `SELECT COUNT(*) WHERE title IS NOT NULL AND title<>''` = 0. The column is vestigial in Swoop's CMS schema.
+- **Parser**: maps values to columns by name from the explicit `INSERT` column list — no misalignment. `NULL`→`null`, `''`→`''`. Correct.
+- **Transform**: [`transformTour`](../product/ingestion/src/sql-transform/transformations.ts) does `if (id === null || title === null) return null;`, and `strOrNull('')` returns `null` ([lookups.ts:197](../product/ingestion/src/sql-transform/lookups.ts)). So all 15 rows return `null` → `skipped=filter:15`.
+- **Cascade**: `transformTourItem` itself keeps all 36, but the `tour_item` upsert has an FK guard `{column:'tour_id', validIds:keptTourIds, mode:'drop'}` ([run.ts:415–423](../product/ingestion/src/sql-transform/run.ts)). `keptTourIds` is empty → all 36 dropped → `fk_drop_tour_id:36`.
+
+The data isn't lost — the transform looks in the wrong column. A tour's real identity lives on the **`page`** its contentblock belongs to: `tours.content_block_id → contentblock.page_id → page.title`. Every one of the 15 has a populated page title ("Best of Patagonia", "Paine and Fitz Roy Trekking Adventure", "Torres del Paine W Trek & Backcountry Kayaking", …). Day-by-day prose is in `tour_items` (`title` + `body` fully populated).
+
+### The "not actually a tour" finding
+
+Joining through to `page.pagetype` shows **3 of the 15 `tours` rows aren't itinerary tours at all** — they're `tours` rows hanging off non-itinerary content blocks:
+
+| tour_id | parent `contentblock.type_id` | page | `page.pagetype` | verdict |
+|---|---|---|---|---|
+| 1 | 107 | Hotel Las Torres | Accommodation | not a tour — a hotel |
+| 70 | 137 | What to do in Aysen | Parent Guidebook | not a tour — a guidebook |
+| 71 | 100 ("Swoop Says" block) | trekking-southern-patagonia | Itinerary | not a tour — a Swoop-Says block that happens to sit on an itinerary page (tour 67 is the *real* tour block on that same page) |
+| 74 | 152 | paul-test-page-2 | Itinerary | a real tour block, but a **test page** |
+
+The clean discriminator is **`contentblock.type_id = 152`** — the block type that *is* the itinerary (12 of 15 rows). It beats `page.pagetype = 'Itinerary'` because pagetype is page-level and can't tell tour 67 (real) from tour 71 (a Swoop-Says block on the same page). Of the 12 type-152 rows, tour 74 is caught by the existing test-page filter once we join to `page`. Net: **11 real tours**.
+
+### The discriminator question (carry to HITL / Swoop)
+
+**Terminology first.** Swoop's CMS has no "Tour" in its type vocabulary at all. The 20 `pagetype` values include `Itinerary` (id 19) — that *is* the sales-facing page type for a sellable multi-day product; there is no `Tour` pagetype. And `tours`-table membership is **not** a clean signal either: the 15 `tours` rows hang off 4 different `contentblock.type_id` values (152 ×12, plus one each of 107 / 137 / 100), so being in `tours` only means "this block carries tour-ish extra fields", not "this is a sellable tour". "Tour" is *Puma's* word for the domain object; in Swoop's data it surfaces as a `type_id = 152` contentblock sitting on an `Itinerary` page. The executing agent should not expect a self-describing "tour" flag — there isn't one.
+
+`contentblock.type_id` has **no FK and no defining table in the dump** — `152` is an app-level magic number. The fix should hard-code it but:
+
+- **Recommended**: filter on `contentblock.type_id === 152` — the only field that separates the 12 real itineraries from the 3 non-tours, and the only thing that distinguishes tour 67 from tour 71 (two blocks on the *same* Itinerary page). Add a corroborating assertion in verification that every kept tour's page has `pagetype = 'Itinerary'` — true today; divergence is the signal that the magic number drifted.
+- **Open question for Swoop** (add to [questions.md](../questions.md), ask Thomas / Richard — the C.t0 Swoop-engineering data contacts; Mark Reed has left the project): confirm `152` is the stable itinerary-tour contentblock type id, or point us at the enum. Low urgency — 11 rows, and the pagetype cross-check is a cheap guard — but it's an undocumented constant in ingestion code.
+
+### Scope of the fix
+
+| File | What changes |
+|---|---|
+| [transformations.ts](../product/ingestion/src/sql-transform/transformations.ts) — `transformTour` | New signature mirroring `transformTrip`: `(row, contentblockById, pageById, pageCanonicalById) => Record \| null`. Resolve `content_block_id → contentblock → {page_id, type_id}`. **Filter**: drop if parent contentblock missing, `type_id !== 152`, or `page_id` not in kept pages (test/profile pages already filtered upstream → naturally drops tour 74). **Title**: `page.title` (not `tours.title`). Also populate from the same join, as the original plan body line 420 always intended: `slug` ← `page.alias`, `canonical_url` ← `pageCanonicalById`, `page_id` ← resolved page id. Return a `{row, reason}` shape like `transformTrip` so the tally can name skips (`reason: 'missing_id' \| 'missing_parent_block' \| 'cb_type_not_itinerary' \| 'page_not_loaded'`). |
+| [lookups.ts](../product/ingestion/src/sql-transform/lookups.ts) | Add a `contentblockById: Map<number, {pageId: number\|null, typeId: number\|null}>` lookup built in pass 1 from `buffers.contentblock` raw rows. Add `pageTitleById: Map<number,string>` (or a `pageById` carrying title + alias) if not already derivable — mirror how `pageCanonicalById` is built. |
+| [run.ts](../product/ingestion/src/sql-transform/run.ts) | `transformTour` is currently passed as a bare fn ref to `flushBuffer` (line ~409) and `populateKeptIds` (line ~413). Wrap both in a shared closure capturing the new lookups (or give tour a bespoke pre-build path like `trip` has). The existing FK rules (`image_id`/`page_id` nullify) stay. `tour_item` wiring is unchanged — it just gets a non-empty `keptTourIds`. |
+| [ingestion/README.md](../product/ingestion/README.md) | Correct the "Expected output" block (see §Expected output below) and drop the "source `tours` rows mostly NULL-titled" comment — it rationalised the bug. |
+| `transformations.test.ts` / `__tests__` | Failing test first (see §Step-by-step). Cover: page-title resolution, the `type_id !== 152` drop, the test-page drop via filtered page, and a tour whose `tours.title` is `''` still getting a real title from the page. |
+
+### What does NOT change
+
+- The parser — it was never wrong here.
+- `transformTourItem` — keeps its current shape; the FK-drop guard in `run.ts` does the right thing once tours are kept.
+- The migration / `COLS.tour` — the target columns (`slug`, `title`, `canonical_url`, `page_id`, …) already exist; we're populating columns that were being written as `null`.
+- `tour.region_id`, `tour.image_id` fallback — **explicitly out of core scope.** `contentblock.region_id` and a page-image fallback are now cheaply available from the same join and would be consistency wins (trips already do region_id via the brave-pare backfill), but the user's ask was the title. Executor may note them as a follow-up; do not bundle without a decision.
+
+### Expected output after the fix
+
+```
+[etl:sql]   tour: 11/15 skipped=cb_type_not_itinerary:3,page_not_loaded:1
+[etl:sql]   tour_item: 35/36 skipped=fk_drop_tour_id:1
+```
+
+- 11 tours kept (type-152 minus the test page). Dropped: tour 1 (Accommodation) + 70 (Parent Guidebook) + 71 (Swoop-Says block) → `cb_type_not_itinerary`; tour 74 (`paul-test-page-2`, filtered upstream by `transformPage`) → `page_not_loaded`.
+- 35 tour_items kept; the 1 dropped belongs to tour 74. Verified against MariaDB: `tour_items WHERE tour_id IN (2,3,4,7,9,67,72,73,75,76,77)` = 35.
+- Note tour 2 ("Luxury Best of Patagonia") legitimately has 0 tour_items — keep it; an itinerary page with no day-by-day rows is still a real tour.
+
+### Step-by-step execution
+
+1. Failing test in `transformations.test.ts`: a `tours` row with `title: ''` whose parent contentblock is `type_id: 152` on a non-test page → expect a row with `title` = the page title, not `null`. A second case: parent `type_id: 107` → expect `{row: null, reason: 'cb_type_not_itinerary'}`. Run, watch them fail.
+2. Add the `contentblockById` + page-title lookups in `lookups.ts` (pass 1).
+3. Rewrite `transformTour` per the table above. Keep it a pure function — lookups injected, no I/O.
+4. Wire the closure at the two `run.ts` call sites (`flushBuffer` + `populateKeptIds`).
+5. Tests green. `npm test -w @swoop/ingestion`.
+6. Full re-run against the real dump from `product/`: `npm run -w @swoop/ingestion etl:sql -- --dump ../data/content-data-swoop-patagonia_prod.sql`. Confirm the tally matches §Expected output.
+7. Correct `ingestion/README.md`.
+8. Update [discoveries.md](../discoveries.md): "`tours.title` is vestigial in Swoop's schema — tour identity is on the parent contentblock's page; `contentblock.type_id = 152` is the itinerary discriminator." Update [gotchas.md](../gotchas.md) if the magic-number 152 deserves a flag.
+9. Add the discriminator open question to [questions.md](../questions.md).
+
+### Verification
+
+```sh
+# Post-run, against puma_dev:
+psql "$DATABASE_URL" -c "SELECT count(*) FROM tour;"        # expect 11
+psql "$DATABASE_URL" -c "SELECT count(*) FROM tour_item;"   # expect 35
+psql "$DATABASE_URL" -c "SELECT id, title, slug, page_id FROM tour ORDER BY id;"
+#   every row has a non-null, non-empty title; no 'Test Destination'; no 'Hotel Las Torres'
+
+# Corroboration guard — every kept tour's page is an Itinerary pagetype:
+psql "$DATABASE_URL" -c "SELECT t.id, p.pagetype_title FROM tour t JOIN page p ON p.id = t.page_id WHERE p.pagetype_title <> 'Itinerary';"
+#   expect 0 rows — any hit means type_id 152 drifted from pagetype, investigate
+```
+Idempotency unchanged: re-run → zero row-count delta.
+
+### Decision marker — C.focused-shamir-1
+
+**Decision** — Tour identity derives from the parent contentblock's `page` (`tours.content_block_id → contentblock.page_id → page.title/.alias/.canonical_url`), not the vestigial `tours.title` column. Tours are filtered to parent `contentblock.type_id = 152` (itinerary blocks), with the existing test-page filter applied via the page join. Fixes the 0-tours bug and the 3 not-actually-a-tour rows. Supersedes the §"Tour + tour_item" plan body. Logged as **C.focused-shamir-1** in [decisions.md](decisions.md).
+
+### Estimated effort
+
+~1.5–2 hours. The transform rewrite is small and `transformTrip` is a close template; the lookup additions and the two call-site closures are the bulk. Tests + re-run + doc sweep is the rest.
+
+### Executed 2026-05-14
+
+Landed in worktree `focused-shamir-52524c` (uncommitted, for Al's review). Implementation followed the plan with two refinements:
+
+- **Skip reasons** settled as `missing_id | missing_parent_block | cb_type_not_itinerary | page_not_loaded`. `page_not_loaded` replaced the planned `test_page` — the mechanism is "parent page absent from the kept-pages map", which is *usually* a test page but generally covers profile/deleted/dup-canonical too; the honest name is `page_not_loaded`.
+- **Build path**: `transformTour` returns `TourTransformResult {row, reason}` and is driven by a bespoke `transformToursWithPages` builder in `run.ts` (mirrors `transformTripsWithDayByDay`), then `flushPrebuilt`. `contentblockById` added to `Lookups`/`loadLookups` (pass 1, soft-deleted blocks excluded). `pageById` (id → {title,alias,canonical_url}) built inline in the `want('tour')` block from the kept `pageOut.rows`. `image_id` FK-nullify applied manually like trip; `page_id` needs no rule (transformTour only emits tours whose page is kept). Old `flushBuffer` + `populateKeptIds` tour wiring removed.
+- **`missing_title`** was *not* needed — `transformPage` sets `title: title ?? '(untitled)'`, so a kept page always has a non-empty title.
+
+Verified: `npm run typecheck` + `npm test -w @swoop/ingestion` green (290 tests). Full ETL re-run against the 2026-04-27 dump → `tour: 11/15 skipped=cb_type_not_itinerary:3,page_not_loaded:1`, `tour_item: 35/36 skipped=fk_drop_tour_id:1`, every other table unchanged from the README baseline. `puma_dev` confirmed: 11 tours (all real titles/slugs/page_ids), 35 tour_items; drift guard (`pagetype <> 'Itinerary'`) and title-sanity (`null/''/'(untitled)'`) queries both return 0 rows. Docs updated: `ingestion/README.md`, `discoveries.md`, `questions.md` ("Tour content population" reframed). `gotchas.md` left untouched — the magic-number 152 is a data-semantics fact, not a tooling trap; the code comment + discoveries + questions cover it.

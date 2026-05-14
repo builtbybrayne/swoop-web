@@ -406,11 +406,36 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   }
 
   if (want('tour')) {
-    tables.tour = await flushBuffer(opts, 'tour', COLS.tour, buffers.tours, transformTour, [
-      { column: 'image_id', validIds: keptImageIds, mode: 'nullify' },
-      { column: 'page_id', validIds: keptPageIds, mode: 'nullify' },
-    ]);
-    populateKeptIds(buffers.tours, transformTour, keptTourIds);
+    // Tour identity comes from the parent contentblock's page
+    // (C.focused-shamir-1): tours.content_block_id → contentblock.page_id →
+    // page.{title,alias,canonical_url}. pageById is built from the kept page
+    // rows, so a tour whose page was filtered upstream drops cleanly.
+    const pageById = new Map<
+      number,
+      { title: string; alias: string | null; canonical_url: string }
+    >();
+    for (const r of pageOut.rows) {
+      pageById.set(r.id as number, {
+        title: r.title as string,
+        alias: r.alias as string | null,
+        canonical_url: r.canonical_url as string,
+      });
+    }
+    const tourOut = transformToursWithPages(buffers.tours, lookups, pageById);
+    // FK rule: nullify image_id where the target image wasn't loaded. page_id
+    // needs no rule — transformTour only emits tours whose page is kept.
+    let imageNulled = 0;
+    tourOut.rows = tourOut.rows.map((row) => {
+      const im = row.image_id as number | null;
+      if (im !== null && !keptImageIds.has(im)) {
+        imageNulled++;
+        return { ...row, image_id: null };
+      }
+      return row;
+    });
+    if (imageNulled > 0) tourOut.skipped.push({ reason: 'fk_nulled_image_id', count: imageNulled });
+    tables.tour = await flushPrebuilt(opts, 'tour', COLS.tour, tourOut.rows, tourOut.skipped);
+    for (const r of tourOut.rows) keptTourIds.add(r.id as number);
   }
   if (want('tour_item')) {
     tables.tour_item = await flushBuffer(
@@ -733,6 +758,44 @@ function transformTripsWithDayByDay(
 }
 
 // ---------------------------------------------------------------------------
+// Tour transform — resolves identity (title / slug / canonical_url) from the
+// parent contentblock's page. Bespoke (not flushBuffer) so the skip tally can
+// name reasons. Per C.focused-shamir-1 / the 2026-05-14 addendum in
+// 03-exec-c-t3.md.
+// ---------------------------------------------------------------------------
+
+interface TourBuildResult {
+  rows: Record<string, unknown>[];
+  skipped: { reason: string; count: number }[];
+  rowsIn: number;
+}
+
+function transformToursWithPages(
+  rawTours: DumpRow[],
+  lookups: Lookups,
+  pageById: Map<number, { title: string; alias: string | null; canonical_url: string }>,
+): TourBuildResult {
+  const rows: Record<string, unknown>[] = [];
+  const skipCounts: Record<string, number> = {};
+
+  for (const r of rawTours) {
+    const result = transformTour(r, lookups, pageById);
+    if (result.row === null) {
+      const k = result.reason ?? 'unknown';
+      skipCounts[k] = (skipCounts[k] ?? 0) + 1;
+      continue;
+    }
+    rows.push(result.row);
+  }
+
+  return {
+    rows,
+    skipped: Object.entries(skipCounts).map(([reason, count]) => ({ reason, count })),
+    rowsIn: rawTours.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Buffer flush helpers
 // ---------------------------------------------------------------------------
 
@@ -815,7 +878,7 @@ async function flushBuffer<R extends Record<string, unknown>>(
   const byId = new Map<unknown, R>();
   for (const r of afterFk) byId.set(r.id, r);
   let final = [...byId.values()];
-  let dupId = afterFk.length - final.length;
+  const dupId = afterFk.length - final.length;
 
   // Dedupe by secondary unique key if applicable.
   const secondaryKey = SECONDARY_UNIQUE_KEY[table];

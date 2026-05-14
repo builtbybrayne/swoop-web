@@ -60,8 +60,8 @@ The supplementary `customerreview` dump is auto-detected if it sits next to the 
 [etl:sql]   chunk: 46/46
 [etl:sql]   faqitem: 906/928 skipped=filter:22
 [etl:sql]   trip: 852/852
-[etl:sql]   tour: 0/15 skipped=filter:15           # source `tours` rows mostly NULL-titled
-[etl:sql]   tour_item: 0/36 skipped=fk_drop_tour_id:36
+[etl:sql]   tour: 11/15 skipped=cb_type_not_itinerary:3,page_not_loaded:1
+[etl:sql]   tour_item: 35/36 skipped=fk_drop_tour_id:1
 [etl:sql]   hotel: 44/44
 [etl:sql]   vessel: 25/25
 [etl:sql]   cabintype: 108/108
@@ -81,6 +81,7 @@ Per the C.t3 plan §"Skip list" (every filter has a journey-moment justification
 - **Profile pagetype** (40 rows) — staff bios, no journey moment (decision C.27).
 - **Test pages** — dev/staging artefacts (decision C.28).
 - **Soft-deleted rows** (`deleted IS NOT NULL`) across all source tables.
+- **Non-itinerary `tours` rows** — a `tours` row is only kept if its parent `contentblock.type_id = 152` (the itinerary-block type). The other 3 of 15 hang off a hotel / guidebook / "Swoop Says" block. Tour identity (title/slug/url) is read from the parent block's *page*, not the vestigial `tours.title` column. See the 2026-05-14 addendum in `planning/03-exec-c-t3.md` (C.focused-shamir-1).
 - **`tripvariant`, `season`, `adventurousness`** — operational draft management / fiscal-year scoping / deprecated style classifier.
 - **`partner*`, `swooper_*` PII columns** — never load.
 - **`enquiry`-typed `ntags_lookup` rows** (148K of 157K) — customer query PII.
@@ -97,6 +98,8 @@ Per the C.t3 plan §"Skip list" (every filter has a journey-moment justification
 | `dup_canonical` / `dup_<key>` | Within-batch duplicate of a UNIQUE secondary key (e.g. `page.canonical_url`, `tag.alias`, `trip.slug`); lowest-id winner kept. |
 | `profile_pagetype` | Pagetype 20 (staff bio) per C.27. |
 | `test_page` | Alias / title matches the test-page filter per C.28. |
+| `cb_type_not_itinerary` | `tours` row whose parent contentblock isn't an itinerary block (`type_id ≠ 152`) — a hotel / guidebook / "Swoop Says" block carrying a `tours` row. |
+| `page_not_loaded` | `tours` row whose parent contentblock has no kept page (page filtered upstream as test/profile/deleted/dup, or contentblock has a null `page_id`). |
 | `orphan_parent_nulled` | Page's `parent_id` references a filtered-out page; nulled at write. |
 | `orphan_image_nulled` | Page's `image_id` / `bannerimage_id` references an image we filtered (deleted / no `file` row); nulled at write. |
 | `fk_nulled_<col>` | Generic FK column nulled because target row wasn't loaded. |

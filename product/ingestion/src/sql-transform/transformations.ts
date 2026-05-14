@@ -401,26 +401,70 @@ export function transformTrip(
 // Tour (source `tours` → target `tour`) + tour_item
 // ---------------------------------------------------------------------------
 
-export function transformTour(row: DumpRow): Record<string, unknown> | null {
-  // Source `tours` doesn't have a `deleted` flag; trust the table.
+/**
+ * `contentblock.type_id` value for an itinerary-tour block. Swoop's CMS dump
+ * carries no defining table for contentblock types — this is an app-level
+ * enum value, confirmed against the 2026-04-27 dump: 12 of 15 `tours` rows
+ * hang off type-152 blocks; the other 3 hang off 107 / 137 / 100 blocks (a
+ * hotel / guidebook / "Swoop Says" block respectively, none of them tours).
+ * Open question for Swoop engineering (see questions.md): confirm 152 is the
+ * stable id. The page-pagetype cross-check in the C.t3 verification step is
+ * the drift guard.
+ */
+const ITINERARY_CONTENTBLOCK_TYPE_ID = 152;
+
+export interface TourTransformResult {
+  row: Record<string, unknown> | null;
+  /** Reason for filtering, if filtered. Used for the per-table skip tally. */
+  reason?: 'missing_id' | 'missing_parent_block' | 'cb_type_not_itinerary' | 'page_not_loaded';
+}
+
+/**
+ * Tour identity comes from the parent contentblock's *page*, not the
+ * vestigial `tours.title` column (empty — NULL or '' — on every source row).
+ * Per C.focused-shamir-1 / the 2026-05-14 addendum in `03-exec-c-t3.md`:
+ *   `tours.content_block_id` → `contentblock.page_id` → page title/alias/url.
+ * Filtered to itinerary-type contentblocks; a tour whose page was dropped
+ * upstream (test / profile / deleted / dup_canonical) drops here too, since
+ * `pageById` only carries the kept page rows.
+ */
+export function transformTour(
+  row: DumpRow,
+  lookups: Lookups,
+  pageById: Map<number, { title: string; alias: string | null; canonical_url: string }>,
+): TourTransformResult {
+  // Source `tours` has no `deleted` flag; trust the table.
   const id = numOrNull(row.values.id);
-  const title = strOrNull(row.values.title);
-  if (id === null || title === null) return null;
+  if (id === null) return { row: null, reason: 'missing_id' };
+
+  const cbId = numOrNull(row.values.content_block_id);
+  const cb = cbId !== null ? lookups.contentblockById.get(cbId) : undefined;
+  if (!cb) return { row: null, reason: 'missing_parent_block' };
+  if (cb.typeId !== ITINERARY_CONTENTBLOCK_TYPE_ID) {
+    return { row: null, reason: 'cb_type_not_itinerary' };
+  }
+
+  if (cb.pageId === null) return { row: null, reason: 'page_not_loaded' };
+  const page = pageById.get(cb.pageId);
+  if (!page) return { row: null, reason: 'page_not_loaded' };
+
   return {
-    id,
-    slug: null, // Source has no alias on tours.
-    title,
-    subtitle: null,
-    duration_days: null,
-    group_size_max: null,
-    from_price: null,
-    currency_code: null,
-    description: strOrNull(row.values.description),
-    region_id: null,
-    ntag_ids: [],
-    image_id: numOrNull(row.values.image_id),
-    canonical_url: null,
-    page_id: null,
+    row: {
+      id,
+      slug: strOrNull(page.alias),
+      title: page.title,
+      subtitle: null,
+      duration_days: null,
+      group_size_max: null,
+      from_price: null,
+      currency_code: null,
+      description: strOrNull(row.values.description),
+      region_id: null,
+      ntag_ids: [],
+      image_id: numOrNull(row.values.image_id),
+      canonical_url: page.canonical_url,
+      page_id: cb.pageId,
+    },
   };
 }
 

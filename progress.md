@@ -342,7 +342,8 @@ contentblock: 2212/10110       [7,898 navigationcard/settings/etc. filtered]
 chunk: 46                      [matches plan: 46 ✓]
 faqitem: 906/928               [matches ~928 ✓]
 trip: 852                      [matches plan: 852 ✓]
-tour: 0/15                     [source `tours` rows mostly NULL-titled]
+tour: 11/15                    [4 filtered: 3 non-itinerary blocks + 1 test page — C.focused-shamir-1, 2026-05-14]
+tour_item: 35/36               [1 dropped: fk_drop_tour_id, parent is the filtered test-page tour]
 hotel: 44   vessel: 25   cabintype: 108   cabin: 98
 customerreview: 2160/2563      [403 unpublished filtered]
 customerreview_trip: 145/163   [matches ~163 ✓]
@@ -369,7 +370,7 @@ Q1 Option B (Node CLI translator) — chosen and shipped. Q2 daybyday concatenat
 
 ### Open questions surfaced for HITL (not blocking C.t3a)
 
-1. **Source `tours` is content-empty** — 15 rows, almost all NULL-titled. The 36 `tour_items` can't anchor without a parent. Question for Thomas/Richard: do we expect `tour` to carry rows, or is multi-region/tour content rendered via `contentblock_tour` rows referencing trips directly? Won't block C.t3a; flagged for C.t4 / B.t3a tool-handler design.
+1. **Source `tours` is content-empty** — 15 rows, almost all NULL-titled. The 36 `tour_items` can't anchor without a parent. Question for Thomas/Richard: do we expect `tour` to carry rows, or is multi-region/tour content rendered via `contentblock_tour` rows referencing trips directly? Won't block C.t3a; flagged for C.t4 / B.t3a tool-handler design. **— RESOLVED 2026-05-14 (C.focused-shamir-1)**: `tours.title` is vestigial; tour identity lives on the parent contentblock's page. The ETL now derives it — `puma_dev` carries 11 tours + 35 tour_items. Residual ask (confirm the `contentblock.type_id = 152` constant) tracked in [questions.md](questions.md) "Tour content population".
 2. **`area` / `location` hierarchy** — source columns don't carry `country_id` / `parent_area_id`; hierarchy is via the page parent_id chain. Left null. C.t3a can derive via a page-walk if `find_locations` retrieval needs it.
 3. **`activity` (751 rows)** populated as first-class but with title-only — the source `activity` is per-trip-per-area data, mostly NULL secondary fields. Worth checking whether `find_activities` semantics are better served by the `tag` taxonomy + `inspire_passage` retrieval; if so, the `activity` domain table is dead weight.
 
