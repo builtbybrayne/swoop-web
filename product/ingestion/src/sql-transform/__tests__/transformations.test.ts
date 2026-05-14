@@ -41,6 +41,7 @@ function emptyLookups(): Lookups {
     imageTripFirst: new Map(),
     imagePageFirst: new Map(),
     areaIdByTagId: new Map(),
+    contentblockById: new Map(),
   };
 }
 
@@ -435,17 +436,100 @@ describe('transformChunk / transformFaqItem / transformActivity / transformArea 
   });
 });
 
-describe('transformTour / transformTourItem', () => {
-  it('tour maps tours → tour with description', () => {
-    expect(
-      transformTour({
+describe('transformTour', () => {
+  // Mirrors what run.ts builds from the kept page rows: page-id → identity.
+  function keptPages(): Map<
+    number,
+    { title: string; alias: string | null; canonical_url: string }
+  > {
+    return new Map([
+      [
+        72,
+        {
+          title: 'Best of Patagonia',
+          alias: 'best-chile-argentina',
+          canonical_url: 'https://www.swoop-patagonia.com/best-chile-argentina',
+        },
+      ],
+    ]);
+  }
+
+  it("takes title/slug/canonical_url from the parent contentblock's page, not the empty tours.title", () => {
+    // Source `tours.title` is '' (or NULL) on every real row — tour identity
+    // lives on the page the contentblock belongs to (C.focused-shamir-1).
+    const lookups = emptyLookups();
+    lookups.contentblockById.set(15635, { pageId: 72, typeId: 152 });
+
+    const result = transformTour(
+      {
         table: 'tours',
-        values: { id: 1, title: 'Multi-region', description: 'Combo' },
-      }),
-    ).toMatchObject({ id: 1, title: 'Multi-region', description: 'Combo' });
+        values: { id: 9, content_block_id: 15635, title: '', description: null, image_id: 10980 },
+      },
+      lookups,
+      keptPages(),
+    );
+    expect(result.row).toMatchObject({
+      id: 9,
+      title: 'Best of Patagonia',
+      slug: 'best-chile-argentina',
+      canonical_url: 'https://www.swoop-patagonia.com/best-chile-argentina',
+      page_id: 72,
+      image_id: 10980,
+    });
   });
 
-  it('tour_items maps body → description', () => {
+  it('drops a tours row whose parent contentblock is not an itinerary block (type_id !== 152)', () => {
+    const lookups = emptyLookups();
+    // type_id 107 — e.g. an Accommodation-page block that carries a tours row.
+    lookups.contentblockById.set(15627, { pageId: 109, typeId: 107 });
+
+    const result = transformTour(
+      { table: 'tours', values: { id: 1, content_block_id: 15627, title: '' } },
+      lookups,
+      keptPages(),
+    );
+    expect(result.row).toBeNull();
+    expect(result.reason).toBe('cb_type_not_itinerary');
+  });
+
+  it('drops a tours row whose parent page was filtered upstream (test/profile/deleted/dup)', () => {
+    const lookups = emptyLookups();
+    // contentblock points at page 509 (paul-test-page-2) — dropped by
+    // transformPage, so it is absent from the kept-pages map.
+    lookups.contentblockById.set(99, { pageId: 509, typeId: 152 });
+
+    const result = transformTour(
+      { table: 'tours', values: { id: 74, content_block_id: 99, title: '' } },
+      lookups,
+      keptPages(), // does not contain 509
+    );
+    expect(result.row).toBeNull();
+    expect(result.reason).toBe('page_not_loaded');
+  });
+
+  it('drops a tours row whose parent contentblock is missing (e.g. soft-deleted)', () => {
+    const result = transformTour(
+      { table: 'tours', values: { id: 5, content_block_id: 88888, title: '' } },
+      emptyLookups(), // contentblockById empty
+      keptPages(),
+    );
+    expect(result.row).toBeNull();
+    expect(result.reason).toBe('missing_parent_block');
+  });
+
+  it('drops a tours row with no id', () => {
+    const result = transformTour(
+      { table: 'tours', values: { id: null, content_block_id: 15635, title: '' } },
+      emptyLookups(),
+      keptPages(),
+    );
+    expect(result.row).toBeNull();
+    expect(result.reason).toBe('missing_id');
+  });
+});
+
+describe('transformTourItem', () => {
+  it('maps body → description', () => {
     expect(
       transformTourItem({
         table: 'tour_items',

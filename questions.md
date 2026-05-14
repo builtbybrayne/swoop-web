@@ -94,15 +94,17 @@ b. **`daybyday` is much sparser than expected — confirm canonical filter.** Th
 
 c. **`ntag` operational meaning of less-obvious entries.** Most of the 79 ntags are self-evident (areas, activities). A few `interest` tags need confirmation: `Futa`, `Queulat`, `Pumalin`, `Navarino`, `San Martin` — are these region-bounded sub-themes, specific routes, or marketing campaigns? Affects how `stoke_imagination` weights them.
 
-### Tour content population — Thomas / Richard / Martin (raised 2026-05-12, route via Julie)
+### Tour content population — Thomas / Richard (raised 2026-05-12, route via Julie; reframed 2026-05-14)
 
-The `tour` table is a structurally-distinct entity from `trip` in the export (own table; own `group_size_max` column; sibling `tour_item` table for day-by-day breakdown). The 2026-04-27 SQL dump carried 15 `tour` rows but almost all are NULL-titled — `tour: 0/15` populated after the C.t3 ETL filter (which excludes content-empty rows). The 36 `tour_item` rows then have no parent.
+**Update 2026-05-14 — the "`tour: 0/15`" problem is fixed.** The `tours` table's own `title` column is vestigial: empty (NULL or `''`) on every source row. Tour identity actually lives on the *page* the tour's `contentblock` belongs to (`tours.content_block_id → contentblock.page_id → page.title`). The C.t3 ETL now derives title/slug/canonical_url from there and filters to itinerary-type contentblocks — `puma_dev` carries **11 real tours + 35 tour_items**. See the 2026-05-14 addendum in [planning/03-exec-c-t3.md](planning/03-exec-c-t3.md) (decision C.focused-shamir-1). So the original "is tour content intended to be populated" question is largely answered: it always was — the ETL was just looking in the wrong column.
 
-**Question**: is the `tour` content intended to be populated, or is multi-region/tour content rendered via `contentblock_tour` rows referencing trips directly? If the former, what's the timeline for populating? If the latter, can Swoop confirm the architectural intent so we know not to wait for `tour` data?
+**Still open — confirm the contentblock type id.** The filter keys on `contentblock.type_id = 152` (the itinerary-block type). Swoop's dump carries no defining table for contentblock types, so `152` is an undocumented app-level enum value. We've confirmed it empirically (12 of 15 `tours` rows are type-152; the other 3 are a hotel / guidebook / "Swoop Says" block) and added a `page.pagetype = 'Itinerary'` cross-check as a drift guard. **Ask Thomas / Richard**: confirm `152` is the stable itinerary-tour contentblock type id, or point us at the enum definition. Low urgency — 11 rows, cheap guard in place — but it's a magic number in ingestion code.
 
-**Why it matters**: Luke's stated upsell priority is Tours. The `find_options` polymorphic-card design ([planning/03-exec-crosscut-find-options-polymorphism.md](planning/03-exec-crosscut-find-options-polymorphism.md)) ships a distinct `tour` variant with group-size badge + day-by-day affordance. The widget renderer + schema ship day-one; the v2 backend tranche (live tour cards) is gated on populated tour content. If Swoop confirms tours are populated elsewhere, the v2 tranche pivots to that source.
+**Also worth a sentence from Swoop**: `tours.title` and `tours.description` are empty (NULL) on all 15 source rows. Confirm these columns are genuinely unused (we read identity off the page) rather than a population gap we should wait on.
 
-**Decision gate**: Al ratified 2026-05-12 that Tours stay a first-class proposal type in the contract regardless of timing — only the v2 backend tranche is gated.
+**Why it matters**: Luke's stated upsell priority is Tours. The `find_options` polymorphic-card design ([planning/03-exec-crosscut-find-options-polymorphism.md](planning/03-exec-crosscut-find-options-polymorphism.md)) ships a distinct `tour` variant with group-size badge + day-by-day affordance. With 11 tours + 35 tour_items now in `puma_dev`, the live-tour-card backend is no longer data-blocked — Al to re-judge the v2 tranche gating against this.
+
+**Decision gate**: Al ratified 2026-05-12 that Tours stay a first-class proposal type in the contract regardless of timing.
 
 ### Analytics platform preference — Julie / Thomas
 

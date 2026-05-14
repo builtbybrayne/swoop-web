@@ -20,6 +20,8 @@
  *                     (used for trip hero image; ~3K rows).
  *   - image_page:     page_id → first image_id ordered by position
  *                     (used for hotel / trip fallback hero image; ~6K rows).
+ *   - contentblock:   id → { pageId, typeId } (used by transformTour to resolve
+ *                     tour identity via the parent block's page; ~10K rows).
  *
  * Per the C.t3 plan: this is "Shape B" for ntag aggregation (pre-aggregate
  * once, write at parent-table-write time) — chosen for cleaner isolation
@@ -47,6 +49,14 @@ export interface Lookups {
    * placeholder.
    */
   areaIdByTagId: Map<number, number>;
+  /**
+   * Contentblock id → its parent page id + block type id. Used by
+   * `transformTour` to resolve a tour's identity — `tours.content_block_id`
+   * → `contentblock.page_id` → page title/alias/canonical_url — and to filter
+   * to itinerary-type blocks (`type_id = 152`). Soft-deleted contentblocks are
+   * excluded, so a tour hanging off a deleted block drops cleanly.
+   */
+  contentblockById: Map<number, { pageId: number | null; typeId: number | null }>;
 }
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'png', 'jpeg', 'heic', 'gif', 'webp']);
@@ -64,6 +74,7 @@ export async function loadLookups(dumpPath: string): Promise<Lookups> {
   // ntag rows), so we capture both halves and join after streaming completes.
   const areaIdByAlias = new Map<string, number>();
   const areaTagAliasByTagId = new Map<number, string>();
+  const contentblockById = new Map<number, { pageId: number | null; typeId: number | null }>();
 
   for await (const row of streamDump(dumpPath)) {
     switch (row.table) {
@@ -160,6 +171,18 @@ export async function loadLookups(dumpPath: string): Promise<Lookups> {
         }
         break;
       }
+      case 'contentblock': {
+        // Soft-deleted blocks are excluded — a tour hanging off a deleted
+        // block should drop, not resolve to a stale page.
+        if (isDeleted(row.values.deleted)) break;
+        const id = numOrNull(row.values.id);
+        if (id === null) break;
+        contentblockById.set(id, {
+          pageId: numOrNull(row.values.page_id),
+          typeId: numOrNull(row.values.type_id),
+        });
+        break;
+      }
     }
   }
 
@@ -186,6 +209,7 @@ export async function loadLookups(dumpPath: string): Promise<Lookups> {
     imageTripFirst,
     imagePageFirst,
     areaIdByTagId,
+    contentblockById,
   };
 }
 
