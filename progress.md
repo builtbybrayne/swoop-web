@@ -149,8 +149,14 @@ After a long HITL design conversation on 2026-05-12, the four pre-existing Tier-
 - E.t6 — counsel-review note for E.t9 (hard-delete posture).
 
 **Crosscut tranche queue**:
-- v2 (tours backend) — Swoop-data-gated. Renderer + schema already shipping against fixtures.
+- v2 (tours backend) — ✅ **landed 2026-05-15** (C.focused-shamir-2 in [decisions.md](planning/decisions.md)): `tour_card` derived table populated (11 rows + embeddings), `queryTourCardsByFilter` live, `find_options(preferredType: 'tour')` no longer falls back to trips. Known limitation: `tour_card.region` is NULL — region filter on tours returns zero (see [discoveries.md](discoveries.md) 2026-05-15). C.bf-6 superseded.
 - v3 (hotels + region_bases backend) — not gated.
+
+**`blendCards` default ratio change (2026-05-15)**: was 2 trips + 1 hotel + 1 region_base at `limit=4` (C.bf-3). Now 1 of each variant (C.focused-shamir-3 supersedes C.bf-3) — four-way even split, extras to trips. Aligned with the imagination-stoking-variety framing.
+
+**Ordering change (2026-05-15)**: all four `find_options` primitives switched from deterministic ranking to `ORDER BY RANDOM(), id` (C.focused-shamir-4). Same-filter calls now return different sets — anti-repetition. The existing implicit ranking (cheapest first / most-popular first) was the wrong default for a variety-driven surface.
+
+**Agent-supplied `exclude` (2026-05-15)**: `find_options` accepts `exclude: Array<{type, id}>` (C.focused-shamir-5) so the agent can omit cards across turns without the connector tracking session state. Lightweight middle path between pure-random and full `SessionState.shownCards`.
 
 ---
 

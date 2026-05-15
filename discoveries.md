@@ -6,6 +6,25 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-15 — Tour region is unrecoverable from source today; `contentblock.region_id` is a dangling reference
+
+While wiring `tour_card.region` during the v2 tranche (C.focused-shamir-2), the obvious candidate sources both turned out to be dead ends:
+
+1. **`contentblock.region_id`** — every tour-bearing contentblock has `region_id = 36`. But `area.id = 36` doesn't exist in `puma_dev` (or in source MariaDB). The column is populated with a value that joins to nothing. Either the area was deleted, or `region_id` here points at a different table that isn't in the dump.
+
+2. **`page.ntag_ids`** — empty array `{}` on every tour page. The existing ETL's `lookups.ntagsByEntity` only aggregates `ntags_lookup` for entity types `image`, `trip`, `contentblock`, `video` (per [lookups.ts](product/ingestion/src/sql-transform/lookups.ts) `NTAGS_AGENT_ENTITY_TYPES`). `page` isn't in that set, so `transformPage` always gets an empty tag array.
+
+Accepted as a known limitation for v2: tours ship with `region: NULL`. Practical impact is small — all 11 tours are Patagonia-themed, and the find_options prompt now nudges Sonnet to drop the `region` filter when `preferredType: 'tour'`. A region-filtered tour query returns zero cards (NULL ILIKE 'patagonia' is NULL, row dropped). For the agent's experience, this means: "tours, ideally in Patagonia" still works; "tours in Aysén" does not.
+
+**Recovery paths** if tour-region matters later:
+- Add `page` to `NTAGS_AGENT_ENTITY_TYPES` and re-ETL. Trips already use page-aggregated tags via C.brave-pare-2.
+- Ingest source `contentblock.region_id` as a column on the puma_dev `contentblock` table (not currently in `COLS.contentblock`). Then derive region from there.
+- Just hard-code a per-tour mapping while the catalogue is 11 rows.
+
+The first option is the most principled but means re-running ETL and touching downstream consumers of `page.ntag_ids` (currently `composeInspirePassage`, `composeInformChunk`). Worth it if tour count grows beyond Patagonia.
+
+---
+
 ## 2026-05-15 — Compose-mode `TRUNCATE` was wiping embeddings every run; cache made it survivable
 
 The enrich pipeline had a documented-vs-implemented divergence: [`cms/ops/embedding-rerun.md:17`](product/cms/ops/embedding-rerun.md#L17) claimed "idempotent on `content_hash`" but the actual embed-pass gating in [`enrich/embed/derived-rows.ts`](product/ingestion/src/enrich/embed/derived-rows.ts) was `WHERE embedding IS NULL`. Compose-mode TRUNCATEs every derived table on every run, so every row's embedding became NULL → every row got re-embedded. Silent waste on every compose run; a tiny incident wiped 649 trip_card embeddings as collateral.

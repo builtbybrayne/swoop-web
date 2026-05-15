@@ -30,6 +30,9 @@ import type { ToolHandlerDeps } from '../deps.js';
 vi.mock('../../data/query-trips.js', () => ({
   queryTripCardsByFilter: vi.fn(),
 }));
+vi.mock('../../data/query-tour-cards.js', () => ({
+  queryTourCardsByFilter: vi.fn(),
+}));
 vi.mock('../../data/query-hotels.js', () => ({
   queryHotelCardsByFilter: vi.fn(),
 }));
@@ -38,10 +41,12 @@ vi.mock('../../data/query-region-bases.js', () => ({
 }));
 
 import { queryTripCardsByFilter } from '../../data/query-trips.js';
+import { queryTourCardsByFilter } from '../../data/query-tour-cards.js';
 import { queryHotelCardsByFilter } from '../../data/query-hotels.js';
 import { queryRegionBaseCardsByFilter } from '../../data/query-region-bases.js';
 
 const mockTrips = queryTripCardsByFilter as unknown as ReturnType<typeof vi.fn>;
+const mockTours = queryTourCardsByFilter as unknown as ReturnType<typeof vi.fn>;
 const mockHotels = queryHotelCardsByFilter as unknown as ReturnType<typeof vi.fn>;
 const mockRegionBases = queryRegionBaseCardsByFilter as unknown as ReturnType<
   typeof vi.fn
@@ -66,6 +71,13 @@ const TRIP_CARD = {
   canonicalUrl: 'https://example.com/trips/1',
   activityTags: [],
 };
+const TOUR_CARD = {
+  type: 'tour' as const,
+  id: '9',
+  headline: 'Best of Patagonia',
+  canonicalUrl: 'https://example.com/tours/best-chile-argentina',
+  activityTags: [],
+};
 const HOTEL_CARD = {
   type: 'hotel' as const,
   id: '12',
@@ -84,6 +96,7 @@ const REGION_BASE_CARD = {
 
 beforeEach(() => {
   mockTrips.mockReset();
+  mockTours.mockReset();
   mockHotels.mockReset();
   mockRegionBases.mockReset();
 });
@@ -248,69 +261,75 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     expect(opts).not.toHaveProperty('activity');
   });
 
-  it('preferredType "tour" falls back to the trip primitive (v2 fallback pin — decision C.bf-6)', async () => {
-    mockTrips.mockResolvedValueOnce([TRIP_CARD]);
+  it('preferredType "tour" routes to queryTourCardsByFilter only (v2-live, C.focused-shamir-2)', async () => {
+    mockTours.mockResolvedValueOnce([TOUR_CARD]);
 
     const out = await findOptionsBody(
       { preferredType: 'tour', limit: 4 },
       makeDeps(),
     );
 
-    expect(mockTrips).toHaveBeenCalledOnce();
+    expect(mockTours).toHaveBeenCalledOnce();
+    expect(mockTrips).not.toHaveBeenCalled();
     expect(mockHotels).not.toHaveBeenCalled();
     expect(mockRegionBases).not.toHaveBeenCalled();
-    expect(out.cards[0]!.type).toBe('trip');
+    expect(out.cards[0]!.type).toBe('tour');
+    expect(() => FindOptionsOutputSchema.parse(out)).not.toThrow();
   });
 
-  it('preferredType unset → blend across all three live primitives', async () => {
-    mockTrips.mockResolvedValueOnce([
-      { ...TRIP_CARD, id: '101' },
-      { ...TRIP_CARD, id: '102' },
-    ]);
+  it('preferredType unset → blend across all four live variants (4-way, C.focused-shamir-3)', async () => {
+    mockTrips.mockResolvedValueOnce([{ ...TRIP_CARD, id: '101' }]);
+    mockTours.mockResolvedValueOnce([{ ...TOUR_CARD, id: '9' }]);
     mockHotels.mockResolvedValueOnce([{ ...HOTEL_CARD, id: '201' }]);
     mockRegionBases.mockResolvedValueOnce([{ ...REGION_BASE_CARD, id: '301' }]);
 
     const out = await findOptionsBody({ limit: 4 }, makeDeps());
 
     expect(mockTrips).toHaveBeenCalledOnce();
+    expect(mockTours).toHaveBeenCalledOnce();
     expect(mockHotels).toHaveBeenCalledOnce();
     expect(mockRegionBases).toHaveBeenCalledOnce();
     expect(out.count).toBe(4);
     expect(out.cards.map((c) => c.type).sort()).toEqual([
       'hotel',
       'region_base',
-      'trip',
+      'tour',
       'trip',
     ]);
     expect(() => FindOptionsOutputSchema.parse(out)).not.toThrow();
   });
 
-  it('blend ratio for limit=4: trips=2, hotels=1, region_bases=1 (quota threading)', async () => {
+  it('blend ratio at limit=4: 1 of each variant (trip=1, tour=1, hotel=1, region_base=1)', async () => {
     mockTrips.mockResolvedValueOnce([]);
+    mockTours.mockResolvedValueOnce([]);
     mockHotels.mockResolvedValueOnce([]);
     mockRegionBases.mockResolvedValueOnce([]);
 
     await findOptionsBody({ limit: 4 }, makeDeps());
 
-    expect(mockTrips.mock.calls[0]![1]).toMatchObject({ limit: 2 });
+    expect(mockTrips.mock.calls[0]![1]).toMatchObject({ limit: 1 });
+    expect(mockTours.mock.calls[0]![1]).toMatchObject({ limit: 1 });
     expect(mockHotels.mock.calls[0]![1]).toMatchObject({ limit: 1 });
     expect(mockRegionBases.mock.calls[0]![1]).toMatchObject({ limit: 1 });
   });
 
   it('blend deficit: when sub-quotas under-deliver, redistribute by querying extra trips', async () => {
-    // First call (quota=2) returns 1 trip. Second call (top-up) returns 2 more.
+    // First call (quota=1 at limit=4) returns 1 trip. Top-up returns more.
     mockTrips
       .mockResolvedValueOnce([{ ...TRIP_CARD, id: '101' }])
       .mockResolvedValueOnce([
         { ...TRIP_CARD, id: '101' }, // duplicate (should be filtered)
         { ...TRIP_CARD, id: '102' },
         { ...TRIP_CARD, id: '103' },
+        { ...TRIP_CARD, id: '104' },
       ]);
+    mockTours.mockResolvedValueOnce([]);
     mockHotels.mockResolvedValueOnce([]);
     mockRegionBases.mockResolvedValueOnce([]);
 
     const out = await findOptionsBody({ limit: 4 }, makeDeps());
 
+    // Top-up fires (trips called twice).
     expect(mockTrips).toHaveBeenCalledTimes(2);
     // No duplicate ids in the output.
     const ids = out.cards.map((c) => c.id);
@@ -318,15 +337,15 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     expect(out.count).toBeLessThanOrEqual(4);
   });
 
-  it('blend respects limit=2 (1 trip + 1 hotel, no region_base)', async () => {
+  it('blend at limit=2 falls back to trips-only (rare at default Sonnet limit=4)', async () => {
+    // base = floor(2/4) = 0, remainder = 2 → tripQuota = 2, others = 0.
     mockTrips.mockResolvedValueOnce([]);
-    mockHotels.mockResolvedValueOnce([]);
-    mockRegionBases.mockResolvedValueOnce([]);
 
     await findOptionsBody({ limit: 2 }, makeDeps());
 
-    expect(mockTrips.mock.calls[0]![1]).toMatchObject({ limit: 1 });
-    expect(mockHotels.mock.calls[0]![1]).toMatchObject({ limit: 1 });
+    expect(mockTrips.mock.calls[0]![1]).toMatchObject({ limit: 2 });
+    expect(mockTours).not.toHaveBeenCalled();
+    expect(mockHotels).not.toHaveBeenCalled();
     expect(mockRegionBases).not.toHaveBeenCalled();
   });
 
@@ -346,5 +365,89 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
       makeDeps(),
     );
     expect(out).toEqual({ cards: [], count: 0 });
+  });
+});
+
+describe('find_options handler — agent-supplied exclude (C.focused-shamir-5)', () => {
+  it('passes type-filtered excludeIds to the matching primitive', async () => {
+    mockTrips.mockResolvedValueOnce([]);
+
+    await findOptionsBody(
+      {
+        preferredType: 'trip',
+        limit: 4,
+        exclude: [
+          { type: 'trip', id: '369' },
+          { type: 'trip', id: '422' },
+        ],
+      },
+      makeDeps(),
+    );
+
+    expect(mockTrips.mock.calls[0]![1]).toMatchObject({
+      excludeIds: [369, 422],
+    });
+  });
+
+  it('cross-type isolation: a trip exclude does NOT bleed into the tour primitive', async () => {
+    mockTours.mockResolvedValueOnce([]);
+
+    await findOptionsBody(
+      {
+        preferredType: 'tour',
+        limit: 4,
+        exclude: [
+          { type: 'trip', id: '369' }, // wrong type — must be ignored
+          { type: 'tour', id: '9' }, // correct type — must be applied
+        ],
+      },
+      makeDeps(),
+    );
+
+    expect(mockTours.mock.calls[0]![1]).toMatchObject({
+      excludeIds: [9],
+    });
+    expect(mockTrips).not.toHaveBeenCalled();
+  });
+
+  it('blend splits the exclude list across all four primitives by type', async () => {
+    mockTrips.mockResolvedValueOnce([]);
+    mockTours.mockResolvedValueOnce([]);
+    mockHotels.mockResolvedValueOnce([]);
+    mockRegionBases.mockResolvedValueOnce([]);
+
+    await findOptionsBody(
+      {
+        limit: 4,
+        exclude: [
+          { type: 'trip', id: '100' },
+          { type: 'tour', id: '9' },
+          { type: 'hotel', id: '44' },
+          { type: 'region_base', id: '7' },
+          { type: 'trip', id: '101' },
+        ],
+      },
+      makeDeps(),
+    );
+
+    expect(mockTrips.mock.calls[0]![1]).toMatchObject({
+      excludeIds: [100, 101],
+    });
+    expect(mockTours.mock.calls[0]![1]).toMatchObject({ excludeIds: [9] });
+    expect(mockHotels.mock.calls[0]![1]).toMatchObject({ excludeIds: [44] });
+    expect(mockRegionBases.mock.calls[0]![1]).toMatchObject({
+      excludeIds: [7],
+    });
+  });
+
+  it('missing exclude (undefined) flows through as empty arrays — no crash', async () => {
+    mockTrips.mockResolvedValueOnce([]);
+
+    await findOptionsBody(
+      { preferredType: 'trip', limit: 4 },
+      makeDeps(),
+    );
+
+    expect(mockTrips.mock.calls[0]![1]).toMatchObject({ excludeIds: [] });
   });
 });

@@ -29,6 +29,11 @@ export interface QueryTripCardsOptions {
   budgetBand?: BudgetBand | null;
   activity?: string | null;
   accommodationStyle?: string | null;
+  /**
+   * Trip ids to omit (e.g. items shown in earlier turns). Empty / undefined
+   * means no exclusion. Per C.focused-shamir-5.
+   */
+  excludeIds?: number[];
   limit: number;
 }
 
@@ -78,12 +83,19 @@ export async function queryTripCardsByFilter(
     binds.push(`%${opts.accommodationStyle}%`);
     clauses.push(`accommodation_style ILIKE $${binds.length}`);
   }
+  if (opts.excludeIds && opts.excludeIds.length > 0) {
+    binds.push(opts.excludeIds);
+    clauses.push(`id <> ALL($${binds.length}::int[])`);
+  }
 
   binds.push(opts.limit);
   const limitBind = `$${binds.length}`;
 
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
+  // ORDER BY RANDOM() — imagination-stoking variety by default (decision
+  // C.focused-shamir-4). Supersedes the previous cheapest-first / shortest-
+  // first implicit ranking. id tiebreaker stabilises the rare collision case.
   const sql = `
     SELECT id, slug, headline, vibe_line, region, duration_days,
            from_price, currency_code, accommodation_style,
@@ -91,7 +103,7 @@ export async function queryTripCardsByFilter(
            canonical_url, image_id
     FROM trip_card
     ${where}
-    ORDER BY duration_days NULLS LAST, from_price NULLS LAST, id
+    ORDER BY RANDOM(), id
     LIMIT ${limitBind}
   `;
 

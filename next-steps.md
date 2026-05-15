@@ -34,7 +34,7 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 **Newly-open follow-ups from the brave-pare wave**:
 - **trip.country_id backfill** — same source as `region_id` (via `area.country_id`), separate user-visible value. Plan called out as scope-cut. ~30 min when needed.
-- **find_options tour variant** — still gated on Swoop populating the `tour` table (questions.md). v2 fallback to trips remains in place.
+- **find_options tour variant** — ✅ **landed 2026-05-15** (C.focused-shamir-2). `tour_card` populated (11 rows + embeddings), `queryTourCardsByFilter` live, `find_options(preferredType: 'tour')` returns real tour cards. Known limitation: `tour_card.region` is NULL — region-filtered tour queries return zero (see [discoveries.md](discoveries.md) 2026-05-15 entry on `contentblock.region_id` dangling reference). Prompt now nudges Sonnet to drop the region filter when `preferredType: 'tour'`.
 - **Truncation HTML-awareness** — `vibeLineFromSource` could split mid-tag if Swoop's CMS ever populates >3-line content. Park; revisit if HITL surfaces a real case.
 - **Strict CMS-HTML sanitiser** for defence-in-depth (e.g. allow-listed tags via DOMPurify) — currently rely on the trust boundary; revisit if Swoop legal counsel asks for it pre-M5.
 - **`@swoop/ui` typecheck regression** (pre-existing on main, broader than originally noted: ~24 errors across 7 widget files) — flagged in inbox.md.
@@ -69,7 +69,7 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 - E.t6 — counsel-review note in `05-retention-policy.md` to surface at E.t9 (hard-delete posture).
 
 **Crosscut tranche queue**:
-- v2 (find_options tours backend) — still gated on Swoop populating the `tour` table per [questions.md](questions.md) tour content ask. Renderer + schema shipping against fixtures; `preferredType: 'tour'` falls back to the trip primitive (decision C.bf-6) so Sonnet's tour-preference always produces *something*.
+- v2 (find_options tours backend) — ✅ **landed 2026-05-15** (C.focused-shamir-2 supersedes C.bf-6). `tour_card` populated, `queryTourCardsByFilter` live, dispatch swapped. Known limitation: `tour_card.region` is NULL (see [discoveries.md](discoveries.md) 2026-05-15). Also landed in the same wave: blendCards 4-way (C.focused-shamir-3), ORDER BY RANDOM (C.focused-shamir-4), agent-supplied exclude (C.focused-shamir-5).
 - v3 (find_options hotels + region_bases backend) — ✅ **landed 2026-05-13** ([planning/03-exec-crosscut-find-options-v3-backfill.md — find_options v3 backfill (hotels + region_bases)](planning/03-exec-crosscut-find-options-v3-backfill.md), decisions C.bf-1..6). `queryHotelCardsByFilter` + `queryRegionBaseCardsByFilter` data primitives wired; handler dispatches on `preferredType`; blended-output path when unset. 26 new tests on `@swoop/connector` (was 126+3 → 149+3 skipped). Live-data smoke pending (Al to run against `puma_dev`).
 
 ---

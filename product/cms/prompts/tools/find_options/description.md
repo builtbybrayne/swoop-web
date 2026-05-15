@@ -7,7 +7,12 @@ The output is two to four **proposal cards**. The cards are polymorphic — each
 - **`hotel`** — accommodation as the concrete option (location-anchored, per-night pricing). Use this when the visitor asks "where could we stay", names an accommodation style, or has signalled a base-and-explore intent rather than a packaged-trip intent.
 - **`region_base`** — a region framed as a launchpad ("use this as a base, explore around"). Use this when the visitor is choosing the region first, the trip second — "we're thinking Torres del Paine, what's the best base from there?".
 
-You don't pick the card type directly. The tool picks it based on (a) the conversation signal you've encoded in the filter and (b) the data's coverage for that signal. If the signal is decisive you can steer with `preferredType: 'trip' | 'tour' | 'hotel' | 'region_base'`; leave it unset to let the tool blend the best-matching set. Mixed sets — say, two trips and a tour — are allowed and often the right answer.
+You don't pick the card type directly. The tool picks it based on (a) the conversation signal you've encoded in the filter and (b) the data's coverage for that signal. If the signal is decisive you can steer with `preferredType: 'trip' | 'tour' | 'hotel' | 'region_base'`; leave it unset to let the tool blend the best-matching set. The default blend is 1 of each variant (mixed). Mixed sets — say, two trips and a tour — are allowed and often the right answer.
+
+Two practical notes:
+
+- **Avoid repeats.** When the visitor has already seen cards in this conversation and you want fresh options, pass `exclude: [{type, id}, ...]` so the tool omits them. You own the conversation history; the tool does not. Use this when the visitor explicitly asks for "different" options, or when you're deliberately rotating an upsell across turns.
+- **Tour + region filter.** Today's tour catalogue is Patagonia-only and doesn't carry region tags — `preferredType: 'tour'` works best without a `region` filter. If you have a strong tour signal but the visitor's region focus is the catchment that tours already cover, drop the region filter on that call rather than constraining it.
 
 Frame each card briefly in your reply — what's distinctive, why it matches what they've shared. Headline pricing rules:
 
