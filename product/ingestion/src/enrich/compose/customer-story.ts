@@ -30,6 +30,7 @@ import {
   stripHtml,
 } from '../chunk.js';
 import { contentHash } from '../hash.js';
+import { GEMINI_MODEL_ID } from '../gemini.js';
 
 const SOURCE_TYPE = 'customer_story';
 
@@ -211,11 +212,24 @@ interface InsertArgs {
 
 async function insertCustomerStoryRow(client: pg.PoolClient, row: InsertArgs): Promise<void> {
   const hash = contentHash(`${row.personaSummary}\n${row.text}`, SOURCE_TYPE);
+  // Cache lookup: same content_hash + model → reuse the cached persona
+  // embedding. Note: customer_story's embedding column is `persona_embedding`
+  // (the Mirror tool keys on this), but the cache stores vectors as
+  // value-agnostic — same content_hash returns the right vector regardless
+  // of what the target column is called. Per
+  // planning/03-exec-crosscut-embedding-cache.md §2.2.
+  const cached = await client.query<{ embedding: string }>(
+    `SELECT embedding::text AS embedding FROM embedding_cache
+     WHERE content_hash = $1 AND model_version = $2`,
+    [hash, GEMINI_MODEL_ID],
+  );
+  const cachedEmbedding = cached.rows[0]?.embedding ?? null;
   await client.query(
     `INSERT INTO customer_story
-       (source_provenance, source_id, text, canonical_url, region, persona_summary, image_id, content_hash, tsv)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, to_tsvector('english', $3))`,
-    [row.provenance, row.sourceId, row.text, row.canonicalUrl, row.region, row.personaSummary, row.imageId, hash],
+       (source_provenance, source_id, text, canonical_url, region, persona_summary,
+        image_id, content_hash, persona_embedding, tsv)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::halfvec(3072), to_tsvector('english', $3))`,
+    [row.provenance, row.sourceId, row.text, row.canonicalUrl, row.region, row.personaSummary, row.imageId, hash, cachedEmbedding],
   );
 }
 

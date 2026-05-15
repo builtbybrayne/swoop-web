@@ -23,6 +23,7 @@
 import type pg from 'pg';
 import { contentHash } from '../hash.js';
 import { stripHtml, chunkContentblockText } from '../chunk.js';
+import { GEMINI_MODEL_ID } from '../gemini.js';
 
 /**
  * Pagetype titles whose pages contribute to Inspire. Subset per the
@@ -265,10 +266,18 @@ interface InsertInspireRowArgs {
 
 async function insertInspireRow(client: pg.PoolClient, row: InsertInspireRowArgs): Promise<void> {
   const hash = contentHash(row.text, SOURCE_TYPE);
+  // Cache lookup: same content_hash + model → reuse the cached embedding,
+  // no Gemini call. Per planning/03-exec-crosscut-embedding-cache.md §2.2.
+  const cached = await client.query<{ embedding: string }>(
+    `SELECT embedding::text AS embedding FROM embedding_cache
+     WHERE content_hash = $1 AND model_version = $2`,
+    [hash, GEMINI_MODEL_ID],
+  );
+  const cachedEmbedding = cached.rows[0]?.embedding ?? null;
   await client.query(
     `INSERT INTO inspire_passage
-       (source_provenance, source_id, text, canonical_url, ntag_ids, image_id, content_hash, tsv)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, to_tsvector('english', $3))`,
-    [row.provenance, row.sourceId, row.text, row.canonicalUrl, row.ntagIds, row.imageId, hash],
+       (source_provenance, source_id, text, canonical_url, ntag_ids, image_id, content_hash, embedding, tsv)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::halfvec(3072), to_tsvector('english', $3))`,
+    [row.provenance, row.sourceId, row.text, row.canonicalUrl, row.ntagIds, row.imageId, hash, cachedEmbedding],
   );
 }

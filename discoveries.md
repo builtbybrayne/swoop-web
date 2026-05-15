@@ -6,6 +6,20 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-15 — Compose-mode `TRUNCATE` was wiping embeddings every run; cache made it survivable
+
+The enrich pipeline had a documented-vs-implemented divergence: [`cms/ops/embedding-rerun.md:17`](product/cms/ops/embedding-rerun.md#L17) claimed "idempotent on `content_hash`" but the actual embed-pass gating in [`enrich/embed/derived-rows.ts`](product/ingestion/src/enrich/embed/derived-rows.ts) was `WHERE embedding IS NULL`. Compose-mode TRUNCATEs every derived table on every run, so every row's embedding became NULL → every row got re-embedded. Silent waste on every compose run; a tiny incident wiped 649 trip_card embeddings as collateral.
+
+Fix landed 2026-05-15 ([planning/03-exec-crosscut-embedding-cache.md](planning/03-exec-crosscut-embedding-cache.md), decisions C.embedding-cache-1 and C.embedding-cache-2): new `embedding_cache (content_hash, model_version, embedding)` table, decoupled from any derived/source table (no FKs back, outside any TRUNCATE blast radius). Compose-time INSERT does a per-row lookup; cache hit hydrates the embedding column inline, no Gemini call. Embed pass writes through to the cache on every fresh embedding. Migration backfilled the cache from currently-embedded rows.
+
+Verified end-to-end: a full re-compose against `puma_dev` cached-hit all 2,581 surviving embeddings (zero Gemini calls) AND fresh-embedded the 660 that needed recovery, for total spend £0.0006. Subsequent re-runs against unchanged content cost £0.
+
+**Pattern to remember**: embeddings are functions of (content, model). The natural key of an embedding is `(content_hash, model_version)`, not "which row happens to hold it today". Storing them keyed by the natural key, outside any consumer table, makes survival across TRUNCATE/DROP/DELETE structural rather than conventional. The per-row `embedding` columns stay as a denormalised projection of the cache — retrieval reads them directly (HNSW indexes preserved, no JOIN at query time), compose re-fills them from cache.
+
+Coverage today: 6 derived tables + blog_chunk. tag/faqitem/image deferred — they lack `content_hash` columns; adding the column needs a per-table design call on what "content" means (especially for image — annotation output vs alt_text vs hash-over-both).
+
+---
+
 ## 2026-05-14 — `tours.title` is vestigial; tour identity lives on the parent contentblock's page
 
 The `tours` table's own `title` column is empty — NULL or `''` — on **every** row in the 2026-04-27 dump (9 NULL, 6 `''`). A tour's real identity lives on the `page` the tour's `contentblock` belongs to: `tours.content_block_id → contentblock.page_id → page.{title, alias, canonical_url}`. C.t3's original `transformTour` filtered on `tours.title` being non-null and so dropped 100% of tours (`tour: 0/15`), cascading to `tour_item: 0/36` via the FK-drop guard. The README's "Expected output" even enshrined `tour: 0/15` as expected — a bug normalised into the runbook.

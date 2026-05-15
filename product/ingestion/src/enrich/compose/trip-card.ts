@@ -16,6 +16,7 @@
 import type pg from 'pg';
 import { contentHash } from '../hash.js';
 import { stripHtml } from '../chunk.js';
+import { GEMINI_MODEL_ID } from '../gemini.js';
 
 const SOURCE_TYPE = 'trip_card';
 
@@ -92,12 +93,24 @@ export async function composeTripCard(
     const canonicalUrl = t.canonical_url ?? `https://www.swoop-patagonia.com/${t.slug ?? ''}`;
     const fromPrice = t.from_price !== null ? Number(t.from_price) : null;
 
+    // Cache lookup: same content_hash + model → reuse the cached embedding.
+    // Cache hit hydrates the embedding column inline; cache miss leaves it
+    // NULL and the embed pass picks it up. Per
+    // planning/03-exec-crosscut-embedding-cache.md §2.2.
+    const cached = await opts.client.query<{ embedding: string }>(
+      `SELECT embedding::text AS embedding FROM embedding_cache
+       WHERE content_hash = $1 AND model_version = $2`,
+      [hash, GEMINI_MODEL_ID],
+    );
+    const cachedEmbedding = cached.rows[0]?.embedding ?? null;
+
     await opts.client.query(
       `INSERT INTO trip_card
          (id, slug, headline, vibe_line, region, duration_days, from_price,
           currency_code, image_id, accommodation_style, activity_tags,
-          canonical_url, content_hash, tsv)
+          canonical_url, content_hash, embedding, tsv)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+               $14::halfvec(3072),
                to_tsvector('english', $3 || ' ' || $4 || ' ' || $5))
        ON CONFLICT (id) DO UPDATE SET
          slug = EXCLUDED.slug,
@@ -112,6 +125,7 @@ export async function composeTripCard(
          activity_tags = EXCLUDED.activity_tags,
          canonical_url = EXCLUDED.canonical_url,
          content_hash = EXCLUDED.content_hash,
+         embedding = EXCLUDED.embedding,
          tsv = EXCLUDED.tsv,
          modified_at = NOW()`,
       [
@@ -128,6 +142,7 @@ export async function composeTripCard(
         t.activity_aliases ?? [],
         canonicalUrl,
         hash,
+        cachedEmbedding,
       ],
     );
     rowsInserted += 1;

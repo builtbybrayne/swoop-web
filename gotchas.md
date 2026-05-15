@@ -48,6 +48,8 @@ Diagnostic for whether the issue is your key vs our pipeline: isolated curl to `
 
 For later: longer initial backoff (env-overridable `GEMINI_BACKOFF_BASE_MS`?) would let our retry chain ride out the per-minute window. Not built yet — current shape is dial-down-burst first, extend-backoff later if 429s recur after dialing down.
 
+**Post-2026-05-15 context**: this gotcha bites only when the run actually needs fresh embeddings. The `embedding_cache` (decision C.embedding-cache-1, plan `planning/03-exec-crosscut-embedding-cache.md`) means **re-runs against unchanged content cost zero Gemini tokens** — cache hits at compose-time INSERT before the embed pass sees the row. The 429 risk now only surfaces on (a) genuinely new / changed content, (b) the first run after migration 012 if the cache backfill couldn't find existing embeddings (e.g. after a wipe), or (c) the four uncached sources (`tag`, `faqitem`, `image`, `blog_chunk`) on their first run. If you're re-running compose with nothing changed, dial-down isn't necessary — but it's free to leave on.
+
 ---
 
 ## Gemini embeddings cap inputs at 2048 tokens (vs Voyage-3's 32K)

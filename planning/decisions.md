@@ -10,6 +10,20 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 > **Numbering note (2026-05-13)** — entries below use non-numeric suffixes (`C.bf-*` for the BF-FO-v3 backfill landing, `C.batch-*` for the BATCH-C.t6 batches-submission landing, `E.verdict-*` for the VERDICT-E.t1 wire-tightening, **`{C,D}.brave-pare-*` for the brave-pare live-smoke wave**) rather than continuing the numeric `C.43+` / `E.16+` / `D.31+` sequences. The rationale is collision avoidance: parallel Tier-3 plan authors were running concurrently the day these landed, and several were independently allocating numeric ids. The semantic-suffix prefixes keep task provenance discoverable and side-step the allocation race entirely. Future renumbering to standard `C.N` / `D.N` / `E.N` form is a doc-only refactor with zero swap cost.
 
+## C.embedding-cache-1 — Embeddings live in a separate content-hash-keyed cache table, outside the truncate blast radius of any consumer
+
+**Decided**: 2026-05-15
+**Owner**: focused-shamir-52524c session ([planning/03-exec-crosscut-embedding-cache.md](03-exec-crosscut-embedding-cache.md))
+**Rationale**: C.focused-shamir-2's compose run on 2026-05-15 surfaced that compose-mode `TRUNCATE`s every derived table and the embed pass gates on `WHERE embedding IS NULL` (not `content_hash` as `cms/ops/embedding-rerun.md` documents). Every compose was re-embedding the entire derived store — silently expensive, and a tiny incident wiped 649 trip_card embeddings as collateral. User constraint: "100% cannot be trashing embeddings any time we change the data." Fix: new `embedding_cache (content_hash, model_version, embedding)` table with composite PK, decoupled from every derived/source table (no FKs back). Compose-time INSERT does a per-row lookup; cache hit hydrates the embedding column inline (no Gemini call). Embed pass writes through to the cache on every fresh embedding. Migration backfills the cache from currently-embedded rows so the 2,581 surviving embeddings (inspire_passage / customer_story / trust_proof / inform_chunk) aren't lost in transition. Verified 2026-05-15: re-compose against `puma_dev` cached-hit all 2,581 (zero Gemini calls) + fresh-embedded the 660 trip_card + tour_card rows that needed recovery; total spend £0.0006. Subsequent re-runs against unchanged content cost £0. The derived tables KEEP their `embedding` columns + HNSW indexes — retrieval semantics, `find_inspiring` / `find_someone_who` / `_card` query paths, source_id/canonical_url linkage all unchanged (plan §1.5).
+**Swap cost**: Low for retrieval-side reversibility — embedding columns + HNSW indexes stay on derived tables; the cache is purely a survival/idempotency layer. Removing the cache would mean compose-mode re-runs cost full embedding spend again (revert reason: never). Scope: 6 derived tables + blog_chunk. tag/faqitem/image deferred to a follow-up (they lack content_hash columns and adding them needs a per-table design call — recorded in plan §9.1).
+
+## C.embedding-cache-2 — `model_version` is part of the cache primary key
+
+**Decided**: 2026-05-15
+**Owner**: focused-shamir-52524c session ([planning/03-exec-crosscut-embedding-cache.md](03-exec-crosscut-embedding-cache.md))
+**Rationale**: Embeddings are functions of (content, model). The cache PK is `(content_hash, model_version)`, not just `content_hash`. Bumping the embedder (today: `gemini-embedding-001`; future: -002 or a different family) inserts new cache entries rather than overwriting; old entries persist as auditable history. Mirrors the immutable-history principle of C.31 forward-only migrations. Avoids the trap where a model swap silently invalidates retrieval without leaving a record.
+**Swap cost**: Trivial. Removing `model_version` from the PK is a one-column migration — but doing so loses model-history granularity. The cost of keeping it is one extra TEXT column (≈30 bytes per entry; rounds to nothing).
+
 ## C.focused-shamir-1 — Tour identity derives from the parent contentblock's page, not the vestigial `tours.title`
 
 **Decided**: 2026-05-14

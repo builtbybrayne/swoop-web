@@ -19,12 +19,13 @@
 import type pg from 'pg';
 import type { CostLedger } from '../cost.js';
 import { approxTokenCount, type LedgerPassKey } from '../cost.js';
-import { embedInBatches, GeminiClient } from '../gemini.js';
+import { embedInBatches, GEMINI_MODEL_ID, GeminiClient } from '../gemini.js';
 import { toPgVectorLiteral } from '../pool.js';
 
 interface DerivedRow {
   id: string; // UUID
   text: string;
+  content_hash: string;
 }
 
 export interface EmbedDerivedTableOptions {
@@ -59,7 +60,7 @@ export async function embedDerivedTable(
 ): Promise<EmbedDerivedTableResult> {
   const limitClause = opts.limit && opts.limit > 0 ? `LIMIT ${opts.limit}` : '';
   const r = await opts.client.query<DerivedRow>(
-    `SELECT id::text AS id, ${opts.textColumn} AS text
+    `SELECT id::text AS id, ${opts.textColumn} AS text, content_hash
      FROM ${opts.table}
      WHERE ${opts.embedColumn} IS NULL
        AND ${opts.textColumn} IS NOT NULL
@@ -94,6 +95,19 @@ export async function embedDerivedTable(
   const idCast = (opts.idColumn ?? 'uuid') === 'uuid' ? '::uuid' : '::integer';
 
   for (const { item, embedding } of out) {
+    // Write-through to embedding_cache first — keyed by (content_hash,
+    // model_version). ON CONFLICT DO NOTHING is idempotent. Survives any
+    // future TRUNCATE on the derived table; the next compose will recover
+    // the embedding by content_hash lookup without spending tokens.
+    // Per planning/03-exec-crosscut-embedding-cache.md §2.3.
+    const embeddingLiteral = toPgVectorLiteral(embedding);
+    await opts.client.query(
+      `INSERT INTO embedding_cache (content_hash, model_version, embedding)
+       VALUES ($1, $2, $3::halfvec(3072))
+       ON CONFLICT (content_hash, model_version) DO NOTHING`,
+      [item.content_hash, GEMINI_MODEL_ID, embeddingLiteral],
+    );
+
     if (opts.populateTsv) {
       await opts.client.query(
         `UPDATE ${opts.table}
@@ -101,7 +115,7 @@ export async function embedDerivedTable(
              tsv = to_tsvector('english', ${opts.textColumn}),
              modified_at = NOW()
          WHERE id = $2${idCast}`,
-        [toPgVectorLiteral(embedding), item.id],
+        [embeddingLiteral, item.id],
       );
     } else {
       await opts.client.query(
@@ -109,7 +123,7 @@ export async function embedDerivedTable(
          SET ${opts.embedColumn} = $1::halfvec(3072),
              modified_at = NOW()
          WHERE id = $2${idCast}`,
-        [toPgVectorLiteral(embedding), item.id],
+        [embeddingLiteral, item.id],
       );
     }
   }

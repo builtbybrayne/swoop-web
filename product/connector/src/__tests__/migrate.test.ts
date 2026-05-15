@@ -36,7 +36,7 @@ const PLACEHOLDER_MIGRATIONS = new Set<string>([
 ]);
 
 describe('migrate.ts setup', () => {
-  it('migrations directory contains the expected SQL files (001–010)', () => {
+  it('migrations directory contains the expected SQL files (001–012)', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith('.sql'))
       .sort();
@@ -52,6 +52,8 @@ describe('migrate.ts setup', () => {
       '008_image_tag_columns.sql',
       '009_embeddings_dim_3072.sql',
       '010_session_history_observability.sql',
+      '011_tour_card.sql',
+      '012_embedding_cache.sql',
     ]);
   });
 

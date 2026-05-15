@@ -44,6 +44,7 @@ import { composeCustomerStory } from './compose/customer-story.js';
 import { composeTrustProof } from './compose/trust-proof.js';
 import { composeInformChunk } from './compose/inform-chunk.js';
 import { composeTripCard } from './compose/trip-card.js';
+import { composeTourCard } from './compose/tour-card.js';
 
 export type RunMode = 'embed' | 'classify' | 'compose' | 'all';
 
@@ -236,6 +237,10 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
           client,
           dryRun: opts.dryRun,
         });
+        passResults['compose:tour_card'] = await composeTourCard({
+          client,
+          dryRun: opts.dryRun,
+        });
 
         if (!opts.dryRun) {
           // Embed derived tables now that they have text.
@@ -265,6 +270,11 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
             table: 'trip_card', textColumn: 'headline', embedColumn: 'embedding',
             ledgerKey: 'gemini:trip_card', populateTsv: false, idColumn: 'integer',
           });
+          passResults['embed:tour_card'] = await embedDerivedTable({
+            client, embeddingClient: opts.embeddingClient, ledger,
+            table: 'tour_card', textColumn: 'headline', embedColumn: 'embedding',
+            ledgerKey: 'gemini:tour_card', populateTsv: false, idColumn: 'integer',
+          });
         }
 
         // Read post-compose row counts.
@@ -293,7 +303,7 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
 }
 
 async function readDerivedRowCounts(client: pg.PoolClient): Promise<Record<string, number>> {
-  const tables = ['inspire_passage', 'customer_story', 'trust_proof', 'inform_chunk', 'trip_card'];
+  const tables = ['inspire_passage', 'customer_story', 'trust_proof', 'inform_chunk', 'trip_card', 'tour_card'];
   const out: Record<string, number> = {};
   for (const t of tables) {
     const r = await client.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM ${t}`);
