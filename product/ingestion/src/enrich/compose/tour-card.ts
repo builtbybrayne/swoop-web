@@ -31,6 +31,7 @@
 import type pg from 'pg';
 import { contentHash } from '../hash.js';
 import { stripHtml } from '../chunk.js';
+import { GEMINI_MODEL_ID } from '../gemini.js';
 
 const SOURCE_TYPE = 'tour_card';
 
@@ -130,13 +131,24 @@ export async function composeTourCard(
     const hash = contentHash(embedInput, SOURCE_TYPE);
     const durationDays = t.day_count > 0 ? t.day_count : null;
 
+    // Cache lookup: same content_hash + model → reuse the cached embedding.
+    // Cache hit hydrates the embedding column inline; cache miss leaves it
+    // NULL and the embed pass picks it up. Per
+    // planning/03-exec-crosscut-embedding-cache.md §2.2.
+    const cached = await opts.client.query<{ embedding: string }>(
+      `SELECT embedding::text AS embedding FROM embedding_cache
+       WHERE content_hash = $1 AND model_version = $2`,
+      [hash, GEMINI_MODEL_ID],
+    );
+    const cachedEmbedding = cached.rows[0]?.embedding ?? null;
+
     await opts.client.query(
       `INSERT INTO tour_card
          (id, slug, headline, vibe_line, region, day_count, duration_days,
           group_size_max, from_price, currency_code, image_id, accommodation_style,
-          activity_tags, canonical_url, content_hash, tsv)
+          activity_tags, canonical_url, content_hash, embedding, tsv)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL, NULL, $8, NULL,
-               $9, $10, $11,
+               $9, $10, $11, $12::halfvec(3072),
                to_tsvector('english', $3 || ' ' || COALESCE($4, '') || ' ' || COALESCE($5, '')))
        ON CONFLICT (id) DO UPDATE SET
          slug = EXCLUDED.slug,
@@ -149,6 +161,7 @@ export async function composeTourCard(
          activity_tags = EXCLUDED.activity_tags,
          canonical_url = EXCLUDED.canonical_url,
          content_hash = EXCLUDED.content_hash,
+         embedding = EXCLUDED.embedding,
          tsv = EXCLUDED.tsv,
          modified_at = NOW()`,
       [
@@ -163,6 +176,7 @@ export async function composeTourCard(
         t.activity_aliases ?? [],
         t.canonical_url,
         hash,
+        cachedEmbedding,
       ],
     );
     rowsInserted += 1;

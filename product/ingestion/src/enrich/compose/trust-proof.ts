@@ -20,6 +20,7 @@
 import type pg from 'pg';
 import { contentHash } from '../hash.js';
 import { stripHtml, chunkContentblockText } from '../chunk.js';
+import { GEMINI_MODEL_ID } from '../gemini.js';
 
 const SOURCE_TYPE = 'trust_proof';
 
@@ -225,10 +226,18 @@ interface InsertArgs {
 
 async function insertTrustRow(client: pg.PoolClient, row: InsertArgs): Promise<void> {
   const hash = contentHash(`${row.claim}\n${row.evidence}`, SOURCE_TYPE);
+  // Cache lookup: same content_hash + model → reuse the cached embedding.
+  // Per planning/03-exec-crosscut-embedding-cache.md §2.2.
+  const cached = await client.query<{ embedding: string }>(
+    `SELECT embedding::text AS embedding FROM embedding_cache
+     WHERE content_hash = $1 AND model_version = $2`,
+    [hash, GEMINI_MODEL_ID],
+  );
+  const cachedEmbedding = cached.rows[0]?.embedding ?? null;
   await client.query(
     `INSERT INTO trust_proof
-       (source_provenance, source_id, topic, claim, evidence, canonical_url, content_hash, tsv)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, to_tsvector('english', $4 || ' ' || $5))`,
-    [row.provenance, row.sourceId, row.topic, row.claim, row.evidence, row.canonicalUrl, hash],
+       (source_provenance, source_id, topic, claim, evidence, canonical_url, content_hash, embedding, tsv)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::halfvec(3072), to_tsvector('english', $4 || ' ' || $5))`,
+    [row.provenance, row.sourceId, row.topic, row.claim, row.evidence, row.canonicalUrl, hash, cachedEmbedding],
   );
 }

@@ -16,6 +16,14 @@ The enrichment pass is what populates those columns. Without it, the agent's ret
 
 The pass is idempotent on `content_hash`: if the source content hasn't changed, the existing embedding / classifier output stays. So re-running after an ETL re-run only re-embeds and re-classifies the rows that actually changed.
 
+### How the cache enforces this (post-2026-05-15)
+
+Embeddings are stored in **two places**: on the derived row (for retrieval — `inspire_passage.embedding`, `customer_story.persona_embedding`, etc.) AND in a separate **`embedding_cache`** table keyed by `(content_hash, model_version)`. The cache lives outside any derived table's TRUNCATE blast radius. Compose-time INSERT looks up by content_hash — cache hit → embedding hydrated inline, no Gemini call; cache miss → embedding NULL, embed pass picks it up and writes through to the cache.
+
+Practical effect: after one compose run, re-running compose against unchanged content costs **zero Gemini tokens**. A direct `TRUNCATE inspire_passage` followed by re-compose recovers all 665 embeddings from cache with no API calls. Plan: [planning/03-exec-crosscut-embedding-cache.md](../../../planning/03-exec-crosscut-embedding-cache.md). Decisions: C.embedding-cache-1, C.embedding-cache-2.
+
+Coverage today: 6 derived tables + `blog_chunk`. `tag`, `faqitem`, `image` are not yet cached (they lack `content_hash` columns); a follow-up adds those. Until then, those four sources still re-embed on every run — but they don't get TRUNCATEd by any compose function, so the cost surfaces only on intentional re-embed.
+
 ---
 
 ## What you'll do every time

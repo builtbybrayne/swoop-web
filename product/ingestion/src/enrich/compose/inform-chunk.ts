@@ -14,6 +14,7 @@
 import type pg from 'pg';
 import { contentHash } from '../hash.js';
 import { chunkFaqItem, stripHtml, chunkContentblockText } from '../chunk.js';
+import { GEMINI_MODEL_ID } from '../gemini.js';
 
 const SOURCE_TYPE = 'inform_chunk';
 
@@ -85,13 +86,13 @@ export async function composeInformChunk(
   for (const f of faqs) {
     const c = chunkFaqItem(f.title, f.content ?? '');
     if (c.text.trim().length === 0) continue;
-    const hash = contentHash(c.text, SOURCE_TYPE);
-    await opts.client.query(
-      `INSERT INTO inform_chunk
-         (source_provenance, source_id, question, text, canonical_url, content_hash, tsv)
-       VALUES ('faq', $1, $2, $3, NULL, $4, to_tsvector('english', $3))`,
-      [String(f.id), f.title, c.text, hash],
-    );
+    await insertInformChunkRow(opts.client, {
+      provenance: 'faq',
+      sourceId: String(f.id),
+      question: f.title,
+      text: c.text,
+      canonicalUrl: null,
+    });
     faqRows += 1;
   }
 
@@ -107,25 +108,23 @@ export async function composeInformChunk(
   for (const p of pages) {
     practicalPageIds.push(p.id);
     if (p.intro_text?.trim()) {
-      const text = stripHtml(p.intro_text);
-      const hash = contentHash(text, SOURCE_TYPE);
-      await opts.client.query(
-        `INSERT INTO inform_chunk
-           (source_provenance, source_id, question, text, canonical_url, content_hash, tsv)
-         VALUES ('swoop_practical', $1, NULL, $2, $3, $4, to_tsvector('english', $2))`,
-        [`${p.id}_intro`, text, p.canonical_url, hash],
-      );
+      await insertInformChunkRow(opts.client, {
+        provenance: 'swoop_practical',
+        sourceId: `${p.id}_intro`,
+        question: null,
+        text: stripHtml(p.intro_text),
+        canonicalUrl: p.canonical_url,
+      });
       practicalPageRows += 1;
     }
     if (p.summary?.trim()) {
-      const text = stripHtml(p.summary);
-      const hash = contentHash(text, SOURCE_TYPE);
-      await opts.client.query(
-        `INSERT INTO inform_chunk
-           (source_provenance, source_id, question, text, canonical_url, content_hash, tsv)
-         VALUES ('swoop_practical', $1, NULL, $2, $3, $4, to_tsvector('english', $2))`,
-        [`${p.id}_summary`, text, p.canonical_url, hash],
-      );
+      await insertInformChunkRow(opts.client, {
+        provenance: 'swoop_practical',
+        sourceId: `${p.id}_summary`,
+        question: null,
+        text: stripHtml(p.summary),
+        canonicalUrl: p.canonical_url,
+      });
       practicalPageRows += 1;
     }
   }
@@ -144,13 +143,13 @@ export async function composeInformChunk(
     for (const cb of cbs) {
       const chunks = chunkContentblockText(cb.text!);
       for (const c of chunks) {
-        const hash = contentHash(c.text, SOURCE_TYPE);
-        await opts.client.query(
-          `INSERT INTO inform_chunk
-             (source_provenance, source_id, question, text, canonical_url, content_hash, tsv)
-           VALUES ('swoop_practical', $1, $2, $3, $4, $5, to_tsvector('english', $3))`,
-          [`${cb.id}_${c.index}`, cb.title ?? null, c.text, cb.page_canonical_url, hash],
-        );
+        await insertInformChunkRow(opts.client, {
+          provenance: 'swoop_practical',
+          sourceId: `${cb.id}_${c.index}`,
+          question: cb.title ?? null,
+          text: c.text,
+          canonicalUrl: cb.page_canonical_url,
+        });
         practicalPageRows += 1;
       }
     }
@@ -167,15 +166,44 @@ export async function composeInformChunk(
     )
   ).rows;
   for (const bc of informBlogs) {
-    const hash = contentHash(bc.text, SOURCE_TYPE);
-    await opts.client.query(
-      `INSERT INTO inform_chunk
-         (source_provenance, source_id, question, text, canonical_url, content_hash, tsv)
-       VALUES ('blog_practical', $1, NULL, $2, $3, $4, to_tsvector('english', $2))`,
-      [String(bc.id), bc.text, bc.blog_canonical_url, hash],
-    );
+    await insertInformChunkRow(opts.client, {
+      provenance: 'blog_practical',
+      sourceId: String(bc.id),
+      question: null,
+      text: bc.text,
+      canonicalUrl: bc.blog_canonical_url,
+    });
     blogRows += 1;
   }
 
   return { rowsInserted: faqRows + practicalPageRows + blogRows, faqRows, practicalPageRows, blogRows };
+}
+
+interface InsertArgs {
+  provenance: 'faq' | 'swoop_practical' | 'blog_practical' | 'guidebook_practical' | 'month_page' | 'trip_prose';
+  sourceId: string;
+  question: string | null;
+  text: string;
+  canonicalUrl: string | null;
+}
+
+/**
+ * Insert one inform_chunk row with embedding-cache lookup. Cache hit hydrates
+ * the embedding column inline (no Gemini call); cache miss leaves it NULL for
+ * the embed pass. Per planning/03-exec-crosscut-embedding-cache.md §2.2.
+ */
+async function insertInformChunkRow(client: pg.PoolClient, row: InsertArgs): Promise<void> {
+  const hash = contentHash(row.text, SOURCE_TYPE);
+  const cached = await client.query<{ embedding: string }>(
+    `SELECT embedding::text AS embedding FROM embedding_cache
+     WHERE content_hash = $1 AND model_version = $2`,
+    [hash, GEMINI_MODEL_ID],
+  );
+  const cachedEmbedding = cached.rows[0]?.embedding ?? null;
+  await client.query(
+    `INSERT INTO inform_chunk
+       (source_provenance, source_id, question, text, canonical_url, content_hash, embedding, tsv)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::halfvec(3072), to_tsvector('english', $4))`,
+    [row.provenance, row.sourceId, row.question, row.text, row.canonicalUrl, hash, cachedEmbedding],
+  );
 }
