@@ -432,6 +432,21 @@ export const FindOptionsInputSchema = z
      * Decision C.51.
      */
     preferredType: ProposalTypeSchema.optional(),
+    /**
+     * Cards to omit from the result. Use to avoid repeating items shown
+     * earlier in the conversation. Each entry is `{type, id}` so cross-type
+     * id-spaces don't collide (a `trip` id 369 doesn't accidentally exclude
+     * a `tour` with id 369). The agent owns its own shown-history; the tool
+     * does not track session state. Decision C.focused-shamir-5.
+     */
+    exclude: z
+      .array(
+        z.object({
+          type: ProposalTypeSchema,
+          id: z.string().min(1),
+        }),
+      )
+      .optional(),
     /** Cap on returned cards. Defaults to 4. */
     limit: z.number().int().positive().max(6).default(4),
   })

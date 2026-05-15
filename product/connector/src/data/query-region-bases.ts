@@ -23,6 +23,11 @@ import { trimCmsDecorativeWhitespace } from './text-utils.js';
 
 export interface QueryRegionBaseCardsOptions {
   region?: string | null;
+  /**
+   * Region-base (area) ids to omit (e.g. items shown in earlier turns).
+   * Empty / undefined means no exclusion. Per C.focused-shamir-5.
+   */
+  excludeIds?: number[];
   limit: number;
 }
 
@@ -57,6 +62,10 @@ export async function queryRegionBaseCardsByFilter(
     whereClauses.push(
       `(a.alias ILIKE ${bindRef} OR a.name ILIKE ${bindRef} OR country.name ILIKE ${bindRef})`,
     );
+  }
+  if (opts.excludeIds && opts.excludeIds.length > 0) {
+    binds.push(opts.excludeIds);
+    whereClauses.push(`a.id <> ALL($${binds.length}::int[])`);
   }
 
   binds.push(opts.limit);
@@ -104,7 +113,7 @@ export async function queryRegionBaseCardsByFilter(
     INNER JOIN area_page ap   ON ap.area_id = a.id
     INNER JOIN area_trip_count atc ON atc.area_id = a.id
     ${whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : ''}
-    ORDER BY atc.trip_count DESC NULLS LAST, a.id
+    ORDER BY RANDOM(), a.id
     LIMIT ${limitBind}
   `;
 

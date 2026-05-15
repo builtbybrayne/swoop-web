@@ -6,19 +6,22 @@
  * hotel | region_base` (`ProposalCardPublicSchema` in `@swoop/common`).
  *
  * Tranche history:
- *   - v1 (2026-05-12, decisions C.48–C.51): contract carries all four
- *     variants from day one; handler wires only `type: 'trip'` live.
- *   - v3 (2026-05-13, task BF-FO-v3, decisions C.bf-1..6): hotels +
- *     region_bases land as live data primitives. `preferredType` becomes
- *     dispatching. v2 (tours) remains gated on Swoop content population.
+ *   - v1 (2026-05-12, C.48–C.51): contract carries all four variants; only
+ *     `type: 'trip'` wired live.
+ *   - v3 (2026-05-13, C.bf-1..6): hotels + region_bases land as live data
+ *     primitives. `preferredType` becomes dispatching.
+ *   - v2 (2026-05-15, C.focused-shamir-{2..5}): tours go live (C.focused-shamir-2
+ *     supersedes C.bf-6); `blendCards` becomes a four-way even split with extras
+ *     to trips (C.focused-shamir-3 supersedes C.bf-3); all primitives use
+ *     `ORDER BY RANDOM()` for variety (C.focused-shamir-4); agent can pass an
+ *     `exclude` list to omit cards it doesn't want repeated (C.focused-shamir-5).
  *
  * Dispatch rules:
+ *   - 'trip'         → queryTripCardsByFilter (live)
+ *   - 'tour'         → queryTourCardsByFilter (live, v2)
  *   - 'hotel'        → queryHotelCardsByFilter (live)
  *   - 'region_base'  → queryRegionBaseCardsByFilter (live)
- *   - 'trip'         → queryTripCardsByFilter (live)
- *   - 'tour'         → queryTripCardsByFilter (v2 fallback; v2 PR swaps
- *                      this branch when Swoop populates the tour table)
- *   - undefined      → blendCards — mixed set across the three live variants
+ *   - undefined      → blendCards — four-way even split, extras to trips
  *
  * Pure SQL filter — no vector retrieval (per C.t4 plan §"Components"). No
  * defence against missing rows: empty result is the correct outcome.
@@ -32,9 +35,11 @@ import {
   type FindOptionsInput,
   type FindOptionsOutput,
   type ProposalCardPublic,
+  type ProposalType,
 } from '@swoop/common';
 
 import { queryTripCardsByFilter } from '../data/query-trips.js';
+import { queryTourCardsByFilter } from '../data/query-tour-cards.js';
 import { queryHotelCardsByFilter } from '../data/query-hotels.js';
 import { queryRegionBaseCardsByFilter } from '../data/query-region-bases.js';
 import type { ToolHandlerDeps } from './deps.js';
@@ -47,6 +52,25 @@ interface SharedFilters {
   activity?: string | null;
   accommodationStyle?: string | null;
   limit: number;
+}
+
+/**
+ * Split the agent-supplied `exclude` list (Array<{type, id}>) into per-type
+ * arrays of numeric ids. Each primitive's id space is distinct, so the lists
+ * don't cross-pollute. Per C.focused-shamir-5.
+ */
+function excludeIdsForType(
+  exclude: FindOptionsInput['exclude'],
+  type: ProposalType,
+): number[] {
+  if (!exclude) return [];
+  const out: number[] = [];
+  for (const e of exclude) {
+    if (e.type !== type) continue;
+    const n = Number(e.id);
+    if (Number.isFinite(n)) out.push(n);
+  }
+  return out;
 }
 
 export async function findOptionsBody(
@@ -66,27 +90,32 @@ export async function findOptionsBody(
 
     switch (input.preferredType) {
       case 'trip':
-        return queryTripCardsByFilter(client, filters);
+        return queryTripCardsByFilter(client, {
+          ...filters,
+          excludeIds: excludeIdsForType(input.exclude, 'trip'),
+        });
+      case 'tour':
+        return queryTourCardsByFilter(client, {
+          ...filters,
+          excludeIds: excludeIdsForType(input.exclude, 'tour'),
+        });
       case 'hotel':
         return queryHotelCardsByFilter(client, {
           region: filters.region,
           budgetBand: filters.budgetBand,
           accommodationStyle: filters.accommodationStyle,
+          excludeIds: excludeIdsForType(input.exclude, 'hotel'),
           limit: filters.limit,
         });
       case 'region_base':
         return queryRegionBaseCardsByFilter(client, {
           region: filters.region,
+          excludeIds: excludeIdsForType(input.exclude, 'region_base'),
           limit: filters.limit,
         });
-      case 'tour':
-        // v2 fallback: until Swoop populates the `tour` table, route through
-        // the trip primitive so Sonnet's tour-preference still produces
-        // *something*. Decision C.bf-6. v2 PR swaps this branch.
-        return queryTripCardsByFilter(client, filters);
       case undefined:
       default:
-        return blendCards(client, filters);
+        return blendCards(client, filters, input.exclude);
     }
   });
 
@@ -97,57 +126,84 @@ export async function findOptionsBody(
 }
 
 /**
- * Build a blended set across the three live variants. Default ratio for
- * `limit=4`: 2 trips + 1 hotel + 1 region_base. For other limits it
- * proportionalises and skips zero-quota primitives. If a primitive
- * under-delivers, deficits redistribute by querying additional trips
- * (priority order: trip → hotel → region_base; today we only top up
- * trips because they're the most populous live source).
+ * Build a blended set across all four variants. Quota rule (C.focused-shamir-3,
+ * supersedes C.bf-3): `base = floor(limit/4)`, extras to trips. At the default
+ * `limit=4` that's 1 of each variant (trip + tour + hotel + region_base). At
+ * `limit=8`: 2 of each. At `limit<4`: drops to trips-only (Sonnet's default is
+ * 4 so this is rare).
  *
- * Decision C.bf-3.
+ * Deficit redistribution: when SOME primitive delivered but the total is still
+ * below limit, query additional trips to top up. Trips remain the most populous
+ * source and the natural deficit-filler.
  */
 async function blendCards(
   client: pg.PoolClient,
   filters: SharedFilters,
+  exclude: FindOptionsInput['exclude'],
 ): Promise<ProposalCardPublic[]> {
-  const tripQuota = Math.floor(filters.limit / 2);
-  const hotelQuota = Math.ceil((filters.limit - tripQuota) / 2);
-  const regionBaseQuota = filters.limit - tripQuota - hotelQuota;
+  const base = Math.floor(filters.limit / 4);
+  const remainder = filters.limit - base * 4;
+  const tripQuota = base + remainder; // trips absorb the remainder
+  const tourQuota = base;
+  const hotelQuota = base;
+  const regionBaseQuota = base;
 
-  const [trips, hotels, regionBases] = await Promise.all([
+  const tripExcludes = excludeIdsForType(exclude, 'trip');
+  const tourExcludes = excludeIdsForType(exclude, 'tour');
+  const hotelExcludes = excludeIdsForType(exclude, 'hotel');
+  const regionBaseExcludes = excludeIdsForType(exclude, 'region_base');
+
+  const [trips, tours, hotels, regionBases] = await Promise.all([
     tripQuota > 0
-      ? queryTripCardsByFilter(client, { ...filters, limit: tripQuota })
+      ? queryTripCardsByFilter(client, {
+          ...filters,
+          excludeIds: tripExcludes,
+          limit: tripQuota,
+        })
+      : Promise.resolve<ProposalCardPublic[]>([]),
+    tourQuota > 0
+      ? queryTourCardsByFilter(client, {
+          ...filters,
+          excludeIds: tourExcludes,
+          limit: tourQuota,
+        })
       : Promise.resolve<ProposalCardPublic[]>([]),
     hotelQuota > 0
       ? queryHotelCardsByFilter(client, {
           region: filters.region,
           budgetBand: filters.budgetBand,
           accommodationStyle: filters.accommodationStyle,
+          excludeIds: hotelExcludes,
           limit: hotelQuota,
         })
       : Promise.resolve<ProposalCardPublic[]>([]),
     regionBaseQuota > 0
       ? queryRegionBaseCardsByFilter(client, {
           region: filters.region,
+          excludeIds: regionBaseExcludes,
           limit: regionBaseQuota,
         })
       : Promise.resolve<ProposalCardPublic[]>([]),
   ]);
 
-  const out: ProposalCardPublic[] = [...trips, ...hotels, ...regionBases];
+  const out: ProposalCardPublic[] = [
+    ...trips,
+    ...tours,
+    ...hotels,
+    ...regionBases,
+  ];
 
-  // Deficit redistribution: when SOME primitive delivered but the total is
-  // still below limit, query additional trips to top up. The `out.length > 0`
-  // guard prevents a wasted second round-trip when every primitive returned
-  // empty (in that case there's no data to redistribute toward, and the
-  // top-up would just return empty too).
+  // Deficit redistribution: top up via trips when SOME primitive delivered but
+  // total < limit. The seen-ids set excludes trips already returned by the
+  // primary query so we don't duplicate. The exclude list is forwarded
+  // unchanged — agent-supplied excludes always hold.
   if (out.length > 0 && out.length < filters.limit) {
     const deficit = filters.limit - out.length;
-    const moreTrips =
-      (await queryTripCardsByFilter(client, {
-        ...filters,
-        limit: tripQuota + deficit,
-      })) ?? [];
+    const moreTrips = await queryTripCardsByFilter(client, {
+      ...filters,
+      excludeIds: tripExcludes,
+      limit: tripQuota + deficit,
+    });
     const seenIds = new Set(
       out.filter((c) => c.type === 'trip').map((c) => c.id),
     );

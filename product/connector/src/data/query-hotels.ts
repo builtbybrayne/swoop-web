@@ -29,6 +29,11 @@ export interface QueryHotelCardsOptions {
   region?: string | null;
   budgetBand?: BudgetBand | null;
   accommodationStyle?: string | null;
+  /**
+   * Hotel ids to omit (e.g. items shown in earlier turns). Empty / undefined
+   * means no exclusion. Per C.focused-shamir-5.
+   */
+  excludeIds?: number[];
   limit: number;
 }
 
@@ -100,6 +105,10 @@ export async function queryHotelCardsByFilter(
       );
     }
   }
+  if (opts.excludeIds && opts.excludeIds.length > 0) {
+    binds.push(opts.excludeIds);
+    whereClauses.push(`h.id <> ALL($${binds.length}::int[])`);
+  }
 
   binds.push(opts.limit);
   const limitBind = `$${binds.length}`;
@@ -136,7 +145,7 @@ export async function queryHotelCardsByFilter(
     ${where}
     GROUP BY h.id, loc.name, area.name, country.name, p.image_id
     ${having}
-    ORDER BY MIN(hp.price) NULLS LAST, h.id
+    ORDER BY RANDOM(), h.id
     LIMIT ${limitBind}
   `;
 
