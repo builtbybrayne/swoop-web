@@ -4,6 +4,37 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## Status (2026-05-14 — chunk G content layer landed)
+
+Cowork HITL session authored the chunk G content layer end-to-end. Detail in [progress.md](progress.md). Headline:
+
+- `product/cms/prompts/system/00_why.md` — ~5,700-word WHY system prompt (was a 5-line stub).
+- `product/cms/prompts/system/10_style-avoid.md` — unchanged from prior authoring.
+- `product/cms/prompts/skills/` — 14 skills populated (4 archetype + 4 functional + 6 worked patterns).
+
+The G.t0 conversational-architecture mapping was done inline rather than as a separate planning doc; its output lives directly in `00_why.md` and the skills library.
+
+### What Claude Code needs to do next (wiring + verification)
+
+The content is in place; the wiring needs to be verified end-to-end:
+
+1. **B.t1a smoke test** — confirm the orchestrator's prompt loader concatenates every `system/^\d{2}_*.md$` match into the agent `instruction` and the new ~5,700-word `00_why.md` loads cleanly. Contract is in [product/cms/README.md](product/cms/README.md).
+2. **B.t9 smoke test** — confirm ADK's `loadAllSkillsInDir` against `prompts/skills/` surfaces all 14 skills and that the agent invokes them when their `description`-field load-triggers fire. Each description was authored as a trigger statement, not as a summary.
+3. **Length-budget behavioural check** — system-prompt content is now ~6,300 words, above the chunk G plan target of 1500–3000. Al authorised richness; worth a smoke test that long-context performance holds. If it doesn't, the WON'T list (§10) and worked patterns are the natural candidates to move to skill-only surfaces.
+4. **Chunk H evalset growth** — eval cases need updating to exercise the new skills, especially the failure modes each names. The patterns provide ready-made dialogue templates for fixture generation.
+
+### Outstanding chunk G work (not for this immediate cycle)
+
+- **G.t2** — handoff email templates already exist from E.t6; a refinement pass against the new voice may be warranted but isn't blocking.
+- **G.t4** — placeholder Patagonia content for M1 vertical slice. Not touched this session; separate work.
+- **G.t5** — post-sales-doc refinement pass blocked on Luke + Lane's doc (open in [questions.md](questions.md)).
+
+### Inbox capture from this session
+
+[inbox.md](inbox.md) 2026-05-14: handoff form free-text "Anything else?" textarea. Needs a Tier-3 plan before Claude Code execution — multi-workspace touch (UI / `@swoop/common` schema / connector / email templates / evalset).
+
+---
+
 ## Status (2026-05-13 — four sequenced waves landed today; `claude/brave-pare-5e0eba` is the fourth, pending merge to `main`)
 
 **Today's four waves in landing order:**

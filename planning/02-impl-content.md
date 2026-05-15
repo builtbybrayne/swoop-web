@@ -318,3 +318,43 @@ Ordering: **G.t0 is a prerequisite** for the finished form of G.t1 and G.t3 (dra
 Parallelism: G.t0–G.t4 run parallel to all code chunks from day 1 (per top-level §5). G.t5 blocks on external input (~May 4). G.t6 is continuous.
 
 Estimated: 0.5 day for G.t0 (HITL session); 1–1.5 days for G.t1 + G.t3 drafting + iteration; 0.5 day each for G.t2 and G.t4; further 0.5 day for G.t5 when the sales doc arrives. Total: ~3–4 days of content work spread across the Puma window.
+
+---
+
+## 11. Status update — 2026-05-14
+
+Cowork-mode HITL session landed G.t0 + G.t1 + G.t3 in a single working session. Full detail in [../progress.md](../progress.md) under the 2026-05-14 entry; summary here for chunk-G consumers.
+
+### Done
+
+- **G.t0 — Patagonia conversational flow mapping**. Done inline through the session rather than as a separate `planning/patagonia-conversational-architecture.md` doc. The flow-mapping output lives directly in `00_why.md` and the skills library — same content the §2.5 spec was meant to produce, different shape.
+- **G.t1 — WHY system prompt**. [`product/cms/prompts/system/00_why.md`](../product/cms/prompts/system/00_why.md) authored end-to-end. ~5,700 words. Carries identity, purpose hypothesis (Al's *friction-as-positive-pull* framing), voice + brand platform, Drift methodology, Discover→Propose boundary, commercial considerations, R×W + relational-mode + four states + four archetypes + signal patterns, LEAR concern handling (chat-appropriate), handoff guidance, WON'T list, and two cross-cutting principles introduced this session: *engage, don't perform alignment* (§3) and *don't over-disclaim your scope* (§5, as a companion to *stoke, don't commit*). `10_style-avoid.md` unchanged from prior authoring. Total `system/` content ~6,300 words.
+- **G.t3 — Seed skills library**. 14 skills authored in [`product/cms/prompts/skills/`](../product/cms/prompts/skills/), well over the ≥2 launch minimum. Three categorical groups: archetype (4), functional (4), worked patterns (6). Each skill is one folder + single `SKILL.md` with frontmatter + body, per ADK 1.0 directory contract (G.11). Total ~16,000 words. All loaded conditionally; no per-turn system-prompt budget cost.
+
+### Conventions introduced (worth knowing for future chunk-G work)
+
+- **MoSCoW tagging** within the brief for graded boundaries (MUST / SHOULD / COULD / WON'T).
+- **Three-voice convention** (Prompt Engineer / We / You) made explicit in the brief's preamble.
+- **NB notes after worked examples** in every skill and at three example-clusters in core — guarding against agent reproducing illustrative facts as authoritative claims; real specifics come from the tools.
+
+### Outstanding chunk G
+
+- **G.t2** — handoff email templates already exist from E.t6 work. Voice-refinement pass against the new brief may be warranted; not blocking.
+- **G.t4** — placeholder Patagonia content for M1 vertical slice. Not touched this session.
+- **G.t5** — post-sales-doc refinement still blocked on Luke + Lane's doc (open in [questions.md](../questions.md)).
+- **G.t6** — ongoing tuning, post-launch.
+
+### Hand-off to Claude Code (wiring + verification)
+
+The content is in place; the wiring is chunk B's work but should be smoke-tested against the new content. The §9 Verification criteria are mostly satisfied on content but need Claude Code to confirm runtime loading:
+
+- Criterion 1 (`00_why.md` reads cleanly end-to-end) — satisfied.
+- Criterion 2 (chunk B's orchestrator loads everything in `prompts/system/`) — needs smoke test against the new ~5,700-word file. Loader contract documented in [`product/cms/README.md`](../product/cms/README.md).
+- Criterion 5 (chunk H's eval harness produces meaningful pass/fail) — needs evalset growth (see chunk H).
+- Criterion 6 (zero inlined content in TS) — unchanged from prior state.
+
+The system-prompt length (~6,300 words) is above the chunk G plan target of 1500–3000 words. Al authorised richness over terseness during the session. Worth a behavioural smoke test that long-context performance holds; if degradation is observed, the WON'T list and worked-patterns content are the natural candidates to move to conditional surfaces.
+
+### Inbox / parking-lot capture
+
+- [`inbox.md`](../inbox.md) 2026-05-14: handoff form free-text *"Anything else?"* textarea. Needs a Tier-3 plan. Touches UI (chunk D), `HandoffSubmitRequest` schema in `@swoop/common`, connector payload assembly, handoff email templates, evalset. Agent guidance deliberately *not* updated to mention this — UI/payload concern, not agent-behaviour.

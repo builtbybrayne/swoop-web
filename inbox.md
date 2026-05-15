@@ -6,6 +6,21 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-05-14 — Handoff form: free-text "Anything else?" textarea
+
+Add a free-text textarea to the handoff form, prompted along the lines of *"Anything else you'd like the specialist to know?"* Content captured in the visitor's own words. Surfaces to the specialist alongside the agent's structured summary (in the handoff email and payload).
+
+Came out of HITL G.t1 session — Al wanted the unstructured visitor-voice content to come from a form field, not from the agent eliciting it. The core agent guidance (`00_why.md`) was deliberately *left clean* of any mention of this — it's a UI / payload concern, not an agent-behaviour concern. The agent doesn't need to know the box exists.
+
+Likely touches:
+- UI: handoff form (chunk D widget) — new textarea, optional, character cap TBD.
+- Schema: `HandoffSubmitRequest` / `HandoffInput` in `@swoop/common` — new optional `visitorNote` (or similar) field across all 21 (verdict, reasonCode) combinations.
+- Payload assembly: `@swoop/connector` `handoff_submit` path — propagate the field through.
+- Email template: `cms/templates/handoff/qualified.md` (and the referred-out variant) — render the visitor's note prominently, distinct from the agent's summary so the specialist can tell them apart.
+- Evalset: handoff fixtures probably want a `visitorNote` populated case to lock the render.
+
+Needs a Tier 3 plan before Claude Code execution — schema impact + multi-workspace propagation means it isn't a single-Edit job. Plausibly the next E-chunk task to scope; could fold in to a future handoff polish wave or stand alone.
+
 ## 2026-05-13 — `@swoop/ui` typecheck broken across all D.t9 widgets (NOT from parallel agent) — revisit
 
 When BF-FO-v3 ran `npm run typecheck --workspaces --if-present`, `@swoop/ui` errored. **Al's 2026-05-13 correction**: not from the parallel agent. Confirmed pre-existing on main HEAD (`git stash` + re-typecheck on `39652aa` and `a29001c`: same errors).

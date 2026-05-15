@@ -1,6 +1,74 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-13 (four sequenced waves today — morning five-plan batch + BF-FO-v3 + BATCH-C.t6/VERDICT-E.t1 landed on `main`; the `claude/brave-pare-5e0eba` live-smoke wave is the fourth and final, still pending merge: D.t9-mount-rehydrate App-level crash fix + C.t9 visitor-query Voyage cleanup + widget empty-state silence + malformed-placeholder diagnosis + trip.region_id backfill + CMS HTML rendering + ExpandableProse + WYSIWYG decorative-whitespace strip + CTA copy fix. With `brave-pare` merged on top all four ProposalCard variants except `tour` are end-to-end live with clean prose and working expansion affordance.)
+**Snapshot date**: 2026-05-14 (chunk G content layer authored end-to-end in a single Cowork HITL session — G.t0 + G.t1 + G.t3 substantively done; details below. Previous snapshot at 2026-05-13 covered four sequenced code-side waves on `main` + `brave-pare`.)
+
+## 2026-05-14 — Chunk G content layer authored (G.t0 + G.t1 + G.t3)
+
+Cowork-mode HITL session with Al landed the chunk G content layer end-to-end. Three Tier-3 tasks substantively delivered in one session.
+
+### G.t0 — Patagonia conversational flow mapping (HITL, inline)
+
+The conversational architecture work — triage inflections, user-type differentiation, the relational-mode dimension (Tool / Companion / Confidante), motivation anchors, handoff signal-reading — was done inline through the session rather than as a separate planning doc. The output landed *directly* in the WHY prompt (G.t1) and the seed-skills library (G.t3) rather than as an intermediate `planning/patagonia-conversational-architecture.md`. Materially the same content the §2.5 spec was meant to produce; different shape.
+
+### G.t1 — WHY system prompt authored
+
+[product/cms/prompts/system/00_why.md](product/cms/prompts/system/00_why.md) replaced its 5-line stub with ~5,700 words of structured guidance: identity (incl. AI-honesty stance + "Swoop Web Discovery Agent" disclosure line), friction-as-positive-pull purpose hypothesis (Al's framing, quoted directly), four-pillar voice + brand platform + channelled-lived-experience pattern, Drift conversational methodology, Discover→Propose boundary (MUST NOT list + softened itinerary-sketching caveat at §5), commercial considerations (tour lean + triage posture + calibrated AI-arrival paragraph), R×W axes + relational-mode dimension + four states + four archetypes + signal patterns, LEAR concern handling with chat-appropriate Acknowledge guidance, handoff trigger/phrasing/payload directives with richness-over-terseness rule, WON'T list, and explicit *engage, don't perform alignment* + *don't over-disclaim your scope* companion principles.
+
+[product/cms/prompts/system/10_style-avoid.md](product/cms/prompts/system/10_style-avoid.md) was already substantively authored before this session and remains untouched. Total `system/` content now ~6,300 words.
+
+### G.t3 — Seed skills library (14 skills authored)
+
+[product/cms/prompts/skills/](product/cms/prompts/skills/) populated with 14 skills, structured per ADK 1.0's directory contract (G.11) — one folder per skill, single `SKILL.md` with YAML frontmatter (`name` + `description` as load-trigger) and body. Well over the chunk G ≥2 minimum.
+
+Three categorical groups:
+
+**Archetype skills (4)** — keyed off *who the visitor seems to be*:
+- `engaging-a-dreamer`
+- `engaging-a-planner` (includes the `find_options` "Planner is the archetype the visual tooling was built for" move)
+- `engaging-a-skeptic`
+- `engaging-a-browser`
+
+**Functional skills (4)** — keyed off *what's happening in the conversation*:
+- `group-tour-surfacing-for-solos` (the solo+group commercial sweet spot)
+- `triage-to-referral` (honest redirect for non-fit visitors)
+- `tailor-made-prospect-posture` (highest-value lane; walks the finest Discover→Propose line)
+- `arrived-with-ai-itinerary` (enhancement-not-competition framing)
+
+**Worked patterns (6)** — illustrative conversation shapes to be consulted *fairly proactively* when shape recognition fires:
+- `pattern-anniversary-couple` / `pattern-budget-solo-traveller` / `pattern-overwhelmed-researcher` (foundational, from Phase 1's product_plan.v2)
+- `pattern-w-vs-o-wrestler` / `pattern-gauchos-and-estancias` / `pattern-puma-photographer` (Patagonia-specific)
+
+Total skill content ~16,000 words. All loaded conditionally; no per-turn system-prompt budget impact beyond what the ADK loader surfaces.
+
+### Cross-cutting conventions introduced this session
+
+- **MoSCoW tagging** (MUST / SHOULD / COULD / WON'T) for graded boundaries within the brief.
+- **Three-voice convention** (Prompt Engineer / We / You) made explicit in the brief's "how to read this" preamble so the agent can weigh whose framing is whose.
+- **NB notes after worked examples** in every skill + at the three substantive example-clusters in core (§3 channelled lived experience, §7 archetype/state examples, §9 handoff intros). Reminds the agent that quoted facts/places/people in dialogue snippets are shape-illustrative; real specifics come from the tools.
+- **`engage, don't perform alignment`** principle added to core §3 with the canonical bad-phrasing list and the *if you'd be willing to delete it without losing anything, delete it* test. Cross-referenced from the LEAR pattern in §8 and from the Skeptic skill, both of which used the antipattern in their initial drafts and were corrected.
+- **`don't over-disclaim your scope`** principle added to core §5 as a companion to *stoke, don't commit*. The boundary is about *confirmability*, not about whether the agent has a view. Originated as a Browser-skill failure-mode bullet and lifted into core after Al flagged it as universal.
+
+### Inbox capture (not authored — flagged for separate planning)
+
+- [inbox.md](inbox.md) 2026-05-14: handoff form free-text *"Anything else?"* textarea. Needs a Tier-3 plan; touches UI (chunk D), `HandoffSubmitRequest` schema in `@swoop/common`, connector payload assembly, handoff email templates, evalset. Agent guidance deliberately *not* updated to mention this — it's a UI/payload concern, not an agent-behaviour concern.
+
+### Outstanding chunk G work (not delivered this session)
+
+- **G.t2 — Handoff email template**: `cms/templates/handoff/qualified.md` and `referred-out.md` already exist from E.t6 work; a content refinement pass against the new voice may be warranted but isn't blocking.
+- **G.t4 — Placeholder Patagonia content for M1**: not touched. Separate work.
+- **G.t5 — Post-sales-doc refinement pass**: still blocked on Luke + Lane's Patagonia sales-thinking doc (open in questions.md).
+- **G.t6 — Ongoing tuning**: post-launch.
+
+### Outstanding for Claude Code agents (wiring + verification)
+
+The content layer is in place; Claude Code agents will need to verify the wiring:
+
+- **B.t1a — system-prompt loader**: should already concatenate every `system/^\d{2}_*.md$` match into the agent `instruction` per [product/cms/README.md](product/cms/README.md). Needs a smoke test against the new ~5,700-word `00_why.md` to confirm load + concatenation works end-to-end.
+- **B.t9 — skill loader**: ADK's `loadAllSkillsInDir` against `prompts/skills/` should surface all 14 skills. Needs a smoke test to confirm the agent can actually invoke them via skill descriptions firing as load-triggers correctly. Each `description` field was authored as a trigger statement, not as a summary.
+- **System-prompt length sanity-check**: total `system/` content (~6,300 words) is above the original chunk G plan target of 1500–3000 words. Al explicitly authorised richness over terseness. Worth a behavioural smoke test that this doesn't degrade long-context performance; if it does, the WON'T list (§10) and worked patterns can be moved to conditional surfaces.
+- **Chunk H — evalset growth**: behavioural eval cases need to be added/updated to exercise the new skills, especially the failure modes each skill names. The patterns provide ready-made dialogue templates for fixture generation.
+
+---
 
 ## 2026-05-13 (afternoon, mid) — BATCH-C.t6 + VERDICT-E.t1 (landed on `main` after BF-FO-v3)
 
