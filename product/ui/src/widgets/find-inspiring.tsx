@@ -24,11 +24,18 @@
 // `product/cms/prompts/tools/find_inspiring/description.md`.
 // =============================================================================
 
-import {
-  FindInspiringOutputSchema,
-  type InspirePassagePublic,
-} from "@swoop/common";
+import type { z } from "zod";
+import { FindInspiringOutputSchema } from "@swoop/common";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+
+// Local passage type — derived from the schema we actually parse against,
+// so optional `image.{subjectTags,moodTags,regionTags}` fields stay optional
+// here even though the `InspirePassagePublic` alias declares them required.
+// Public type vs schema-inferred type alignment is a `@swoop/common` concern
+// being worked elsewhere; this local derivation keeps the widget agnostic.
+type ParsedPassage = z.infer<
+  typeof FindInspiringOutputSchema
+>["passages"][number];
 import { Card, ImageBlock } from "../shared";
 import {
   renderLifecycleGate,
@@ -37,17 +44,25 @@ import {
   type ToolCallLifecycle,
 } from "./widget-shell";
 
+const SHELL_CTX = {
+  widgetType: "find-inspiring",
+  toolName: "find_inspiring",
+} as const;
+
 export function FindInspiringWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
 ) {
   const gate = renderLifecycleGate(
     props as ToolCallLifecycle,
+    SHELL_CTX,
     "Surfacing inspiration…",
   );
   if (gate) return gate;
 
-  const parsed = safeParse(FindInspiringOutputSchema, props.result);
-  if (!parsed.ok) return <WidgetMalformedPlaceholder />;
+  const parsed = safeParse(FindInspiringOutputSchema, props.result, SHELL_CTX);
+  if (!parsed.ok) {
+    return <WidgetMalformedPlaceholder {...SHELL_CTX} debug={parsed.debug} />;
+  }
   const { passages } = parsed.data;
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
@@ -75,7 +90,7 @@ FindInspiringWidget.displayName = "FindInspiringWidget";
 // PassageCard — image-above-text card; the whole card is the affordance.
 // -----------------------------------------------------------------------------
 
-function PassageCard({ passage }: { passage: InspirePassagePublic }) {
+function PassageCard({ passage }: { passage: ParsedPassage }) {
   return (
     <Card
       className="overflow-hidden"

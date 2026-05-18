@@ -34,11 +34,14 @@
 // `product/cms/prompts/tools/find_someone_who/description.md`.
 // =============================================================================
 
-import {
-  FindSomeoneWhoOutputSchema,
-  type CustomerStoryPublic,
-} from "@swoop/common";
+import type { z } from "zod";
+import { FindSomeoneWhoOutputSchema } from "@swoop/common";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+
+// Schema-inferred shape — see note in find-inspiring.tsx.
+type ParsedStory = z.infer<
+  typeof FindSomeoneWhoOutputSchema
+>["stories"][number];
 import { Card, ImageBlock } from "../shared";
 import {
   renderLifecycleGate,
@@ -47,17 +50,29 @@ import {
   type ToolCallLifecycle,
 } from "./widget-shell";
 
+const SHELL_CTX = {
+  widgetType: "find-someone-who",
+  toolName: "find_someone_who",
+} as const;
+
 export function FindSomeoneWhoWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
 ) {
   const gate = renderLifecycleGate(
     props as ToolCallLifecycle,
+    SHELL_CTX,
     "Looking for similar travellers…",
   );
   if (gate) return gate;
 
-  const parsed = safeParse(FindSomeoneWhoOutputSchema, props.result);
-  if (!parsed.ok) return <WidgetMalformedPlaceholder />;
+  const parsed = safeParse(
+    FindSomeoneWhoOutputSchema,
+    props.result,
+    SHELL_CTX,
+  );
+  if (!parsed.ok) {
+    return <WidgetMalformedPlaceholder {...SHELL_CTX} debug={parsed.debug} />;
+  }
   const { stories } = parsed.data;
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
@@ -86,7 +101,7 @@ FindSomeoneWhoWidget.displayName = "FindSomeoneWhoWidget";
 // + region tag + deep-link.
 // -----------------------------------------------------------------------------
 
-function StoryVignette({ story }: { story: CustomerStoryPublic }) {
+function StoryVignette({ story }: { story: ParsedStory }) {
   return (
     <Card className="overflow-hidden">
       <div data-swoop-part="find-someone-who-vignette" className="contents">
