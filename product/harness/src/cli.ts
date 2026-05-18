@@ -32,6 +32,7 @@ import {
   type AnthropicLike as SonnetAnthropicLike,
 } from './sonnet-judge.js';
 import { NullEventCapture } from './event-capture.js';
+import { FileEventSink } from './events.js';
 import { loadScenarios, type LoadedScenario } from './scenario.js';
 import {
   runScenario,
@@ -52,6 +53,12 @@ interface CliArgs {
   readonly judge: JudgeKind;
   /** True when the operator explicitly passed --judge. */
   readonly judgeExplicit: boolean;
+  /**
+   * Per-turn timeout in ms for OrchestratorClient. `null` → use the
+   * library default (currently 180_000). Configurable via
+   * `--turn-timeout-ms <n>` for ops who hit long agent-as-user turns.
+   */
+  readonly turnTimeoutMs: number | null;
 }
 
 function parseArgs(argv: readonly string[]): CliArgs {
@@ -61,6 +68,7 @@ function parseArgs(argv: readonly string[]): CliArgs {
   let baseUrl: string | null = null;
   let judge: JudgeKind = 'sonnet';
   let judgeExplicit = false;
+  let turnTimeoutMs: number | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -95,6 +103,15 @@ function parseArgs(argv: readonly string[]): CliArgs {
         }
         break;
       }
+      case '--turn-timeout-ms': {
+        const n = Number(argv[++i]);
+        if (!Number.isFinite(n) || n <= 0) {
+          console.warn('[harness] --turn-timeout-ms expects a positive number');
+        } else {
+          turnTimeoutMs = n;
+        }
+        break;
+      }
       case '--help':
       case '-h':
         printHelp();
@@ -107,7 +124,15 @@ function parseArgs(argv: readonly string[]): CliArgs {
         break;
     }
   }
-  return { filter, reportDir, maxScenarios, baseUrl, judge, judgeExplicit };
+  return {
+    filter,
+    reportDir,
+    maxScenarios,
+    baseUrl,
+    judge,
+    judgeExplicit,
+    turnTimeoutMs,
+  };
 }
 
 function printHelp(): void {
@@ -125,6 +150,8 @@ function printHelp(): void {
     '  --judge sonnet|stub       Pick the judge for `judge_rubric` assertions + the optional top-level',
     '                            judge block. Default: sonnet (needs ANTHROPIC_API_KEY). Use stub for',
     '                            cost-free dry runs.',
+    '  --turn-timeout-ms <n>     Per-turn timeout in ms for the orchestrator client (default 180000).',
+    '                            Bump up if agent-as-user scenarios with long Dreamer turns hit aborts.',
     '  -h, --help                Show this message.',
     '',
     'Exit code is 0 even when scenarios fail (Tier 3 H.13 non-gating).',
@@ -245,7 +272,10 @@ async function main(): Promise<void> {
 
   const baseUrl =
     args.baseUrl ?? process.env.ORCHESTRATOR_URL ?? 'http://localhost:8080';
-  const client = new OrchestratorClient({ baseUrl });
+  const client = new OrchestratorClient({
+    baseUrl,
+    ...(args.turnTimeoutMs !== null ? { turnTimeoutMs: args.turnTimeoutMs } : {}),
+  });
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const judge = buildJudge(args.judge, apiKey, args.judgeExplicit);
   const agentRuntime = buildAgentRuntimeFactory(apiKey);
@@ -255,14 +285,29 @@ async function main(): Promise<void> {
   // the orchestrator's stdout. Decision H.14.
   const events = new NullEventCapture();
 
+  // Per-event streaming: create the run output directory + per-scenario
+  // subdir BEFORE the for-loop so each iteration can write to disk the moment
+  // it has something. Per planning/03-exec-h-t8-streaming-fix.md (HITL-
+  // ratified 2026-05-18).
+  const runFolder = args.reportDir ?? timestampFolder();
+  const outDir = path.join(packageRoot, 'runs', runFolder);
+  const scenariosOutDir = path.join(outDir, 'scenarios');
+  mkdirSync(scenariosOutDir, { recursive: true });
+  console.log(`[harness] writing per-scenario JSONL + JSON to ${outDir}`);
+
   const results: ScenarioResult[] = [];
   for (const loaded of scenarios) {
     console.log(`[harness] running ${loaded.scenario.name} …`);
+    const jsonlPath = path.join(scenariosOutDir, `${loaded.scenario.name}.jsonl`);
+    const jsonPath = path.join(scenariosOutDir, `${loaded.scenario.name}.json`);
+    const sink = new FileEventSink(jsonlPath);
+
     const result = await runScenario(loaded, {
       client,
       judge,
       events,
       agentRuntime,
+      sink,
     });
     const badge =
       result.status === 'passed'
@@ -275,25 +320,27 @@ async function main(): Promise<void> {
       `[harness]   ${badge} ${result.name} in ${(result.durationMs / 1000).toFixed(2)}s${suffix}`,
     );
     results.push(result);
+
+    // Stream this scenario's structured summary the instant it completes.
+    writeFileSync(jsonPath, JSON.stringify(result, null, 2), 'utf8');
+
+    // Re-write the run-level rollup after each scenario — incremental
+    // visibility for `tail`/`watch` while the run is in flight.
+    const md = formatMarkdown(results);
+    const json = formatJson(results);
+    writeFileSync(path.join(outDir, 'results.md'), md, 'utf8');
+    writeFileSync(
+      path.join(outDir, 'results.json'),
+      JSON.stringify(json, null, 2),
+      'utf8',
+    );
   }
 
-  const runFolder = args.reportDir ?? timestampFolder();
-  const outDir = path.join(packageRoot, 'runs', runFolder);
-  mkdirSync(outDir, { recursive: true });
-
-  const md = formatMarkdown(results);
-  const json = formatJson(results);
-  writeFileSync(path.join(outDir, 'results.md'), md, 'utf8');
-  writeFileSync(
-    path.join(outDir, 'results.json'),
-    JSON.stringify(json, null, 2),
-    'utf8',
-  );
-
   console.log('');
-  console.log(md);
+  console.log(formatMarkdown(results));
   console.log('');
   console.log(`[harness] report written to ${outDir}`);
+  console.log(`[harness] per-scenario JSONL + JSON under ${scenariosOutDir}`);
 
   // Non-gating per H.13 — always exit 0.
   process.exit(0);
