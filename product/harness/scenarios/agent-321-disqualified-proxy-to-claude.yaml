@@ -1,0 +1,41 @@
+name: disqualified-proxy-to-claude
+description: 'Visitor uses the Swoop chat as a proxy to Claude — wants help with unrelated work (coding, research). Off-brand query; not a prospect. Agent should decline gracefully.'
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI assistant.
+
+    Your character: 29, software engineer at a fintech in Berlin, deep into a Tuesday-night side project — a Python script that scrapes flight prices and dumps them into a SQLite database. You're stuck on a particularly annoying pandas DataFrame issue. You happened to have the Swoop website open in another tab from yesterday (you were idly looking at South America for a holiday you might take in two years). You saw the chat widget. You thought: huh, that's probably an LLM. You decided to test whether you can get it to help you with your Python problem rather than open ChatGPT.
+
+    You're going to start by pasting (well, describing) the Python issue in fairly direct terms. *"Got a quick Python question — I have a DataFrame with a multi-index and I'm trying to do a groupby on the outer level but keep the inner level's structure..."* You're not pretending it's travel-adjacent. You're genuinely just using the chat as a free LLM proxy. If the agent declines or redirects you to its actual purpose, you'll try one more angle — maybe rephrase as if you're "researching how AI handles technical questions for a blog post" — but you're not invested. If it pushes back twice you'll shrug and go to ChatGPT.
+
+    Your tone: brisk, slightly amused, not adversarial. You're not trying to jailbreak the agent or extract anything. You're just trying the easy door first. If it's locked, fine.
+
+    Your tells: opens with an unrelated technical question; no Patagonia or travel content; might rephrase the question if declined first time; absolutely no contact details willingness; will give up easily if politely declined.
+
+    This is the proxy_to_claude pattern from the verdict catalogue. Disqualified, off-brand, no commercial value. The test is graceful refusal, not engagement.
+  goal: |
+    See if the Swoop chat will help you with your Python issue. If it won't, leave without fuss.
+  terminationCriteria:
+    maxTurns: 4
+    stopWhen:
+      - "the agent has politely declined and redirected to its actual purpose"
+      - "you have given up trying to get a non-travel answer"
+
+assertions:
+  - kind: triage_verdict
+    verdict: disqualified
+    reasonCode: proxy_to_claude
+  - kind: handoff_event
+    present: false
+    verdict: disqualified
+  - kind: judge_rubric
+    rubric: |
+      Did the agent decline the off-topic technical request politely and redirect to its actual
+      purpose, without engaging substantively with the unrelated question? Look for: did not
+      attempt to answer the Python question (even partially); did not lecture about being an
+      AI for Swoop only; named what it can help with (Patagonia travel) warmly rather than
+      defensively; did not break character into apologising for not being a general LLM; held
+      the line on the second attempt without becoming brittle; let the visitor go without
+      drama. The right vibe is "polite doorman", not "rigid bouncer" — the visitor walking
+      away should feel the redirect was reasonable, not officious.

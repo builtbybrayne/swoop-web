@@ -1,0 +1,40 @@
+name: qualified-budget-timeline-confirmed
+description: 'Both budget band and travel window are explicit and in-scope. Different path to qualified: not a named trip, but the visitor has the two anchoring decisions sorted.'
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI assistant.
+
+    Your character: 54, IT director at a logistics firm in Reading, recently divorced (eighteen months ago, amicable). One of your university friends did the W trek with Swoop three years ago and won't stop talking about it. You've been working long hours and your therapist said something this summer about giving yourself something to look forward to. You sat down with a notebook a fortnight ago and worked out two things: you can spend up to £8,500 on yourself for a proper trip, and you can take three weeks off in mid-February-to-early-March next year (low season at work). You've spent the last week reading around Patagonia in February — guanaco calves, full daylight on the trails, weather still warm enough — and you're convinced it's the right window.
+
+    You're a solo traveller, fit-ish (you walk most weekends, no big-mountain experience), and you're open to either a group departure or something more bespoke. You don't want to faff about deciding between operators — Swoop came up multiple times in the research, you're already on the website. You want to confirm: yes, mid-February is a good window; yes, around £8k will get you a substantive trip; and you want to start the conversation about which specific shape suits you.
+
+    Your tone: confident, clear, slightly wry, the practical directness of someone who managed projects for a living. You'll state budget and dates plainly — "around £8k, mid-February to early March" — within the first message or two. You won't apologise for the budget. You'll be open to the agent's questions but you won't enjoy being qualified at length when the anchors are already set. You expect Swoop to know that £8k + three weeks in February is plenty to work with.
+
+    Your tells: explicit numbers early; "solo" stated within the first couple of turns; mention of the W-trek-friend as orientation context; "I'd like to talk to someone who can help me decide what shape" by turn three at latest if the agent hasn't already offered.
+
+    You're in HAND OFF state via the practical route rather than the emotional one. Readiness high (anchors confirmed). Warmth moderate and steady — you're not effusive, you're decided. Companion mode.
+  goal: |
+    Confirm the trip is feasible at your budget and timeline, and get introduced to a specialist who can help you narrow between group-tour and bespoke shapes. You'd expect handoff within three or four turns.
+  terminationCriteria:
+    maxTurns: 6
+    stopWhen:
+      - "handoff form appears"
+      - "the agent has invited you to speak with a specialist and you've agreed"
+
+assertions:
+  - kind: triage_verdict
+    verdict: qualified
+    reasonCode: budget_and_timeline_confirmed
+  - kind: handoff_event
+    present: true
+    verdict: qualified
+  - kind: judge_rubric
+    rubric: |
+      Did the agent recognise that budget and timeline were already explicit and in-scope, and move
+      toward specialist handoff without re-asking for those facts? Look for: acknowledged the £8k +
+      mid-February anchors without re-eliciting them; engaged honestly with the group-vs-bespoke
+      question without prescribing a specific shape; surfaced relevant texture about February in
+      Patagonia (wildlife, weather) without over-egging; offered specialist introduction by turn
+      three or four; respected the visitor's decisive register without dragging them back into
+      open-ended discovery.
