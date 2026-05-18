@@ -50,13 +50,6 @@ export function FyiSignalingText({ text }: FyiSignalingTextProps) {
               {children}
             </a>
           ),
-          // Drop inline image markdown. The `illustrate` tool's widget is
-          // the visual channel — when Claude writes `![alt](url)` in prose
-          // it duplicates what the widget already renders, and stacks
-          // vertically inside `<p>` blocks. The matching WHY-prompt rule
-          // (§5) tells the agent not to emit these; this is the
-          // defense-in-depth strip at the render layer.
-          img: () => null,
         }}
       >
         {text}
