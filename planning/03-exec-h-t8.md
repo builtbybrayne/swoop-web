@@ -584,4 +584,49 @@ Estimated effort: ~4–6 hours assuming sub-agent dispatch for persona authoring
 
 > *Executing agents (one per cluster, plus a runner-implementer agent) fill in as they work. Capture: deviations from the plan body, persona-authoring tradeoffs, scenario counts that ended up different from the matrix, baseline vs post-B.t9 delta highlights.*
 
-(empty until execution starts)
+### Tasks 1 + 2 + 2b — runner-implementer agent (2026-05-18)
+
+**Scope executed**: Tasks 1, 2, and 2b only (schema + user-agent + stop-judge + Sonnet judge + runner dispatch + CLI flag). Tasks 0 (worktree setup) done by spawning orchestrator. Tasks 3–5 (persona authoring + baseline + post-B.t9) deferred to later waves.
+
+**Commits landed (3, atomic per task)**:
+
+| Hash | Task | Files | Test delta |
+|---|---|---|---|
+| [`8dacb87`](#) — `feat(harness): H.t8 — scenario schema accepts userAgent variant` | Task 1 | `scenario.ts`, `runner.ts` (minimal stub), `__tests__/scenario.test.ts` | scenario.test: 14 → 27 (+13); total: 74 → 87 |
+| [`9c5593d`](#) — `feat(harness): H.t8 — user-agent loop + Haiku stop-judge + runner dispatch` | Task 2 | `user-agent.ts`, `stop-judge.ts`, `runner.ts` (full rewrite), `package.json` (`@anthropic-ai/sdk@^0.90.0`), 3 new test files | +15 (user-agent) +18 (stop-judge) +9 (runner-agent); total: 87 → 129 |
+| [`af431da`](#) — `feat(harness): H.t8 — Sonnet judge for judge_rubric assertions` | Task 2b | `sonnet-judge.ts`, `cli.ts` (--judge flag + agent runtime factory wiring), `__tests__/sonnet-judge.test.ts` | +19 (sonnet-judge); total: 129 → 148 |
+
+**Per-workspace test deltas**: `@swoop/harness` 74 → 148 tests passing (+74). Typecheck clean throughout. No regressions in any other workspace (none of them touched).
+
+**Fresh-install verification**: `command rm -rf product/node_modules && npm install` then `npm run typecheck --workspace=@swoop/harness && npm test --workspace=@swoop/harness` — both green from a fresh tree. False-green lesson satisfied.
+
+**New exports surfaced** (downstream-consumable for the persona-authoring wave):
+
+- From `scenario.ts`: `UserAgentSpec`, `TerminationCriteria`, `AgentScenario`, `ScriptedScenario`, `isAgentScenario(s)` type-guard. Persona-authoring agents can `import { ScenarioSchema } from '@swoop/harness/scenario'` and parse a draft YAML against it to validate before authoring more.
+- From `user-agent.ts`: `UserAgent`, `AnthropicLike` (narrow interface), `DEFAULT_USER_AGENT_MODEL` (`claude-sonnet-4-5-20250929`), `buildSystemPrompt`, `buildMessages`, `ConversationTurn` type.
+- From `stop-judge.ts`: `shouldStop` function, `AnthropicLike`, `DEFAULT_STOP_JUDGE_MODEL` (`claude-haiku-4-5-20251001`), prompt builders.
+- From `sonnet-judge.ts`: `SonnetJudge` class, `AnthropicLike`, `DEFAULT_SONNET_JUDGE_MODEL`, `parseJudgeOutput`.
+- From `runner.ts`: `AgentRuntimeFactory`, `UserAgentLike`, `ShouldStopFn` — injection surface for tests and CLI. `RunScenarioDeps` now carries optional `agentRuntime`.
+
+**CLI surface added**: `--judge sonnet|stub`. Default `sonnet`. When `ANTHROPIC_API_KEY` is unset, falls back to `StubJudge` with a loud warning (silent fallback was deemed dangerous — it would mask why adversarial scenarios mysteriously pass).
+
+**Deviations from the plan body**:
+
+1. **Plan §Task 1's "explicit superRefine backstop" replaced with a `z.preprocess` pre-check.** Zod's union picks the first matching member; `.strict()` on both schemas already rejects scenarios with both `turns` and `userAgent`. But the union's native error message is hard to read (one issue per attempted member). The preprocess emits a clean single error for the "both" and "neither" cases. Net effect identical for valid inputs.
+2. **Plan §Task 2 specified a single `shouldStop` function; the runner accepts a `ShouldStopFn` interface instead** so tests can inject a fake without faking the Anthropic client transitively. Same surface in practice — the CLI wires `shouldStop` into the factory.
+3. **Runner refactored into `runScriptedScenario` + `runAgentScenario` + shared `finaliseResult`** rather than branching inline in `runScenario`. Cleaner separation; assertion-eval / triage-derivation / top-level-judge logic deduplicated.
+4. **Added a new `runner-agent.test.ts` (9 tests)** that wasn't explicitly required by the plan but covers the maxTurns hard cap, early-stop dispatch, scripted-vs-agent routing, and the no-runtime error path. Felt load-bearing — the plan's Task 2.1 listed a "MaxTurns guard" test but didn't say where.
+5. **Sonnet judge's `parseJudgeOutput` returns `passed:false` rather than throwing on malformed output.** Plan body says "Parse defensively" — I went all the way to "never throws". A scenario whose judge gets a weird reply still produces a structured `AssertionOutcome` rather than crashing the whole scenario as `errored`. Tradeoff: an operator has to read the report message to notice; if you'd prefer throws, easy to flip.
+6. **Real Anthropic client cast through `unknown` to the narrow `AnthropicLike` interfaces** — same pattern as `orchestrator/src/agent/claude-llm.ts`. The mismatch is purely the `readonly` vs mutable distinction on `messages`; runtime shape is identical.
+
+**Ready-state for the persona-authoring wave**:
+
+- `ScenarioSchema` accepts a userAgent block. A persona-authoring sub-agent can author `scenarios/agent-100-...yaml` files and load them with `loadScenarios()` to validate shape before committing.
+- `runScenario()` dispatches userAgent scenarios through the new codepath. If `ANTHROPIC_API_KEY` is exported, `npm run -w @swoop/harness eval -- --filter agent-` will run them end-to-end against the worktree's orchestrator on `:8081`.
+- The persona-authoring agents do NOT need to touch any source code — they only write YAML.
+
+**What's NOT yet ready** (deferred to later waves):
+
+- 37 persona YAMLs (Task 3) — five parallel sub-agents.
+- Baseline harness run (Task 4) — wait until B.t9 is in a sibling worktree, not on `main`.
+- Post-B.t9 re-run (Task 5).

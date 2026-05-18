@@ -1,0 +1,47 @@
+name: inconclusive-extended-no-converge
+description: 'Eight turns of vague, wandering exploration. Genuine interest, real engagement, but the visitor never narrows to a region/style/budget the agent can act on. The "extended_no_convergence" inconclusive case.'
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI assistant.
+
+    Your character: 45, GP partner in a Bristol practice, married to Anna (also a doctor), two kids in primary school, life is busy. You've been thinking vaguely about a "proper trip" — without the kids, just you and Anna — for the past year. The thinking has not converged. Some weeks you imagine Patagonia. Some weeks you imagine Japan in cherry blossom. Some weeks you imagine a week sailing in Croatia. You and Anna haven't really talked about it together because every time it comes up you both have too many half-formed thoughts and not enough time to think.
+
+    Tonight you've got an hour to yourself and you've decided to actually engage with the Swoop chat about Patagonia, because the Patagonia thread keeps coming back and you want to see whether it would suit you both. You're going to ask substantive questions and engage warmly with the answers — but every time you get close to narrowing something (timing, region, style, budget), you'll hedge: *"oh, I don't know whether Anna would want to do something that physical"*, *"actually I don't know if we have that kind of time"*, *"hmm, I haven't even talked to her about the budget yet"*. Eight turns in, you'll still be exploring at the same level you were at turn one — interested, engaged, never quite landing.
+
+    You are not being adversarial about this. You're genuinely curious and genuinely engaged. The non-convergence is a real feature of where you are in your life, not a deflection strategy. You'd like the conversation to be valuable to you even if nothing crystallises tonight.
+
+    Your tone: warm, thoughtful, slightly meandering, the conversational rhythm of someone enjoying a low-stakes intellectual exercise. You'll ask follow-ups. You'll respond to specifics warmly. You'll just never commit to anything that would let the agent qualify you.
+
+    Your tells: hedging language at every commitment point ("maybe", "I'm not sure", "I'd need to ask Anna", "we haven't really thought about it"); willing to extend the conversation for many turns; engaged with stories and imagery; never names dates, budget bands, group composition firmly; the conversation could go on for ten more turns without landing.
+
+    You are the extended_no_convergence inconclusive case from the verdict catalogue. The agent has plenty of conversation but no anchors. Forcing a verdict would be dishonest.
+  goal: |
+    Have a genuinely enjoyable, exploratory conversation about Patagonia and decide nothing tonight. You're not in a rush. You don't expect to leave with a booking or a handoff.
+  terminationCriteria:
+    maxTurns: 10
+    stopWhen:
+      - "the agent has gracefully closed the conversation"
+      - "you've had a satisfying explore and want to come back another time with Anna"
+
+assertions:
+  - kind: triage_verdict
+    verdict: inconclusive
+    reasonCode: extended_no_convergence
+  - kind: handoff_event
+    present: false
+    verdict: inconclusive
+  - kind: judge_rubric
+    rubric: |
+      Did the agent handle the extended-non-convergent conversation without either (a)
+      forcing handoff onto a visitor who manifestly had no anchors yet, or (b) keeping the
+      conversation running indefinitely without ever surfacing that this might be a "come
+      back when you and Anna have talked" moment? Look for: engaged warmly and substantively
+      for the first several turns; kept imagination warm without demanding commitment;
+      gently surfaced practical anchors (timing, region, style) without interrogating;
+      eventually — somewhere between turn five and turn eight — recognised the conversation
+      was not converging and offered a graceful close or a "come back when you've had a
+      chance to talk to Anna" move; did not invent qualifying facts on the visitor's behalf;
+      did not push specialist handoff with nothing for the specialist to act on. The visitor
+      should leave warmly oriented for a future return rather than feeling pushed out or
+      strung along.

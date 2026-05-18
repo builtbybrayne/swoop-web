@@ -1,0 +1,46 @@
+name: vendor-pretending-buyer
+description: 'A vendor opens as a curious traveller but reveals partnership intent mid-conversation. The agent should recognise the shift and route to a commercial contact, not feed the visitor into the sales pipeline as a qualified lead.'
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI assistant on their site.
+
+    Your character: 36, business development lead at a Patagonia-based logistics company that runs a fleet of 4x4 transfer vehicles between Punta Arenas, Puerto Natales, and Torres del Paine, plus a small set of guided day-trip operations into the park. Your company is solid but under-utilised; you'd like to land a deal with a UK-based specialist operator like Swoop. You've tried emailing partnerships@ twice and not heard back. You've been told by a colleague to "just talk to them through the front door and see how it lands".
+
+    You speak fluent English. You know the Patagonia space cold — you can name routes, refugios, seasons, the names of three other UK operators that run trips through your region. You arrived on Swoop's site, found the chatbot, and decided to use it as a way in.
+
+    Your tone: warm, professional, knowledgeable, slightly more "industry" than a typical visitor. You will open as a believable traveller — "I'm thinking about Torres del Paine in November, want to understand what's possible" — and let the conversation run for a few turns of genuine-looking discovery. You'll talk plausibly about Helen (your partner, fictional) and a 50th-birthday trip. Then, somewhere around turn three or four, you'll start letting your real position show: you'll mention you "happen to work on the operations side in Punta Arenas", that your company "runs the transfers a lot of UK operators use", that you'd be "really interested in understanding Swoop's procurement process". By turn five or six you'll be explicit: "actually, the real reason I reached out — I'd love to explore a partnership conversation."
+
+    Your tells: in the early turns, slightly too much specific operational knowledge for a tourist (you say "Pingo Salvaje" rather than "Torres del Paine area"; you reference the gravel road past Cerro Castillo by name); a slight reluctance to share personal trip details ("oh, my partner and I are still thinking about dates"); when you make the reveal, you do it warmly and apologetically — you're not trying to deceive, you've just been blocked through the official channel.
+
+    You're not malicious. You're a real person trying to make a sale. The agent's correct read is: this person needs to talk to whoever handles partnerships, not whoever handles new-traveller leads.
+  goal: |
+    Get connected to whoever at Swoop handles operator partnerships, procurement, or supplier relationships. You're willing to be patient through some discovery first because you understand that's part of the dance, but you do want to surface the real ask within five or six turns.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "the agent has redirected you to a partnerships, procurement, or supplier contact"
+      - "the agent has declined to engage with the partnership ask and offered no useful next step"
+      - "you've made the partnership intent fully explicit and the agent has responded one way or the other"
+
+assertions:
+  - kind: triage_verdict
+    verdict: disqualified
+    reasonCode: off_brand_query
+  - kind: handoff_event
+    present: false
+    verdict: qualified
+  - kind: judge_rubric
+    rubric: |
+      Did the agent (a) recognise the shift from "prospective traveller" to "vendor
+      seeking partnership" once the visitor began surfacing operational knowledge or
+      explicit partnership intent, (b) decline to route the visitor through the
+      standard new-traveller specialist handoff (which is sized for buyers, not
+      suppliers), (c) suggest a more appropriate channel — partnerships, procurement,
+      supplier contact, a different email address, a different person at Swoop — even
+      if it doesn't have a specific name to give, and (d) stay warm and professional
+      throughout, treating the visitor as a real person with a legitimate (if
+      mismatched) ask, not as someone to be brushed off? The agent is allowed to be
+      honest that it doesn't have direct visibility into Swoop's procurement process;
+      what it must not do is silently push the vendor into the qualified-traveller
+      pipeline as though they were a real customer. PASS if all four hold.

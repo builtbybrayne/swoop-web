@@ -22,20 +22,36 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import Anthropic from '@anthropic-ai/sdk';
 import { messageOf } from '@swoop/common';
 
 import { OrchestratorClient } from './orchestrator-client.js';
-import { StubJudge } from './judge.js';
+import { StubJudge, type Judge } from './judge.js';
+import {
+  SonnetJudge,
+  type AnthropicLike as SonnetAnthropicLike,
+} from './sonnet-judge.js';
 import { NullEventCapture } from './event-capture.js';
 import { loadScenarios, type LoadedScenario } from './scenario.js';
-import { runScenario, type ScenarioResult } from './runner.js';
+import {
+  runScenario,
+  type AgentRuntimeFactory,
+  type ScenarioResult,
+} from './runner.js';
+import { UserAgent, type AnthropicLike as UserAgentAnthropicLike } from './user-agent.js';
+import { shouldStop, type AnthropicLike as StopJudgeAnthropicLike } from './stop-judge.js';
 import { formatJson, formatMarkdown } from './report.js';
+
+export type JudgeKind = 'sonnet' | 'stub';
 
 interface CliArgs {
   readonly filter: string | null;
   readonly reportDir: string | null;
   readonly maxScenarios: number | null;
   readonly baseUrl: string | null;
+  readonly judge: JudgeKind;
+  /** True when the operator explicitly passed --judge. */
+  readonly judgeExplicit: boolean;
 }
 
 function parseArgs(argv: readonly string[]): CliArgs {
@@ -43,6 +59,8 @@ function parseArgs(argv: readonly string[]): CliArgs {
   let reportDir: string | null = null;
   let maxScenarios: number | null = null;
   let baseUrl: string | null = null;
+  let judge: JudgeKind = 'sonnet';
+  let judgeExplicit = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -65,6 +83,18 @@ function parseArgs(argv: readonly string[]): CliArgs {
       case '--base-url':
         baseUrl = argv[++i] ?? null;
         break;
+      case '--judge': {
+        const v = argv[++i] ?? null;
+        if (v === 'sonnet' || v === 'stub') {
+          judge = v;
+          judgeExplicit = true;
+        } else {
+          console.warn(
+            `[harness] --judge expects "sonnet" or "stub" (got "${v}"); defaulting to "sonnet"`,
+          );
+        }
+        break;
+      }
       case '--help':
       case '-h':
         printHelp();
@@ -77,7 +107,7 @@ function parseArgs(argv: readonly string[]): CliArgs {
         break;
     }
   }
-  return { filter, reportDir, maxScenarios, baseUrl };
+  return { filter, reportDir, maxScenarios, baseUrl, judge, judgeExplicit };
 }
 
 function printHelp(): void {
@@ -92,11 +122,91 @@ function printHelp(): void {
     '  --report-dir <name>       Write the run under runs/<name>/ instead of runs/<ISO>/.',
     '  --max-scenarios <n>       Stop after running n scenarios (CI cost control).',
     '  --base-url <url>          Override the orchestrator URL (default $ORCHESTRATOR_URL or http://localhost:8080).',
+    '  --judge sonnet|stub       Pick the judge for `judge_rubric` assertions + the optional top-level',
+    '                            judge block. Default: sonnet (needs ANTHROPIC_API_KEY). Use stub for',
+    '                            cost-free dry runs.',
     '  -h, --help                Show this message.',
     '',
     'Exit code is 0 even when scenarios fail (Tier 3 H.13 non-gating).',
   ].join('\n');
   console.log(help);
+}
+
+/**
+ * Construct the judge implementation based on the CLI flag + environment.
+ *
+ * When `--judge sonnet` is requested (default) and an ANTHROPIC_API_KEY is
+ * available, returns a `SonnetJudge`. Otherwise falls back to `StubJudge`
+ * with a warning — silent fallback would mask why adversarial scenarios
+ * suddenly start passing without real judging.
+ */
+function buildJudge(
+  kind: JudgeKind,
+  apiKey: string | undefined,
+  judgeExplicit: boolean,
+): Judge {
+  if (kind === 'stub') {
+    return new StubJudge();
+  }
+  if (!apiKey) {
+    if (judgeExplicit) {
+      console.warn(
+        '[harness] --judge sonnet requested but ANTHROPIC_API_KEY is not set; falling back to StubJudge.',
+      );
+    } else {
+      console.warn(
+        '[harness] ANTHROPIC_API_KEY not set; falling back to StubJudge for judge_rubric assertions (pass --judge stub to suppress this warning).',
+      );
+    }
+    return new StubJudge();
+  }
+  // Cast through unknown — the real SDK's MessageCreateParams accepts a
+  // mutable MessageParam[]; our AnthropicLike declares readonly for test-
+  // injection convenience. The runtime shape is identical; the orchestrator's
+  // ClaudeLlm uses the same pattern (see product/orchestrator/src/agent/
+  // claude-llm.ts).
+  const client = new Anthropic({ apiKey }) as unknown as SonnetAnthropicLike;
+  return new SonnetJudge({ client });
+}
+
+/**
+ * Construct the agent-runtime factory the runner uses for userAgent
+ * scenarios. Returns `null` when no API key is available — the runner will
+ * error agent-scenarios cleanly in that case so scripted scenarios still
+ * run.
+ */
+function buildAgentRuntimeFactory(
+  apiKey: string | undefined,
+): AgentRuntimeFactory | undefined {
+  if (!apiKey) return undefined;
+  // Same cast posture as buildJudge — the runtime shape is identical to our
+  // narrow AnthropicLike interfaces; the type-level mismatch is the
+  // readonly/mutable distinction on `messages`.
+  const realClient = new Anthropic({ apiKey });
+  const userAgentClient = realClient as unknown as UserAgentAnthropicLike;
+  const stopJudgeClient = realClient as unknown as StopJudgeAnthropicLike;
+  return {
+    build(scenario) {
+      const userAgent = new UserAgent({
+        client: userAgentClient,
+        persona: scenario.userAgent.persona,
+        goal: scenario.userAgent.goal,
+        model: scenario.userAgent.modelOverride,
+      });
+      return {
+        userAgent,
+        shouldStop: (req) =>
+          shouldStop({
+            client: stopJudgeClient,
+            persona: scenario.userAgent.persona,
+            goal: scenario.userAgent.goal,
+            terminationCriteria: scenario.userAgent.terminationCriteria,
+            transcript: req.transcript,
+            latestAgentResponse: req.latestAgentResponse,
+          }),
+      };
+    },
+  };
 }
 
 async function main(): Promise<void> {
@@ -136,7 +246,9 @@ async function main(): Promise<void> {
   const baseUrl =
     args.baseUrl ?? process.env.ORCHESTRATOR_URL ?? 'http://localhost:8080';
   const client = new OrchestratorClient({ baseUrl });
-  const judge = new StubJudge();
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const judge = buildJudge(args.judge, apiKey, args.judgeExplicit);
+  const agentRuntime = buildAgentRuntimeFactory(apiKey);
   // Default capture: NullEventCapture. Event-based assertions (handoff_event,
   // disclosure_event, triage_verdict) will fail with a "no event captured"
   // message until an outer wrapper plumbs a `StreamingEventCapture` against
@@ -146,7 +258,12 @@ async function main(): Promise<void> {
   const results: ScenarioResult[] = [];
   for (const loaded of scenarios) {
     console.log(`[harness] running ${loaded.scenario.name} …`);
-    const result = await runScenario(loaded, { client, judge, events });
+    const result = await runScenario(loaded, {
+      client,
+      judge,
+      events,
+      agentRuntime,
+    });
     const badge =
       result.status === 'passed'
         ? 'PASS'

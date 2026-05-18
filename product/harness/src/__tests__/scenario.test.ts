@@ -18,7 +18,11 @@ describe('ScenarioSchema', () => {
       assertions: [{ kind: 'contains', text: 'hi' }],
     });
     expect(parsed.name).toBe('greeting');
-    expect(parsed.turns).toHaveLength(1);
+    if ('turns' in parsed) {
+      expect(parsed.turns).toHaveLength(1);
+    } else {
+      throw new Error('expected scripted scenario');
+    }
     expect(parsed.assertions).toHaveLength(1);
     expect(parsed.judge).toBeNull();
   });
@@ -182,5 +186,203 @@ describe('ScenarioSchema', () => {
       judge: { rubric: 'Was the response warm?' },
     });
     expect(parsed.judge).toMatchObject({ rubric: 'Was the response warm?' });
+  });
+
+  // -------------------------------------------------------------------------
+  // H.t8 — agent-as-user variant.
+  // -------------------------------------------------------------------------
+
+  describe('userAgent variant (H.t8)', () => {
+    const validPersona =
+      'You are a 42-year-old office professional planning a 10th anniversary trip ' +
+      'to Patagonia. You prefer lodges over camping, ask clarifying questions, and ' +
+      'are open to surprise but cautious about commitments.';
+    const validGoal =
+      'Find out what a 10-day Patagonia trip in December could look like and ' +
+      'decide whether to speak with a specialist.';
+
+    it('accepts a userAgent scenario (no turns)', () => {
+      const parsed = ScenarioSchema.parse({
+        name: 'anniversary-couple-agent',
+        description: '40-something couple celebrating 10 years (agent-driven).',
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: {
+            maxTurns: 8,
+            stopWhen: ['handoff form appears', 'you have everything you need'],
+          },
+        },
+        assertions: [{ kind: 'triage_verdict', verdict: 'qualified' }],
+      });
+      expect('userAgent' in parsed).toBe(true);
+      if ('userAgent' in parsed) {
+        expect(parsed.userAgent.persona).toContain('42-year-old');
+        expect(parsed.userAgent.terminationCriteria.maxTurns).toBe(8);
+      }
+    });
+
+    it('defaults terminationCriteria.maxTurns to 8 when omitted', () => {
+      const parsed = ScenarioSchema.parse({
+        name: 'defaulted-max-turns',
+        description: 'Verifies maxTurns default behaviour.',
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: {},
+        },
+      });
+      if ('userAgent' in parsed) {
+        expect(parsed.userAgent.terminationCriteria.maxTurns).toBe(8);
+      }
+    });
+
+    it('accepts userAgent with an optional modelOverride', () => {
+      const parsed = ScenarioSchema.parse({
+        name: 'with-model-override',
+        description: 'Per-scenario model override.',
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: { maxTurns: 4 },
+          modelOverride: 'claude-haiku-4-5-20251001',
+        },
+      });
+      if ('userAgent' in parsed) {
+        expect(parsed.userAgent.modelOverride).toBe(
+          'claude-haiku-4-5-20251001',
+        );
+      }
+    });
+
+    it('preserves backwards-compat: turns-only scenarios still parse', () => {
+      const parsed = ScenarioSchema.parse({
+        name: 'still-scripted',
+        description: 'Pre-H.t8 scripted scenario still loads.',
+        turns: [{ user: 'hello' }],
+        assertions: [{ kind: 'contains', text: 'hello' }],
+      });
+      expect('turns' in parsed).toBe(true);
+      if ('turns' in parsed) {
+        expect(parsed.turns).toHaveLength(1);
+      }
+    });
+
+    it('rejects a scenario containing BOTH turns and userAgent (ambiguous)', () => {
+      const result = ScenarioSchema.safeParse({
+        name: 'ambiguous',
+        description: 'Cannot have both shapes.',
+        turns: [{ user: 'hi' }],
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: { maxTurns: 4 },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a scenario containing NEITHER turns nor userAgent', () => {
+      const result = ScenarioSchema.safeParse({
+        name: 'neither',
+        description: 'Must have one shape.',
+        assertions: [],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects terminationCriteria.maxTurns below 1', () => {
+      const result = ScenarioSchema.safeParse({
+        name: 'too-few-turns',
+        description: 'maxTurns must be >= 1.',
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: { maxTurns: 0 },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects terminationCriteria.maxTurns above 20', () => {
+      const result = ScenarioSchema.safeParse({
+        name: 'too-many-turns',
+        description: 'maxTurns must be <= 20.',
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: { maxTurns: 21 },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects too-short persona', () => {
+      const result = ScenarioSchema.safeParse({
+        name: 'short-persona',
+        description: 'Persona must clear the minimum length.',
+        userAgent: {
+          persona: 'too short',
+          goal: validGoal,
+          terminationCriteria: { maxTurns: 4 },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects too-short goal', () => {
+      const result = ScenarioSchema.safeParse({
+        name: 'short-goal',
+        description: 'Goal must clear the minimum length.',
+        userAgent: {
+          persona: validPersona,
+          goal: 'short',
+          terminationCriteria: { maxTurns: 4 },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown keys on userAgent block (strict)', () => {
+      const result = ScenarioSchema.safeParse({
+        name: 'extra-keys',
+        description: 'Strict mode catches typos.',
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: { maxTurns: 4 },
+          extraKey: 'whoops',
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects unknown keys on terminationCriteria (strict)', () => {
+      const result = ScenarioSchema.safeParse({
+        name: 'extra-criteria-key',
+        description: 'Strict mode catches typos.',
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: { maxTurns: 4, unknownKey: true },
+        },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts userAgent without optional stopWhen', () => {
+      const parsed = ScenarioSchema.parse({
+        name: 'no-stop-when',
+        description: 'stopWhen is optional.',
+        userAgent: {
+          persona: validPersona,
+          goal: validGoal,
+          terminationCriteria: { maxTurns: 6 },
+        },
+      });
+      if ('userAgent' in parsed) {
+        expect(parsed.userAgent.terminationCriteria.stopWhen).toBeUndefined();
+      }
+    });
   });
 });

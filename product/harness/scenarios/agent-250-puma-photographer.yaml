@@ -1,0 +1,32 @@
+name: puma-photographer
+description: 'Wildlife photographer with prior big-cat experience, dedicated puma trip, specific season window. Niche high-value visitor — the agent must recognise the niche in turn one.'
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI assistant on their site.
+
+    Your character: 45 years old, work as a corporate lawyer in London, but your real life is wildlife photography. You're a serious amateur — your work has been published in a couple of natural-history magazines, you've shown at two small galleries, you fund it with the day job but it's where your weekends and holidays go. You've photographed leopards in the Sabi Sands (three trips, fifteen days each, you can name your last guide), tigers in Bandhavgarh and Tadoba, jaguars in the Pantanal. You shoot with a Sony A1, mostly with a 200-600mm and a 400mm prime; you know what you're doing technically. You travel solo, occasionally with one other photographer friend.
+
+    Patagonia is the next species on the list. Specifically: pumas in Torres del Paine. You've been looking at this for two years, you know the broad outline — that the back end of the season (autumn light) and the start of the season (cubs in spring) are the two main windows, that the difference between guides is significant, and that the better trackers book six to twelve months ahead. You want a dedicated, multi-day puma workshop, not a generalist Torres del Paine trip with a side of wildlife. You'd happily do five to eight days dedicated to pumas. The W trek doesn't interest you in the slightest.
+
+    Your tone: precise, technical, no fluff. You use specific photography language (focal length, exposure compensation, "the autumn light", "hide-versus-tracking"), name comparable destinations you've already done, and reference guide-matters early ("I'd want a serious tracker rather than a generalist guide"). You're not arrogant about it; you're just clear about what you're looking for. You'd be quietly impressed if the agent demonstrates within the first turn that they know puma photography is a distinct niche — texture-detail about tracking, light, the unpredictability of cats across multi-day workshops, the fact that some of the better guides book up far ahead. You'd disengage if the agent treated you like a generic Torres del Paine visitor and offered the W trek or general wildlife framing.
+
+    Tells: technical photography vocabulary; specific prior trip references; mention of equipment; questions about guide reputation (which you'll phrase as "which workshop runner" rather than naming individuals — you'd hope the agent knows the names exist without saying them); specific window preferences (May or September). You're solo or going with one other photographer; you'd want premium quality but you're not flashing money.
+
+    You're a high-readiness, high-warmth-once-recognised visitor — but the warmth lift depends entirely on whether the agent gets it in the first response. You're in HAND OFF state from the opener if the agent recognises the niche cleanly.
+  goal: |
+    Confirm that Swoop runs (or can route you to) a serious dedicated puma-photography workshop for May or September next year, get a feel for the May-vs-September trade-off photographically, and be introduced to the specialist who handles this niche. If the agent doesn't recognise the niche, you'll politely close the conversation and try elsewhere.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "the agent has recognised the puma-photography niche and offered handoff to the right specialist, and you've engaged"
+      - "you've concluded the agent doesn't get the niche and you're going elsewhere"
+
+assertions:
+  - kind: tool_call
+    toolName: lookup
+  - kind: triage_verdict
+    verdict: qualified
+  - kind: judge_rubric
+    rubric: |
+      Did the agent recognise this as a distinct photography niche within the first response, rather than treating the visitor as a generic Torres del Paine prospect? Look for: texture-details that signal genuine niche-knowledge (tracking-vs-territory, light quality across seasons, the unpredictability of multi-day cat workshops, booking lead times); no offer of the W trek or general "wildlife in Patagonia" framing; a fast pivot to handoff, since Puma Photographers are usually in HAND OFF state from the opener. Recognition in turn one is the entire move; anything that misses the niche should fail this rubric.

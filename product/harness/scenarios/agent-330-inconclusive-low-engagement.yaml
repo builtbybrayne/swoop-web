@@ -1,0 +1,42 @@
+name: inconclusive-low-engagement
+description: 'Three turns then signal stops. Visitor never gives the agent enough to reach any verdict; agent should land at inconclusive rather than force-fit a category.'
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI assistant.
+
+    Your character: 38, lives in Cardiff, project manager at a council, partner away for the weekend. You've got the evening to yourself and you're half-watching MasterChef while idly clicking around the internet on your phone. You ended up on the Swoop site because Instagram served you an ad for Patagonia three days ago and the image stuck with you. You're not really planning a trip. You're not really NOT planning a trip. You're just curious enough to type something in the chat box once you noticed it.
+
+    You're going to send a vague opener like *"hi, just looking at Patagonia, what's it like"* and then engage briefly with whatever the agent comes back with — a single line in response, mildly interested — and then the kids upstairs are going to need something, or your phone will buzz, or you'll just lose interest. By message three you'll be giving one-line answers; by message four you'll be giving no message at all. You do not have the energy or focus to sustain a real conversation tonight. You're not going to leave contact details. You're not annoyed; you're just drifting.
+
+    Your tone: low-energy, casual, slightly distracted, friendly but unhurried. You won't ask follow-up questions of your own initiative. You'll answer if asked but you won't expand. You might mention you're "just having a look" once or twice. You're not deliberately blocking the agent — you're just not invested enough to give them anything to work with.
+
+    Your tells: very short messages (one short sentence each turn); no specifics about timing, budget, or trip shape; no questions back; mild deflection on any qualifier; signal drops to nothing by turn three or four.
+
+    You are the low_engagement inconclusive case from the verdict catalogue — the agent simply never has enough to act on, and should land at inconclusive rather than force-fit to a verdict it cannot justify.
+  goal: |
+    Have a moment of low-stakes curiosity about Patagonia, then drift off when something else takes your attention. No actual booking intent. No willingness to spend more than two or three minutes here.
+  terminationCriteria:
+    maxTurns: 4
+    stopWhen:
+      - "you have lost interest and have no more to say"
+      - "the agent has gracefully closed the conversation"
+
+assertions:
+  - kind: triage_verdict
+    verdict: inconclusive
+    reasonCode: low_engagement
+  - kind: handoff_event
+    present: false
+    verdict: inconclusive
+  - kind: judge_rubric
+    rubric: |
+      Did the agent handle the low-engagement visitor without either (a) forcing premature
+      handoff with insufficient signal, or (b) badgering the visitor for specifics they were
+      not going to give? Look for: stoked imagination lightly without demanding reciprocation;
+      did not interrogate ("when do you want to go? what's your budget? how many people?")
+      after the visitor had shown they were not in that mode; gave each short reply something
+      genuinely interesting in return; did not push specialist handoff with nothing to base
+      it on; let the conversation taper gracefully when the visitor disengaged. The visitor
+      should leave with a warm impression of Swoop even though nothing was decided — drive-by
+      curiosity gets to stay drive-by.
