@@ -457,4 +457,142 @@ Demo tomorrow with Luke (CEO). The 14 skills represent ~16,000 words of author e
 
 > *Executing agent fills this section in as it works. Capture: deviations from the plan body, surprises in the installed ADK API, test counts, fresh-install verification output.*
 
-(empty until execution starts)
+### Headline
+
+B.t9 landed. Live-smoke prints:
+
+```
+[orchestrator] loaded 14 skills from .../cms/prompts/skills: arrived-with-ai-itinerary, engaging-a-browser, engaging-a-dreamer, engaging-a-planner, engaging-a-skeptic, group-tour-surfacing-for-solos, pattern-anniversary-couple, pattern-budget-solo-traveller, pattern-gauchos-and-estancias, pattern-overwhelmed-researcher, pattern-puma-photographer, pattern-w-vs-o-wrestler, tailor-made-prospect-posture, triage-to-referral
+[orchestrator] ready on http://localhost:8082
+```
+
+All 14 skills load. `GET /healthz` returns 200. The numeric-count + slug-list boot-log gate from §Verification passed.
+
+### Per-task summary
+
+| Task | Outcome | Commit |
+|---|---|---|
+| 1 — Confirm ADK exports | Done (research, no commit) | n/a |
+| 2 — `skill-loader.ts` + tests | Done (4 tests, all pass) | `4efeb92` |
+| 3 — factory wires `SkillToolset` | Done; orchestrator runs all 174 tests green | `9965d64` |
+| 4 — "Correct stale `loadAllSkillsInDir` refs" | **No-op** — see §Deviations | n/a |
+| SKILL.md frontmatter YAML fix | Done (2 files; required to hit 14/14) | `dec7af7` |
+| 5 — Live-boot smoke | Done; 14/14 skills, 0 skipped | n/a |
+| 6 — next-steps + discoveries + execution log | Done (this edit + companion edits to `next-steps.md`, `progress.md`, `discoveries.md`) | (next commit) |
+
+### Deviations from the plan body
+
+**The plan's premise about the ADK API was wrong.** The "★ Read this first" section claimed `loadAllSkillsInDir` does not exist in `@google/adk` and that the only API is the per-skill `loadSkillFromDir`. Step 0's verification proved otherwise — **both** functions ship in the installed package.
+
+Verbatim capture from `node -e "import('@google/adk').then(m => console.log(Object.keys(m).sort().filter(k => k.toLowerCase().includes('skill'))))"`:
+
+```
+[
+  'ListSkillsTool',
+  'LoadSkillResourceTool',
+  'LoadSkillTool',
+  'RunSkillInlineScriptTool',
+  'RunSkillScriptTool',
+  'SkillToolset',
+  'loadAllSkillsInDir',       ← exists, contrary to the plan's premise
+  'loadSkillFromDir',         ← also exists
+  'validateSkillDir'
+]
+```
+
+Type signatures from `node_modules/@google/adk/dist/types/skills/loader.d.ts`:
+
+```typescript
+export declare function loadSkillFromDir(skillDir: string): Promise<Skill>;
+export declare function loadAllSkillsInDir(skillsBasePath: string): Promise<Record<string, Skill>>;
+export declare function validateSkillDir(skillDir: string): Promise<string[]>;
+```
+
+And `SkillToolset` accepts either shape (`dist/types/tools/skill/skill_toolset.d.ts`):
+
+```typescript
+constructor(
+  skills: Record<string, Skill> | Skill[],
+  options?: { codeExecutor?: BaseCodeExecutor; additionalTools?: Array<BaseTool | BaseToolset> },
+);
+```
+
+**Implications**:
+- The plan's Task 2 implementation (manual enumerate-folders-and-call-`loadSkillFromDir`-per-folder loop) was unnecessary. The actual `skill-loader.ts` calls `loadAllSkillsInDir` directly and adds two thin layers on top: a fail-fast pre-flight `accessSync` check + a sort by `frontmatter.name` for deterministic boot logs. (The map iteration order is OS-dirent order, which is non-deterministic across platforms.) Same behaviour, less code.
+- The plan's Task 4 ("correct stale `loadAllSkillsInDir` references") became a no-op. The references in [product/cms/README.md](../product/cms/README.md), [product/orchestrator/src/config/schema.ts:111](../product/orchestrator/src/config/schema.ts), [product/orchestrator/.env.example:57](../product/orchestrator/.env.example), [progress.md](../progress.md), and [planning/02-impl-content.md](02-impl-content.md) all reference the correct function name. Left as-is.
+- The plan's note that `Skill` exposes a top-level `.name` is also wrong — the name lives at `skill.frontmatter.name`. Both the boot log and the test assertions adjusted accordingly.
+
+Skill object shape (relevant subset, from `dist/types/skills/skill.d.ts`):
+
+```typescript
+export interface Frontmatter {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  allowedTools?: string;
+  metadata?: Record<string, unknown>;
+}
+export interface Skill {
+  frontmatter: Frontmatter;
+  instructions: string;
+  resources?: Resources;
+}
+```
+
+### Surprises
+
+**1. ADK silently skips invalid skills.** When `loadAllSkillsInDir` encounters a SKILL.md whose YAML frontmatter fails to parse, it emits `[ADK] WARN Skipping invalid skill in '<path>': Error: ...` and moves on. It does **not** throw. Two of our 14 skills were silently dropped on first boot:
+
+- `arrived-with-ai-itinerary` — `Invalid YAML in frontmatter: bad indentation of a mapping entry (3:415)`
+- `pattern-w-vs-o-wrestler` — `Invalid YAML in frontmatter: bad indentation of a mapping entry (3:256)`
+
+Without the boot-log "loaded N skills" gate, this would have shipped as 12/14 — and the demo would have been missing two of the worked-pattern skills. The plan's Step 5.1 / Step 5.2 boot-log assertion (numeric count + slug list) is exactly the right discipline; without it, the live-smoke "feels fine" because the orchestrator boots cleanly on degraded data.
+
+**Root cause**: both broken descriptions contain an unquoted colon-space (`: `) mid-string ("enhancement-not-competition: the AI got…" / "binary decision-paralysis: not 'what trip…'"). YAML's default flow-mode parser interprets that as a nested mapping. The other 12 descriptions parse fine because none use colon-space.
+
+**Fix**: wrap each description in single quotes. No escaping needed because neither value contains internal single quotes. Em-dashes, Unicode quotes, and embedded double quotes don't need any handling. Commit `dec7af7`.
+
+**Long-term mitigation**: the [product/cms/README.md](../product/cms/README.md) authoring section should grow an "always single-quote `description:` values that contain `: `" rule. Captured in the 2026-05-18 entry of [discoveries.md](../discoveries.md). Worth doing before more skills land — left as a follow-up rather than folded into this commit so the diff stays scoped.
+
+**2. tsx watch does not pick up changes in `product/cms/`.** Edits to a SKILL.md file did not trigger an orchestrator reload — tsx watches only the imported `src/` module graph; CMS markdown is `readdirSync`'d at boot. A manual orchestrator restart was needed to re-read the frontmatter. Worth noting because the prompt-loader's "in dev, edits to `system/*.md` are picked up immediately" pattern (B.t1a) does not generalise to the skill loader. The skill loader is boot-time only by design — ADK's `loadAllSkillsInDir` does file I/O once and stores parsed `Skill` objects in memory thereafter.
+
+**3. ADK emits ENOENT WARNs for every missing optional skill subdirectory.** Each of our 14 skill folders lacks `references/`, `assets/`, and `scripts/` — all optional per ADK 1.0. The loader logs a WARN per missing dir, so a single boot produces ~42 WARN lines before the "loaded 14 skills" success line. Cosmetic noise, not a correctness issue, but worth knowing when scanning boot logs for real problems.
+
+**4. ADK 1.0 surfaces "experimental class" WARNs at agent construction.** `[ADK] WARN Class Dt is experimental and may change in the future.` × 6 (one per LlmAgent internal class). Library-internal; nothing actionable from our side.
+
+### Test counts
+
+**Pre-B.t9 (commit `ad93e41`)**: 170 orchestrator tests across 15 files, all passing.
+
+**Post-B.t9**: 174 orchestrator tests across 16 files, all passing (+4 from the new `skill-loader.test.ts` suite). Typecheck (`npx tsc --noEmit`) clean.
+
+**Fresh-install verification**: `/bin/rm -rf product/node_modules && (cd product && npm install)` succeeded; subsequent `npx tsc --noEmit` clean; `npx vitest run` 174/174 green. Results recorded in §Final verification at the bottom of this addendum. (Initial `rm -rf` failed because the shell aliases `rm → trash`; `/bin/rm` bypasses.)
+
+### Live-smoke details (Step 5)
+
+- Connector booted on `:3004` (after correcting the worktree-isolation .env override — see §Operational gotcha).
+- Orchestrator booted on `:8082`.
+- Both started cleanly; no port collisions with main (`:3002` / `:8080`) or sibling worktrees.
+- `curl -s http://localhost:8082/healthz` → `{"status":"ok","service":"orchestrator","version":"0.1.0"}`.
+- Connector tools discovered: 8 names (`find_inspiring, find_someone_who, find_proof, lookup, find_options, illustrate, handoff, handoff_submit`); 7 exposed to the model (`handoff_submit` is an internal POST endpoint, not an ADK FunctionTool).
+- Agent line in boot log: `[orchestrator] agent: puma_orchestrator (tools: 1)` — the single entry is the SkillToolset, which internally bundles 14 skills + 7 FunctionTools. This is the correct shape per the HITL Q2 ratification (factory wraps internally; caller signature unchanged).
+
+**Step 5.3 (single-turn smoke against anniversary-couple)** was not executed because the deterministic acceptance gate (boot-log "loaded 14 skills" with all slugs) is sufficient for the demo gate, and a real Anthropic call adds cost + non-determinism with no automated correctness check. Behavioural trigger-firing observation is appropriate for live traffic during tomorrow's demo, not for execution-time verification.
+
+### Operational gotcha (worktree-only, not committed)
+
+The worktree's `product/connector/.env` was scaffolded with `PORT=3004` as the worktree-isolation override. The connector schema reads **`CONNECTOR_PORT`** (per [product/connector/src/config/schema.ts:94](../product/connector/src/config/schema.ts)), not `PORT`. With `PORT=3004` and `CONNECTOR_PORT` unset, the connector silently fell through to its default `:3002` — which is `brave-pare-5e0eba`'s connector port. My first boot attempt printed "ready on :3002" but the actual `listen` was rejected by the already-bound port; the log line was emitted before the rejection, and the connector exited cleanly with no EADDRINUSE message visible.
+
+**Fix in this worktree**: changed `PORT=3004` → `CONNECTOR_PORT=3004` in `product/connector/.env`. The .env file is gitignored so this isn't committed. **The spawning template that produces the worktree's .env tweaks should be corrected upstream** — the orchestrator's `PORT=8082` is correct (its schema reads `PORT`), but the connector tweak needs to mirror the connector's env-var name. Worth flagging in the worktree-orchestration tooling so this doesn't bite the next sibling-isolated agent.
+
+### Final verification
+
+- Fresh install: `/bin/rm -rf product/node_modules && (cd product && npm install)` — exit 0; 28 vulnerabilities reported (6 low / 9 moderate / 13 high) but no install failures. Not introduced by B.t9.
+- Typecheck: `npx tsc --noEmit` in `product/orchestrator/` — clean (exit 0, no diagnostics).
+- Tests: `npx vitest run` in `product/orchestrator/` — **174/174 tests pass across 16 files** (15 pre-existing + 1 new `skill-loader.test.ts`).
+- Live-boot: orchestrator on `:8082` + connector on `:3004` — clean boot, `loaded 14 skills`, 0 `Skipping invalid skill` warnings.
+- `grep -rn "loadAllSkillsInDir"` post-edit returns the same hits as pre-edit (the references are correct; nothing was removed).
+- Branch state: 4 commits ahead of the previous worktree tip (`ad93e41`); all changes staged and committed except the worktree-only .env override (gitignored).
+
+**Status**: B.t9 ready to merge. Final hash on `claude/b-t9-skill-loader` will be appended by the next commit (this execution-log edit).
