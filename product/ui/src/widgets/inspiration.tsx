@@ -116,9 +116,11 @@ export function InspirationWidget(
       className="my-2 w-full"
     >
       {/* Mobile: horizontal scroll strip (swipe feels natural on touch).
-          ≥sm: grid (2 cols), ≥md: 3 cols. Lets desktop visitors scan
-          the whole set at once rather than overflow-scrolling sideways. */}
-      <ul className="flex gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0 md:grid-cols-3">
+          ≥sm: 2-column grid. We previously stepped up to 3 cols at md,
+          but the cards become too cramped at that density — 2-up reads
+          better at every desktop width and is the canonical grid for
+          image-only widgets across the surface. */}
+      <ul className="flex gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0">
         {images.map((img) => (
           <li key={img.id} className="flex-shrink-0 sm:flex-shrink">
             <button
