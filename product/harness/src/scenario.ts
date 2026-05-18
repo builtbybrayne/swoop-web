@@ -45,7 +45,17 @@ import { messageOf } from '@swoop/common';
 //        module is the canonical surface for scenario authors.
 // ---------------------------------------------------------------------------
 
-const VerdictSchema = z.enum(['qualified', 'referred_out', 'disqualified']);
+// Four-verdict enum per E.t1 (`HandoffPayloadSchema` in @swoop/common). The
+// original H.t1 scaffold predates the `inconclusive` verdict; widened here so
+// triage_verdict + handoff_event assertions can cover all four paths the
+// agent can reach. Per-verdict reasonCode catalogue lives in
+// `cms/prompts/tools/handoff/description.md` (21 combinations across the four).
+const VerdictSchema = z.enum([
+  'qualified',
+  'referred_out',
+  'disqualified',
+  'inconclusive',
+]);
 
 // ---------------------------------------------------------------------------
 // Turn schema (unchanged from H.t1).
