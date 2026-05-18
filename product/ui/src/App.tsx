@@ -67,6 +67,27 @@ import { usePreflight, useRehydrate } from "./session";
  * the right tradeoff for now (the rest of the codebase consumes the
  * `MessagePrimitive.*` namespace consistently).
  */
+/**
+ * Per-message renderer. Branches on role via `MessagePrimitive.If` so visitor
+ * turns are visually distinct from the agent's:
+ *
+ *   - Visitor (`user`): right-aligned bubble — subtle slate background,
+ *     rounded corners with a tucked bottom-right, capped at ~75% width.
+ *     `data-swoop-role="user"` hook on the root + `data-swoop-part="message-bubble"`
+ *     on the inner bubble so Swoop's brand team can re-skin without touching
+ *     React internals.
+ *   - Agent (`assistant`): full-width prose + tool-call widgets, matching
+ *     the existing layout (no bubble, no alignment shift).
+ *
+ * Both branches delegate part rendering to the registry from `./parts`. In
+ * practice user messages today are text-only, but routing both through the
+ * same part registry keeps the door open without special-casing.
+ *
+ * `MessagePrimitive.If` is marked deprecated in 0.12.25 in favour of an
+ * `<AuiIf>` API that's still settling; keeping the deprecated primitive is
+ * the right tradeoff for now (the rest of the codebase consumes the
+ * `MessagePrimitive.*` namespace consistently).
+ */
 function MessageView() {
   return (
     <>
@@ -206,13 +227,6 @@ function ThreadSurface({
 }
 
 export default function App() {
-  // Bumped by the "Fresh chat" button and the error-banner restart flow.
-  // Used two ways: (1) as a dep of the transport `useMemo` so a new
-  // transport picks up the new session id from storage, and (2) as a
-  // `key` on <AssistantRuntimeProvider> so the assistant-ui thread state
-  // remounts clean (no stale messages from the previous conversation).
-  const [resetKey, setResetKey] = useState(0);
-
   // Fire `ui.conversation_opened` once per mount. Pre-consent this still
   // emits with a `"unknown"` sessionId — that's the signal that a visitor
   // reached the surface but hasn't committed yet. Post-consent reloads
@@ -245,10 +259,18 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  // `useMemo` on `resetKey` churns the transport each time we restart; the
-  // runtime below then re-initialises against the new transport. Keeping
-  // both keyed avoids any subtle state carry-over.
-  const transport = useMemo(() => createOrchestratorTransport(), [resetKey]);
+  // Transport is created once and reused. It reads the current session id
+  // from sessionStorage per-request, so a fresh-chat / restart that mints
+  // a new session id is picked up automatically by the next outbound call.
+  // We deliberately do NOT re-create the transport (or re-key the provider)
+  // on restart: assistant-ui's `useChatRuntime` wraps the transport in a
+  // stable Proxy memoized with empty deps, so churning the transport prop
+  // doesn't actually swap the runtime — but a `key` bump on
+  // `<AssistantRuntimeProvider>` DID remount the React tree, which left
+  // the composer's global Zustand state out of sync with the post-remount
+  // tree and made the textarea unresponsive to typing. See `handleFreshChat`
+  // below for the supported clearing path (`runtime.threads.switchToNewThread()`).
+  const transport = useMemo(() => createOrchestratorTransport(), []);
   const runtime = useChatRuntime({ transport });
 
   // D.t4 gate. Single `useConsent()` instance — its state drives both the
@@ -294,10 +316,11 @@ export default function App() {
         "Your previous conversation expired — please start a new one.",
       );
       consent.clearSilently();
-      // Churn the assistant-ui runtime so any stale thread state can't carry
-      // across the OpeningScreen boundary. The runtime is reconstructed on
-      // the next post-consent render.
-      setResetKey((k) => k + 1);
+      // Switch to a fresh assistant-ui thread + clear any drafted composer
+      // text so neither bleeds across the OpeningScreen boundary into the
+      // subsequent post-consent render.
+      runtime.threads.switchToNewThread();
+      runtime.thread.composer.setText("");
     },
   });
 
@@ -319,15 +342,26 @@ export default function App() {
       payload: { closeReason: "restart" },
     });
     void consent.refreshSession().then(
-      () => setResetKey((k) => k + 1),
+      () => {
+        // Use the assistant-ui-sanctioned API to start a new thread (clears
+        // the thread message list) and explicitly clear the composer text
+        // (clears any drafted input). The earlier pattern of bumping a
+        // resetKey on `<AssistantRuntimeProvider>` cleared messages via a
+        // React remount of the chat hook's local state, but left the
+        // composer's global Zustand state live AND broke its binding to the
+        // post-remount tree — the textarea then shipped stale input and was
+        // unresponsive to further typing.
+        runtime.threads.switchToNewThread();
+        runtime.thread.composer.setText("");
+      },
       () => {
         // refreshSession already emitted; banner handles display.
       },
     );
-  }, [consent]);
+  }, [consent, runtime]);
 
   return (
-    <AssistantRuntimeProvider key={resetKey} runtime={runtime}>
+    <AssistantRuntimeProvider runtime={runtime}>
       {hasConsented ? (
         <ThreadSurface onRestart={handleFreshChat} onFreshChat={handleFreshChat} />
       ) : (
