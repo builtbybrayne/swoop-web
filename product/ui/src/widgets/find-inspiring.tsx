@@ -41,6 +41,7 @@ import {
   renderLifecycleGate,
   safeParse,
   WidgetMalformedPlaceholder,
+  WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
 
@@ -66,8 +67,18 @@ export function FindInspiringWidget(
   const { passages } = parsed.data;
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
+  // In production: silent (return null). In dev: a small "rendered silently"
+  // indicator so the developer sees that the tool fired with no passages.
   // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md.
-  if (passages.length === 0) return null;
+  if (passages.length === 0) {
+    return (
+      <WidgetSilentPlaceholder
+        {...SHELL_CTX}
+        reason="empty result"
+        hint={{ passages: 0 }}
+      />
+    );
+  }
 
   return (
     <section

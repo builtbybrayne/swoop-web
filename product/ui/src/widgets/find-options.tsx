@@ -43,6 +43,7 @@ import {
   renderLifecycleGate,
   safeParse,
   WidgetMalformedPlaceholder,
+  WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
 import { HotelCard } from "./find-options/hotel-card";
@@ -72,10 +73,18 @@ export function FindOptionsWidget(
   const { cards } = parsed.data;
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
-  // Match the find-proof / lookup pattern — render nothing; the conversational
-  // layer says "I couldn't find anything that fits — [follow-up]" in voice.
+  // Match the find-proof / lookup pattern — prod silent, dev indicator so the
+  // developer sees that find_options fired with zero cards.
   // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md.
-  if (cards.length === 0) return null;
+  if (cards.length === 0) {
+    return (
+      <WidgetSilentPlaceholder
+        {...SHELL_CTX}
+        reason="empty result"
+        hint={{ cards: 0 }}
+      />
+    );
+  }
 
   return (
     <section

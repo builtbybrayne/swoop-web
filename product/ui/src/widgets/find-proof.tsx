@@ -39,6 +39,7 @@ import {
   renderLifecycleGate,
   safeParse,
   WidgetMalformedPlaceholder,
+  WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
 
@@ -63,10 +64,19 @@ export function FindProofWidget(
   }
   const { proofs } = parsed.data;
 
-  // Empty case: render nothing. Reassurance with no evidence is silence — the
-  // surrounding prose carries the moment, not a "we couldn't find proof"
-  // disclosure.
-  if (proofs.length === 0) return null;
+  // Empty case: render nothing visibly. Reassurance with no evidence is
+  // silence in production — the surrounding prose carries the moment, not a
+  // "we couldn't find proof" disclosure. In dev, indicate so the absence is
+  // explainable.
+  if (proofs.length === 0) {
+    return (
+      <WidgetSilentPlaceholder
+        {...SHELL_CTX}
+        reason="empty result"
+        hint={{ proofs: 0 }}
+      />
+    );
+  }
 
   return (
     <section

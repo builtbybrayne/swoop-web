@@ -72,12 +72,16 @@ describe("InspirationWidget", () => {
     expect(screen.getByTestId("widget-malformed")).toBeInTheDocument();
   });
 
-  it("renders nothing when the image list is empty (agent handles in prose)", () => {
-    // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md
-    // — empty results yield to the conversational agent, no widget chrome.
-    const { container } = render(
+  it("renders the dev silent indicator when the image list is empty (prod stays silent)", () => {
+    // Visitor-facing chrome is gone (agent prose carries the moment); the
+    // dev silent placeholder surfaces what fired and why under Vitest.
+    render(
       <InspirationWidget {...mockProps({ result: { images: [] } })} />,
     );
-    expect(container.firstChild).toBeNull();
+    expect(screen.queryByTestId("inspiration")).toBeNull();
+    const silent = screen.getByTestId("widget-silent");
+    expect(silent).toHaveAttribute("data-swoop-widget", "inspiration");
+    expect(silent.textContent).toContain("illustrate");
+    expect(silent.textContent).toContain("empty result");
   });
 });
