@@ -88,7 +88,7 @@ export type ToolCallLifecycle<TResult = unknown> = {
  *  `{ok: true, value: <data>}` so it can carry structured errors through the
  *  same channel as values. That envelope is invisible to the widget's output
  *  schema — unwrap before parsing. */
-function unwrapEnvelope(value: unknown): unknown {
+export function unwrapEnvelope(value: unknown): unknown {
   if (
     value &&
     typeof value === "object" &&
