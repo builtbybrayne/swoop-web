@@ -6,6 +6,28 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-18 — Per-scenario JSONL has a sibling HTML viewer for human review
+
+Streaming JSONL ([entry below — 16-event-kind observability stream](#2026-05-18--harness-now-streams-every-observable-event-to-per-scenario-jsonl-the-instant-it-happens)) is the right substrate for forensic inspection and machine ingestion, but it's dense (50–100 events per typical scenario). When a human wants to *read* a transcript, the JSONL needs collation: SSE text frames concatenated into one Agent bubble per turn; user-agent thinking / stop-judge decisions / tool-call args tucked behind collapsibles; raw events available but not in the face.
+
+Use:
+
+```sh
+npm run -w @swoop/harness view -- <path-to-jsonl>          # writes HTML
+npm run -w @swoop/harness view -- <path-to-jsonl> --open   # also pops browser (macOS)
+npm run -w @swoop/harness view -- <scenarios-dir>          # renders every .jsonl
+```
+
+Output lands at `<run-dir>/views/<scenario-name>.html` — a self-contained file (inline CSS, no JS, no external assets) that opens cleanly in any browser. Native `<details>`/`<summary>` for collapsibles so no scripting layer is needed.
+
+Default view = the conversation. One click expands: lifecycle (session + consent + completion), per-turn user-agent invocation + raw Anthropic response, per-turn stop-judge decision + raw Anthropic response, per-turn tool-call args, scenario-level raw events dump (every event in JSON). Errors + timeouts inline as red blockquotes at their position. Assertions block at the bottom with ✅/❌ + reason; judge_rubric assertions surface the raw judge response in a nested collapsible.
+
+**Pattern to remember**: the streaming substrate and the human-readable view are different jobs. Stream raw events for forensic durability (per-event, sync write, on-disk before next event); render a *separate* collation pass on demand for human review. Conflating them (e.g., streaming pre-formatted markdown) loses the forensic value; bundling the render into the streaming path adds latency for no benefit. Keep them as sibling artefacts of the same JSONL.
+
+Concrete fix: [03-exec-h-t8-transcript-view.md](planning/03-exec-h-t8-transcript-view.md). Implementation in [product/harness/src/view-transcript.ts](product/harness/src/view-transcript.ts) (pure function) + [cli-view.ts](product/harness/src/cli-view.ts) (file IO + paths).
+
+---
+
 ## 2026-05-18 — Harness now streams every observable event to per-scenario JSONL the instant it happens
 
 A 37-scenario validator run was killed at scenario 28 (~22 min in). Zero transcripts were recoverable because the CLI wrote `results.md` + `results.json` only at end-of-loop — all 28 completed scenarios + the in-flight scenario sat in memory and died with the process. *"Shockingly poor design"*, correctly. The fix lands in [03-exec-h-t8-streaming-fix.md](planning/03-exec-h-t8-streaming-fix.md) (HITL-ratified 2026-05-18) across 6 commits on the harness:
