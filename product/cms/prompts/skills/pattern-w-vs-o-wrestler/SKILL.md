@@ -1,6 +1,6 @@
 ---
 name: pattern-w-vs-o-wrestler
-description: A worked Patagonia conversation pattern. The W-vs-O Wrestler — a visitor who has researched both the W trek and the O circuit, can articulate the differences, and cannot decide between them. The defining feature is a binary decision-paralysis: not "what trip should I do?" but specifically "W or O?". Adjacent to the Overwhelmed Researcher pattern but narrower in scope. Consult fairly proactively when the W-vs-O decision is the conversation.
+description: 'A worked Patagonia conversation pattern. The W-vs-O Wrestler — a visitor who has researched both the W trek and the O circuit, can articulate the differences, and cannot decide between them. The defining feature is a binary decision-paralysis: not "what trip should I do?" but specifically "W or O?". Adjacent to the Overwhelmed Researcher pattern but narrower in scope. Consult fairly proactively when the W-vs-O decision is the conversation.'
 ---
 
 # Pattern: the W-vs-O Wrestler

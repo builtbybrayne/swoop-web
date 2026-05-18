@@ -50,17 +50,25 @@ import { RegionBaseCard } from "./find-options/region-base-card";
 import { TourCard } from "./find-options/tour-card";
 import { TripCard } from "./find-options/trip-card";
 
+const SHELL_CTX = {
+  widgetType: "find-options",
+  toolName: "find_options",
+} as const;
+
 export function FindOptionsWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
 ) {
   const gate = renderLifecycleGate(
     props as ToolCallLifecycle,
+    SHELL_CTX,
     "Pulling options together…",
   );
   if (gate) return gate;
 
-  const parsed = safeParse(FindOptionsOutputSchema, props.result);
-  if (!parsed.ok) return <WidgetMalformedPlaceholder />;
+  const parsed = safeParse(FindOptionsOutputSchema, props.result, SHELL_CTX);
+  if (!parsed.ok) {
+    return <WidgetMalformedPlaceholder {...SHELL_CTX} debug={parsed.debug} />;
+  }
   const { cards } = parsed.data;
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
@@ -78,7 +86,15 @@ export function FindOptionsWidget(
       className="my-2 grid w-full grid-cols-1 gap-3 sm:grid-cols-2"
     >
       {cards.map((card) => (
-        <ProposalCardRenderer key={card.id} card={card} />
+        // Cast: schema-inferred type vs `ProposalCardPublic` alias drift
+        // (optional vs required `activityTags` / image-tag arrays) is a
+        // `@swoop/common` reconciliation in flight elsewhere. Runtime shape
+        // already matches; this cast keeps the widget surface stable until
+        // the alias/schema realign.
+        <ProposalCardRenderer
+          key={card.id}
+          card={card as ProposalCardPublic}
+        />
       ))}
     </section>
   );
@@ -105,10 +121,12 @@ function ProposalCardRenderer({ card }: { card: ProposalCardPublic }) {
     case "region_base":
       return <RegionBaseCard card={card} />;
     default: {
-      // Compile-time exhaustiveness guard.
+      // Compile-time exhaustiveness guard. Runtime fall-through (a new
+      // discriminator landed without matching renderer) is treated as
+      // schema drift and surfaces via the shared placeholder.
       const _exhaustiveCheck: never = card;
       void _exhaustiveCheck;
-      return <WidgetMalformedPlaceholder />;
+      return <WidgetMalformedPlaceholder {...SHELL_CTX} />;
     }
   }
 }
