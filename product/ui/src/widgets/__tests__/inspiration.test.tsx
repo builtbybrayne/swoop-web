@@ -72,6 +72,31 @@ describe("InspirationWidget", () => {
     expect(screen.getByTestId("widget-malformed")).toBeInTheDocument();
   });
 
+  it("renders images when the result is wrapped in the connector's {ok,value} envelope", () => {
+    // Regression: the connector adapter wraps successful results as
+    // `{ ok: true, value: { images } }`. Earlier the widget bypassed
+    // `safeParse`'s unwrap and read `props.result.images` directly,
+    // silently rendering an empty-result placeholder for every real call.
+    const result = {
+      ok: true as const,
+      value: {
+        images: [
+          {
+            id: SampleImage.id,
+            url: SampleImage.url,
+            altText: SampleImage.altText,
+            caption: SampleImage.summary,
+          },
+        ],
+      },
+    };
+
+    render(<InspirationWidget {...mockProps({ result })} />);
+
+    expect(screen.getByTestId("inspiration")).toBeInTheDocument();
+    expect(screen.queryByTestId("widget-silent")).toBeNull();
+  });
+
   it("renders the dev silent indicator when the image list is empty (prod stays silent)", () => {
     // Visitor-facing chrome is gone (agent prose carries the moment); the
     // dev silent placeholder surfaces what fired and why under Vitest.

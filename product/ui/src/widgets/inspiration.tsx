@@ -13,6 +13,7 @@ import { ImageBlock } from "../shared";
 import {
   renderLifecycleGate,
   safeParse,
+  unwrapEnvelope,
   WidgetMalformedPlaceholder,
   WidgetSilentPlaceholder,
   type ToolCallLifecycle,
@@ -57,10 +58,15 @@ export function InspirationWidget(
     caption: z.string().optional(),
     moodTags: z.array(z.string()).optional(),
   });
+  // Source: the unwrapped envelope, not `props.result` directly. The
+  // connector wraps successful results as `{ ok: true, value: { images } }`
+  // (see widget-shell.unwrapEnvelope), so reading `props.result.images`
+  // would always miss when the envelope is present.
+  const unwrapped = unwrapEnvelope(props.result);
   const rawImages = Array.isArray(
-    (props.result as { images?: unknown })?.images,
+    (unwrapped as { images?: unknown })?.images,
   )
-    ? ((props.result as { images: unknown[] }).images)
+    ? ((unwrapped as { images: unknown[] }).images)
     : [];
   const images: IllustrateImage[] = rawImages
     .map((raw) => EnrichedImageSchema.safeParse(raw))
