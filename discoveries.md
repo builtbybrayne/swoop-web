@@ -6,6 +6,38 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-18 — Schema drift between authoring surface and canonical contract is a recurring trap; propagate enum widenings explicitly
+
+The H.t1 harness scaffold ([planning/03-exec-validation-scaffold.md — H.t1](planning/03-exec-validation-scaffold.md)) shipped a local `VerdictSchema = z.enum(['qualified', 'referred_out', 'disqualified'])` in [product/harness/src/scenario.ts](product/harness/src/scenario.ts). At the time that matched chunk-E's verdict enum. Months later, [E.t1 — Handoff schema wire-tightening](planning/03-exec-e-t1-wire-tightening.md) widened the canonical `@swoop/common` verdict enum to add `inconclusive` (4 verdicts total), and the [handoff/description.md tool description](product/cms/prompts/tools/handoff/description.md) was updated with the full per-verdict reasonCode catalogue (21 combinations).
+
+The harness's local `VerdictSchema` was never updated. The H.t8 plan ([planning/03-exec-h-t8.md](planning/03-exec-h-t8.md)) introduced a new authoring surface (agent-as-user scenarios) on top of that drifted schema. The Tasks 1+2+2b runner+judges agent built the new `userAgent` shape correctly but didn't audit the existing `VerdictSchema` against the canonical source. Five persona-authoring agents then attempted `triage_verdict: inconclusive` assertions per the plan's instructions and hit `.strict()`-mode schema rejection. Mid-swarm fix landed as commit `82e2e37` to widen the enum, costing one swarm cycle of rework and forcing two agents (Cluster 5 + Cluster 4) to ship workarounds that needed follow-up upgrade commits.
+
+**Pattern to remember**: whenever a Tier 3 plan introduces or extends an authoring surface, **explicitly audit all related schemas against the canonical source in `@swoop/common`** before scoping the work. Verdict enums, reason codes, tier values, event kinds, status enums — any field that's "the same wire-level identifier as chunk-X but locally-redeclared for stability" needs a drift check. The plan's `★ Read this first` section is the right place to list which canonical schemas the work depends on, alongside an explicit "I have grep'd for divergence between the local re-declaration and the canonical surface as of <date>" step.
+
+The deliberate local-redeclaration posture (per H.12: avoid runtime imports of the event schema; content-as-data shouldn't churn whenever F's wire schema bumps) is still correct in principle. The lesson is that the *cost* of that posture is periodic drift-audit pressure that has to be paid explicitly — it doesn't pay itself.
+
+Concrete fix: commit `82e2e37` (VerdictSchema widening); planning context inline at the bottom of `planning/03-exec-h-t8.md` execution log.
+
+---
+
+## 2026-05-18 — N≥3 swarms on a shared single worktree have material merge friction; default to one-worktree-per-agent
+
+Dispatched a 5-agent persona-authoring swarm in the H.t8 validator-harness worktree per [the H.t8 plan's Task 3](planning/03-exec-h-t8.md) — all five agents authoring YAML files into the same `product/harness/scenarios/` directory on the same branch (`claude/h-t8-validator-harness`). File names were disjoint per cluster (`agent-1xx-*` / `agent-2xx-*` / `agent-3xx-*` / `agent-4xx-*` / `agent-5xx-*`) so I assumed no real conflict surface. That was *almost* true but cost two real recovery cycles:
+
+1. **Cluster 1 lost its 12 files during a sibling's merge sequence.** Cluster 3's mid-swarm `git merge` (to integrate the orchestrator's schema fix `82e2e37`) somehow dropped Cluster 1's then-untracked files from the working tree. Cluster 1's agent terminated with a truncated "let me write a tighter test" status, then became unaddressable — its work gone with it. Required a full respawn (`cluster-1-archetype-redo`) with a fresh prompt and another ~7 min of authoring time.
+2. **Cluster 4's late upgrade edits got bundled into Cluster 3's commit.** Both agents made schema-fix-following changes around the same time; Cluster 3's commit happened to land first and absorbed Cluster 4's pending edits as a slight misattribution.
+3. **Git index-lock collisions** between the orchestrator's commits and concurrent agent commits required `until ! test -f .git/.../index.lock; do sleep 1; done` polling.
+
+End-state shipped clean (37/37 scenarios committed, `npm test` green) — but the path was bumpy and the failure modes weren't predictable from the dispatch design.
+
+**Pattern to remember**: for swarms of N≥3 agents that all need to commit to the same branch, default to **one worktree per agent** (per the [superpowers:dispatching-parallel-agents skill](../../.claude/plugins/cache/superpowers-marketplace/superpowers/4.0.3/skills/dispatching-parallel-agents)) and merge each agent's branch back at the end. The cost of N extra worktrees is small (each is a `git worktree add` + `.env` copy + `npm install`); the cost of shared-worktree race recovery — losing 12 hours-of-effort files, having to dispatch a fresh agent with a re-explanation, polishing misattributed commit messages — is meaningfully larger.
+
+The shared-worktree pattern is fine for **N=2** swarms (agent index-lock collisions stay rare) and for **N=1+orchestrator** work where the orchestrator is the only sibling. Above that, isolate. Documented inline in the H.t8 execution log.
+
+Adjacent observation worth carrying: when an agent reports `<status>completed</status>` with a single-line truncated summary, it's a stall AND a potential file-loss risk if a concurrent sibling is rebasing. The [unsticking-stalled-background-agents skill](/Users/al/.claude/skills/unsticking-stalled-background-agents) recommends `SendMessage("continue")` first — but in the multi-worktree-per-agent model, file loss across a stall is impossible because each agent owns its files exclusively. That's a second argument for the isolation default.
+
+---
+
 ## 2026-05-18 — Tour region IS recoverable via the page-parent chain; the "unrecoverable" claim below was wrong
 
 The 2026-05-15 entry below concluded tour region was a dead end after both candidate sources (`contentblock.region_id` dangling, `page.ntag_ids` empty) failed. It missed the obvious third option: walk **`page.parent_id`** upward. C.t3 preserves the self-FK chain, and 2 of 11 tours have ancestors of pagetype `National Park` / `Region` / `Region-Activity`:
