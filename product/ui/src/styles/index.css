@@ -66,3 +66,13 @@ body {
 [data-swoop-density] {
   padding-block: calc(0.5rem * var(--swoop-density));
 }
+
+/* Dev-affordance toggle. Anything tagged `data-swoop-dev="true"` (the
+ * three dev cards: widget-malformed, widget-silent, dev-tool-trace) is
+ * hidden when `<body>` carries the `swoop-hide-dev` class. The toggle in
+ * the thread header (dev-only) flips the class and persists in
+ * localStorage. Production builds never set the body class regardless,
+ * because the dev cards themselves only render in `import.meta.env.DEV`. */
+body.swoop-hide-dev [data-swoop-dev="true"] {
+  display: none;
+}

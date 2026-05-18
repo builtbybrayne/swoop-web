@@ -158,6 +158,38 @@ function detectUaCategory(): "desktop" | "mobile" | "tablet" | "unknown" {
   return "desktop";
 }
 
+/**
+ * Dev-only affordance: persist a "hide dev cards" preference in localStorage
+ * and reflect it as a class on `<body>` (consumed by `body.swoop-hide-dev
+ * [data-swoop-dev="true"] { display: none; }` in styles/index.css). The dev
+ * cards themselves only render under `import.meta.env.DEV`, so prod builds
+ * never see the class and the toggle button is omitted from the header.
+ */
+const DEV_AFFORDANCE_KEY = "swoop-hide-dev";
+function useDevAffordanceToggle(): { hidden: boolean; toggle: () => void } {
+  const [hidden, setHidden] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(DEV_AFFORDANCE_KEY) === "1";
+  });
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("swoop-hide-dev", hidden);
+  }, [hidden]);
+  const toggle = useCallback(() => {
+    setHidden((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(DEV_AFFORDANCE_KEY, next ? "1" : "0");
+      } catch {
+        // localStorage may be unavailable (private mode, etc.); the in-memory
+        // toggle still works for the session.
+      }
+      return next;
+    });
+  }, []);
+  return { hidden, toggle };
+}
+
 function EmptyState() {
   return (
     <div className="mx-auto mt-12 max-w-2xl px-4 text-center text-slate-500">
@@ -186,6 +218,7 @@ function ThreadSurface({
   onFreshChat: () => void;
 }) {
   const { current, retry, restart, dismiss } = useRuntimeErrors({ onRestart });
+  const devHidden = useDevAffordanceToggle();
   return (
     <ThreadPrimitive.Root className="flex h-full w-full flex-col bg-slate-50">
       <div
@@ -194,6 +227,17 @@ function ThreadSurface({
       >
         <ChromeBadge />
         <div className="flex items-center gap-3">
+          {import.meta.env.DEV ? (
+            <button
+              type="button"
+              onClick={() => devHidden.toggle()}
+              data-testid="toggle-dev-affordances"
+              aria-pressed={devHidden.hidden}
+              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+            >
+              {devHidden.hidden ? "Show dev" : "Hide dev"}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onFreshChat}
