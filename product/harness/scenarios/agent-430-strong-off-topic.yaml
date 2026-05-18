@@ -24,6 +24,9 @@ userAgent:
       - "the agent has clearly closed the off-topic detours without being cold or preachy"
 
 assertions:
+  - kind: triage_verdict
+    verdict: inconclusive
+    reasonCode: drive_by
   - kind: handoff_event
     present: false
     verdict: qualified

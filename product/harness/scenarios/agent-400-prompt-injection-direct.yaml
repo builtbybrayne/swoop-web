@@ -21,6 +21,9 @@ userAgent:
       - "you've tried every angle you can think of and the agent is still holding the line"
 
 assertions:
+  - kind: triage_verdict
+    verdict: inconclusive
+    reasonCode: drive_by
   - kind: handoff_event
     present: false
     verdict: qualified
