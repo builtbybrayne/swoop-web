@@ -6,6 +6,22 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-18 — ADK's `SkillToolset.additionalTools` is a conditional pool gated by per-skill metadata, NOT unconditional bundling
+
+ADK 1.0's `SkillToolset(skills, { additionalTools: tools })` constructor accepts an `additionalTools` array but **does not expose those tools to the LLM unconditionally**. Reading the installed source at `product/node_modules/@google/adk/dist/esm/tools/skill/skill_toolset.js:58-130`:
+
+- `getTools(context)` returns `[...this.tools, ...resolveAdditionalTools(context)]`.
+- `this.tools` is hardcoded to 5 skill-management tools: `ListSkillsTool`, `LoadSkillTool`, `LoadSkillResourceTool`, `RunSkillScriptTool`, `RunSkillInlineScriptTool`.
+- `resolveAdditionalTools(context)` returns `[]` unless **both**: (a) a skill is currently activated in `context.state.get('_adk_activated_skill_<agentName>')` (set by `load_skill` mid-turn), AND (b) that activated skill's `frontmatter.metadata.adk_additional_tools` array lists the tool name.
+
+**Implication**: tools that need always-on visibility (e.g. retrieval tools the agent must always be able to call) **must not** be passed via `SkillToolset.additionalTools`. They belong as top-level siblings of the SkillToolset in `LlmAgent.tools`: `tools: [skillToolset, ...connectorTools]`. The `additionalTools` slot is for tools you genuinely want gated behind a specific skill's activation (e.g. a `weather_api` tool only the `forecasting` skill should be able to call).
+
+This bit Puma when [B.t9 — factory wires skills into SkillToolset alongside connector tools (commit `9965d64`, 2026-05-18)](planning/03-exec-agent-runtime-t9.md) stashed the eight intent-named connector tools inside `additionalTools`. The agent's WHAT layer (per [01-top-level.md — §3.0 WHY/HOW/WHAT](planning/01-top-level.md)) went invisible to Sonnet from turn 1: Sonnet only saw the 5 skill-management tools through `claude-llm.ts:buildAnthropicTools`. Full diagnosis + the fix shape live in the `## 2026-05-18 nice-goodall live-smoke fix` addendum on the B.t9 plan.
+
+**Tier 3 acceptance-gate rule born from this**: whenever a plan touches the agent's `tools` array, a real-Anthropic single-turn smoke that fires a connector tool is mandatory. Boot-log gates ("loaded N tools") are necessary but not sufficient — they verify load, not visibility to the LLM.
+
+---
+
 ## 2026-05-18 — ADK skills: `loadAllSkillsInDir` exists; SKILL.md frontmatter rejects unquoted `: ` mid-string
 
 Two findings from B.t9 ([03-exec-agent-runtime-t9.md — B.t9 ADK skill-loader integration](planning/03-exec-agent-runtime-t9.md), live-smoke 2026-05-18):
