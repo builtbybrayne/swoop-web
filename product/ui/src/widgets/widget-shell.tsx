@@ -273,6 +273,7 @@ function DevMalformedDebug(props: {
       data-swoop-part="widget"
       data-swoop-widget-state="malformed"
       data-swoop-widget={props.widgetType}
+      data-swoop-dev="true"
       className="my-2 overflow-hidden rounded-md border-2 border-dashed border-amber-300 bg-amber-50 text-[12px] text-amber-950"
     >
       <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-100/60 px-3 py-1.5">
@@ -434,6 +435,7 @@ function DevSilentIndicator(props: {
       data-swoop-part="widget"
       data-swoop-widget-state="silent"
       data-swoop-widget={props.widgetType}
+      data-swoop-dev="true"
       className="my-2 inline-flex max-w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1 text-[11px] leading-snug text-slate-600"
     >
       <span className="rounded-sm bg-slate-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
@@ -656,6 +658,7 @@ function DevToolCallTrace(props: {
       data-swoop-part="widget"
       data-swoop-widget-state="dev-trace"
       data-swoop-tool={props.toolName}
+      data-swoop-dev="true"
       className="my-2 rounded-md border border-slate-200 bg-white/60 text-[11px] text-slate-600 open:bg-white"
     >
       <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-1 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
