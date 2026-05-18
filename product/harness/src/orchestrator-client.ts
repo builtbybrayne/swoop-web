@@ -22,25 +22,15 @@
 
 import { messageOf, parseSseFrames } from '@swoop/common';
 
-import { envelope, type EventSink } from './events.js';
+import { envelope } from './events.js';
+import type { ObservabilityContext } from './events.js';
+
+// Re-export so callers that imported ObservabilityContext from this module
+// don't break. New code should import from `./events.js` directly.
+export type { ObservabilityContext } from './events.js';
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
 const DEFAULT_TURN_TIMEOUT_MS = 180_000;
-
-/**
- * Per-call observability threading. The harness's per-scenario FileEventSink
- * is injected here so the OrchestratorClient can emit `agent.sse.frame` per
- * frame as the SSE stream arrives, `agent.response.aggregated` when the
- * turn closes, and `timeout` if the turn aborts.
- *
- * Optional — callers that don't care (default) pass `undefined` and no
- * events flow.
- */
-export interface ObservabilityContext {
-  readonly sink: EventSink;
-  readonly scenarioName: string;
-  readonly turnIndex: number;
-}
 
 export interface OrchestratorSession {
   readonly sessionId: string;

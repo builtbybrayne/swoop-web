@@ -34,6 +34,7 @@
  * conversation runs $0.06–0.18; the 37-scenario suite is $2–5 per full run.
  */
 
+import { envelope, type ObservabilityContext } from './events.js';
 import type { TerminationCriteria } from './scenario.js';
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,12 @@ export interface NextMessageRequest {
    * user-agent generates an opener from persona + goal alone.
    */
   readonly latestAgentResponse?: string;
+  /**
+   * Optional observability threading. When supplied, `nextMessage` emits a
+   * `user_agent.invoked` event before the Anthropic call and a
+   * `user_agent.responded` event after (with the raw Anthropic response).
+   */
+  readonly observability?: ObservabilityContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +223,18 @@ export class UserAgent {
    */
   async nextMessage(req: NextMessageRequest): Promise<string> {
     const messages = buildMessages(req.transcript, req.latestAgentResponse);
+    const obs = req.observability;
+    if (obs) {
+      obs.sink.emit({
+        kind: 'user_agent.invoked',
+        ...envelope(obs.scenarioName, obs.turnIndex),
+        persona: this.persona,
+        goal: this.goal,
+        transcriptSoFar: messages,
+        model: this.model,
+      });
+    }
+    const startedAt = Date.now();
     const res = await this.client.messages.create({
       model: this.model,
       system: this.systemPrompt,
@@ -223,8 +242,18 @@ export class UserAgent {
       max_tokens: this.maxTokens,
       temperature: this.temperature,
     });
+    const durationMs = Date.now() - startedAt;
     const text = extractTextContent(res.content);
     const trimmed = text.trim();
+    if (obs) {
+      obs.sink.emit({
+        kind: 'user_agent.responded',
+        ...envelope(obs.scenarioName, obs.turnIndex),
+        message: trimmed,
+        durationMs,
+        anthropicRaw: res,
+      });
+    }
     if (trimmed.length === 0) {
       throw new Error(
         `[user-agent] model returned no text content (model=${this.model}). Persona may be triggering a refusal.`,

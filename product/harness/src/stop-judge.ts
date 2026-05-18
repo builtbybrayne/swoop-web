@@ -30,6 +30,7 @@
  *   from the YAML, so we'd notice and tighten the persona/criteria.
  */
 
+import { envelope, type ObservabilityContext } from './events.js';
 import type { ConversationTurn } from './user-agent.js';
 import type { TerminationCriteria } from './scenario.js';
 
@@ -62,6 +63,12 @@ export interface ShouldStopRequest {
   readonly transcript: readonly ConversationTurn[];
   readonly latestAgentResponse: string;
   readonly model?: string;
+  /**
+   * Optional observability threading. When supplied, `shouldStop` emits a
+   * `stop_judge.invoked` event before the Haiku call and a
+   * `stop_judge.responded` event after.
+   */
+  readonly observability?: ObservabilityContext;
 }
 
 /**
@@ -150,19 +157,54 @@ export async function shouldStop(req: ShouldStopRequest): Promise<boolean> {
     req.transcript,
     req.latestAgentResponse,
   );
+  const model = req.model ?? DEFAULT_STOP_JUDGE_MODEL;
+  const obs = req.observability;
+  if (obs) {
+    obs.sink.emit({
+      kind: 'stop_judge.invoked',
+      ...envelope(obs.scenarioName, obs.turnIndex),
+      model,
+      transcriptSoFar: [{ role: 'user', content: userPayload }],
+      latestAgentResponse: req.latestAgentResponse,
+    });
+  }
+  const startedAt = Date.now();
   const res = await req.client.messages.create({
-    model: req.model ?? DEFAULT_STOP_JUDGE_MODEL,
+    model,
     system,
     messages: [{ role: 'user', content: userPayload }],
     max_tokens: 5,
     temperature: 0,
   });
+  const durationMs = Date.now() - startedAt;
   const text = extractTextContent(res.content).trim().toUpperCase();
-  if (text === 'YES') return true;
-  if (text === 'NO') return false;
-  throw new Error(
-    `[stop-judge] unexpected response: "${text}". Expected YES or NO.`,
-  );
+  let shouldStopValue: boolean;
+  if (text === 'YES') shouldStopValue = true;
+  else if (text === 'NO') shouldStopValue = false;
+  else {
+    if (obs) {
+      obs.sink.emit({
+        kind: 'stop_judge.responded',
+        ...envelope(obs.scenarioName, obs.turnIndex),
+        shouldStop: false,
+        anthropicRaw: res,
+        durationMs,
+      });
+    }
+    throw new Error(
+      `[stop-judge] unexpected response: "${text}". Expected YES or NO.`,
+    );
+  }
+  if (obs) {
+    obs.sink.emit({
+      kind: 'stop_judge.responded',
+      ...envelope(obs.scenarioName, obs.turnIndex),
+      shouldStop: shouldStopValue,
+      anthropicRaw: res,
+      durationMs,
+    });
+  }
+  return shouldStopValue;
 }
 
 function extractTextContent(

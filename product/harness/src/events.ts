@@ -245,6 +245,22 @@ export interface EventSink {
 }
 
 /**
+ * Per-call observability threading. The harness's per-scenario FileEventSink
+ * is injected into individual components (OrchestratorClient, UserAgent,
+ * StopJudge, SonnetJudge via assertions, runScenario) so they can emit
+ * lifecycle events as the scenario unfolds.
+ *
+ * All three fields are required when observability is supplied (the runner
+ * always knows which scenario + turn it's in). The whole struct is optional
+ * at the call site — components without it stay silent.
+ */
+export interface ObservabilityContext {
+  readonly sink: EventSink;
+  readonly scenarioName: string;
+  readonly turnIndex: number;
+}
+
+/**
  * Drops all events. The default when no observability is required (tests,
  * CI runs against a non-writable filesystem, etc.).
  */
