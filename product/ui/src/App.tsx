@@ -47,14 +47,53 @@ import { ErrorBanner, useRuntimeErrors } from "./errors";
 import { usePreflight, useRehydrate } from "./session";
 
 /**
- * Per-message renderer. Delegates every part kind to the registry exported
- * from `./parts`. Tool-call widgets register in D.t3 by extending that map.
+ * Per-message renderer. Branches on role via `MessagePrimitive.If` so visitor
+ * turns are visually distinct from the agent's:
+ *
+ *   - Visitor (`user`): right-aligned bubble — subtle slate background,
+ *     rounded corners with a tucked bottom-right, capped at ~75% width.
+ *     `data-swoop-role="user"` hook on the root + `data-swoop-part="message-bubble"`
+ *     on the inner bubble so Swoop's brand team can re-skin without touching
+ *     React internals.
+ *   - Agent (`assistant`): full-width prose + tool-call widgets, matching
+ *     the existing layout (no bubble, no alignment shift).
+ *
+ * Both branches delegate part rendering to the registry from `./parts`. In
+ * practice user messages today are text-only, but routing both through the
+ * same part registry keeps the door open without special-casing.
+ *
+ * `MessagePrimitive.If` is marked deprecated in 0.12.25 in favour of an
+ * `<AuiIf>` API that's still settling; keeping the deprecated primitive is
+ * the right tradeoff for now (the rest of the codebase consumes the
+ * `MessagePrimitive.*` namespace consistently).
  */
 function MessageView() {
   return (
-    <MessagePrimitive.Root className="flex w-full max-w-2xl flex-col gap-2 py-3">
-      <MessagePrimitive.Parts components={messagePartComponents} />
-    </MessagePrimitive.Root>
+    <>
+      <MessagePrimitive.If user>
+        <MessagePrimitive.Root
+          data-swoop-part="message"
+          data-swoop-role="user"
+          className="flex w-full max-w-2xl justify-end py-1.5"
+        >
+          <div
+            data-swoop-part="message-bubble"
+            className="max-w-[85%] rounded-2xl rounded-br-md bg-slate-200 px-4 py-2 text-[15px] leading-6 text-slate-900 sm:max-w-[75%]"
+          >
+            <MessagePrimitive.Parts components={messagePartComponents} />
+          </div>
+        </MessagePrimitive.Root>
+      </MessagePrimitive.If>
+      <MessagePrimitive.If assistant>
+        <MessagePrimitive.Root
+          data-swoop-part="message"
+          data-swoop-role="assistant"
+          className="flex w-full max-w-2xl flex-col gap-2 py-3"
+        >
+          <MessagePrimitive.Parts components={messagePartComponents} />
+        </MessagePrimitive.Root>
+      </MessagePrimitive.If>
+    </>
   );
 }
 

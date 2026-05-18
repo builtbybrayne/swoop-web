@@ -28,11 +28,12 @@
 // `product/cms/prompts/tools/lookup/description.md`.
 // =============================================================================
 
-import {
-  LookupOutputSchema,
-  type InformChunkPublic,
-} from "@swoop/common";
+import type { z } from "zod";
+import { LookupOutputSchema } from "@swoop/common";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+
+// Schema-inferred chunk type — see note in find-inspiring.tsx.
+type ParsedChunk = z.infer<typeof LookupOutputSchema>["chunks"][number];
 import {
   renderLifecycleGate,
   safeParse,
@@ -50,17 +51,22 @@ type SourceAffordance = {
   hint: string | null;
 };
 
+const SHELL_CTX = { widgetType: "lookup", toolName: "lookup" } as const;
+
 export function LookupWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
 ) {
   const gate = renderLifecycleGate(
     props as ToolCallLifecycle,
+    SHELL_CTX,
     "Looking that up…",
   );
   if (gate) return gate;
 
-  const parsed = safeParse(LookupOutputSchema, props.result);
-  if (!parsed.ok) return <WidgetMalformedPlaceholder />;
+  const parsed = safeParse(LookupOutputSchema, props.result, SHELL_CTX);
+  if (!parsed.ok) {
+    return <WidgetMalformedPlaceholder {...SHELL_CTX} debug={parsed.debug} />;
+  }
   const { chunks } = parsed.data;
 
   if (chunks.length === 0) return null;
@@ -124,7 +130,7 @@ function SourceLink({ affordance }: { affordance: SourceAffordance }) {
 // (FAQ-style), otherwise null.
 // -----------------------------------------------------------------------------
 
-function pickAffordances(chunks: InformChunkPublic[]): SourceAffordance[] {
+function pickAffordances(chunks: ParsedChunk[]): SourceAffordance[] {
   const seen = new Map<string, SourceAffordance>();
   for (const chunk of chunks) {
     if (!chunk.canonicalUrl) continue;
