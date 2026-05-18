@@ -22,6 +22,7 @@
 
 import { messageOf, type Event } from '@swoop/common';
 
+import { envelope, type EventSink } from './events.js';
 import type { Judge } from './judge.js';
 import type {
   Assertion,
@@ -34,6 +35,16 @@ import type {
   ToolCallAssertion,
   TriageVerdictAssertion,
 } from './scenario.js';
+
+/**
+ * Scenario-level observability (no turnIndex — assertions evaluate after the
+ * conversation completes). Used to emit `assertion.evaluated` per handler and
+ * `judge.invoked` / `judge.responded` around the SonnetJudge call.
+ */
+export interface AssertionObservability {
+  readonly sink: EventSink;
+  readonly scenarioName: string;
+}
 
 // ---------------------------------------------------------------------------
 // Types.
@@ -116,25 +127,45 @@ export async function evaluateAssertion(
   assertion: Assertion,
   context: RunContext,
   judge: Judge,
+  observability?: AssertionObservability,
 ): Promise<AssertionOutcome> {
+  let outcome: AssertionOutcome;
   switch (assertion.kind) {
     case 'contains':
-      return evaluateContains(assertion, context);
+      outcome = evaluateContains(assertion, context);
+      break;
     case 'not_contains':
-      return evaluateNotContains(assertion, context);
+      outcome = evaluateNotContains(assertion, context);
+      break;
     case 'tool_call':
-      return evaluateToolCall(assertion, context);
+      outcome = evaluateToolCall(assertion, context);
+      break;
     case 'triage_verdict':
-      return evaluateTriageVerdict(assertion, context);
+      outcome = evaluateTriageVerdict(assertion, context);
+      break;
     case 'handoff_event':
-      return evaluateHandoffEvent(assertion, context);
+      outcome = evaluateHandoffEvent(assertion, context);
+      break;
     case 'disclosure_event':
-      return evaluateDisclosureEvent(assertion, context);
+      outcome = evaluateDisclosureEvent(assertion, context);
+      break;
     case 'response_format':
-      return evaluateResponseFormat(assertion, context);
+      outcome = evaluateResponseFormat(assertion, context);
+      break;
     case 'judge_rubric':
-      return evaluateJudgeRubric(assertion, context, judge);
+      outcome = await evaluateJudgeRubric(assertion, context, judge, observability);
+      break;
   }
+  if (observability) {
+    observability.sink.emit({
+      kind: 'assertion.evaluated',
+      ...envelope(observability.scenarioName),
+      assertionKind: outcome.kind,
+      passed: outcome.passed,
+      reason: outcome.message,
+    });
+  }
+  return outcome;
 }
 
 /**
@@ -145,10 +176,11 @@ export async function evaluateAll(
   assertions: readonly Assertion[],
   context: RunContext,
   judge: Judge,
+  observability?: AssertionObservability,
 ): Promise<AssertionOutcome[]> {
   const outcomes: AssertionOutcome[] = [];
   for (const a of assertions) {
-    outcomes.push(await evaluateAssertion(a, context, judge));
+    outcomes.push(await evaluateAssertion(a, context, judge, observability));
   }
   return outcomes;
 }
@@ -440,11 +472,37 @@ async function evaluateJudgeRubric(
   a: JudgeRubricAssertion,
   ctx: RunContext,
   judge: Judge,
+  observability?: AssertionObservability,
 ): Promise<AssertionOutcome> {
+  // Model field is informational pre-call — judge implementations decide the
+  // actual model. SonnetJudge falls back to its constructor default when
+  // a.model is undefined; this string surfaces the author's intent.
+  const intendedModel = a.model ?? '(judge-default)';
+  if (observability) {
+    observability.sink.emit({
+      kind: 'judge.invoked',
+      ...envelope(observability.scenarioName),
+      rubric: a.rubric,
+      finalUtterance: ctx.finalUtterance,
+      model: intendedModel,
+    });
+  }
+  const startedAt = Date.now();
   try {
     const verdict = await judge.evaluate(a.rubric, ctx.finalUtterance, {
       model: a.model,
     });
+    const durationMs = Date.now() - startedAt;
+    if (observability) {
+      observability.sink.emit({
+        kind: 'judge.responded',
+        ...envelope(observability.scenarioName),
+        passed: verdict.passed,
+        reasoning: verdict.reasoning,
+        anthropicRaw: verdict.rawResponse ?? null,
+        durationMs,
+      });
+    }
     return {
       kind: 'judge_rubric',
       passed: verdict.passed,
@@ -453,7 +511,18 @@ async function evaluateJudgeRubric(
         : `judge failed: ${verdict.reasoning}`,
     };
   } catch (err) {
+    const durationMs = Date.now() - startedAt;
     const reason = messageOf(err);
+    if (observability) {
+      observability.sink.emit({
+        kind: 'judge.responded',
+        ...envelope(observability.scenarioName),
+        passed: false,
+        reasoning: `judge threw: ${reason}`,
+        anthropicRaw: null,
+        durationMs,
+      });
+    }
     return {
       kind: 'judge_rubric',
       passed: false,

@@ -51,6 +51,7 @@ import {
   NullEventCapture,
   type EventCapture,
 } from './event-capture.js';
+import { envelope, type EventSink, type ObservabilityContext } from './events.js';
 import type { Judge, JudgeVerdict } from './judge.js';
 import type {
   AggregatedResponse,
@@ -101,6 +102,7 @@ export interface UserAgentLike {
   nextMessage(req: {
     transcript: readonly ConversationTurn[];
     latestAgentResponse?: string;
+    observability?: ObservabilityContext;
   }): Promise<string>;
 }
 
@@ -108,6 +110,7 @@ export interface ShouldStopFn {
   (req: {
     transcript: readonly ConversationTurn[];
     latestAgentResponse: string;
+    observability?: ObservabilityContext;
   }): Promise<boolean>;
 }
 
@@ -140,6 +143,15 @@ export interface RunScenarioDeps {
    * `ANTHROPIC_API_KEY` is available.
    */
   readonly agentRuntime?: AgentRuntimeFactory;
+  /**
+   * Optional per-event sink. When supplied, the runner emits every
+   * observable signal (scenario lifecycle + SSE frames + Anthropic calls +
+   * assertions + judge verdicts + errors + timeouts) the instant it
+   * happens, threaded through to each component.
+   *
+   * Per planning/03-exec-h-t8-streaming-fix.md (HITL-ratified 2026-05-18).
+   */
+  readonly sink?: EventSink;
 }
 
 export async function runScenario(
@@ -166,6 +178,8 @@ async function runScriptedScenario(
   const { file } = loaded;
   const now = deps.now ?? (() => Date.now());
   const eventCapture: EventCapture = deps.events ?? new NullEventCapture();
+  const sink = deps.sink;
+  const name = scenario.name;
   const startedAt = now();
 
   const turnResults: TurnResult[] = [];
@@ -174,17 +188,51 @@ async function runScriptedScenario(
   let finalUtterance = '';
   let sessionId = '';
 
+  if (sink) {
+    sink.emit({
+      kind: 'scenario.started',
+      ...envelope(name),
+      file,
+      scenarioShape: 'scripted',
+    });
+  }
+
   try {
     const session = await deps.client.createSession();
     sessionId = session.sessionId;
+    if (sink) {
+      sink.emit({
+        kind: 'session.created',
+        ...envelope(name),
+        sessionId,
+        disclosureCopyVersion: session.disclosureCopyVersion,
+      });
+    }
     await deps.client.grantConsent(sessionId, session.disclosureCopyVersion);
+    if (sink) {
+      sink.emit({
+        kind: 'consent.granted',
+        ...envelope(name),
+        sessionId,
+        copyVersion: session.disclosureCopyVersion,
+      });
+    }
 
     let turnIndex = 0;
     for (const turn of scenario.turns) {
       turnIndex += 1;
+      if (sink) {
+        sink.emit({
+          kind: 'user.message.sent',
+          ...envelope(name, turnIndex),
+          sessionId,
+          message: turn.user,
+        });
+      }
       const aggregated: AggregatedResponse = await deps.client.sendMessage(
         sessionId,
         turn.user,
+        sink ? { sink, scenarioName: name, turnIndex } : undefined,
       );
       perTurnStructure.push(aggregated.structure);
       for (const tc of aggregated.toolCalls) {
@@ -212,9 +260,10 @@ async function runScriptedScenario(
       sessionId,
       eventCapture,
       judge: deps.judge,
+      sink,
     });
   } catch (err) {
-    return erroredResult(scenario, file, startedAt, now, turnResults, err);
+    return erroredResult(scenario, file, startedAt, now, turnResults, err, sink);
   }
 }
 
@@ -230,6 +279,8 @@ async function runAgentScenario(
   const { file } = loaded;
   const now = deps.now ?? (() => Date.now());
   const eventCapture: EventCapture = deps.events ?? new NullEventCapture();
+  const sink = deps.sink;
+  const name = scenario.name;
   const startedAt = now();
 
   const turnResults: TurnResult[] = [];
@@ -237,6 +288,16 @@ async function runAgentScenario(
   const allToolCalls: CapturedToolCall[] = [];
   let finalUtterance = '';
   let sessionId = '';
+
+  if (sink) {
+    sink.emit({
+      kind: 'scenario.started',
+      ...envelope(name),
+      file,
+      scenarioShape: 'agent',
+      userAgentSpec: scenario.userAgent,
+    });
+  }
 
   try {
     if (!deps.agentRuntime) {
@@ -253,7 +314,23 @@ async function runAgentScenario(
 
     const session = await deps.client.createSession();
     sessionId = session.sessionId;
+    if (sink) {
+      sink.emit({
+        kind: 'session.created',
+        ...envelope(name),
+        sessionId,
+        disclosureCopyVersion: session.disclosureCopyVersion,
+      });
+    }
     await deps.client.grantConsent(sessionId, session.disclosureCopyVersion);
+    if (sink) {
+      sink.emit({
+        kind: 'consent.granted',
+        ...envelope(name),
+        sessionId,
+        copyVersion: session.disclosureCopyVersion,
+      });
+    }
 
     const maxTurns = scenario.userAgent.terminationCriteria.maxTurns;
     const transcript: ConversationTurn[] = [];
@@ -261,19 +338,28 @@ async function runAgentScenario(
     let turnIndex = 0;
     while (turnIndex < maxTurns) {
       turnIndex += 1;
-      // Generate the next user message from the user-agent. The user-agent
-      // receives the full transcript so far; `buildMessages` inside the
-      // user-agent role-flips it (visitor lines → assistant role; agent
-      // replies → user role) and naturally terminates on a `user` role line,
-      // so we don't need a separate `latestAgentResponse` trailer here.
+      const obs = sink ? { sink, scenarioName: name, turnIndex } : undefined;
+
+      // Generate the next user message from the user-agent.
       const userMessage = await runtime.userAgent.nextMessage({
         transcript,
+        observability: obs,
       });
+
+      if (sink) {
+        sink.emit({
+          kind: 'user.message.sent',
+          ...envelope(name, turnIndex),
+          sessionId,
+          message: userMessage,
+        });
+      }
 
       // Send to orchestrator + capture aggregated response.
       const aggregated: AggregatedResponse = await deps.client.sendMessage(
         sessionId,
         userMessage,
+        obs,
       );
       perTurnStructure.push(aggregated.structure);
       for (const tc of aggregated.toolCalls) {
@@ -292,12 +378,11 @@ async function runAgentScenario(
       // Hard cap reached? Don't bother asking the stop-judge.
       if (turnIndex >= maxTurns) break;
 
-      // Ask the stop-judge whether to terminate. Pass transcript-minus-last
-      // + latest assistant response so the judge prompt isolates the new
-      // utterance cleanly (matches the `shouldStop` interface).
+      // Ask the stop-judge whether to terminate.
       const stop = await runtime.shouldStop({
         transcript: transcript.slice(0, -1),
         latestAgentResponse: aggregated.utterText,
+        observability: obs,
       });
       if (stop) break;
     }
@@ -314,9 +399,10 @@ async function runAgentScenario(
       sessionId,
       eventCapture,
       judge: deps.judge,
+      sink,
     });
   } catch (err) {
-    return erroredResult(scenario, file, startedAt, now, turnResults, err);
+    return erroredResult(scenario, file, startedAt, now, turnResults, err, sink);
   }
 }
 
@@ -336,6 +422,7 @@ interface FinaliseArgs {
   sessionId: string;
   eventCapture: EventCapture;
   judge: Judge;
+  sink?: EventSink;
 }
 
 async function finaliseResult(args: FinaliseArgs): Promise<ScenarioResult> {
@@ -355,6 +442,7 @@ async function finaliseResult(args: FinaliseArgs): Promise<ScenarioResult> {
     args.scenario.assertions,
     context,
     args.judge,
+    args.sink ? { sink: args.sink, scenarioName: args.scenario.name } : undefined,
   );
 
   let judgeVerdict: JudgeVerdict | null = null;
@@ -370,12 +458,25 @@ async function finaliseResult(args: FinaliseArgs): Promise<ScenarioResult> {
   const status: ScenarioStatus =
     assertionsPassed && judgePassed ? 'passed' : 'failed';
 
+  const durationMs = args.now() - args.startedAt;
+  const summary = `${status.toUpperCase()} ${args.scenario.name} in ${(durationMs / 1000).toFixed(2)}s`;
+
+  if (args.sink) {
+    args.sink.emit({
+      kind: 'scenario.completed',
+      ...envelope(args.scenario.name),
+      status,
+      durationMs,
+      summary,
+    });
+  }
+
   return {
     file: args.file,
     name: args.scenario.name,
     description: args.scenario.description,
     status,
-    durationMs: args.now() - args.startedAt,
+    durationMs,
     turns: args.turnResults,
     assertions,
     judge: judgeVerdict,
@@ -389,17 +490,36 @@ function erroredResult(
   now: () => number,
   turnResults: readonly TurnResult[],
   err: unknown,
+  sink?: EventSink,
 ): ScenarioResult {
+  const durationMs = now() - startedAt;
+  const message = messageOf(err);
+  if (sink) {
+    sink.emit({
+      kind: 'error',
+      ...envelope(scenario.name),
+      message,
+      stack: err instanceof Error ? err.stack : undefined,
+      phase: 'runScenario',
+    });
+    sink.emit({
+      kind: 'scenario.completed',
+      ...envelope(scenario.name),
+      status: 'errored',
+      durationMs,
+      summary: `ERROR ${scenario.name} in ${(durationMs / 1000).toFixed(2)}s (${message})`,
+    });
+  }
   return {
     file,
     name: scenario.name,
     description: scenario.description,
     status: 'errored',
-    durationMs: now() - startedAt,
+    durationMs,
     turns: turnResults,
     assertions: [],
     judge: null,
-    error: messageOf(err),
+    error: message,
   };
 }
 

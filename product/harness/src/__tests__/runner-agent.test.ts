@@ -268,7 +268,8 @@ describe('runScenario — scripted dispatch (sanity)', () => {
       agentRuntime: factory, // supplied but should not be touched
     });
     expect(result.status).toBe('passed');
-    expect(client.sendMessage).toHaveBeenCalledWith('sess_test', 'hi');
+    // Third arg is the optional ObservabilityContext; undefined when no sink is wired.
+    expect(client.sendMessage).toHaveBeenCalledWith('sess_test', 'hi', undefined);
     expect(userAgent.nextMessage).not.toHaveBeenCalled();
   });
 });
