@@ -6,6 +6,36 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-18 — Harness now streams every observable event to per-scenario JSONL the instant it happens
+
+A 37-scenario validator run was killed at scenario 28 (~22 min in). Zero transcripts were recoverable because the CLI wrote `results.md` + `results.json` only at end-of-loop — all 28 completed scenarios + the in-flight scenario sat in memory and died with the process. *"Shockingly poor design"*, correctly. The fix lands in [03-exec-h-t8-streaming-fix.md](planning/03-exec-h-t8-streaming-fix.md) (HITL-ratified 2026-05-18) across 6 commits on the harness:
+
+- `events.ts` — 16-kind discriminated union covering every observable signal (scenario lifecycle, SSE frames, Anthropic API calls, assertions, judge verdicts, errors, timeouts) + `FileEventSink` that `appendFileSync`s one JSON line per emit. Sync writes are OS-page-cache-durable: events up to a process kill are on disk before the kill returns; only OS panic / power failure can lose anything.
+- `OrchestratorClient`, `UserAgent`, `shouldStop`, `evaluateAll`, `runScenario` all take an optional `ObservabilityContext` and emit lifecycle events through it.
+- `cli.ts` constructs a `FileEventSink` per scenario at `runs/<dir>/scenarios/<name>.jsonl` + writes the per-scenario JSON summary + rewrites the run-level rollup *after each scenario completes*, not at end of loop.
+
+Resulting directory shape per run:
+
+```
+runs/<report-dir>/
+├── results.md                       ← rolling rollup; updated after each scenario
+├── results.json                     ← same
+└── scenarios/
+    ├── greeting.jsonl               ← APPENDED per event in real-time
+    ├── greeting.json                ← structured summary; written on completion
+    ├── …
+```
+
+Killed-run guarantee verified live 2026-05-18: a deliberately mid-aborted browser-low-investment run left 24 events of mid-turn-2 detail on disk (full turn-1 transcript + 14 SSE frames + user-agent calls + turn-2 start), no `.json` summary, no rollup writes. Inspectable via `cat … .jsonl | jq .`.
+
+**Pattern to remember**: when a process can be killed in the middle of doing valuable work, every observable signal needs to land on disk synchronously the instant it's produced. End-of-loop / end-of-function writes are an antipattern for any long-running observable workflow. The pre-fix harness's design seemed reasonable in isolation; the cost of the antipattern only became visible when a 28-scenario run cost ~$2 + 22 minutes and surfaced zero diagnostically-useful artefact. *Default to per-event streaming for any pipeline that takes more than a few seconds end-to-end.*
+
+The streaming behaviour is opt-in at every level (sink is optional in every component's constructor / request shape) so existing test suites + non-streaming callers stay unchanged. Backward-compatible by construction.
+
+Watch a run in flight: `tail -f product/harness/runs/<dir>/scenarios/<name>.jsonl | jq .`
+
+---
+
 ## 2026-05-18 — ADK skills: `loadAllSkillsInDir` exists; SKILL.md frontmatter rejects unquoted `: ` mid-string
 
 Two findings from B.t9 ([03-exec-agent-runtime-t9.md — B.t9 ADK skill-loader integration](planning/03-exec-agent-runtime-t9.md), live-smoke 2026-05-18):
