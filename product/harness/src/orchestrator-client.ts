@@ -22,7 +22,25 @@
 
 import { messageOf, parseSseFrames } from '@swoop/common';
 
+import { envelope, type EventSink } from './events.js';
+
 const DEFAULT_BASE_URL = 'http://localhost:8080';
+const DEFAULT_TURN_TIMEOUT_MS = 180_000;
+
+/**
+ * Per-call observability threading. The harness's per-scenario FileEventSink
+ * is injected here so the OrchestratorClient can emit `agent.sse.frame` per
+ * frame as the SSE stream arrives, `agent.response.aggregated` when the
+ * turn closes, and `timeout` if the turn aborts.
+ *
+ * Optional — callers that don't care (default) pass `undefined` and no
+ * events flow.
+ */
+export interface ObservabilityContext {
+  readonly sink: EventSink;
+  readonly scenarioName: string;
+  readonly turnIndex: number;
+}
 
 export interface OrchestratorSession {
   readonly sessionId: string;
@@ -75,7 +93,11 @@ export interface RawToolCall {
 
 export interface OrchestratorClientOptions {
   readonly baseUrl?: string;
-  /** Turn timeout in ms. Puma turns take 3–10s; 60s leaves margin. */
+  /**
+   * Turn timeout in ms. Puma turns are typically 3–10s but agent-as-user
+   * scenarios with long Dreamer turns occasionally hit 30–60s; 180s leaves
+   * comfortable headroom. Configurable via the CLI's `--turn-timeout-ms` flag.
+   */
   readonly turnTimeoutMs?: number;
 }
 
@@ -85,7 +107,7 @@ export class OrchestratorClient {
 
   constructor(opts: OrchestratorClientOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
-    this.turnTimeoutMs = opts.turnTimeoutMs ?? 60_000;
+    this.turnTimeoutMs = opts.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
   }
 
   async createSession(): Promise<OrchestratorSession> {
@@ -139,9 +161,15 @@ export class OrchestratorClient {
   async sendMessage(
     sessionId: string,
     message: string,
+    observability?: ObservabilityContext,
   ): Promise<AggregatedResponse> {
+    const startedAt = Date.now();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.turnTimeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.turnTimeoutMs);
 
     let res: Response;
     try {
@@ -157,6 +185,14 @@ export class OrchestratorClient {
     } catch (err) {
       clearTimeout(timer);
       const reason = messageOf(err);
+      if (timedOut && observability) {
+        observability.sink.emit({
+          kind: 'timeout',
+          ...envelope(observability.scenarioName, observability.turnIndex),
+          phase: 'turn-fetch',
+          timeoutMs: this.turnTimeoutMs,
+        });
+      }
       throw new Error(`POST /chat fetch failed: ${reason}`);
     }
 
@@ -168,7 +204,19 @@ export class OrchestratorClient {
     }
 
     try {
-      return await consumeSseStream(res.body);
+      return await consumeSseStream(res.body, observability, startedAt);
+    } catch (err) {
+      // If the abort fired during stream consumption, the parser throws.
+      // Emit a timeout event before re-throwing so the JSONL captures it.
+      if (timedOut && observability) {
+        observability.sink.emit({
+          kind: 'timeout',
+          ...envelope(observability.scenarioName, observability.turnIndex),
+          phase: 'turn-stream',
+          timeoutMs: this.turnTimeoutMs,
+        });
+      }
+      throw err;
     } finally {
       clearTimeout(timer);
     }
@@ -189,6 +237,8 @@ export class OrchestratorClient {
 
 async function consumeSseStream(
   body: ReadableStream<Uint8Array>,
+  observability: ObservabilityContext | undefined,
+  startedAt: number,
 ): Promise<AggregatedResponse> {
   let utterText = '';
   let utterPartCount = 0;
@@ -198,10 +248,72 @@ async function consumeSseStream(
   const rawParts: unknown[] = [];
   let errored: string | null = null;
 
+  function emitAggregated(abortReason?: string): void {
+    if (!observability) return;
+    observability.sink.emit({
+      kind: 'agent.response.aggregated',
+      ...envelope(observability.scenarioName, observability.turnIndex),
+      utterText,
+      toolCalls: toolCalls.map((tc) => ({
+        toolName: tc.toolName,
+        input: tc.input,
+      })),
+      structure: {
+        utterPartCount,
+        fyiPartCount,
+        reasoningPartCount,
+        toolCallCount: toolCalls.length,
+      },
+      durationMs: Date.now() - startedAt,
+      ...(abortReason !== undefined ? { abortReason } : {}),
+    });
+  }
+
   for await (const frame of parseSseFrames(body)) {
+    // Per-frame emit — verbatim raw plus parsed convenience fields.
+    if (observability) {
+      const conv: {
+        partType?: string;
+        text?: string;
+        toolName?: string;
+        toolInput?: unknown;
+        fyiData?: unknown;
+      } = {};
+      if (frame.event === null && frame.data.length > 0) {
+        try {
+          const part = JSON.parse(frame.data) as {
+            type?: unknown;
+            text?: unknown;
+            toolName?: unknown;
+            input?: unknown;
+          };
+          if (typeof part?.type === 'string') {
+            conv.partType = part.type;
+            if (part.type === 'text' && typeof part.text === 'string') {
+              conv.text = part.text;
+            } else if (part.type === 'tool-call') {
+              if (typeof part.toolName === 'string') conv.toolName = part.toolName;
+              conv.toolInput = part.input;
+            } else if (part.type === 'data-fyi') {
+              conv.fyiData = part;
+            }
+          }
+        } catch {
+          // Malformed; skip convenience fields. Raw still flows.
+        }
+      }
+      observability.sink.emit({
+        kind: 'agent.sse.frame',
+        ...envelope(observability.scenarioName, observability.turnIndex),
+        frameEvent: frame.event,
+        frameData: frame.data,
+        ...conv,
+      });
+    }
+
     if (frame.event === 'done') {
       // Clean end of turn.
-      return {
+      const result: AggregatedResponse = {
         utterText,
         toolCalls,
         structure: {
@@ -212,6 +324,8 @@ async function consumeSseStream(
         },
         rawParts,
       };
+      emitAggregated();
+      return result;
     }
     if (frame.event === 'error') {
       errored = frame.data;
@@ -258,10 +372,12 @@ async function consumeSseStream(
   }
 
   if (errored) {
+    emitAggregated(`sse-error-frame: ${errored}`);
     throw new Error(`SSE error frame from /chat: ${errored}`);
   }
 
   // Stream ended without an explicit `done` event — return what we have.
+  emitAggregated('stream-ended-without-done');
   return {
     utterText,
     toolCalls,
