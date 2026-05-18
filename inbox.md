@@ -6,6 +6,23 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-05-18 — Analytics on now-hidden widget-malformed failures
+
+Nice-knuth wave dev/prod-gated `WidgetMalformedPlaceholder` so production renders nothing instead of the amber "Couldn't load that" card. Schema-parse failures now fire a structured `console.warn` from `safeParse` (toolName + widgetType + Zod issues — captured by Cloud Run stdout) and a `ui.widget_rendered` event whose `widgetType` field carries a `:malformed:schema` or `:malformed:lifecycle` suffix (e.g. `find-options:malformed:schema`). That's the only post-launch signal — no dashboard, no aggregation, no alert.
+
+What we want before launch (or shortly after — depends on chunk F appetite):
+- **Counts** of malformed renders broken down by `(widgetType, toolName, failure-kind)`, bucketed by day/hour. Daily-trended in whatever F lands as the analytics surface (Julie/Thomas analytics-platform question still open).
+- **Alert / threshold** so a deploy that breaks a schema doesn't go unnoticed. Rough heuristic: malformed-render-rate > 0.5% of widget renders for a given toolName.
+- **Rolling debug-capture** — small ring buffer of recent failures (raw candidate truncated + PII-screened, Zod issues, request id) so post-incident diagnosis doesn't need a repro.
+
+Implementation notes:
+- The suffix-on-existing-eventType pattern (`<widget>:malformed:<kind>`) was deliberate — sidesteps the `@swoop/common/events.ts` schema change while parallel worktrees are evolving wire shape. Once those settle, a discrete `ui.widget_malformed` event kind would be cleaner downstream and probably worth promoting.
+- The `safeParse` call site already has the full debug payload (`{ widgetType, toolName, issues, rawCandidate }`) — extending the emit to carry it is a small additive change once the event kind is settled.
+
+Why it matters: prod gate is silent-by-design (right UX call — agent prose covers for the visitor), but silent also means schema drift is invisible until a user complains. Cloud Run stdout has the warns but nobody watches it day-to-day.
+
+Lands in: chunk F (observability) when its event schema work touches `@swoop/common/events.ts`. Low urgency until post-M1 real traffic; high value once we're shipping changes against live data.
+
 ## 2026-05-14 — Handoff form: free-text "Anything else?" textarea
 
 Add a free-text textarea to the handoff form, prompted along the lines of *"Anything else you'd like the specialist to know?"* Content captured in the visitor's own words. Surfaces to the specialist alongside the agent's structured summary (in the handoff email and payload).

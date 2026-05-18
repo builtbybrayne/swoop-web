@@ -6,6 +6,24 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-18 — ADK skills: `loadAllSkillsInDir` exists; SKILL.md frontmatter rejects unquoted `: ` mid-string
+
+Two findings from B.t9 ([03-exec-agent-runtime-t9.md — B.t9 ADK skill-loader integration](planning/03-exec-agent-runtime-t9.md), live-smoke 2026-05-18):
+
+**1. The installed `@google/adk` exports both `loadAllSkillsInDir(path) → Promise<Record<string, Skill>>` and `loadSkillFromDir(path) → Promise<Skill>`.** The B.t9 plan's "★ Read this first" section claimed the bulk loader was missing and the codebase docs were stale — wrong. Both exist. CMS README + `config/schema.ts:111` + the `loadAllToolDescriptions` analogue all correctly reference the bulk loader. The B.t9 wrapper at [product/orchestrator/src/agent/skill-loader.ts](product/orchestrator/src/agent/skill-loader.ts) delegates to it and adds a fail-fast directory check + lexicographic sort.
+
+**2. ADK rejects SKILL.md frontmatter that contains an unquoted colon-space (`: `) inside the `description:` scalar.** ADK's loader uses js-yaml in default (non-permissive) mode; an unquoted scalar with embedded `: ` parses as a nested mapping ("bad indentation of a mapping entry" at the colon's column). Caught two of our 14 skills:
+- `arrived-with-ai-itinerary` — "enhancement-not-competition: the AI got…"
+- `pattern-w-vs-o-wrestler` — "binary decision-paralysis: not 'what trip…'"
+
+ADK's posture is **silently skip + log a WARN** rather than fail boot — so without a deterministic `loaded N skills` boot-log gate, this kind of authoring regression is easy to miss. The B.t9 boot log fixes that.
+
+**Authoring rule for `prompts/skills/<name>/SKILL.md`**: if a `description:` contains a colon-space, em-dash + colon, or any character js-yaml would interpret structurally (`:` `#` `&` `*` `!` `|` `>` `'` `"` `%` `@` `\``), wrap the value in single quotes (escape internal single quotes as `''`). Em-dashes and Unicode quotes don't need escaping. The other 12 skills' descriptions parse fine because none contain colon-space.
+
+The CMS README at [product/cms/README.md](product/cms/README.md) should grow an "Authoring rule: quote descriptions that contain `: `" callout. Worth doing before more skills land.
+
+---
+
 ## 2026-05-18 — Schema drift between authoring surface and canonical contract is a recurring trap; propagate enum widenings explicitly
 
 The H.t1 harness scaffold ([planning/03-exec-validation-scaffold.md — H.t1](planning/03-exec-validation-scaffold.md)) shipped a local `VerdictSchema = z.enum(['qualified', 'referred_out', 'disqualified'])` in [product/harness/src/scenario.ts](product/harness/src/scenario.ts). At the time that matched chunk-E's verdict enum. Months later, [E.t1 — Handoff schema wire-tightening](planning/03-exec-e-t1-wire-tightening.md) widened the canonical `@swoop/common` verdict enum to add `inconclusive` (4 verdicts total), and the [handoff/description.md tool description](product/cms/prompts/tools/handoff/description.md) was updated with the full per-verdict reasonCode catalogue (21 combinations).
@@ -616,7 +634,7 @@ Resolved by giving `cms/prompts/` a deliberate sub-structure (`system/`, `skills
 - Files outside the pattern (drafts, `README.md`, sub-dirs) are silently skipped.
 - No metadata layer, no manifest, no interpolation. Anyone can `cat cms/prompts/system/*.md` and see what the agent sees.
 
-Skills use ADK 1.0's native `loadAllSkillsInDir` (one folder per skill, `SKILL.md` + frontmatter). Tools fragments are read explicitly by tool code from `tools/<tool-name>/`.
+Skills use ADK 1.0's native `loadAllSkillsInDir` (one folder per skill, `SKILL.md` + frontmatter). Tools fragments are read explicitly by tool code from `tools/<tool-name>/`. The skill-loader wiring lives at [product/orchestrator/src/agent/skill-loader.ts](product/orchestrator/src/agent/skill-loader.ts) (B.t9, 2026-05-18); it wraps `loadAllSkillsInDir` with a fail-fast directory check and lexicographic sort for deterministic boot logs.
 
 The two-layer voice control from G.10 now actually works: positive examples in `00_why.md` + avoidance list in `10_style-avoid.md` are both auto-loaded; neither file needs to reference the other; both iterate independently. Decision **G.11** + Tier 3 plan in `planning/03-exec-agent-runtime-t1a.md`.
 

@@ -25,18 +25,29 @@ type IllustrateImage = {
   moodTags?: string[];
 };
 
+const SHELL_CTX = {
+  widgetType: "inspiration",
+  toolName: "illustrate",
+} as const;
+
 export function InspirationWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
 ) {
-  const gate = renderLifecycleGate(props as ToolCallLifecycle, "Gathering imagery…");
+  const gate = renderLifecycleGate(
+    props as ToolCallLifecycle,
+    SHELL_CTX,
+    "Gathering imagery…",
+  );
   if (gate) return gate;
 
   // Validate the outer envelope against the shared schema (ensures the
   // contract in @swoop/common is the source of truth), and re-parse each
   // image with a loosened schema so connector-supplied enrichment fields
   // (moodTags) survive Zod's default strip.
-  const outer = safeParse(IllustrateOutputSchema, props.result);
-  if (!outer.ok) return <WidgetMalformedPlaceholder />;
+  const outer = safeParse(IllustrateOutputSchema, props.result, SHELL_CTX);
+  if (!outer.ok) {
+    return <WidgetMalformedPlaceholder {...SHELL_CTX} debug={outer.debug} />;
+  }
 
   const EnrichedImageSchema = z.object({
     id: z.string(),

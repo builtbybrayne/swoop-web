@@ -63,6 +63,11 @@ const CONSENT_COPY_VERSION = "consent-handoff/v1";
 
 type Step = "summary" | "form";
 
+const SHELL_CTX = {
+  widgetType: "lead-capture",
+  toolName: "handoff",
+} as const;
+
 export function LeadCaptureWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
 ) {
@@ -70,7 +75,7 @@ export function LeadCaptureWidget(
   // (assistant-ui has invoked handoff) so args are populated; if somehow
   // malformed, fall back to the placeholder.
   const argsParsed = useMemo(
-    () => safeParse(HandoffInputSchema, props.args),
+    () => safeParse(HandoffInputSchema, props.args, SHELL_CTX),
     [props.args],
   );
 
@@ -89,13 +94,21 @@ export function LeadCaptureWidget(
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  if (!argsParsed.ok) return <WidgetMalformedPlaceholder />;
+  if (!argsParsed.ok) {
+    return (
+      <WidgetMalformedPlaceholder {...SHELL_CTX} debug={argsParsed.debug} />
+    );
+  }
   const args = argsParsed.data;
 
   // Result-driven states. After a successful POST we mark `submitted`;
   // assistant-ui re-renders with `props.result` populated by addResult.
   if (submitted) {
-    const resultParsed = safeParse(HandoffSubmitOutputSchema, props.result);
+    const resultParsed = safeParse(
+      HandoffSubmitOutputSchema,
+      props.result,
+      SHELL_CTX,
+    );
     if (resultParsed.ok && resultParsed.data.status === "accepted") {
       return (
         <div
@@ -114,7 +127,10 @@ export function LeadCaptureWidget(
       );
     }
     if (resultParsed.ok && resultParsed.data.status === "rejected") {
-      return <WidgetMalformedPlaceholder />;
+      // Server-side rejection: not a parse failure but the rest of the
+      // confirmation surface can't render. Treat as a lifecycle-style
+      // malformed signal (no schema-issues payload to surface).
+      return <WidgetMalformedPlaceholder {...SHELL_CTX} lifecycleFailure />;
     }
     // result not yet available → pending state
     return (
@@ -222,7 +238,16 @@ export function LeadCaptureWidget(
       },
     };
 
-    const response = await postHandoffSubmit(reqBody);
+    // `reqBody.verdict` carries the union literal from `args.verdict`, not a
+    // narrowed variant. The widget only renders the contact-form path for
+    // qualified / referred_out verdicts (the others don't surface the
+    // lead-capture widget in normal operation), so the assembled body matches
+    // one of those two variants at runtime. The orchestrator runs Zod
+    // validation at the route boundary regardless. Cast to satisfy the
+    // distributive-Omit parameter type without restructuring the assembly.
+    const response = await postHandoffSubmit(
+      reqBody as Parameters<typeof postHandoffSubmit>[0],
+    );
 
     setSubmitting(false);
 
