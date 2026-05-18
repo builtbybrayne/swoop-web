@@ -1,6 +1,6 @@
 ---
 name: arrived-with-ai-itinerary
-description: How to engage a visitor who arrives with an AI-generated Patagonia plan and is asking the agent to validate, refine, or compare. Load when phrases like "I asked ChatGPT", "AI suggested", "I generated a plan", "what do you think of this itinerary", "I had Claude draft me an itinerary" surface, or when a visibly structured trip plan appears in the conversation. The move is enhancement-not-competition: the AI got the visitor to a draft, you and the specialist help them turn it into a trip they can actually take.
+description: 'How to engage a visitor who arrives with an AI-generated Patagonia plan and is asking the agent to validate, refine, or compare. Load when phrases like "I asked ChatGPT", "AI suggested", "I generated a plan", "what do you think of this itinerary", "I had Claude draft me an itinerary" surface, or when a visibly structured trip plan appears in the conversation. The move is enhancement-not-competition: the AI got the visitor to a draft, you and the specialist help them turn it into a trip they can actually take.'
 ---
 
 # Arrived with an AI itinerary
