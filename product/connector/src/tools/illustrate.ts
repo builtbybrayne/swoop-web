@@ -28,10 +28,13 @@ export async function illustrateBody(
   deps: ToolHandlerDeps,
 ): Promise<IllustrateOutput> {
   const limit = input.count ?? DEFAULT_COUNT;
-  // Embed the joined keywords as a single search vector.
+  // Embed the joined keywords as a single search vector. Per the 2026-05-18
+  // `findImagesByKeywords` simplification, ranking is cosine ANN on the
+  // annotation embedding only — the input keywords flow through the embedding
+  // path; tag-array overlap no longer gates results.
   const embedding = await deps.embedQuery(input.keywords.join(' '));
   const images = await deps.withClient((client) =>
-    findImagesByKeywords(client, embedding, input.keywords, {
+    findImagesByKeywords(client, embedding, {
       regionSlug: input.regionSlug,
       limit,
     }),

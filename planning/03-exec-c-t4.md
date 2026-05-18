@@ -439,3 +439,80 @@ Open questions resolved per Al's HITL session 2026-05-01. Status flipped from DR
 
 - **H1 + H2 cross-cut helpers should land FIRST in this agent's commits.** Pair with the chunk-C work as documented in next-steps.md. The new tool handlers' error envelopes will use `messageOf()` and `emitErrorRaised()` from day one. See `planning/03-exec-crosscut-common-helpers-fix.md` §H1 + §H2 for the helper specs.
 - Q3's "fail-fast on ALL 8" supersedes the agent's recommendation that the 3 utilities (`illustrate` / `handoff` / `handoff_submit`) degrade gracefully on description-load failure. Reason: development-time visibility. If a utility's description goes missing, we want a hard failure at boot.
+
+---
+
+## 2026-05-18 — `illustrate` tag-gate removal (HITL with Al)
+
+### Symptom
+
+Live chat: agent calls `illustrate` (e.g. `keywords: ["patagonia", "mountains", "glaciers", "torres del paine", "hiking"]`, `count: 6`), tool returns `ok: true, value: { images: [] }`, agent yields to the empty-state silence. Two retries, both empty. Dev trace screenshot in the conversation log.
+
+### Diagnosis (two compounding causes — see also [discoveries.md 2026-05-18](../discoveries.md))
+
+1. **Vision pipeline never wrote the four tag arrays.** [product/ingestion/src/images/vision-client.ts:117-120](../product/ingestion/src/images/vision-client.ts) (authored 2026-05-02, commit `a1592f2`) injects a user-message reminder: *"Return ONLY a JSON object with `description` and `annotation` keys, no preamble."* The same-day fold (decision **C.40 — Vision call produces 6 outputs in one call**) bumped the *system* prompt to v2 (six outputs) and updated `output-schema.ts` + `write-back.ts`; this in-message reminder was missed. The Zod schema's `.default([])` on the four tag arrays parses prose-only model output as valid. `puma_dev` confirms: all 5,325 annotated rows have `subject_tags` / `mood_tags` / `region_tags` / `tags` as `{}` (empty arrays, not NULL).
+
+2. **`findImagesByKeywords` AND-gated cosine ANN behind exact-string tag overlap.** The pre-fix SQL: `WHERE embedding IS NOT NULL AND (subject_tags && $2 OR mood_tags && $2 OR region_tags && $2 OR tags && $2)`. With every tag array empty in the corpus, the AND clause was always false → zero rows regardless of embedding rank. Even with the corpus tags populated, the gate would still be brittle: visitor keywords (`"torres del paine"`, `"glaciers"`, `"mountains"`) don't overlap tag vocabulary verbatim (`torres-del-paine`, `glacier`, `granite`/`peak`).
+
+### Architectural reframe (HITL with Al, 2026-05-18)
+
+The tag arrays were librarian-shaped against a prose substrate. The agent doesn't know the (model-invented) tag vocabulary, can't fuzzy-match against it, and the values themselves aren't embedded — only `ntag` (Swoop's canonical typed-tag taxonomy) carries embeddings, and only `region_tags` was authored to align with `ntag` slugs. Three of the four arrays have no semantic route from agent utterance to image.
+
+The `annotation` column — 1–2 sentences of literal, keyword-rich scene description authored for retrieval — *is* embedded (`image.embedding`, 6,118 rows populated). Cosine ANN over that substrate carries the load. Smushing structured intent into a single embedding is acceptable for the agent's simplest mode; richer axis-aware intent expression is a future v2 concern.
+
+**Decision (this addendum)**: drop the tag-overlap AND-gate. Rank `illustrate` results on cosine ANN against `image.embedding` only. Retain `regionSlug` as an optional hard filter on `region_tags @> ARRAY[$slug]` — no-op today (column empty), lights up automatically when a future re-annotation pass populates `region_tags`. No re-annotation required to ship.
+
+**Future (parked in [inbox.md 2026-05-18](../inbox.md))**: per-facet image embeddings — one image → N vectors, one per facet (mood / content / region / activity). Tool surface evolves to let the agent express axis-specific intent. That's the design the tag arrays were reaching for. Decision: don't re-run image annotation now; see how good single-embedding cosine ANN gets first; revisit if quality is meh.
+
+### Decisions logged
+
+- **C.illustrate-tag-gate-1** (numeric id TBD at merge): `findImagesByKeywords` ranks on cosine ANN against `image.embedding` only; tag-array overlap removed as a hard gate. Forward-compatible with the v2 facet-aware design.
+- **C.illustrate-tag-gate-2** (numeric id TBD at merge): `regionSlug` retained as an optional hard filter on `region_tags @> [$slug]`. Today a no-op (column empty across the corpus); preserved for the future re-annotation lighting it up automatically.
+- **C.illustrate-tag-gate-3** (numeric id TBD at merge): re-annotation of the 5,325 already-annotated images is **deferred**, not actioned in this fix. The `vision-client.ts:117-120` reminder bug is the root cause of empty tag arrays; left in place pending the v2 facet decision. If v2 lands and goes facet-aware, the prompt + reminder both want a refactor; fix-then-re-annotate is wasted work if the schema is about to change.
+
+### Files changed
+
+- `product/connector/src/data/find-images-by-keywords.ts` — top doc-comment rewritten (the prior "Hybrid: cosine ANN UNION array overlap" framing was load-bearing-incorrect). Dropped the `keywords: ReadonlyArray<string>` parameter (unused now that the OR-block is gone). Dropped the `(subject_tags && OR …)` block from the WHERE clause. Kept `embedding IS NOT NULL` gate and `region_tags @> ARRAY[$slug]` optional filter.
+- `product/connector/src/tools/illustrate.ts` — caller updated to drop the now-removed `keywords` argument from the `findImagesByKeywords` call. The tool's public `IllustrateInput` shape (`keywords[]` + `regionSlug?` + `count?`) is **unchanged** — minimum blast radius; no agent-facing tool-description rewrite required.
+- `product/connector/src/data/__tests__/find-images-by-keywords.test.ts` **(new)** — unit tests for SQL shape (cosine ANN, no tag-overlap, optional regionSlug clause) + row-parse + null-caption branch. Plus DB-gated integration tests (`DATABASE_URL + GEMINI_API_KEY`) that embed real visitor queries via `buildEmbedQuery` and assert non-empty rows against `puma_dev`.
+
+### Verification
+
+- New unit tests; pre-existing tests unaffected (the test file is new).
+- DB-gated integration test asserts `findImagesByKeywords` returns non-empty results for the screenshot's exact query (`patagonia mountains glaciers torres del paine hiking`) against live `puma_dev`. Logs the rows for operator inspection of relevance quality.
+- Live-smoke result captured below at execution time.
+
+### Live smoke (captured 2026-05-18)
+
+Run against `puma_dev` with `GEMINI_API_KEY` sourced from `product/connector/.env`.
+
+**Query 1**: `keywords = ["patagonia", "mountains", "glaciers", "torres del paine", "hiking"]`, `limit = 6` (the screenshot scenario from the conversation log).
+
+Result: 6 / 6 images returned. All Torres del Paine. All hiking-themed. Captions track tightly with the query intent.
+
+```
+id    | caption                                                    | url-tail
+------+------------------------------------------------------------+--------------------------------------------------------
+ 9097 | Hiking in Torres del Paine, Patagonia, Chile               | EXPL_4_EXPL_RTD_Hiking-in-Torres-del-Paine.jpg
+  963 | Hiking in Patagonia, Torres del Paine, Chile, Patagonia    | Explora_Trekking.jpg
+  738 | Hiking in Patagonia, Torres del Paine, Chile, Patagonia    | Explora_Excursions_4.jpg
+10493 | Hiking on Mt Paine, Torres del Paine, Patagonia, Chile     | SWO_4_DAVID_ALL_Mt-Paine-horse-ride-and-hike.jpg
+ 9804 | Hiking on Mt Paine, Torres del Paine, Patagonia, Chile     | HOTELLASTORRES_4_HLT_RTD_Mt-Paine-horseride-and-trek.jpg
+ 8711 | On a hike in Torres del Paine, Patagonia, Chile            | CN_4_CN_RTD_Zapata-River-Hike.jpg
+```
+
+Latency: 563ms (Gemini embed + Postgres ANN combined). Sits inside `illustrate`'s 562ms-observed envelope from the screenshot (which had returned 0 rows). Cosine substrate alone is doing real journey-relevant work.
+
+**Query 2**: `keywords = ["granite tower at golden hour"]`, `regionSlug = "torres-del-paine"`, `limit = 4`.
+
+Result: 0 rows — exactly as expected (`region_tags` is empty across the corpus per the 2026-05-18 diagnosis; the optional hard filter excludes every row until a future re-annotation populates the column). The filter wired correctly, didn't error, and is forward-compatible.
+
+**Coverage characterisation note**: the upstream `description` column (where pre-populated by Swoop's upstream curation, ~47.5% of the catalogue per the C.t6 plan) is what `image.embedding` was derived from for the 793 images that have an embedding but no `annotation` from C.t6. Those rows participate in cosine ANN today — they're not blocked on the C.t6 annotation pass. The 6,118 total = 5,325 (C.t6 annotations) + 793 (upstream descriptions). The "still has neither" tail (~6.9K) is the population a future C.t6 re-run would extend coverage over.
+
+**Cost of the smoke**: 2 Gemini embedding calls + 2 Postgres ANN queries. Sub-cent.
+
+### Surfaces for downstream
+
+- **Quality monitoring**: `ui.widget_rendered{widgetType: 'inspiration', toolName: 'illustrate', outputCount: N}` already exists per F-a wiring. Post-launch, watch the distribution of `outputCount` per `illustrate` call — if many calls still return 0 results, the cosine substrate is the bottleneck and the facet-aware v2 becomes urgent.
+- **Agent empty-state silence**: the brave-pare wave (2026-05-13) still applies — when `illustrate` returns 0, the widget renders nothing and the agent's prose carries the moment. No agent-prompt change needed for this fix.
+- **C.t6 prompt + reminder**: when a future v2 effort touches the image annotation pipeline, the [vision-client.ts:117-120](../product/ingestion/src/images/vision-client.ts) reminder string is the first thing to fix. The system prompt + Zod schema + write-back SQL are already aligned to six outputs; only the reminder lags.

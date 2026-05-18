@@ -6,6 +6,24 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-05-18 — Multi-facet image embeddings (the v2 illustrate shape)
+
+Future shape for `illustrate`. Today: one `image.embedding` per row, derived from the `annotation` prose. Tomorrow (when retrieval quality from the single-embedding cosine ANN proves insufficient): **one image → multiple embeddings, one per facet**, each indexed independently.
+
+Candidate facet decomposition (mirrors the tag-bucket intuition that the 2026-05-18 tag-gate removal closed for now):
+- **Content embedding** — what's literally in the picture (the current `annotation`, possibly tightened to just-the-subjects).
+- **Mood embedding** — aesthetic register, embedded from a mood-focused prose pass.
+- **Region embedding** — geographic anchor, possibly tied through to `ntag` slugs so a visitor utterance can fuzzy-match the canonical region taxonomy.
+- **Activity embedding** — what's *happening* in the image (hiking / kayaking / dining / wildlife-watching).
+
+Tool surface evolution: `IllustrateInput` becomes axis-aware — `{ contentIntent?: string, moodIntent?: string, regionIntent?: string, activityIntent?: string, count? }`. Each field is natural-language (the agent never sees a vocabulary); each routes to its own facet ANN; results combine (RRF or simple union with per-axis diversity).
+
+Why parked: requires re-running image annotation (cost: ~$26 batches for the full corpus per BATCH-C.t6 estimates, or splitting into 4 model passes — could be done in one call returning a structured 4-facet output). The 2026-05-18 single-embedding fix is shipping first to characterise how good the existing substrate gets without rework. If quality turns out fine for the journey moments the agent actually reaches `illustrate` for, this stays parked; if many calls still return 0 or visually-off results, this becomes urgent.
+
+Lands in: a future Tier-3 chunk-C task (call it `C.illustrate-v2` or similar). Touches `product/ingestion/src/images/` (prompt + schema + write-back), `product/connector/src/data/find-images-by-keywords.ts` (axis dispatch), `@swoop/common` (new `IllustrateInputSchema` shape), `product/cms/prompts/tools/illustrate/description.md` (agent-facing instruction on the axes), the image table (4 embedding columns + 4 HNSW indexes — possibly a separate `image_facet_embedding` table to keep the main row narrow).
+
+Reference: [planning/03-exec-c-t4.md — 2026-05-18 illustrate tag-gate removal addendum](planning/03-exec-c-t4.md) for the diagnosis that landed us here; [discoveries.md 2026-05-18 — illustrate tag-gate librarian-shaped on prose substrate](discoveries.md) for the substrate framing.
+
 ## 2026-05-18 — Validator scenario assertion-authoring quality pass needed
 
 Several of the 37 H.t8 userAgent scenarios have mis-authored assertions. Concrete case from the 2026-05-18 sample run against `skeptic-ai-suspicious`: the scenario asserts `tool_call: find_someone_who` but the scenario shape is about a Skeptic wanting handoff, not someone seeking Mirror stories — `find_someone_who` is the wrong tool to expect. The persona-author sub-agents weren't deeply familiar with the eight-tool intent surface. A quick cleanup pass across all 37 `agent-*.yaml` files would remove false-failure noise. Triage: scan each scenario's `tool_call` and `handoff_event` assertions against the scenario's actual conversational goal; remove or correct any that don't fit. ~30-60 min.
