@@ -25,18 +25,12 @@ userAgent:
       - "you've had a satisfying explore and want to come back another time with Anna"
 
 assertions:
-  # NB: the schema-correct assertion would be `triage_verdict { verdict: inconclusive,
-  # reasonCode: extended_no_convergence }` per the verdict catalogue
-  # (handoff/description.md) and `FinalTriage` interface (assertions.ts:81-85),
-  # plus a `handoff_event { present: false, verdict: inconclusive }`. But
-  # `VerdictSchema` in scenario.ts:48 only enumerates the three handoff-routed
-  # verdicts. Schema-bug to land separately; in the meantime, the load-bearing
-  # assertion for an inconclusive scenario is "the agent did not falsely qualify
-  # and fire a qualified-verdict handoff" plus the judge_rubric carrying the
-  # substantive intent.
+  - kind: triage_verdict
+    verdict: inconclusive
+    reasonCode: extended_no_convergence
   - kind: handoff_event
     present: false
-    verdict: qualified
+    verdict: inconclusive
   - kind: judge_rubric
     rubric: |
       Did the agent handle the extended-non-convergent conversation without either (a)

@@ -23,17 +23,12 @@ userAgent:
       - "the agent has gracefully closed the conversation"
 
 assertions:
-  # NB: the schema-correct assertion would be `triage_verdict { verdict: inconclusive,
-  # reasonCode: low_engagement }` per the verdict catalogue (handoff/description.md)
-  # and `FinalTriage` interface (assertions.ts:81-85), plus a `handoff_event { present:
-  # false, verdict: inconclusive }`. But `VerdictSchema` in scenario.ts:48 only
-  # enumerates the three handoff-routed verdicts. Schema-bug to land separately;
-  # in the meantime, the load-bearing assertion for an inconclusive scenario is
-  # "the agent did not falsely qualify and fire a qualified-verdict handoff" plus
-  # the judge_rubric carrying the substantive intent.
+  - kind: triage_verdict
+    verdict: inconclusive
+    reasonCode: low_engagement
   - kind: handoff_event
     present: false
-    verdict: qualified
+    verdict: inconclusive
   - kind: judge_rubric
     rubric: |
       Did the agent handle the low-engagement visitor without either (a) forcing premature
