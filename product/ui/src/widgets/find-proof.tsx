@@ -42,17 +42,25 @@ import {
   type ToolCallLifecycle,
 } from "./widget-shell";
 
+const SHELL_CTX = {
+  widgetType: "find-proof",
+  toolName: "find_proof",
+} as const;
+
 export function FindProofWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
 ) {
   const gate = renderLifecycleGate(
     props as ToolCallLifecycle,
+    SHELL_CTX,
     "Gathering supporting evidence…",
   );
   if (gate) return gate;
 
-  const parsed = safeParse(FindProofOutputSchema, props.result);
-  if (!parsed.ok) return <WidgetMalformedPlaceholder />;
+  const parsed = safeParse(FindProofOutputSchema, props.result, SHELL_CTX);
+  if (!parsed.ok) {
+    return <WidgetMalformedPlaceholder {...SHELL_CTX} debug={parsed.debug} />;
+  }
   const { proofs } = parsed.data;
 
   // Empty case: render nothing. Reassurance with no evidence is silence — the

@@ -40,6 +40,18 @@ function readSessionId(): string | null {
 }
 
 /**
+ * Distributive `Omit` — applies per-variant of a discriminated union so the
+ * discriminator (and the fields it gates, e.g. `contact` on qualified vs
+ * absent on disqualified) survive. TypeScript's built-in `Omit<U, K>` is
+ * non-distributive: it collapses the union into a single shape and drops
+ * the variant-specific narrowing, which breaks mock-call assertions in
+ * tests that narrow via the discriminator and then access variant fields.
+ */
+type DistributiveOmit<T, K extends keyof never> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+/**
  * POST a handoff-submit request to the orchestrator. Always returns a
  * `HandoffSubmitResponse` — network errors / non-JSON responses are
  * normalised into `{ ok: false, reason: 'internal_error', ... }` so the
@@ -49,7 +61,7 @@ function readSessionId(): string | null {
  * it from sessionStorage.
  */
 export async function postHandoffSubmit(
-  body: Omit<HandoffSubmitRequest, "sessionId">,
+  body: DistributiveOmit<HandoffSubmitRequest, "sessionId">,
 ): Promise<HandoffSubmitResponse> {
   const sessionId = readSessionId();
   if (!sessionId) {
