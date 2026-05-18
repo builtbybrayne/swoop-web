@@ -149,7 +149,7 @@ After a long HITL design conversation on 2026-05-12, the four pre-existing Tier-
 - E.t6 — counsel-review note for E.t9 (hard-delete posture).
 
 **Crosscut tranche queue**:
-- v2 (tours backend) — ✅ **landed 2026-05-15** (C.focused-shamir-2 in [decisions.md](planning/decisions.md)): `tour_card` derived table populated (11 rows + embeddings), `queryTourCardsByFilter` live, `find_options(preferredType: 'tour')` no longer falls back to trips. Known limitation: `tour_card.region` is NULL — region filter on tours returns zero (see [discoveries.md](discoveries.md) 2026-05-15). C.bf-6 superseded.
+- v2 (tours backend) — ✅ **landed 2026-05-15** (C.focused-shamir-2 in [decisions.md](planning/decisions.md)): `tour_card` derived table populated (11 rows + embeddings), `queryTourCardsByFilter` live, `find_options(preferredType: 'tour')` no longer falls back to trips. C.bf-6 superseded. **Region follow-up landed 2026-05-18** (C.focused-shamir-6): `tour_card.region` now derived via the page-parent chain (2 of 11 anchored — Atacama Desert + Torres del Paine National Park; 9 unconstrained pan-Patagonia). Region is informational on the card, NOT a filter — the agent reads it off the response and frames contextually. Region hierarchy doesn't reduce to ILIKE, and a flat filter would lose Torres del Paine ⊂ Patagonia. See [discoveries.md](discoveries.md) 2026-05-18 (supersedes 2026-05-15).
 - v3 (hotels + region_bases backend) — not gated.
 
 **`blendCards` default ratio change (2026-05-15)**: was 2 trips + 1 hotel + 1 region_base at `limit=4` (C.bf-3). Now 1 of each variant (C.focused-shamir-3 supersedes C.bf-3) — four-way even split, extras to trips. Aligned with the imagination-stoking-variety framing.
