@@ -14,11 +14,15 @@
  *      duration_days mirrors it today and can diverge if Swoop sends
  *      explicit durations later.
  *
- * Today's data realities (per C.focused-shamir-2 surfacing):
+ * Today's data realities:
  *   - 11 tours total, all Patagonia-themed.
- *   - `region` is NULL on every row (source field `contentblock.region_id`
- *     is a dangling reference; tour pages have empty `ntag_ids`). Net
- *     effect: a region filter on tours returns zero — accept; document.
+ *   - `region` is informational, NOT a filter (C.focused-shamir-6). Two of
+ *     the 11 tours are anchored to a specific region (Atacama, Torres del
+ *     Paine); the rest are pan-region. Region hierarchy (Torres del Paine ⊂
+ *     Patagonia ⊂ Chile) doesn't reduce to ILIKE filtering, so the tool
+ *     surfaces every tour and lets the conversational agent decide which
+ *     fits the visitor's region focus. Region appears on each card so the
+ *     agent has the label to reason about + frame in prose.
  *   - `from_price`, `currency_code`, `group_size_max`, `accommodation_style`
  *     are NULL today (no source columns). Filters on them effectively skip
  *     all tours; same accept-and-document.
@@ -38,6 +42,12 @@ import {
 import { resolveImagesByIds } from './resolve-image.js';
 
 export interface QueryTourCardsOptions {
+  /**
+   * Accepted-but-ignored (C.focused-shamir-6). Region hierarchy can't reduce
+   * to ILIKE filtering on a single string; the tool returns every tour and
+   * lets the agent decide contextually. Shape kept for dispatch symmetry
+   * with the other primitives via `SharedFilters` in find_options.ts.
+   */
   region?: string | null;
   durationMin?: number | null;
   durationMax?: number | null;
@@ -73,10 +83,11 @@ export async function queryTourCardsByFilter(
   const clauses: string[] = [];
   const binds: unknown[] = [];
 
-  if (opts.region) {
-    binds.push(`%${opts.region}%`);
-    clauses.push(`region ILIKE $${binds.length}`);
-  }
+  // NOTE: opts.region is intentionally NOT applied as a WHERE clause
+  // (C.focused-shamir-6). Tour catalogue is small + region hierarchy
+  // (Torres del Paine ⊂ Patagonia ⊂ Chile) doesn't reduce to a flat
+  // string match. The agent reads the `region` field on returned cards
+  // and frames in prose.
   if (opts.durationMin !== null && opts.durationMin !== undefined) {
     binds.push(opts.durationMin);
     clauses.push(`day_count >= $${binds.length}`);

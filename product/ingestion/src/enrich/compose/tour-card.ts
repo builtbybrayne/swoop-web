@@ -18,8 +18,14 @@
  *     is the next-best fallback and is populated for all 3 tour rows whose
  *     `tour.image_id` is null (verified against puma_dev on 2026-05-15).
  *
- * Region derivation mirrors C.brave-pare-2 — the tour's parent page's
- * area-typed ntag intersected with `area.alias`, lowest `area.id` wins.
+ * Region derivation (C.focused-shamir-6, supersedes the broken C.brave-pare-2
+ * mirror that produced NULL on every row): walk the `page.parent_id` chain
+ * from the tour's page; the closest ancestor with a region-shaped pagetype
+ * (`National Park` > `Region` > `Region-Activity`) supplies the region label.
+ * Tours that roll up through general Swoop / Patagonia parents with no such
+ * ancestor get `region: NULL` — *intentional pan-region*, not a data gap.
+ * Region is informational, not a filter; `queryTourCardsByFilter` doesn't
+ * narrow on it.
  *
  * Embedding text rule: `headline + ' ' + vibe_line + ' ' + first 500 chars of
  * day_text`. day_text is the concatenation of all tour_item titles + (stripped)
@@ -86,7 +92,36 @@ export async function composeTourCard(
 
   const tours = (
     await opts.client.query<TourRow>(
-      `SELECT
+      `WITH RECURSIVE page_chain AS (
+         SELECT t.id AS tour_id, p.id AS page_id, p.title, p.pagetype_title,
+                p.parent_id, 0 AS depth
+         FROM tour t
+         LEFT JOIN page p ON p.id = t.page_id
+         WHERE t.canonical_url IS NOT NULL AND p.id IS NOT NULL
+         UNION ALL
+         SELECT c.tour_id, parent.id, parent.title, parent.pagetype_title,
+                parent.parent_id, c.depth + 1
+         FROM page_chain c
+         JOIN page parent ON parent.id = c.parent_id
+         WHERE c.depth < 6
+       ),
+       tour_region AS (
+         -- Closest region-shaped ancestor wins.
+         -- Preference: National Park > Region > Region-Activity, then by depth.
+         -- NULL when no such ancestor exists — that's intentional pan-region
+         -- (tour rolls up through general Swoop/Patagonia parents).
+         SELECT DISTINCT ON (tour_id) tour_id, title AS region_name
+         FROM page_chain
+         WHERE pagetype_title IN ('National Park', 'Region', 'Region-Activity')
+         ORDER BY tour_id,
+           CASE pagetype_title
+             WHEN 'National Park' THEN 1
+             WHEN 'Region' THEN 2
+             WHEN 'Region-Activity' THEN 3
+           END,
+           depth
+       )
+       SELECT
          t.id,
          t.slug,
          t.title,
@@ -94,7 +129,7 @@ export async function composeTourCard(
          t.page_id,
          p.intro_text,
          p.summary,
-         area_lookup.region_name,
+         tr.region_name,
          (SELECT COUNT(*)::int FROM tour_item ti WHERE ti.tour_id = t.id) AS day_count,
          (SELECT string_agg(
               COALESCE(ti.title, '') || ' ' || COALESCE(ti.description, ''),
@@ -109,15 +144,7 @@ export async function composeTourCard(
          ) AS activity_aliases
        FROM tour t
        LEFT JOIN page p ON p.id = t.page_id
-       LEFT JOIN LATERAL (
-         SELECT a.name AS region_name
-         FROM area a
-         JOIN tag tg ON tg.alias = a.alias
-         WHERE tg.id = ANY(p.ntag_ids)
-           AND tg.type = 'area'
-         ORDER BY a.id ASC
-         LIMIT 1
-       ) area_lookup ON true
+       LEFT JOIN tour_region tr ON tr.tour_id = t.id
        WHERE t.canonical_url IS NOT NULL`,
     )
   ).rows;

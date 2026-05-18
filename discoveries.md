@@ -6,7 +6,26 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-18 — Tour region IS recoverable via the page-parent chain; the "unrecoverable" claim below was wrong
+
+The 2026-05-15 entry below concluded tour region was a dead end after both candidate sources (`contentblock.region_id` dangling, `page.ntag_ids` empty) failed. It missed the obvious third option: walk **`page.parent_id`** upward. C.t3 preserves the self-FK chain, and 2 of 11 tours have ancestors of pagetype `National Park` / `Region` / `Region-Activity`:
+
+- tour 72 ("Luxury Best of Chile") → parent page `Atacama Desert` (Region, depth 1)
+- tour 77 ("W Trek & Backcountry Kayaking") → grandparent `Torres del Paine National Park` (National Park, depth 3)
+
+The other 9 roll up through `Patagonia Tours & Vacations` / `Luxury Patagonia Tours` (Experience / Parent Guidebook pagetypes) and never hit a region-shaped ancestor. That's not a data gap — it's **editorial intent**. Those 9 are deliberately pan-Patagonia tours; the editor placed them under general parents rather than scoping to a sub-region. The data model carries that intent if you read the chain.
+
+A second realisation followed: even with region populated, **filtering on it via flat ILIKE loses hierarchy**. Torres del Paine ⊂ Patagonia ⊂ Chile — a TdP-tagged tour should surface for "Patagonia" queries, but a single-string match can't encode that. Per C.focused-shamir-6 (2026-05-18), the solution is to derive region informationally, surface it on each card, and **remove the region filter entirely** for tours — the agent reads the region label off the response and frames contextually in prose. Tour catalogue is small enough (11 rows) that programmatic filtering buys nothing over conversational reasoning.
+
+Implementation: recursive CTE in `composeTourCard` SQL, preference order `National Park > Region > Region-Activity`, ties broken by depth. `queryTourCardsByFilter`'s region clause deleted.
+
+**Pattern to remember**: when an obvious schema field is empty or broken, look for the same information encoded elsewhere in the data model before declaring it unrecoverable. The CMS often expresses scope via *placement* (parent chain), not just *tagging*. And before building a filter, check whether the conversational layer can do the reasoning better — programmatic-by-default isn't always the cleanest answer.
+
+---
+
 ## 2026-05-15 — Tour region is unrecoverable from source today; `contentblock.region_id` is a dangling reference
+
+> **Superseded by the 2026-05-18 entry above** — the page-parent chain wasn't checked at the time. The recovery path documented in this entry's "Recovery paths" section (option 1: add 'page' to NTAGS_AGENT_ENTITY_TYPES) is now a deferred secondary option; option 3 (hard-code) is moot. The chain-walk is the right answer and it's already shipped.
 
 While wiring `tour_card.region` during the v2 tranche (C.focused-shamir-2), the obvious candidate sources both turned out to be dead ends:
 
