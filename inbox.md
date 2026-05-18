@@ -6,6 +6,38 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-05-18 — Validator scenario assertion-authoring quality pass needed
+
+Several of the 37 H.t8 userAgent scenarios have mis-authored assertions. Concrete case from the 2026-05-18 sample run against `skeptic-ai-suspicious`: the scenario asserts `tool_call: find_someone_who` but the scenario shape is about a Skeptic wanting handoff, not someone seeking Mirror stories — `find_someone_who` is the wrong tool to expect. The persona-author sub-agents weren't deeply familiar with the eight-tool intent surface. A quick cleanup pass across all 37 `agent-*.yaml` files would remove false-failure noise. Triage: scan each scenario's `tool_call` and `handoff_event` assertions against the scenario's actual conversational goal; remove or correct any that don't fit. ~30-60 min.
+
+## 2026-05-18 — Real WHY-prompt bugs surfaced by the skeptic-ai-suspicious transcript
+
+Two distinct quality problems caught in the post-skill-integration sample transcript at `runs/sample-1-skeptic/views/skeptic-ai-suspicious.html`:
+
+1. **Hallucinated phone numbers, and different ones across turns**. Turn 1: `+44 (0) 117 369 0196`. Turn 3: `+44 (0)117 325 7898`. Two different made-up UK numbers within one conversation. The chunk-G WHY prompt says the agent doesn't commit specifics but doesn't explicitly forbid hallucinating contact details. Add a `MUST NOT invent specific contact details (phone, email, address)` line to `cms/prompts/system/00_why.md`; specialist routing belongs to the `handoff` tool, not free-text invention.
+
+2. **Self-contradiction on Patagonia seasonality within one conversation**. Turn 2 says August is "right in the heart of the season ... most stable weather". Turn 3 says (correctly) August is winter, cold, windy, snowy. Add a geographical-anchor line: *"You are talking about destinations in the Southern Hemisphere. Patagonian seasons are inverted relative to UK/Europe/North America — December–February is summer; June–August is winter."*
+
+Both are 1-line WHY-prompt edits + a validator re-run to confirm. ~15 min.
+
+## 2026-05-18 — Event-capture wiring (H.14) needed to make triage_verdict assertions useful
+
+Every H.t8 scenario with a `triage_verdict` assertion currently FALSE-FAILS because the harness defaults to `NullEventCapture` (per H.14 — deferred orchestrator-stdout-capture wiring). The runner can never see `triage.decided` events; `finalTriage` is always null; the assertion always fails with *"no final triage state captured"*. This adds significant noise to every validator run. Pick up [H.14 — StreamingEventCapture against orchestrator stdout](planning/03-exec-validation-scaffold.md) and wire it into the CLI: spawn the orchestrator as a child process from the harness, attach a `StreamingEventCapture` to its stdout, pass through to `runScenario.deps.events`. Until this lands, suppress `triage_verdict` assertions in scenario authoring, or treat their failures as known-noise rather than real signal. Estimate: 2-3 hrs including the orchestrator-spawn lifecycle handling.
+
+## 2026-05-18 — B.t9 plan artefact still overstates the ADK API discrepancy
+
+[planning/03-exec-agent-runtime-t9.md](planning/03-exec-agent-runtime-t9.md)'s "★ Read this first" section says ADK's `loadAllSkillsInDir` doesn't exist and the CMS docs were stale. That was wrong — the function DOES exist; the executing agent confirmed empirically and the discoveries.md entry corrects it. The plan file itself is the only place still carrying the overstatement. Quick edit pass to mark that section as superseded / inline-correct it. ~10 min. Doesn't change anything that runs, just keeps the plan artefact honest for future readers.
+
+## 2026-05-18 — Streaming + viewer post-demo cleanups
+
+Small follow-ups from the streaming-fix + transcript-view work:
+- Add a `cms/README.md` authoring rule: "If a `description:` in a SKILL.md contains a colon-space, em-dash + colon, or any js-yaml-structural character, single-quote the value." Surfaced when two of the 14 skills silently dropped on first boot.
+- Add `gotchas.md` entry: `connector` reads `CONNECTOR_PORT` env var, NOT `PORT` (caused silent port collision in the validator-harness worktree boot when `PORT=3003` was set without `CONNECTOR_PORT=3003`).
+- Restore the `triage_verdict: inconclusive` assertions in cluster-5 `agent-500-uncommunicative-monosyllabic.yaml` + `agent-520-unclear-confused.yaml` — they were removed mid-swarm as a workaround when VerdictSchema didn't accept `inconclusive`; schema is now widened (commit `82e2e37`); assertions can be restored.
+- Investigate the **duplicated-opener bug** flagged in the pre-skill smoke 1 (dreamer-pure-curiosity turn 1 emitted two near-identical opening paragraphs in a single response). Real artefact; may be a streaming-layer issue, a tool-call interleaving issue, or a real agent regression. Not seen in the post-skill skeptic sample but worth a focused look — capture transcripts with the new HTML viewer, check whether the duplication is in the SSE frames themselves or just the rendered text.
+
+---
+
 ## 2026-05-18 — Analytics on now-hidden widget-malformed failures
 
 Nice-knuth wave dev/prod-gated `WidgetMalformedPlaceholder` so production renders nothing instead of the amber "Couldn't load that" card. Schema-parse failures now fire a structured `console.warn` from `safeParse` (toolName + widgetType + Zod issues — captured by Cloud Run stdout) and a `ui.widget_rendered` event whose `widgetType` field carries a `:malformed:schema` or `:malformed:lifecycle` suffix (e.g. `find-options:malformed:schema`). That's the only post-launch signal — no dashboard, no aggregation, no alert.
