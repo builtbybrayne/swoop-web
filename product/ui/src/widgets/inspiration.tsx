@@ -115,14 +115,17 @@ export function InspirationWidget(
       aria-label="Inspiration imagery"
       className="my-2 w-full"
     >
-      <ul className="flex gap-3 overflow-x-auto pb-2">
+      {/* Mobile: horizontal scroll strip (swipe feels natural on touch).
+          ≥sm: grid (2 cols), ≥md: 3 cols. Lets desktop visitors scan
+          the whole set at once rather than overflow-scrolling sideways. */}
+      <ul className="flex gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0 md:grid-cols-3">
         {images.map((img) => (
-          <li key={img.id} className="flex-shrink-0">
+          <li key={img.id} className="flex-shrink-0 sm:flex-shrink">
             <button
               type="button"
               onClick={() => setExpandedId(img.id)}
               aria-label={`Expand image: ${img.altText}`}
-              className="flex w-48 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-left transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 sm:w-56"
+              className="flex w-48 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-left transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 sm:w-full"
             >
               <ImageBlock src={img.url} alt={img.altText} />
               <div className="flex flex-col gap-1 p-2">
