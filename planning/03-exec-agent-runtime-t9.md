@@ -596,3 +596,83 @@ The worktree's `product/connector/.env` was scaffolded with `PORT=3004` as the w
 - Branch state: 4 commits ahead of the previous worktree tip (`ad93e41`); all changes staged and committed except the worktree-only .env override (gitignored).
 
 **Status**: B.t9 ready to merge. Final hash on `claude/b-t9-skill-loader` will be appended by the next commit (this execution-log edit).
+
+---
+
+## 2026-05-18 nice-goodall live-smoke fix — connector tools restored as top-level siblings
+
+**Status**: ✅ done in worktree `nice-goodall-a66ed3` (this session). Supersedes the HITL Q2 "bundle internally" ratification above.
+
+### What broke
+
+After B.t9 merged to `main` (commits [`4efeb92` — skill loader enumerates SKILL.md folders](#) + [`9965d64` — factory wires skills into SkillToolset alongside connector tools](#)), live chat conversations showed Sonnet calling `list_skills` / `load_skill` but **never** calling any of the eight intent-named connector tools (`find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`, `illustrate`, `handoff`, `handoff_submit`). Alastair surfaced the regression: "the chat agent can see skills now, but cannot find any of the tools it used to use (e.g. `find_options`)".
+
+This is a Tier 1 violation. [planning/01-top-level.md — §3.0 WHY/HOW/WHAT](01-top-level.md) names the eight intent-named tools as the agent's WHAT layer: "*WHAT: eight intent-named tools (`find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`, `illustrate`, `handoff`, `handoff_submit`)*". They are load-bearing for every turn. The B.t9 build silently hid them.
+
+### Root cause
+
+The plan body above and the Q2 HITL ratification assumed ADK's `SkillToolset(skills, { additionalTools: tools })` re-exposes `additionalTools` to the LLM as unconditional callable tools. **It does not.** Reading the installed source at [product/node_modules/@google/adk/dist/esm/tools/skill/skill_toolset.js:58-130](#):
+
+- `SkillToolset.getTools(context)` returns `[...this.tools, ...await this.resolveAdditionalTools(context)]`.
+- `this.tools` is **hardcoded** to the 5 skill-management tools: `ListSkillsTool`, `LoadSkillTool`, `LoadSkillResourceTool`, `RunSkillScriptTool`, `RunSkillInlineScriptTool`.
+- `resolveAdditionalTools(context)` returns `[]` unless **both** of these are true:
+  1. A skill is currently *activated* in `context.state.get('_adk_activated_skill_<agentName>')` (set by `load_skill` mid-turn), AND
+  2. That activated skill's `frontmatter.metadata.adk_additional_tools` array lists the tool name.
+
+None of the 14 authored SKILL.md files declare `metadata.adk_additional_tools`, and even if they did, the connector tools would only appear *after* a `load_skill` call. So the bound shape — `tools: [skillToolset]` — exposed only the 5 skill-management tools to Sonnet through B.t5's `claude-llm.ts:buildAnthropicTools` translator. `find_options` and siblings were invisible from turn 1.
+
+The premise was contradicted by the Tier 2 architecture but the Q2 question framing ("SkillToolset bundles tools too — keep factory signature?") never traced the semantics. [planning/02-impl-agent-runtime.md — decision B.3](02-impl-agent-runtime.md) anticipated exactly this case: "**Fall back to a custom loader tool only if the native primitive turns out to be a poor fit in Tier 3.**" That escape clause was the licence — never exercised.
+
+### Why the live-smoke gate missed it
+
+§Verification of the plan body satisfied itself with two deterministic gates: the boot-log `loaded 14 skills` line + `GET /healthz` 200. **Task 5 Step 5.3 — a real single-turn chat against `pattern-anniversary-couple` — was explicitly skipped** ("adds cost + non-determinism with no automated correctness check"). A single live turn would have shown Sonnet had no `find_options` in scope; the regression would have been caught before merge.
+
+Captured as a permanent acceptance-gate rule for future Tier 3 plans that touch the agent's `tools` array: **a real Anthropic single-turn smoke that triggers a connector tool is mandatory** when the tool surface changes. Boot-log gates are necessary but not sufficient.
+
+### Fix shape
+
+`product/orchestrator/src/agent/factory.ts:81-99`:
+
+```typescript
+// Before (buggy):
+const skillToolset = new SkillToolset(skills, { additionalTools: tools });
+return new LlmAgent({ ..., tools: [skillToolset] });
+
+// After (fixed):
+const skillToolset = new SkillToolset(skills);
+return new LlmAgent({ ..., tools: [skillToolset, ...tools] });
+```
+
+- Connector tools regain top-level sibling status alongside the SkillToolset. ADK's runner populates each into `llmRequest.toolsDict`; `claude-llm.ts:buildAnthropicTools` walks it and Sonnet sees the eight tools by name.
+- `additionalTools` is dropped — passing the same FunctionTools both inside (gated, with `Duplicate tool name` risk if a skill ever activated with metadata) and at top level (always-on) is incoherent. Skills are *additive guidance* per [planning/02-impl-content.md — §2.6](02-impl-content.md), not a re-binding layer for retrieval tools.
+- SkillToolset still injects its `DEFAULT_SKILL_SYSTEM_INSTRUCTION` + the skills XML via `processLlmRequest`. `list_skills` / `load_skill` / `load_skill_resource` / `run_skill_script` / `run_skill_inline_script` remain available so the model can pull skill bodies on demand.
+- The factory's header comment is rewritten to match the corrected understanding.
+
+### Regression test
+
+New file: [product/orchestrator/src/agent/__tests__/factory.test.ts](../product/orchestrator/src/agent/__tests__/factory.test.ts) — five tests covering:
+
+1. `agent.tools.length === connectorTools.length + 1` (the assertion that would have failed under the buggy code regardless of input).
+2. SkillToolset is `agent.tools[0]`, connector tools follow in order, referential identity preserved.
+3. `skillToolset.additionalTools` is empty (no gating pool).
+4. The factory still returns the loaded skills alongside the agent (boot-log path intact).
+5. Empty-connector-tools input degrades to a SkillToolset-only `agent.tools` of length 1.
+
+### Verification (this worktree)
+
+- [x] `npm test --workspace=@swoop/orchestrator -- factory.test.ts` — 5/5 pass.
+- [x] `npx tsc --noEmit` in `product/orchestrator/` — clean.
+- [x] Existing skill-loader.test.ts unchanged — 4/4 still pass.
+- [ ] Real-Anthropic single-turn live smoke — pending Alastair's API key + run (the new mandatory gate). Expected: Sonnet invokes at least one connector tool when prompted with a discovery-shaped opener.
+
+### Plan addendum vs separate cross-cut
+
+This fix touches only chunk B (orchestrator factory + one new test file). It has a clear chunk home — this Tier 3 plan — so it lands as a `## YYYY-MM-DD <name> fix` addendum per the [project root CLAUDE.md review-driven-fix convention](../CLAUDE.md). No `03-exec-crosscut-*-fix.md` warranted.
+
+### Sequence summary
+
+| | |
+|---|---|
+| **2026-05-02** | [B.t3a — connector adapter rewrite](03-exec-agent-runtime-t3.md) lands the eight intent-named connector tools as ADK FunctionTools the orchestrator calls directly. ✅ |
+| **2026-05-18 16:53** | [B.t9 commit `9965d64` — factory wires skills into SkillToolset alongside connector tools](#) inadvertently un-wires the connector tools by stashing them inside the SkillToolset's gated `additionalTools` pool. |
+| **2026-05-18 evening** | Alastair surfaces the regression via live-traffic observation. This addendum + the factory fix + the regression test land in worktree `nice-goodall-a66ed3`. |

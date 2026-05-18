@@ -4,6 +4,21 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## Status (2026-05-18 — B.t9 tool-surface regression fixed)
+
+Live-traffic observation by Alastair surfaced that after [B.t9 ADK skill-loader integration (commit `9965d64`, 2026-05-18)](planning/03-exec-agent-runtime-t9.md) merged, Sonnet could see the 14 skills but could not call any of the eight intent-named connector tools (`find_inspiring` / `find_someone_who` / `find_proof` / `lookup` / `find_options` / `illustrate` / `handoff` / `handoff_submit`). Root cause: B.t9 stashed connector tools inside `SkillToolset.additionalTools`, which ADK gates behind per-skill `frontmatter.metadata.adk_additional_tools` declarations — none of the 14 SKILL.md files declare those.
+
+**Fix landed in worktree `nice-goodall-a66ed3` (this session)**:
+
+- `product/orchestrator/src/agent/factory.ts:81-99` — `tools: [skillToolset]` → `tools: [skillToolset, ...connectorTools]`. `additionalTools` dropped from the SkillToolset constructor.
+- New regression test `product/orchestrator/src/agent/__tests__/factory.test.ts` (5 tests). Would have caught the buggy shape: under the bug `agent.tools.length` was always 1 regardless of input.
+- Plan addendum at the bottom of [03-exec-agent-runtime-t9.md — B.t9 ADK skill-loader integration](planning/03-exec-agent-runtime-t9.md) under `## 2026-05-18 nice-goodall live-smoke fix`. Supersedes B.t9 HITL Q2 ("bundle internally").
+- [discoveries.md](discoveries.md) entry on ADK's `SkillToolset.additionalTools` gating semantics + the new Tier-3 acceptance-gate rule born from this: any plan touching `agent.tools` requires a real-Anthropic single-turn smoke firing a connector tool. Boot-log gates are necessary but not sufficient.
+
+**Outstanding**: real-Anthropic single-turn smoke against a `find_options`-shaped opener — pending Alastair's run. Expected behaviour: orchestrator boot still prints `loaded 14 skills`; new boot-log line shows `agent: puma_orchestrator (tools: 8)` (1 SkillToolset + 7 connector FunctionTools — `handoff_submit` is a POST endpoint, not a FunctionTool).
+
+---
+
 ## Status (2026-05-14 — chunk G content layer landed)
 
 Cowork HITL session authored the chunk G content layer end-to-end. Detail in [progress.md](progress.md). Headline:
