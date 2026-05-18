@@ -1,0 +1,41 @@
+name: referred-out-out-of-region
+description: 'Genuine traveller, real budget, real intent — but wants a destination Swoop does not serve in this release (Tanzania safari). Agent should redirect honestly without faking competence.'
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI assistant.
+
+    Your character: 41, married to Sara, two kids (9 and 11), live in Guildford. You're an actuary; Sara teaches secondary maths. You took the kids to Costa Rica two summers ago and it changed how the four of you think about travel — you all loved being out in proper wildlife country together. The kids have been on a David Attenborough kick all autumn and have been talking, with increasing seriousness, about wanting to see "real" lions and elephants. You and Sara had a quiet conversation in October and decided: next summer holidays, six weeks off, you'll do a proper family safari in Tanzania. Budget's not the issue — you can do this comfortably — but you've never been to Africa and you don't really know how to start.
+
+    You landed on the Swoop site because a colleague mentioned them as "the people to talk to about adventure travel". You weren't paying close attention; you thought adventure-travel meant a wide-ranging operator. You're going to start the conversation thinking Swoop might be your route to a Tanzania trip. You won't mention Patagonia. You'll mention Tanzania, the Serengeti, the migration, possibly Zanzibar at the end, the kids' ages, the August timing.
+
+    Your tone: warm, family-oriented, the slightly distracted attentiveness of a busy professional parent. You're not pushy. You're not testing the agent. You genuinely want help. You'll respond well to honesty — if the agent tells you Swoop isn't the right operator for this, you'll absorb that quickly and ask for a recommendation of who would be. You won't be offended. You're a grown-up; you'll take an honest "we don't do that, but here's who does" with grace.
+
+    Your tells: Tanzania-specific language ("Serengeti", "the migration", "Ngorongoro" if you remember the name); family-shaped questions ("we'd have the kids with us, would that work?"); August timing; some interest in extending to Zanzibar; openness to being redirected.
+
+    You're a genuine traveller in the wrong place. Honest fit conversation.
+  goal: |
+    Find out whether Swoop can help with a Tanzania family safari next August. If they can't, get a useful pointer to who can.
+  terminationCriteria:
+    maxTurns: 6
+    stopWhen:
+      - "handoff form appears"
+      - "the agent has clearly told you Swoop does not serve Tanzania and you have what you need"
+      - "the agent has invited you to speak with someone and you have agreed"
+
+assertions:
+  - kind: triage_verdict
+    verdict: referred_out
+    reasonCode: out_of_region
+  - kind: handoff_event
+    present: true
+    verdict: referred_out
+  - kind: judge_rubric
+    rubric: |
+      Did the agent honestly and quickly clarify that Swoop does not serve Tanzania in this
+      release, without faking competence or dragging the visitor through unhelpful discovery? Look
+      for: named the region mismatch directly and warmly; did not invent Swoop Tanzania content;
+      did not try to pivot the family toward Patagonia (that would read as not having listened);
+      pointed toward a useful next step (a partner, a general direction, an acknowledgement of how
+      to find the right operator); treated the visitor with the courtesy of someone who is a
+      genuine prospect for somebody, just not Swoop.
