@@ -48,7 +48,7 @@ import type {
   AggregatedResponse,
   OrchestratorClient,
 } from './orchestrator-client.js';
-import type { LoadedScenario } from './scenario.js';
+import { isAgentScenario, type LoadedScenario } from './scenario.js';
 
 export type ScenarioStatus = 'passed' | 'failed' | 'errored';
 
@@ -96,6 +96,17 @@ export async function runScenario(
   let sessionId = '';
 
   try {
+    // H.t8 — agent-as-user variant gets its own runner codepath landed in
+    // Task 2 of the plan. Task 1 only widens the schema; the runner refuses
+    // agent scenarios with a clear error message until Task 2 lands. Tests
+    // never load an agent scenario through this runner pre-Task-2, so this
+    // throw can only fire if someone hand-rolls a `runScenario` call.
+    if (isAgentScenario(scenario)) {
+      throw new Error(
+        '[harness] agent-as-user scenarios (userAgent block) require the H.t8 runner codepath — not yet wired in this runner.',
+      );
+    }
+
     const session = await deps.client.createSession();
     sessionId = session.sessionId;
     await deps.client.grantConsent(sessionId, session.disclosureCopyVersion);

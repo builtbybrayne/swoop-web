@@ -241,20 +241,118 @@ const JudgeSchema = z
   })
   .strict();
 
-export const ScenarioSchema = z
+// ---------------------------------------------------------------------------
+// H.t8 — userAgent variant.
+//
+// A scenario is either:
+//   - Shape A: `turns: [{user: ...}]` — scripted (pre-H.t8).
+//   - Shape B: `userAgent: {persona, goal, terminationCriteria, modelOverride?}`
+//             — agent-as-user (H.t8).
+//
+// We model this as a Zod union over two strict object schemas + a refinement
+// catching the "both" and "neither" edge cases with clearer error messages.
+// Authoring lesson from H.t1: keep schemas strict so YAML typos fail loudly.
+//
+// Length bounds for `persona` / `goal` are deliberately permissive — see the
+// Tier 3 plan §"Task 1" + the matrix design (200–400 word personas typical).
+// The 4000-char ceiling on persona matches `TurnSchema.user` for symmetry.
+// ---------------------------------------------------------------------------
+
+const TerminationCriteriaSchema = z
   .object({
-    name: z.string().min(1).max(80),
-    description: z.string().min(1).max(400),
-    turns: z.array(TurnSchema).min(1).max(10),
-    assertions: z.array(AssertionSchema).default([]),
-    judge: JudgeSchema.nullable().default(null),
+    maxTurns: z.number().int().min(1).max(20).default(8),
+    stopWhen: z.array(z.string().min(1)).max(5).optional(),
   })
   .strict();
 
+const UserAgentSpecSchema = z
+  .object({
+    persona: z.string().min(50).max(4000),
+    goal: z.string().min(20).max(800),
+    terminationCriteria: TerminationCriteriaSchema,
+    modelOverride: z.string().min(1).optional(),
+  })
+  .strict();
+
+// Shared envelope fields — both scripted + agent variants carry them.
+const SharedScenarioFields = {
+  name: z.string().min(1).max(80),
+  description: z.string().min(1).max(400),
+  assertions: z.array(AssertionSchema).default([]),
+  judge: JudgeSchema.nullable().default(null),
+};
+
+const ScriptedScenarioSchema = z
+  .object({
+    ...SharedScenarioFields,
+    turns: z.array(TurnSchema).min(1).max(10),
+  })
+  .strict();
+
+const AgentScenarioSchema = z
+  .object({
+    ...SharedScenarioFields,
+    userAgent: UserAgentSpecSchema,
+  })
+  .strict();
+
+/**
+ * The discriminated parse is done by trying both shapes. Zod's `union` picks
+ * the first member that parses cleanly, which means:
+ *   - {turns, !userAgent} -> matches `ScriptedScenarioSchema` only.
+ *   - {!turns, userAgent} -> matches `AgentScenarioSchema` only.
+ *   - {turns, userAgent}  -> matches neither (both schemas are `.strict()`,
+ *                            so the extra key on each side fails).
+ *   - {!turns, !userAgent} -> matches neither.
+ *
+ * Zod's default union error is a heap of per-member issues that's hard to
+ * read. We do a pre-check first and emit a clearer message; the union is the
+ * canonical shape validator behind it.
+ */
+export const ScenarioSchema = z.preprocess(
+  (raw, ctx) => {
+    if (typeof raw !== 'object' || raw === null) return raw;
+    const hasTurns = 'turns' in raw;
+    const hasUserAgent = 'userAgent' in raw;
+    if (hasTurns && hasUserAgent) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Scenario must have either `turns` (scripted) or `userAgent` (agent-as-user), not both.',
+      });
+      return z.NEVER;
+    }
+    if (!hasTurns && !hasUserAgent) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Scenario must have either `turns` (scripted) or `userAgent` (agent-as-user).',
+      });
+      return z.NEVER;
+    }
+    return raw;
+  },
+  z.union([ScriptedScenarioSchema, AgentScenarioSchema]),
+);
+
 export type Scenario = z.infer<typeof ScenarioSchema>;
+export type ScriptedScenario = z.infer<typeof ScriptedScenarioSchema>;
+export type AgentScenario = z.infer<typeof AgentScenarioSchema>;
 export type Assertion = z.infer<typeof AssertionSchema>;
 export type Turn = z.infer<typeof TurnSchema>;
 export type JudgeSpec = z.infer<typeof JudgeSchema>;
+export type UserAgentSpec = z.infer<typeof UserAgentSpecSchema>;
+export type TerminationCriteria = z.infer<typeof TerminationCriteriaSchema>;
+
+/**
+ * Type-guard: true when the loaded scenario is agent-as-user.
+ *
+ * Discriminate downstream via this guard rather than re-checking `'userAgent'
+ * in scenario` so the union narrowing is centralised.
+ */
+export function isAgentScenario(s: Scenario): s is AgentScenario {
+  return 'userAgent' in s;
+}
 
 // Per-variant inferred types — useful for handler signatures in `assertions.ts`.
 export type ContainsAssertion = z.infer<typeof ContainsAssertionSchema>;
