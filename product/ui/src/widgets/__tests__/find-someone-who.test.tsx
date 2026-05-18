@@ -78,15 +78,19 @@ describe("FindSomeoneWhoWidget", () => {
     expect(persona.textContent).not.toEqual(story.textContent);
   });
 
-  it("renders nothing when the stories list is empty (agent handles in prose)", () => {
-    // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md
-    // — empty results yield to the conversational agent, no widget chrome.
-    const { container } = render(
+  it("renders the dev silent indicator when stories are empty (prod stays silent)", () => {
+    // Visitor-facing chrome is gone (agent prose carries the moment); the
+    // dev silent placeholder surfaces what fired and why under Vitest.
+    render(
       <FindSomeoneWhoWidget
         {...mockProps({ result: { stories: [], count: 0 } })}
       />,
     );
-    expect(container.firstChild).toBeNull();
+    expect(screen.queryByTestId("find-someone-who")).toBeNull();
+    const silent = screen.getByTestId("widget-silent");
+    expect(silent).toHaveAttribute("data-swoop-widget", "find-someone-who");
+    expect(silent.textContent).toContain("find_someone_who");
+    expect(silent.textContent).toContain("empty result");
   });
 
   it("falls back to the placeholder on a malformed result", () => {

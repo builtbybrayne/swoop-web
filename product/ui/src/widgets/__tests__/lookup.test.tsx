@@ -83,7 +83,7 @@ describe("LookupWidget", () => {
     expect(hints).toHaveLength(2);
   });
 
-  it("renders nothing when chunks lack canonicalUrls", () => {
+  it("renders the dev silent indicator when chunks lack canonicalUrls (prod stays silent)", () => {
     const result = {
       chunks: [
         {
@@ -93,17 +93,22 @@ describe("LookupWidget", () => {
       ],
       count: 1,
     };
-    const { container } = render(<LookupWidget {...mockProps({ result })} />);
+    render(<LookupWidget {...mockProps({ result })} />);
     expect(screen.queryByTestId("lookup")).toBeNull();
-    expect(container.textContent).toBe("");
+    const silent = screen.getByTestId("widget-silent");
+    expect(silent).toHaveAttribute("data-swoop-widget", "lookup");
+    expect(silent.textContent).toContain("lookup");
+    expect(silent.textContent).toContain("no canonical URLs");
   });
 
-  it("renders nothing when the chunks list is empty", () => {
-    const { container } = render(
+  it("renders the dev silent indicator when the chunks list is empty (prod stays silent)", () => {
+    render(
       <LookupWidget {...mockProps({ result: { chunks: [], count: 0 } })} />,
     );
     expect(screen.queryByTestId("lookup")).toBeNull();
-    expect(container.textContent).toBe("");
+    const silent = screen.getByTestId("widget-silent");
+    expect(silent).toHaveAttribute("data-swoop-widget", "lookup");
+    expect(silent.textContent).toContain("empty result");
   });
 
   it("falls back to the placeholder on a malformed result", () => {

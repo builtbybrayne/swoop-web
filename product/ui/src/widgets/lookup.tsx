@@ -38,6 +38,7 @@ import {
   renderLifecycleGate,
   safeParse,
   WidgetMalformedPlaceholder,
+  WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
 
@@ -69,10 +70,26 @@ export function LookupWidget(
   }
   const { chunks } = parsed.data;
 
-  if (chunks.length === 0) return null;
+  if (chunks.length === 0) {
+    return (
+      <WidgetSilentPlaceholder
+        {...SHELL_CTX}
+        reason="empty result"
+        hint={{ chunks: 0 }}
+      />
+    );
+  }
 
   const affordances = pickAffordances(chunks);
-  if (affordances.length === 0) return null;
+  if (affordances.length === 0) {
+    return (
+      <WidgetSilentPlaceholder
+        {...SHELL_CTX}
+        reason="no canonical URLs"
+        hint={{ chunks: chunks.length, urls: 0 }}
+      />
+    );
+  }
 
   return (
     <section
