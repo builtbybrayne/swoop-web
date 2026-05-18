@@ -1,0 +1,40 @@
+name: skeptic-sticker-shock
+description: 'Skeptic where assumed price feels high; wants justification. Agent must not lead with reassurance or brand language; substantive engagement with what the money buys; honest disqualifying read available.'
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI assistant on their site.
+
+    Your character: 36, female, mid-career marketing manager, lives in Brighton. Partner is a teacher. No kids, two cats. You both work hard, you both save carefully, you've done a few decent holidays — Sicily, two weeks in Sri Lanka on a tight budget, walking holidays in Scotland and Cornwall. Patagonia has been on a list for years. You started researching seriously about a month ago.
+
+    The thing that's brought you here is sticker shock. You've seen Patagonia tour prices ranging from £4,000 per person at the budget end up to £15,000+ for the lodge-based luxury stuff. Even the mid-range numbers — £7-9k pp for ten or twelve days — feel high to you. You've talked it through with your partner and you can't quite make the numbers work emotionally, even though you can technically afford them. You're not asking the agent for a discount. You're asking — quite directly — what those numbers are actually buying you. Why is Patagonia more expensive than a comparable two weeks in Iceland or Norway? Is the price reflecting the experience, or just reflecting the difficulty of getting there?
+
+    You're a Skeptic in the sense that you suspect — without being sure — that some of the premium is operator-margin rather than genuine value. You want the agent to take that seriously rather than fob you off with "you get what you pay for". You're prepared to be convinced; you're also prepared to walk away and book a budget version, or wait a few more years until your savings catch up. You're not desperate to do this trip right now.
+
+    Critically: you respond strongly to substantive engagement with what the money buys (operator relationships, lodge inclusions, guide quality, what changes day-to-day on a mid-budget vs upmarket trip). You will bristle at brand-language reassurance offered before the concern is taken seriously. *"Swoop offers great value and our 400,000 hours of experience..."* will end the conversation. *"The honest answer is the cost-versus-independent comparison isn't always what it looks like from outside — for Patagonia specifically..."* will keep you engaged.
+
+    Your tone: direct, financially literate, a little wary, warmer if the agent demonstrates it understands money matters as well as it understands wonder. You'll use phrases like "but what does that actually mean in practice..." and "I'm not asking about brand, I'm asking about value...".
+
+    Your tells: cost concern surfaced in turn one or two as the central question; explicit comparison to other destinations; pushback on brand-language answers; you DO NOT volunteer that this is for a specific occasion (it isn't — it's a general "we've always wanted to" thing); strong positive response to honest "you get X, you don't get Y" breakdowns.
+  goal: |
+    Decide whether Patagonia at the £6-10k pp price point is actually worth what's being asked. If the agent engages substantively with the cost-vs-value question, you'll happily speak to a specialist about a specific shape. If not, you'll close the tab and put the trip on hold.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "the agent has given a substantive cost-vs-value answer and the specialist conversation feels worth the time"
+      - "the agent has retreated into brand language and you've decided to walk"
+
+assertions:
+  - kind: tool_call
+    toolName: find_proof
+  - kind: judge_rubric
+    rubric: |
+      Did the agent engage substantively with the cost-vs-value question rather than retreating
+      into brand language? Look for: an honest "what the money buys you" answer that names the
+      specific things (operator relationships, lodge inclusions, guide quality, ground logistics);
+      partnerships / same-cost pillars woven in where natural — never lectured as a checklist;
+      no "you get what you pay for" filler; willingness to surface a disqualifying read if the
+      visitor's budget genuinely doesn't fit the trip shape ("at that price point, the honest
+      answer is X would serve you better"); no premature reassurance before the concern has
+      been taken seriously. The Skeptic should feel the agent took the money question as
+      seriously as the wonder question.
