@@ -6,6 +6,22 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-18 — `illustrate` tag-overlap gate was librarian-shaped on a prose substrate
+
+Live chat surfaced that `illustrate` returned `images: []` for the easiest possible query (`["patagonia", "mountains", "glaciers", "torres del paine", "hiking"]`). Two compounding causes; the architectural lesson sits above the bug.
+
+**Bug-level causes**: (1) the Vision-call's in-message reminder at [product/ingestion/src/images/vision-client.ts:117-120](product/ingestion/src/images/vision-client.ts) asked the model for `description` + `annotation` only, contradicting the system prompt's six-output v2 schema (decision C.40, 2026-05-02 fold). The Zod schema's `.default([])` on the four tag arrays parses prose-only output as valid, write-back wrote `{}`, all 5,325 annotated rows in `puma_dev` have empty tag arrays. (2) `findImagesByKeywords` SQL AND-gated cosine ANN behind exact-string overlap on those four tag arrays — with the arrays empty, the gate always evaluated false, regardless of how good the embedding match was.
+
+**The lesson — substrate vs gate**: the four tag arrays are model-invented controlled-ish vocabularies. The agent doesn't see them. Their values aren't embedded (only `ntag` is, and only `region_tags` was authored to align with `ntag` slugs). Visitor or agent keywords rarely overlap tag values verbatim — `"torres del paine"` ≠ `"torres-del-paine"`; `"mountains"` ≠ `"granite"` / `"peak"` / `"ridge"`. The `annotation` prose — 1–2 sentences of literal scene description, deliberately keyword-rich — IS embedded and is the rich substrate cosine ANN is built for. Building a tag-overlap gate on top of that substrate was librarian-shaped intuition: filter-then-rank when filter has no semantic bridge from agent-utterance to corpus.
+
+**Pattern to remember**: when designing a retrieval primitive, ask which signal is *gate-shaped* (deterministic, the agent or visitor can name it confidently) vs *rank-shaped* (semantic, embedding-derived). Tag arrays are gate-shaped only if either (a) the agent knows the vocabulary, or (b) the values themselves are embedded so we can fuzzy-match utterance → tag. If neither, they're not access-mode tags — they're analytics or human-curation metadata. Don't gate ranking on them.
+
+**Fix (2026-05-18)**: drop the AND-gate. Pure cosine ANN against `image.embedding`. `regionSlug` retained as a no-op-today optional hard filter (lights up when a future re-annotation populates `region_tags`). Tier-3 addendum on [planning/03-exec-c-t4.md — 2026-05-18 illustrate tag-gate removal](planning/03-exec-c-t4.md). Future facet-aware shape (one image → multiple embeddings, axis-aware tool surface) parked in [inbox.md 2026-05-18](inbox.md).
+
+**Tier-3 acceptance-gate rule born from this**: when a retrieval primitive depends on populated columns at ETL time, the Tier-3 plan's verification step must include a column-coverage probe — `SELECT COUNT(*) FILTER (WHERE <col> IS NOT NULL OR array_length(<col>,1) > 0) FROM <table>` — not just SQL-shape correctness. Schema-correct + Zod-validated + write-fired ≠ data-populated. Sibling rule to the 2026-05-18 B.t9 "real-Anthropic single-turn smoke" gate and the 2026-05-13 C.t9 "corpus-AND-query checklist".
+
+---
+
 ## 2026-05-18 — ADK's `SkillToolset.additionalTools` is a conditional pool gated by per-skill metadata, NOT unconditional bundling
 
 ADK 1.0's `SkillToolset(skills, { additionalTools: tools })` constructor accepts an `additionalTools` array but **does not expose those tools to the LLM unconditionally**. Reading the installed source at `product/node_modules/@google/adk/dist/esm/tools/skill/skill_toolset.js:58-130`:

@@ -1,13 +1,32 @@
 /**
- * Image retrieval by keywords. Powers `illustrate`.
+ * Image retrieval by semantic similarity. Powers `illustrate`.
  *
- * Hybrid: cosine ANN on `image.embedding` UNION array overlap on the four tag
- * arrays (subject_tags / mood_tags / region_tags / tags). Per HITL Q1 +
- * 03-exec-c-t4.md §"`illustrate` and the C.t6 dependency": handler ships
- * against whatever annotation coverage exists; rows with no embedding/tags
- * just don't surface.
+ * **2026-05-18 simplification** (Tier 3 addendum on `03-exec-c-t4.md`):
+ * ranking is **cosine ANN on `image.embedding` only**. The annotation prose
+ * (1–2 keyword-rich sentences authored by C.t6's Vision pass) embeds the
+ * scene's content, mood, and named subjects together; cosine over that
+ * substrate carries the load.
  *
- * Optional `regionSlug` further narrows via `region_tags @> ARRAY[$slug]`.
+ * The earlier shape — AND-gating the cosine ANN behind exact-string overlap
+ * across `subject_tags` / `mood_tags` / `region_tags` / `tags` — was
+ * librarian-shaped against a prose substrate. The agent doesn't know the
+ * (model-invented) tag vocabulary; visitor keywords ("torres del paine",
+ * "glaciers", "mountains") rarely overlap tag values verbatim
+ * (`torres-del-paine`, `glacier`, `granite`/`peak`); the prose embedding
+ * carries the semantic match the tag-overlap gate was suppressing.
+ *
+ * The **future** facet-aware version (parked in inbox.md 2026-05-18) would
+ * give each image multiple per-facet embeddings (mood / content / region /
+ * activity), and the tool surface would let the agent express axis-specific
+ * intent. Until then, single-embedding cosine ANN against the annotation is
+ * the workhorse.
+ *
+ * `regionSlug` is retained as an optional hard filter on `region_tags @>
+ * ARRAY[$slug]`. It's a **no-op today** (every image's `region_tags` is
+ * empty per the 2026-05-18 finding that the Vision call's in-message
+ * reminder asked the model for prose only), and lights up automatically
+ * when a future annotation re-run populates the column. Forward-compatible
+ * with the v2 / facet-aware version.
  */
 
 import type pg from 'pg';
@@ -26,23 +45,27 @@ export interface FindImagesByKeywordsOptions {
   limit: number;
 }
 
+/**
+ * Rank annotated images by cosine similarity to the supplied query
+ * `embedding` (a 3072-d Gemini vector per C.46). Returns the top
+ * `opts.limit` rows.
+ *
+ * Rows without an `embedding` are silently excluded — they have no signal
+ * to rank on.
+ *
+ * If `opts.regionSlug` is supplied, the result is further constrained to
+ * images whose `region_tags` contains that slug as an array element.
+ * Today this filter is a no-op (the column is empty across the corpus);
+ * it lights up if/when `region_tags` is populated.
+ */
 export async function findImagesByKeywords(
   client: pg.PoolClient,
   embedding: number[],
-  keywords: ReadonlyArray<string>,
   opts: FindImagesByKeywordsOptions,
 ): Promise<ImageRow[]> {
-  const tagFilter = keywords.length > 0 ? keywords : null;
-
   const clauses: string[] = ['embedding IS NOT NULL'];
   const binds: unknown[] = [`[${embedding.join(',')}]`];
 
-  if (tagFilter) {
-    binds.push(tagFilter);
-    clauses.push(
-      `(subject_tags && $${binds.length} OR mood_tags && $${binds.length} OR region_tags && $${binds.length} OR tags && $${binds.length})`,
-    );
-  }
   if (opts.regionSlug) {
     binds.push([opts.regionSlug]);
     clauses.push(`region_tags @> $${binds.length}`);
