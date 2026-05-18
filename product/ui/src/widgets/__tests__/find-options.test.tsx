@@ -124,15 +124,20 @@ describe("FindOptionsWidget", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("renders nothing when the cards list is empty (agent handles in prose)", () => {
-    // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md
-    // — empty results yield to the conversational agent, no widget chrome.
-    const { container } = render(
+  it("renders the dev silent indicator when cards are empty (prod stays silent)", () => {
+    // Visitor-facing chrome is gone (agent prose carries the moment); the
+    // dev silent placeholder surfaces what fired and why under Vitest's
+    // DEV-true env.
+    render(
       <FindOptionsWidget
         {...mockProps({ result: { cards: [], count: 0 } })}
       />,
     );
-    expect(container.firstChild).toBeNull();
+    expect(screen.queryByTestId("find-options")).toBeNull();
+    const silent = screen.getByTestId("widget-silent");
+    expect(silent).toHaveAttribute("data-swoop-widget", "find-options");
+    expect(silent.textContent).toContain("find_options");
+    expect(silent.textContent).toContain("empty result");
   });
 
   it("falls back to the placeholder on a malformed result", () => {

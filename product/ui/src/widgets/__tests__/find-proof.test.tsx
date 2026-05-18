@@ -52,13 +52,20 @@ describe("FindProofWidget", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("renders nothing when the proofs list is empty (silence, not a disclosure)", () => {
-    const { container } = render(
+  it("renders the dev silent indicator when proofs are empty (prod stays silent)", () => {
+    render(
       <FindProofWidget {...mockProps({ result: { proofs: [], count: 0 } })} />,
     );
-    // No find-proof root rendered — nothing visible at all from this widget.
+    // No real find-proof root — the widget yielded to the agent's prose.
     expect(screen.queryByTestId("find-proof")).toBeNull();
-    expect(container.textContent).toBe("");
+    // In dev/test mode (import.meta.env.DEV === true under Vitest) the
+    // silent placeholder renders with widget+tool+reason context for the
+    // developer. In production it returns null; the test runs in dev mode.
+    const silent = screen.getByTestId("widget-silent");
+    expect(silent).toBeInTheDocument();
+    expect(silent).toHaveAttribute("data-swoop-widget", "find-proof");
+    expect(silent.textContent).toContain("find_proof");
+    expect(silent.textContent).toContain("empty result");
   });
 
   it("falls back to the placeholder on a malformed result", () => {

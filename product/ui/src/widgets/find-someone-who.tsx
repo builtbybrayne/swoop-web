@@ -47,6 +47,7 @@ import {
   renderLifecycleGate,
   safeParse,
   WidgetMalformedPlaceholder,
+  WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
 
@@ -76,8 +77,17 @@ export function FindSomeoneWhoWidget(
   const { stories } = parsed.data;
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
+  // Prod: silent. Dev: indicator names the tool + reason.
   // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md.
-  if (stories.length === 0) return null;
+  if (stories.length === 0) {
+    return (
+      <WidgetSilentPlaceholder
+        {...SHELL_CTX}
+        reason="empty result"
+        hint={{ stories: 0 }}
+      />
+    );
+  }
 
   return (
     <section

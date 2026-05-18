@@ -27,12 +27,53 @@
 // it for the side-effect-free named export and passes it to Parts.
 
 import { MessagePrimitive } from "@assistant-ui/react";
+import type {
+  ToolCallMessagePartComponent,
+  ToolCallMessagePartProps,
+} from "@assistant-ui/react";
+import { createElement } from "react";
 import type { ComponentProps, ComponentType } from "react";
 import type { DataFyiPart } from "@swoop/common";
 import { FyiRenderer } from "./fyi-renderer";
 import { FyiSignalingText } from "./fyi-signaling-text";
 import { ReasoningGuard } from "./reasoning-guard";
 import { toolWidgetComponents } from "../widgets";
+import {
+  UnregisteredToolFallback,
+  wrapWithDevTrace,
+} from "../widgets/widget-shell";
+
+// Bridge `UnregisteredToolFallback` (a narrow `{toolName, args, result}`
+// shape) to the full `ToolCallMessagePartProps` the registry's `Fallback`
+// slot expects. We only read three fields; assistant-ui's other props
+// (`addResult`, `resume`, `status`, etc.) are ignored — there's nothing
+// for an unregistered tool to do with them. `createElement` over JSX so
+// this file stays `.ts` (rest of the file has no JSX).
+const RawToolFallback: ToolCallMessagePartComponent = (
+  props: ToolCallMessagePartProps,
+) =>
+  createElement(UnregisteredToolFallback, {
+    toolName: props.toolName,
+    args: props.args,
+    result: props.result,
+  });
+RawToolFallback.displayName = "RawToolFallback";
+
+// Wrap every registered widget (and the fallback) with the universal
+// dev-only `DevToolCallTrace` so each tool call shows a collapsible
+// diagnostic — toolCallId, duration, args, result, isError — below the
+// widget's own render. In production `wrapWithDevTrace` is a pass-through.
+const wrappedToolComponents: Record<string, ToolCallMessagePartComponent> =
+  Object.fromEntries(
+    Object.entries(toolWidgetComponents).map(([name, Component]) => [
+      name,
+      wrapWithDevTrace(name, Component),
+    ]),
+  );
+const ToolFallback: ToolCallMessagePartComponent = wrapWithDevTrace(
+  "(unregistered)",
+  RawToolFallback,
+);
 
 /**
  * Narrow alias: the data renderer assistant-ui expects receives at least
@@ -61,7 +102,15 @@ export const messagePartComponents = {
     },
   },
   tools: {
-    by_name: toolWidgetComponents,
+    // `wrappedToolComponents` decorates each widget with `DevToolCallTrace`
+    // in dev mode (prod: pass-through to the raw widget). Every tool call
+    // therefore shows a universal diagnostic surface beneath whatever the
+    // widget itself rendered.
+    by_name: wrappedToolComponents,
+    // Tool calls not in `by_name` route to the dev-only "unregistered tool"
+    // indicator (prod: returns null). Also wrapped so we still get the
+    // trace card for previously-unknown tool names.
+    Fallback: ToolFallback,
   },
 } satisfies NonNullable<ComponentProps<typeof MessagePrimitive.Parts>["components"]>;
 

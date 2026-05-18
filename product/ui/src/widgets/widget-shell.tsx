@@ -23,10 +23,27 @@
 //          issues, previewing the raw value, with a copy-to-clipboard
 //          button. The existing `data-testid="widget-malformed"` is
 //          preserved so widget tests keep passing.
+//
+//   4. Dev vs prod behaviour for the *silent* placeholder:
+//        - Production → returns `null`. A `ui.widget_rendered` event tagged
+//          `<widget>:silent:<reason-slug>` still fires so post-launch
+//          analytics can count silent renders by tool.
+//        - Dev / test → a muted inline "rendered silently" indicator naming
+//          the widget, the tool, and the reason (e.g. "empty result", "no
+//          canonical URLs"). Optional `hint` (count, raw value preview)
+//          surfaces inline for diagnosis. `data-testid="widget-silent"`
+//          for assertion targeting.
+//      Widgets that previously `return null` for by-design empty results
+//      now render `<WidgetSilentPlaceholder>` instead — same visitor-side
+//      behaviour, but the developer sees what fired and why.
 
-import { useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { ZodIssue, ZodTypeAny, infer as zInfer } from "zod";
+import type {
+  ToolCallMessagePartComponent,
+  ToolCallMessagePartProps,
+} from "@assistant-ui/react";
 import { emitUiEvent } from "../runtime/emit-ui-event";
 
 /**
@@ -326,6 +343,139 @@ function truncateForPreview(value: unknown): string | null {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Silent-render visibility (dev-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * The render-boundary "I fired but I'm not showing anything" surface.
+ *
+ * Used by widgets that return silent (e.g. empty results, no canonical URLs)
+ * — instead of `return null`, render `<WidgetSilentPlaceholder>` so the
+ * developer sees that the tool fired and why the widget chose silence.
+ *
+ * Production: returns `null` (visitor sees nothing; agent prose carries the
+ * moment as today). A `ui.widget_rendered` event tagged
+ * `<widget>:silent:<reason-slug>` still fires so post-launch analytics can
+ * count silent renders by widget × tool × reason.
+ *
+ * Dev / test (`import.meta.env.DEV === true`): a quiet inline indicator
+ * — slate-toned dotted border, "DEV" badge, "<widget> (<tool>) rendered
+ * silently — <reason>" + optional hint preview. `data-testid="widget-silent"`.
+ */
+export function WidgetSilentPlaceholder(props: {
+  readonly widgetType: string;
+  readonly toolName: string;
+  /** Short, human-friendly reason, e.g. "empty result" or "no canonical URLs". */
+  readonly reason: string;
+  /** Optional structured context for the developer (count, raw value, etc.). */
+  readonly hint?: unknown;
+}): ReactNode {
+  useEmitSilentTelemetry({
+    widgetType: props.widgetType,
+    toolName: props.toolName,
+    reason: props.reason,
+  });
+
+  if (!import.meta.env.DEV) {
+    return null;
+  }
+  return <DevSilentIndicator {...props} />;
+}
+
+/** Lazy fire-once. Same shape as `useEmitMalformedTelemetry`. */
+function useEmitSilentTelemetry(params: {
+  readonly widgetType: string;
+  readonly toolName: string;
+  readonly reason: string;
+}): void {
+  const [emitted] = useState(() => {
+    emitUiEvent({
+      eventType: "ui.widget_rendered",
+      payload: {
+        widgetType: `${params.widgetType}:silent:${slugifyReason(
+          params.reason,
+        )}`,
+        toolName: params.toolName,
+        turnIndex: 0,
+      },
+    });
+    return true;
+  });
+  void emitted;
+}
+
+/** Reason → kebab-case slug suitable for analytics filtering. */
+function slugifyReason(reason: string): string {
+  return reason
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "unspecified";
+}
+
+/**
+ * Dev-only "tool fired silently" indicator. Visually quieter than the
+ * malformed card — this isn't a failure, just a render-skip we want
+ * visible during development so the conversation's "pause then continue"
+ * shape is explainable.
+ */
+function DevSilentIndicator(props: {
+  readonly widgetType: string;
+  readonly toolName: string;
+  readonly reason: string;
+  readonly hint?: unknown;
+}): ReactNode {
+  const hintPreview = truncateForPreview(props.hint);
+  return (
+    <div
+      role="note"
+      data-testid="widget-silent"
+      data-swoop-part="widget"
+      data-swoop-widget-state="silent"
+      data-swoop-widget={props.widgetType}
+      className="my-2 inline-flex max-w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1 text-[11px] leading-snug text-slate-600"
+    >
+      <span className="rounded-sm bg-slate-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+        Dev
+      </span>
+      <span>
+        <span className="font-medium text-slate-700">{props.widgetType}</span>{" "}
+        <span className="text-slate-400">({props.toolName})</span>{" "}
+        rendered silently — <span className="italic">{props.reason}</span>
+      </span>
+      {hintPreview !== null ? (
+        <code className="block w-full max-w-full overflow-x-auto whitespace-pre-wrap break-all font-mono text-[10px] text-slate-500">
+          {hintPreview}
+        </code>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * `tools.Fallback` for assistant-ui's part registry — renders for any tool
+ * call whose `toolName` isn't in `toolWidgetComponents`. In prod silent; in
+ * dev surfaces a "no widget registered" indicator so unregistered tool
+ * calls don't disappear unannounced. Args + result are exposed via the
+ * hint preview so the developer can decide whether a real widget is
+ * warranted.
+ */
+export function UnregisteredToolFallback(props: {
+  readonly toolName: string;
+  readonly args?: unknown;
+  readonly result?: unknown;
+}): ReactNode {
+  return (
+    <WidgetSilentPlaceholder
+      widgetType="(unregistered)"
+      toolName={props.toolName}
+      reason="no widget registered"
+      hint={{ args: props.args, result: props.result }}
+    />
+  );
+}
+
 /**
  * Hook: fire `ui.widget_rendered` once per widget instance when the widget
  * actually renders its happy-path body. Widgets call this from their render
@@ -427,3 +577,216 @@ export function WidgetRenderTracker(props: {
   });
   return props.children;
 }
+
+// ---------------------------------------------------------------------------
+// DevToolCallTrace — universal per-tool-call diagnostic surface (dev-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * A small collapsible diagnostic card that renders **below every tool call**
+ * in dev mode. Distinct from `WidgetMalformedPlaceholder` (failure-only) and
+ * `WidgetSilentPlaceholder` (in-widget silence) — this surface is universal:
+ * it fires for *every* tool call, regardless of whether the widget renders
+ * content, malformed, silent, or loading.
+ *
+ * Production: returns `null`. The wrapping HOC (`wrapWithDevTrace`) is a
+ * no-op in prod so the trace component never mounts. No telemetry — the
+ * existing per-widget `ui.widget_rendered` + malformed/silent suffixes
+ * already cover server-bound observability.
+ *
+ * Dev / test: a one-line collapsed summary (DEV badge · toolName · status ·
+ * duration · error flag if any). Click the `<summary>` to expand a full
+ * diagnostic view: toolCallId, args (JSON), result (JSON), isError, raw
+ * status.type, started/ended timestamps.
+ *
+ * Timing: client-side approximation. First mount = "tool call observed";
+ * first complete with result = "ended". For very fast tool calls (cached
+ * results that arrive complete on first render), duration shows as 0 ms.
+ *
+ * `data-testid="dev-tool-trace"` for assertion targeting.
+ */
+function DevToolCallTrace(props: {
+  readonly toolName: string;
+  readonly toolCallId: string;
+  readonly args: unknown;
+  readonly result: unknown;
+  readonly isError?: boolean | undefined;
+  readonly status: { readonly type: string };
+}): ReactNode {
+  // `startedAt` is captured once on first render via a lazy-init ref — no
+  // re-render needed, the value is stable across the widget's lifetime.
+  const startedAtRef = useRef<number | null>(null);
+  if (startedAtRef.current === null) {
+    startedAtRef.current = Date.now();
+  }
+  const startedAt: number = startedAtRef.current;
+
+  // `endedAt` is state (not a ref) so when the effect latches the end
+  // timestamp, the component re-renders to display the duration. Without
+  // this, a tool call that arrives complete on first render shows
+  // "(pending)" forever — the effect runs but the ref change doesn't
+  // schedule a re-render.
+  const [endedAt, setEndedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (
+      props.status.type === "complete" &&
+      props.result !== undefined &&
+      endedAt === null
+    ) {
+      setEndedAt(Date.now());
+    }
+  }, [props.status.type, props.result, endedAt]);
+
+  const durationMs = endedAt !== null ? endedAt - startedAt : null;
+  const hasError = Boolean(props.isError);
+
+  const summary = [
+    props.toolName,
+    props.status.type,
+    durationMs !== null ? `${durationMs} ms` : null,
+    hasError ? "error" : null,
+  ]
+    .filter((s): s is string => s !== null)
+    .join(" · ");
+
+  return (
+    <details
+      data-testid="dev-tool-trace"
+      data-swoop-part="widget"
+      data-swoop-widget-state="dev-trace"
+      data-swoop-tool={props.toolName}
+      className="my-2 rounded-md border border-slate-200 bg-white/60 text-[11px] text-slate-600 open:bg-white"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-1 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+        <span className="rounded-sm bg-slate-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+          Dev
+        </span>
+        <span aria-hidden="true" className="text-slate-300">
+          ▸
+        </span>
+        <span className="font-mono text-[11px] text-slate-700">
+          {summary}
+        </span>
+        {hasError ? (
+          <span className="ml-auto rounded bg-rose-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rose-700">
+            isError
+          </span>
+        ) : null}
+      </summary>
+      <div className="border-t border-slate-200 px-2.5 py-2">
+        <DevTraceField label="toolCallId" value={props.toolCallId} />
+        <DevTraceField label="status.type" value={props.status.type} />
+        <DevTraceField
+          label="started"
+          value={new Date(startedAt).toISOString()}
+        />
+        <DevTraceField
+          label="ended"
+          value={endedAt !== null ? new Date(endedAt).toISOString() : "(pending)"}
+        />
+        <DevTraceField
+          label="durationMs"
+          value={durationMs !== null ? String(durationMs) : "(pending)"}
+        />
+        <DevTraceField label="isError" value={hasError ? "true" : "false"} />
+        <DevTraceJsonField label="args" value={props.args} />
+        <DevTraceJsonField label="result" value={props.result} />
+      </div>
+    </details>
+  );
+}
+
+function DevTraceField({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}): ReactNode {
+  return (
+    <div className="flex gap-2 leading-snug">
+      <span className="w-24 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </span>
+      <span className="font-mono text-[11px] text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+/** JSON-rendered field — pretty-printed, scroll-on-overflow, no truncation
+ *  (developer wants the full payload; the `<details>` collapse keeps the
+ *  chat tidy when not needed). */
+function DevTraceJsonField({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: unknown;
+}): ReactNode {
+  let body: string;
+  try {
+    body =
+      value === undefined ? "(undefined)" : JSON.stringify(value, null, 2);
+  } catch {
+    body = String(value);
+  }
+  return (
+    <div className="mt-1">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <pre className="mt-0.5 max-h-64 overflow-auto rounded bg-slate-50 px-2 py-1 font-mono text-[10.5px] leading-snug text-slate-700">
+        {body}
+      </pre>
+    </div>
+  );
+}
+
+/**
+ * Decorate a `ToolCallMessagePartComponent` with the universal dev trace.
+ * The returned component renders the original widget unchanged, then
+ * appends `<DevToolCallTrace>` below it. In production this HOC is a
+ * pass-through (no wrapper component, no extra render work) — the wrapping
+ * only happens when `import.meta.env.DEV` is truthy at module-load time.
+ *
+ * Intended for use by `parts/index.ts` when assembling the
+ * `tools.by_name` + `tools.Fallback` registry, so every tool call gets the
+ * trace regardless of which widget renders it.
+ *
+ * The HOC signature accepts the broader `ComponentType<ToolCallMessagePartProps>`
+ * so it can wrap both real widgets (`ToolCallMessagePartComponent`) and
+ * the registry's `Fallback` (same shape). Returns the same broader type.
+ */
+export function wrapWithDevTrace(
+  toolName: string,
+  Inner: ComponentType<ToolCallMessagePartProps>,
+): ComponentType<ToolCallMessagePartProps> {
+  if (!import.meta.env.DEV) {
+    // Prod: no wrapper. Caller registers the original component verbatim.
+    return Inner;
+  }
+  function WrappedWithDevTrace(
+    props: ToolCallMessagePartProps,
+  ): ReactNode {
+    return (
+      <>
+        <Inner {...props} />
+        <DevToolCallTrace
+          toolName={props.toolName ?? toolName}
+          toolCallId={props.toolCallId}
+          args={props.args}
+          result={props.result}
+          isError={props.isError}
+          status={props.status}
+        />
+      </>
+    );
+  }
+  WrappedWithDevTrace.displayName = `WrappedWithDevTrace(${toolName})`;
+  return WrappedWithDevTrace;
+}
+
+// Re-export the type alias so callers (e.g. parts/index.ts) can use the
+// canonical assistant-ui type without re-importing it themselves.
+export type { ToolCallMessagePartComponent };

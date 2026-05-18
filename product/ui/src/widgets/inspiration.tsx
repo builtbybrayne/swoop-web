@@ -14,6 +14,7 @@ import {
   renderLifecycleGate,
   safeParse,
   WidgetMalformedPlaceholder,
+  WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
 
@@ -78,8 +79,23 @@ export function InspirationWidget(
   }, [expandedId]);
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
+  // Prod: silent. Dev: indicator distinguishes "tool returned zero" vs
+  // "tool returned N but they all failed the inner enriched-image parse"
+  // — the hint shows both counts so the developer can tell which.
   // Per crosscut plan 03-exec-crosscut-brave-pare-widget-user-copy-fix.md.
-  if (images.length === 0) return null;
+  if (images.length === 0) {
+    const reason =
+      rawImages.length === 0
+        ? "empty result"
+        : "all images failed inner parse";
+    return (
+      <WidgetSilentPlaceholder
+        {...SHELL_CTX}
+        reason={reason}
+        hint={{ rawImages: rawImages.length, parsed: images.length }}
+      />
+    );
+  }
 
   const expanded = expandedId
     ? images.find((img) => img.id === expandedId) ?? null
