@@ -78,7 +78,7 @@ async function main(): Promise<void> {
 
   const connector = await setupConnector({ config, descriptions: toolDescriptions });
 
-  const agent = buildOrchestratorAgent({ config, promptLoader, tools: connector.tools });
+  const { agent } = await buildOrchestratorAgent({ config, promptLoader, tools: connector.tools });
 
   // Layer-2 functional agent (B.t7). Separate ADK LlmAgent running on a
   // different (cheaper) model — getModelFor(config, 'classifier') resolves
