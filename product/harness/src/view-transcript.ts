@@ -17,6 +17,9 @@
  * 2026-05-18). Self-contained HTML: inline CSS, no external assets, no JS.
  */
 
+import { marked } from 'marked';
+import sanitizeHtml from 'sanitize-html';
+
 import type {
   AgentResponseAggregatedEvent,
   AgentSseFrameEvent,
@@ -36,6 +39,11 @@ import type {
   UserAgentRespondedEvent,
   UserMessageSentEvent,
 } from './events.js';
+
+// Configure marked once at module load. GFM + single-newline-as-<br> matches
+// chat-UI semantics. We intentionally do NOT use marked's deprecated
+// `sanitize` option; instead we post-process with sanitize-html below.
+marked.setOptions({ gfm: true, breaks: true });
 
 // ---------------------------------------------------------------------------
 // Public API.
@@ -372,23 +380,23 @@ function renderTurn(t: ViewTurn): string {
     parts.push(renderUserAgentDetails(t.userAgentInvoked, t.userAgentResponded));
   }
 
-  // Visitor bubble.
+  // Visitor bubble. Markdown rendered (sanitised).
   if (t.userMessage !== null) {
     parts.push(
-      `<div class="bubble bubble-visitor"><div class="bubble-role">Visitor</div><div class="bubble-text">${escapeHtml(t.userMessage)}</div></div>`,
+      `<div class="bubble bubble-visitor"><div class="bubble-role">Visitor</div><div class="bubble-text">${renderMarkdown(t.userMessage)}</div></div>`,
     );
   }
 
-  // Agent bubble.
+  // Agent bubble. Markdown rendered (sanitised).
   if (t.agentText.length > 0) {
     parts.push(
-      `<div class="bubble bubble-agent"><div class="bubble-role">Agent</div><div class="bubble-text">${escapeHtml(t.agentText)}</div></div>`,
+      `<div class="bubble bubble-agent"><div class="bubble-role">Agent</div><div class="bubble-text">${renderMarkdown(t.agentText)}</div></div>`,
     );
   } else if (t.agentResponseAggregated) {
     // Edge: aggregated event reports utter text not surfaced via text-frame
     // events (shouldn't happen normally but defensive).
     parts.push(
-      `<div class="bubble bubble-agent"><div class="bubble-role">Agent</div><div class="bubble-text">${escapeHtml(t.agentResponseAggregated.utterText)}</div></div>`,
+      `<div class="bubble bubble-agent"><div class="bubble-role">Agent</div><div class="bubble-text">${renderMarkdown(t.agentResponseAggregated.utterText)}</div></div>`,
     );
   }
 
@@ -555,6 +563,64 @@ function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/**
+ * Render markdown to HTML for use inside conversation bubbles ONLY.
+ *
+ * Used in two places: Visitor bubble + Agent bubble. Every other surface
+ * (tool args, persona, raw Anthropic responses, errors, assertion reasons,
+ * raw events block) keeps using `escapeHtml` — those are data, not
+ * conversation.
+ *
+ * Pipeline: marked → sanitize-html → string.
+ *   - marked produces HTML from markdown. Configured with `gfm: true`
+ *     (fenced code, tables) + `breaks: true` (single \n → <br>; matches
+ *     chat-UI semantics).
+ *   - sanitize-html strips raw HTML, event-handler attrs, javascript:
+ *     hrefs, and anything outside the explicit allow-list below. Defends
+ *     against an LLM emitting `<script>` or an `<img onerror=…>` in its
+ *     markdown.
+ *
+ * Allow-list: the tags + attrs a chat reply legitimately needs. Add to
+ * this list deliberately; default-disallow.
+ */
+const SANITIZE_ALLOWED_TAGS = [
+  'p',
+  'br',
+  'strong',
+  'em',
+  'code',
+  'pre',
+  'ul',
+  'ol',
+  'li',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'blockquote',
+  'a',
+  'hr',
+];
+const SANITIZE_ALLOWED_ATTRS = {
+  a: ['href', 'title'],
+};
+const SANITIZE_ALLOWED_SCHEMES = ['http', 'https', 'mailto'];
+
+function renderMarkdown(text: string): string {
+  // `marked.parse` is sync when given a string (the .Promise overload only
+  // kicks in with options.async = true). Use the sync overload deliberately.
+  const html = marked.parse(text, { async: false }) as string;
+  return sanitizeHtml(html, {
+    allowedTags: SANITIZE_ALLOWED_TAGS,
+    allowedAttributes: SANITIZE_ALLOWED_ATTRS,
+    allowedSchemes: SANITIZE_ALLOWED_SCHEMES,
+    // Disallow event handlers, data attrs, anything not explicitly listed.
+    disallowedTagsMode: 'discard',
+  });
 }
 
 function formatTimestamp(ts: string): string {

@@ -292,8 +292,10 @@ describe('viewTranscript — frame collation', () => {
 // HTML escaping.
 // ---------------------------------------------------------------------------
 
-describe('viewTranscript — HTML escaping', () => {
-  it('escapes <, >, &, ", \' in visitor messages + agent text', () => {
+describe('viewTranscript — HTML escaping (non-bubble surfaces)', () => {
+  it('escapes <, >, & in tool args and persona surfaces (the data ones)', () => {
+    // Bubbles now render markdown; we only assert escaping on non-bubble
+    // surfaces. Use a tool-call arg containing HTML to verify it's escaped.
     const events: HarnessEvent[] = [
       {
         kind: 'scenario.started',
@@ -302,27 +304,152 @@ describe('viewTranscript — HTML escaping', () => {
         scenarioShape: 'scripted',
       },
       {
-        kind: 'user.message.sent',
-        ...envelope('escape-test', 1),
-        sessionId: 's',
-        message: '<script>alert("xss")</script> & friends',
-      },
-      {
         kind: 'agent.sse.frame',
         ...envelope('escape-test', 1),
         frameEvent: null,
-        frameData: '{"type":"text","text":"He said \'hi\' & waved"}',
-        partType: 'text',
-        text: "He said 'hi' & waved",
+        frameData: '{"type":"tool-call","toolName":"find_options","input":{"query":"<script>alert(1)</script> & friends"}}',
+        partType: 'tool-call',
+        toolName: 'find_options',
+        toolInput: { query: '<script>alert(1)</script> & friends' },
       },
     ];
     const html = viewTranscript(events);
-    // The visitor message must not appear as raw script tag.
-    expect(html).not.toContain('<script>alert');
+    // The tool-arg surface MUST escape (it's data, not chat).
+    expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
     expect(html).toContain('&amp;');
-    expect(html).toContain('&#39;');
-    expect(html).toContain('&quot;');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Markdown rendering in bubbles only.
+// ---------------------------------------------------------------------------
+
+/**
+ * Slice the first `<div class="bubble bubble-agent">…</div>` from the HTML.
+ * Used by sanitisation tests so adversarial strings preserved in the
+ * Raw Events block (which is correct + expected) don't false-positive
+ * full-doc assertions.
+ */
+function extractAgentBubble(html: string): string {
+  const m = /<div class="bubble bubble-agent">[\s\S]*?<\/div><\/div>/.exec(html);
+  if (!m) throw new Error('test helper: no agent bubble found in HTML');
+  return m[0];
+}
+
+describe('viewTranscript — markdown rendering in bubbles', () => {
+  function bubbleScenario(visitorText: string, agentText: string): HarnessEvent[] {
+    return [
+      {
+        kind: 'scenario.started',
+        ...envelope('md-test'),
+        file: '/x.yaml',
+        scenarioShape: 'scripted',
+      },
+      {
+        kind: 'user.message.sent',
+        ...envelope('md-test', 1),
+        sessionId: 's',
+        message: visitorText,
+      },
+      {
+        kind: 'agent.sse.frame',
+        ...envelope('md-test', 1),
+        frameEvent: null,
+        frameData: `{"type":"text","text":${JSON.stringify(agentText)}}`,
+        partType: 'text',
+        text: agentText,
+      },
+    ];
+  }
+
+  it('renders **bold**, *italic*, and `code` as strong/em/code tags', () => {
+    const html = viewTranscript(
+      bubbleScenario('hi', 'This is **bold**, *italic*, and `code` text.'),
+    );
+    expect(html).toContain('<strong>bold</strong>');
+    expect(html).toContain('<em>italic</em>');
+    expect(html).toContain('<code>code</code>');
+  });
+
+  it('renders bullet lists as <ul>/<li>', () => {
+    const html = viewTranscript(
+      bubbleScenario(
+        'hi',
+        'Here are three things:\n- first thing\n- second thing\n- third thing',
+      ),
+    );
+    expect(html).toContain('<ul>');
+    expect(html).toContain('<li>first thing</li>');
+    expect(html).toContain('<li>second thing</li>');
+    expect(html).toContain('<li>third thing</li>');
+  });
+
+  it('converts single newlines to <br /> (breaks: true)', () => {
+    const html = viewTranscript(
+      bubbleScenario('hi', 'line one\nline two\nline three'),
+    );
+    // breaks: true → single newlines become <br>; sanitize-html serialises
+    // self-closing tags as XHTML-style `<br />`.
+    expect(html).toContain('<br />');
+  });
+
+  it('renders markdown headers as h1-h6 tags', () => {
+    const html = viewTranscript(
+      bubbleScenario('hi', '# Big heading\n\nsome body'),
+    );
+    expect(html).toContain('<h1>Big heading</h1>');
+  });
+
+  it('renders markdown links with sanitised href (http/https/mailto allowed)', () => {
+    const html = viewTranscript(
+      bubbleScenario('hi', 'See [Swoop](https://swoop-patagonia.com).'),
+    );
+    expect(html).toContain('href="https://swoop-patagonia.com"');
+    expect(html).toContain('>Swoop</a>');
+  });
+
+  it('STRIPS raw <script> tags and javascript: hrefs from agent text (sanitisation)', () => {
+    const adversarial =
+      'Hello <script>alert("xss")</script>! Click [me](javascript:alert(1)).';
+    const html = viewTranscript(bubbleScenario('hi', adversarial));
+    // Scope assertions to the agent bubble content; the raw events block
+    // at the bottom contains the original text verbatim (escaped) and
+    // would false-positive a full-doc assertion.
+    const bubble = extractAgentBubble(html);
+    // <script> must not survive sanitisation inside the bubble.
+    expect(bubble).not.toContain('<script>');
+    expect(bubble).not.toContain('alert(&quot;xss&quot;)');
+    expect(bubble).not.toContain('alert("xss")');
+    // javascript: hrefs must be stripped (sanitize-html removes the attr).
+    expect(bubble).not.toContain('javascript:alert(1)');
+    expect(bubble).not.toContain('href="javascript:');
+    // Word "Hello" + "Click" + "me" still surface — sanitisation removes
+    // the tags + attrs but preserves text content.
+    expect(bubble).toContain('Hello');
+    expect(bubble).toContain('Click');
+    expect(bubble).toContain('me');
+  });
+
+  it('STRIPS <img onerror=...> injected via markdown raw HTML', () => {
+    const adversarial = 'oops <img src=x onerror="alert(1)"> end';
+    const html = viewTranscript(bubbleScenario('hi', adversarial));
+    const bubble = extractAgentBubble(html);
+    // <img> tag and onerror attr must not survive.
+    expect(bubble).not.toContain('onerror');
+    expect(bubble).not.toContain('<img');
+    // Surrounding text preserved.
+    expect(bubble).toContain('oops');
+    expect(bubble).toContain('end');
+  });
+
+  it('markdown renders in visitor bubble too (not just agent)', () => {
+    const html = viewTranscript(
+      bubbleScenario('I have **questions** about *Patagonia*.', 'sure'),
+    );
+    // The visitor's bold + italic both render.
+    expect(html).toContain('<strong>questions</strong>');
+    expect(html).toContain('<em>Patagonia</em>');
   });
 });
 

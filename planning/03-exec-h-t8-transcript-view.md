@@ -302,3 +302,71 @@ Per Alastair's directives (incorporated above):
 > *Executing session fills in.*
 
 (empty until execution starts)
+
+---
+
+## 2026-05-18 Addendum — render markdown in Visitor + Agent bubbles
+
+**Status**: DRAFT — for HITL review.
+**Trigger**: Alastair on reviewing the first HTML: *"good. html should honour/convert markdown in the chats though."*
+
+### The gap
+
+The current view escapes ALL text in bubbles via `escapeHtml()`. Agent responses freely use markdown (`**bold**`, `*italic*`, `- list items`, `# headers`, `\`code\``). All of that currently renders as literal asterisks + raw newlines in the HTML. Hurts readability + misrepresents what a visitor would actually see in the chat UI.
+
+### Goal
+
+Render markdown to HTML inside Visitor + Agent bubbles. Everything else (tool args, persona, raw event dumps, error blockquotes, etc.) stays as plain escaped text — those are data surfaces, not conversational.
+
+### Scope
+
+- **In**: Visitor bubble text + Agent bubble text. The text rendered inside `.bubble-text` divs.
+- **Out**: User-agent persona + goal (data); tool call args (JSON); raw Anthropic responses (JSON); errors + timeouts (technical); assertion reasons (technical-ish); raw events block.
+
+### Architecture
+
+- Add `marked` (~30KB, MIT, widely used) as a harness dependency.
+- New helper `renderMarkdown(text: string): string` in `view-transcript.ts` — wraps `marked.parse()` with safe defaults:
+  - `gfm: true` (GitHub-flavoured: tables, fenced code, etc.)
+  - `breaks: true` (single `\n` → `<br>`, matching chat semantics where line breaks are intentional)
+  - Sanitisation: post-process with `sanitize-html` to strip raw HTML / script tags / event handlers / dangerous attrs. Defaults to allow-list of safe inline + block tags.
+  - Or: configure `marked` to escape HTML before parsing. Simpler if `marked` exposes that flag in current version.
+
+**Picking the safer of the two**: `sanitize-html` post-process. `marked` historically had a `sanitize` flag but it was deprecated 2024+ as too coarse. The sanitize-html post-pass is the recommended path.
+
+Two deps add: `marked` + `sanitize-html`. Both stable, small, dependency-light.
+
+### Tasks
+
+**Task A1**: Add `marked` + `sanitize-html` (+ `@types/sanitize-html`) as harness dependencies.
+```sh
+npm install --save --workspace=@swoop/harness marked sanitize-html
+npm install --save-dev --workspace=@swoop/harness @types/sanitize-html
+```
+
+**Task A2**: Add `renderMarkdown(text)` helper to `view-transcript.ts`. Configure marked with `gfm: true, breaks: true`. Run sanitize-html on the output with an explicit allow-list: `['p','br','strong','em','code','pre','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','a','hr']` + safe attr allow-list (`{a: ['href','title']}`). Disallow event handlers, javascript: hrefs, etc.
+
+**Task A3**: Swap the two `escapeHtml(text)` calls inside `renderTurn` (visitor + agent bubbles) for `renderMarkdown(text)`. Leave every other `escapeHtml` call untouched.
+
+**Task A4**: Add tests in `view-transcript.test.ts`:
+- Bold/italic/code render as `<strong>`/`<em>`/`<code>`.
+- Bullet list renders as `<ul><li>…</li></ul>`.
+- Newlines become `<br>` (with `breaks: true`).
+- Raw `<script>` / `<img onerror=…>` / `javascript:` href injected via markdown is stripped or escaped.
+- HTML escaping of non-markdown surfaces (tool args, persona, etc.) UNAFFECTED.
+
+**Task A5**: Re-smoke against sample-1-skeptic. Confirm markdown renders. Eyeball the output for any layout issues (e.g., `<p>` margins inside bubbles).
+
+### Open questions
+
+1. **Should persona + goal in user-agent details also render markdown?** Recommended: **NO for v1.** Personas are technical-ish prose; treating them as code surfaces them as authored. Add later if Alastair wants.
+2. **`breaks: true` (single `\n` → `<br>`) vs `false` (paragraph-only)?** Recommended: **true.** Agent responses have intentional line breaks in lists + paragraphs; preserving them matches the chat UI.
+3. **Linkify URLs that aren't markdown-linked?** Recommended: **NO for v1.** Agent's URLs are typically markdown-formatted already; adding auto-linkify risks turning incidental URL-like strings into links.
+
+### Estimated effort
+
+15–20 minutes including tests + re-smoke.
+
+### HITL ratification
+
+**Status**: RATIFIED 2026-05-18. All three open-question recommendations accepted (persona/goal stay escaped; `breaks: true`; no auto-linkify). Proceed with sequential execution in this session.
