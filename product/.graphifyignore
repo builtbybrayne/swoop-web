@@ -1,0 +1,55 @@
+# graphify exclusions for the Puma `product/` graph.
+# Same syntax as .gitignore. Keep this lean — every excluded file is one fewer
+# tree-sitter parse, and for non-code paths one fewer LLM call.
+
+# --- Build / install artefacts ---
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+.vercel/
+**/.vercel/
+*.tsbuildinfo
+**/*.tsbuildinfo
+coverage/
+**/coverage/
+
+# --- Lockfiles (huge, low semantic value) ---
+package-lock.json
+**/package-lock.json
+yarn.lock
+**/yarn.lock
+pnpm-lock.yaml
+**/pnpm-lock.yaml
+
+# --- Graphify's own output ---
+graphify-out/
+
+# --- Env files — never feed secrets to the extractor ---
+.env
+**/.env
+.env.*
+**/.env.*
+
+# --- Local data dumps / per-package var stores (would also be gitignored) ---
+/data/
+harness/runs/
+orchestrator/var/
+connector/var/
+
+# --- Symlink to sibling PoC repo (if restored at root) ---
+chatgpt_poc/
+
+# --- Symlink back to project-root planning/ (would re-include the 101 planning
+#     MDs we explicitly scoped out by running graphify from product/). ---
+project_management_references/
+
+# --- Mock fixtures (low semantic value for the code graph) ---
+# Revisit if/when graph queries need mock-host context.
+mock-host/

@@ -24,7 +24,11 @@
     "format:write": "prettier --write .",
     "dev": "bash scripts/dev.sh",
     "mock-host": "npx --yes serve mock-host -l 4173",
-    "clean": "rm -rf node_modules */node_modules */dist"
+    "clean": "rm -rf node_modules */node_modules */dist",
+    "graph:check": "bash scripts/graphify.sh check",
+    "graph:update": "bash scripts/graphify.sh update",
+    "graph:rebuild": "bash scripts/graphify.sh rebuild",
+    "graph:query": "bash scripts/graphify.sh query"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
