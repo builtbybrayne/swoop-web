@@ -1,48 +1,54 @@
-NEW LEAD FROM SWOOP WEB DISCOVERY
-==================================
+## New lead — {{contact.name}} ({{reason.code}})
 
-This visitor has been talking to the Patagonia discovery agent and is ready
-for a specialist follow-up.
+This visitor has been talking to the Patagonia discovery agent and is ready for a specialist follow-up.
 
-CONTACT
-  Name:           {{contact.name}}
-  Email:          {{contact.email}}
-  Phone:          {{contactPhoneOrDash}}
-  Prefers:        {{contactPreferredMethod}}
-  Time-zone hint: {{contactTimeZoneOrDash}}
+### Conversation summary
 
-VERDICT
-  qualified — {{reason.code}}
+{{reason.text}}
 
-WHAT THE AGENT SAW
-  {{reason.text}}
+### Why this trip, why now
 
-VISITOR PROFILE
-  Independence:  {{visitorIndependence}}
-  Budget band:   {{visitorBudgetBand}}
-  Activities:    {{visitorActivities}}
-  Regions:       {{visitorRegions}}
+{{motivationAnchor}}
 
-WISHLIST
+### What they shared
+
+- Independence: {{visitorIndependence}}
+- Budget band: {{visitorBudgetBand}}
+- Activities: {{visitorActivities}}
+- Regions: {{visitorRegions}}
+
+### Wishlist
+
 {{wishlistFormatted}}
 
-MOTIVATION
-  {{motivationAnchor}}
+### Anything else they wanted you to know
 
-REFERENCES
-  Handoff ID:    {{handoffId}}
-  Session ID:    {{session.sessionId}}
-  Turn count:    {{session.turnCount}}
-  Started:       {{session.conversationStartedAt}}
-  Submitted:     {{session.handoffSubmittedAt}}
-  Conv. ref:     {{session.rawConversationRef}}
-  Entry URL:     {{sessionEntryUrlOrDash}}
+{{additionalNotesOrNone}}
 
-CONSENT
-  Conversation: granted at {{consent.conversationTimestamp}} (copy v{{consentCopyVersionOrDash}})
-  Handoff:      granted at {{consent.handoffTimestamp}}
-  Marketing:    {{marketingConsentLabel}}
+### Contact
+
+- Name: {{contact.name}}
+- Email: {{contact.email}}
+- Phone: {{contactPhoneOrDash}}
+- Prefers: {{contactPreferredMethod}}
+- Time-zone hint: {{contactTimeZoneOrDash}}
+
+### References
+
+- Handoff ID: {{handoffId}}
+- Session ID: {{session.sessionId}}
+- Turn count: {{session.turnCount}}
+- Started: {{session.conversationStartedAt}}
+- Submitted: {{session.handoffSubmittedAt}}
+- Conversation ref: {{session.rawConversationRef}}
+- Entry URL: {{sessionEntryUrlOrDash}}
+
+### Consent
+
+- Conversation: granted at {{consent.conversationTimestamp}} (copy v{{consentCopyVersionOrDash}})
+- Handoff: granted at {{consent.handoffTimestamp}}
+- Marketing: {{marketingConsentLabel}}
 
 ---
-Sent automatically by the Swoop Patagonia discovery agent. The visitor has
-explicitly consented to this contact (tier-2 consent at handoff time).
+
+Sent automatically by the Swoop Patagonia discovery agent. The visitor has explicitly consented to this contact (tier-2 consent at handoff time).

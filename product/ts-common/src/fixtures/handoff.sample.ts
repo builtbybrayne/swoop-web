@@ -48,6 +48,11 @@ export const SampleHandoffQualified: HandoffPayloadQualified = {
     },
   ],
   motivationAnchor: "First big trekking trip — wants to feel like they earned it.",
+  visitorPrecis:
+    "W Trek in November, refugio-based (not camping), premium budget band, Torres del Paine.",
+  additionalNotes:
+    "Travelling with my partner — they're slightly less experienced on multi-day treks. Would " +
+    "love to know what level of fitness we should be working toward.",
   consent: {
     conversationGranted: true,
     conversationTimestamp: "2026-04-22T09:00:04.000Z",
@@ -94,6 +99,8 @@ export const SampleHandoffReferredOut: HandoffPayloadReferredOut = {
     },
   ],
   motivationAnchor: "Using Punta Arenas as a layover before a separate Antarctic cruise.",
+  visitorPrecis:
+    "Punta Arenas stopover, 3 nights, budget under £500pp, ahead of an Antarctic cruise.",
   consent: {
     conversationGranted: true,
     conversationTimestamp: "2026-04-22T10:30:00.000Z",

@@ -233,7 +233,7 @@ describe("fixtures round-trip through their Zod schemas", () => {
     const ok = {
       verdict: "qualified" as const,
       reasonCode: "ready_booking_named_trip" as const,
-      conversationSummary: "summary",
+      specialistSummary: "summary",
       motivationAnchor: "anchor",
     };
     expect(HandoffInputSchema.parse(ok)).toEqual(ok);
@@ -243,7 +243,7 @@ describe("fixtures round-trip through their Zod schemas", () => {
     const bad = {
       verdict: "qualified" as const,
       reasonCode: "low_engagement",
-      conversationSummary: "summary",
+      specialistSummary: "summary",
       motivationAnchor: "anchor",
     };
     expect(HandoffInputSchema.safeParse(bad).success).toBe(false);
@@ -253,7 +253,7 @@ describe("fixtures round-trip through their Zod schemas", () => {
     const bad = {
       verdict: "disqualified" as const,
       reasonCode: "unknown_code_123",
-      conversationSummary: "summary",
+      specialistSummary: "summary",
       motivationAnchor: "anchor",
     };
     expect(HandoffInputSchema.safeParse(bad).success).toBe(false);
@@ -273,7 +273,7 @@ describe("fixtures round-trip through their Zod schemas", () => {
       const ok = {
         verdict: "inconclusive" as const,
         reasonCode: code,
-        conversationSummary: "summary",
+        specialistSummary: "summary",
         motivationAnchor: "anchor",
       };
       expect(HandoffInputSchema.safeParse(ok).success).toBe(true);

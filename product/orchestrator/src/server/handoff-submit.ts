@@ -249,11 +249,21 @@ function enrichPayload(args: EnrichArgs): HandoffPayload {
   const motivationAnchor =
     reqBody.motivationAnchor ?? session.wishlist.motivationAnchor ?? '';
 
+  // Two visitor-influenced fields land on the durable payload as-is from
+  // the wire (frosty-leavitt-handoff-form-polish, 2026-05-19):
+  //   - visitorPrecis: the logistical-only summary the visitor was shown
+  //     inside the lead-capture form. Persisted for audit; NEVER reaches
+  //     the email body (mailer renders `additionalNotes`, not this).
+  //   - additionalNotes: free text from the visitor's "Anything else?"
+  //     textarea. Renders into the specialist email via the new
+  //     `additionalNotesOrNone` mailer template field.
   const common = {
     handoffId,
     visitorProfile,
     wishlist,
     motivationAnchor,
+    ...(reqBody.visitorPrecis ? { visitorPrecis: reqBody.visitorPrecis } : {}),
+    ...(reqBody.additionalNotes ? { additionalNotes: reqBody.additionalNotes } : {}),
     consent,
     session: sessionMeta,
   };

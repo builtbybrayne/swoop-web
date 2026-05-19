@@ -108,7 +108,7 @@ describe('MCP /mcp endpoint', () => {
           // pre-tightening test used a free-form placeholder which the
           // discriminated union now rejects.
           reasonCode: 'ready_booking_named_trip',
-          conversationSummary: 'Visitor wants W trek in March',
+          specialistSummary: 'Visitor wants W trek in March',
           motivationAnchor: 'autumn light in Patagonia',
         },
       }),
