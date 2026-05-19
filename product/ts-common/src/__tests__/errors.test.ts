@@ -60,4 +60,72 @@ describe("messageOf", () => {
     expect(typeof message).toBe("string");
     expect(message.length).toBeGreaterThan(0);
   });
+
+  // -------------------------------------------------------------------------
+  // 2026-05-19 demo-day diagnostic hardening — empty-Error.message fallback.
+  // Node's AggregateError (thrown by pg on ECONNREFUSED) has `.message === ""`
+  // and the real signal in `.errors[]`. The original messageOf returned ""
+  // which propagated through the connector's `handler_threw` envelope as a
+  // silent failure. These tests pin the new behaviour.
+  // -------------------------------------------------------------------------
+
+  it("falls back to the Error name when message is empty", () => {
+    const err = new Error("");
+    expect(messageOf(err)).toBe("Error");
+  });
+
+  it("includes the .code suffix for system errors with empty message", () => {
+    const err = new Error("");
+    (err as { code?: string }).code = "ENOENT";
+    expect(messageOf(err)).toBe("Error [ENOENT]");
+  });
+
+  it("surfaces the first inner error from AggregateError-like shapes", () => {
+    // Synthesise an AggregateError-shaped instance. In Node 16+ the real
+    // AggregateError carries `errors`, an empty `message`, and `name:
+    // 'AggregateError'`. We replicate that here so the test doesn't depend
+    // on Node's `AggregateError` constructor signature.
+    const inner = new Error("connect ECONNREFUSED 127.0.0.1:5432");
+    const agg = new Error("");
+    agg.name = "AggregateError";
+    (agg as { code?: string }).code = "ECONNREFUSED";
+    (agg as { errors?: unknown[] }).errors = [inner];
+
+    expect(messageOf(agg)).toBe(
+      "AggregateError [ECONNREFUSED]: connect ECONNREFUSED 127.0.0.1:5432",
+    );
+  });
+
+  it("uses a string inner from AggregateError.errors[]", () => {
+    const agg = new Error("");
+    agg.name = "AggregateError";
+    (agg as { errors?: unknown[] }).errors = ["raw string inner"];
+    expect(messageOf(agg)).toBe("AggregateError: raw string inner");
+  });
+
+  it("skips empty inners and uses the first non-empty one", () => {
+    const empty = new Error("");
+    const real = new Error("the real problem");
+    const agg = new Error("");
+    agg.name = "AggregateError";
+    (agg as { errors?: unknown[] }).errors = [empty, real];
+    expect(messageOf(agg)).toBe("AggregateError: the real problem");
+  });
+
+  it("returns just the name when no inner errors are useful", () => {
+    const agg = new Error("");
+    agg.name = "AggregateError";
+    (agg as { errors?: unknown[] }).errors = [new Error(""), null, undefined];
+    expect(messageOf(agg)).toBe("AggregateError");
+  });
+
+  it("non-empty Error.message still wins (no regression on the dominant path)", () => {
+    const err = new Error("real message");
+    err.name = "AggregateError";
+    (err as { code?: string }).code = "ECONNREFUSED";
+    (err as { errors?: unknown[] }).errors = [new Error("inner")];
+    // The non-empty top-level message is preferred over any inner-error
+    // synthesis — the fallback only fires when there's nothing else to say.
+    expect(messageOf(err)).toBe("real message");
+  });
 });
