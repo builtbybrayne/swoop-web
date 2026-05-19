@@ -6,6 +6,35 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## ADK's `SkillToolset.processLlmRequest` never fires — manual prompt-injection required
+
+**Symptom**: agent has `SkillToolset` wired in `tools: [skillToolset, ...]`, the 5 skill meta-tools (`list_skills` / `load_skill` / etc.) are callable, `loadAllSkillsInDir` loads all the SKILL.md files at boot — but Sonnet never calls `load_skill`, even when a description is an obvious match. The ADK-shipped "you MUST use load_skill when a skill is relevant" instruction is also nowhere visible to the model.
+
+**Cause**: `LlmAgent`'s pipeline (`node_modules/@google/adk/dist/cjs/agents/llm_agent.js`) iterates `this.tools`, but for each `toolUnion` calls `convertToolUnionToTools()` BEFORE invoking `processLlmRequest`. `convertToolUnionToTools()` flattens a `Toolset` to its child tools and discards the toolset itself:
+
+```js
+async function convertToolUnionToTools(toolUnion, context) {
+  if (isBaseTool(toolUnion)) return [toolUnion];
+  return await toolUnion.getTools(context);   // ← toolset is gone
+}
+```
+
+The agent then loops the child tools and calls `processLlmRequest` on each. The 5 skill child tools inherit `BaseTool`'s no-op `processLlmRequest`. **`SkillToolset.processLlmRequest` — where `DEFAULT_SKILL_SYSTEM_INSTRUCTION` + `formatSkillsAsXml(skills)` auto-injection lives — is dead code in ADK's own pipeline.** Sonnet receives the 5 generic tool descriptions ("Loads the SKILL.md instructions for a given skill.") and that's it — no framework-level guidance to actually USE them.
+
+**Fix**: manual replication. The constants/helpers aren't exported from `@google/adk`'s public surface, so we copy them locally in [product/orchestrator/src/agent/skills-prompt-injection.ts](product/orchestrator/src/agent/skills-prompt-injection.ts):
+
+- `DEFAULT_SKILL_SYSTEM_INSTRUCTION` (verbatim from `tools/skill/skill_toolset.js`).
+- `formatSkillsAsXml` (verbatim port of `skills/prompt.js`).
+- `buildSkillsPromptInjection(skills, { includeBodies })` — concatenates both into one block.
+
+[product/orchestrator/src/agent/factory.ts](product/orchestrator/src/agent/factory.ts) computes the injection at boot and wraps the `InstructionProvider` so every turn's instruction is `<brief>\n\n---\n\n<skills-injection>`. The brief still re-reads per-turn in dev (hot-reload); the skills bodies don't change at runtime so they're captured in closure.
+
+**Demo escape hatch**: `PRELOAD_SKILL_BODIES=true` env var (see config schema) appends every skill's full body to the system prompt as an appendix — Sonnet sees the whole library in context regardless of whether it'd call `load_skill`. ~20K extra prompt tokens, cache-friendly, ~$0.001/conversation. Off by default.
+
+**When this becomes dead code**: if ADK ever fixes the toolset pipeline (calling `processLlmRequest` on toolsets, not just child tools) OR exports the helpers, delete `skills-prompt-injection.ts` and revert the `factory.ts` wiring to `instruction: () => promptLoader.load()`. Keep the env-var preload only if the auto-loading still proves unreliable.
+
+---
+
 ## `annotate-images --mode=batches` builds the payload then bails — submission is unwired *(CLOSED 2026-05-13 by BATCH-C.t6; entry preserved for git-blame readers hitting old logs)*
 
 **Status**: ✅ CLOSED 2026-05-13. The submit + poll + result-stream wiring landed via [planning/03-exec-c-t6-batches-submission.md — BATCH-C.t6](planning/03-exec-c-t6-batches-submission.md), decisions C.batch-1..4. `--mode=batches` now POSTs to Anthropic, polls until the batch ends, fetches results, and writes back per-result. The operator-facing runbook at [product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md) now recommends `--mode=batches` for full re-runs.

@@ -117,6 +117,22 @@ export const configSchema = z
     SKILLS_DIR: z.string().trim().min(1).default('../cms/prompts/skills'),
     TOOLS_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/tools'),
 
+    // Demo / tactical override: when true, the full body of every loaded
+    // skill is appended to the system prompt as an appendix. Bypasses the
+    // ADK list_skills / load_skill dance entirely — Sonnet sees every
+    // pattern in context regardless of whether it would have called the
+    // load tool. Costs ~20K extra system-prompt tokens (cache-friendly,
+    // ~one-tenth-of-a-cent per conversation with prompt caching).
+    //
+    // The XML skills-index (`<available_skills>...</available_skills>`)
+    // is injected unconditionally to fix the ADK toolset.processLlmRequest
+    // bug — see agent/skills-prompt-injection.ts + gotchas.md. This flag
+    // only controls whether the bodies are also appended.
+    PRELOAD_SKILL_BODIES: z
+      .string()
+      .default('false')
+      .transform((s) => s.toLowerCase() === 'true' || s === '1'),
+
     // --- Session ---------------------------------------------------------
     SESSION_BACKEND: SessionBackend.default('in-memory'),
     SESSION_TTL_IDLE_HOURS: z.coerce.number().int().positive().default(24),
