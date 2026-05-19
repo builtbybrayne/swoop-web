@@ -117,6 +117,7 @@ export const messagePartComponents = {
 export { FyiRenderer } from "./fyi-renderer";
 export { FyiSignalingText } from "./fyi-signaling-text";
 export { ReasoningGuard, REASONING_GUARD_MESSAGE } from "./reasoning-guard";
+export { TextThinkingIndicator } from "./text-thinking-indicator";
 export {
   subscribeFyiChannel,
   emitFyiChannel,
