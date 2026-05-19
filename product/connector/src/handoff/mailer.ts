@@ -268,7 +268,15 @@ export function preparePayloadForTemplate(
   return {
     ...payload,
     ...(scrubbedContact ? { contact: scrubbedContact } : {}),
-    motivationAnchor: stripControlChars(payload.motivationAnchor),
+    // motivationAnchor is optional on the agent-facing tool args (an
+    // early-turn handoff may have no clear motivation read yet), so render
+    // a fallback when the durable payload carries an empty string — keeps
+    // the email's "Why this trip, why now" section reading cleanly either
+    // way.
+    motivationAnchor:
+      payload.motivationAnchor && payload.motivationAnchor.trim().length > 0
+        ? stripControlChars(payload.motivationAnchor)
+        : '(not surfaced)',
     reason: { ...payload.reason, text: stripControlChars(payload.reason.text) },
 
     // ---- Contact fallbacks (disqualified has no contact field) -----------
