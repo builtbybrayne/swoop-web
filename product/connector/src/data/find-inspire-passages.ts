@@ -54,11 +54,25 @@ export async function findInspirePassages(
       LIMIT 50
     `,
     outerSelect: `
-      SELECT ip.id, ip.text, ip.canonical_url, ip.region, ip.mood, ip.image_id, fused.rrf_score
-      FROM fused
-      JOIN inspire_passage ip ON ip.id = fused.id
+      SELECT * FROM (
+        SELECT DISTINCT ON (ip.canonical_url, img.canonical_url)
+          ip.id, ip.text, ip.canonical_url, ip.region, ip.mood, ip.image_id, fused.rrf_score
+        FROM fused
+        JOIN inspire_passage ip ON ip.id = fused.id
+        LEFT JOIN image img ON img.id = ip.image_id
+        ORDER BY ip.canonical_url, img.canonical_url, fused.rrf_score DESC
+      ) deduped
     `,
-    tail: `ORDER BY fused.rrf_score DESC LIMIT $3`,
+    // Per-(page-URL, image-URL) dedup: the schema's content_hash idempotency
+    // dedupes by text bytes, but the same logical page often ingests as
+    // multiple source rows (page.intro_text + a contentblock on the same
+    // page, etc.) with near-identical prose that hash distinctly. The outer
+    // subquery collapses these — DISTINCT ON keeps the highest-RRF row per
+    // (page URL, image URL) pair. NULL image URL groups with NULL image URL
+    // (Postgres treats NULL = NULL inside DISTINCT ON), so image-less
+    // passages from the same page still collapse. Outer ORDER BY re-sorts
+    // the deduped set by RRF and applies the visitor-facing limit.
+    tail: `ORDER BY rrf_score DESC LIMIT $3`,
   });
 
   const res = await client.query(sql, [

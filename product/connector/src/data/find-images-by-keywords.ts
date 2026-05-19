@@ -74,11 +74,22 @@ export async function findImagesByKeywords(
   binds.push(opts.limit);
   const limitBind = `$${binds.length}`;
 
+  // Per-canonical_url dedup. The corpus carries multiple `image` rows
+  // pointing at the same imgix URL (the 3-kayak case observed in dev —
+  // distinct rows, identical content). Inner DISTINCT ON keeps the
+  // closest-cosine row per URL; outer wrapper re-orders by distance and
+  // applies the visitor-facing limit. NULL canonical_url shouldn't occur
+  // (column is NOT NULL on the `image` table), so no edge-case there.
   const sql = `
-    SELECT id, canonical_url, alt_text, description
-    FROM image
-    WHERE ${clauses.join(' AND ')}
-    ORDER BY embedding <=> $1::vector
+    SELECT * FROM (
+      SELECT DISTINCT ON (canonical_url)
+        id, canonical_url, alt_text, description,
+        (embedding <=> $1::vector) AS distance
+      FROM image
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY canonical_url, (embedding <=> $1::vector) ASC
+    ) deduped
+    ORDER BY distance ASC
     LIMIT ${limitBind}
   `;
 
