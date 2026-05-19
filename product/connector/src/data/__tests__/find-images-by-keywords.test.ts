@@ -62,8 +62,11 @@ describe('findImagesByKeywords — unit', () => {
     expect(calls).toHaveLength(1);
     const { sql, binds } = calls[0]!;
 
-    // Cosine-ANN ranking against $1.
-    expect(sql).toMatch(/ORDER BY embedding <=> \$1::vector/);
+    // Cosine-ANN ranking against $1 (now inside the dedup wrapper's
+    // inner ORDER BY: `ORDER BY canonical_url, (embedding <=> $1::vector) ASC`).
+    expect(sql).toMatch(/embedding <=> \$1::vector/);
+    // Per-canonical_url dedup wrapper: keeps the closest-cosine row per URL.
+    expect(sql).toMatch(/DISTINCT ON \(canonical_url\)/);
     // The non-null embedding gate remains — rows with no signal don't rank.
     expect(sql).toMatch(/embedding IS NOT NULL/);
     // Regression guard: no tag-array-overlap clause anywhere.
@@ -91,7 +94,8 @@ describe('findImagesByKeywords — unit', () => {
     const { sql, binds } = calls[0]!;
 
     expect(sql).toMatch(/region_tags @> \$2/);
-    expect(sql).toMatch(/ORDER BY embedding <=> \$1::vector/);
+    expect(sql).toMatch(/embedding <=> \$1::vector/);
+    expect(sql).toMatch(/DISTINCT ON \(canonical_url\)/);
     // Binds: embedding, [regionSlug], limit.
     expect(binds).toHaveLength(3);
     expect(binds[0]).toBe(`[${DUMMY_EMBEDDING.join(',')}]`);
