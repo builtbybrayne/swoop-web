@@ -46,6 +46,13 @@ coverage/
 product/harness/runs/*
 !product/harness/runs/.gitkeep
 
+# graphify (safishamsi/graphify) output — visualization + queryable graph.
+# Built locally with `graphify .` from product/. manifest.json is mtime-based
+# and pollutes diffs; cost.json is local-only. Cache could be committed for
+# team-wide rebuild speedup — leave excluded for now, revisit if rebuilds
+# become a bottleneck.
+product/graphify-out/
+
 # Local-only file-backed durable stores (E.t3 interim — FsHandoffStore writes
 # handoff records here pending the Firestore swap targeted in E.t2). Never
 # commit visitor PII / contact details to git.

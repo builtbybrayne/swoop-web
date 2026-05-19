@@ -74,3 +74,13 @@ Cloud Run only. Firebase Functions are out of scope for Puma; the Firebase Emula
 - If a Tier 3 plan doesn't list a file, don't create it.
 - If a decision feels wrong at implementation time, raise it against the relevant Tier 2 doc (`../planning/02-impl-*.md`) before implementing an alternative. Plan-first, code-second.
 - Don't `git add` / commit unless the user asks. Leave the working tree for Al to review.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
