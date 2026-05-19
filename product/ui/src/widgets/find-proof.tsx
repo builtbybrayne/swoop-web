@@ -42,6 +42,7 @@ import {
   WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
+import { decodeHtmlEntities } from "./text-utils";
 
 const SHELL_CTX = {
   widgetType: "find-proof",
@@ -112,14 +113,14 @@ function PulledQuote({ proof }: { proof: TrustProofPublic }) {
           data-testid="find-proof-claim"
           className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500"
         >
-          {proof.claim}
+          {decodeHtmlEntities(proof.claim)}
         </figcaption>
       ) : null}
       <blockquote
         data-testid="find-proof-evidence"
         className="text-base italic leading-relaxed text-slate-700"
       >
-        {proof.evidence}
+        {decodeHtmlEntities(proof.evidence)}
       </blockquote>
       {proof.canonicalUrl ? (
         <a
