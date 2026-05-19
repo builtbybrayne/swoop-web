@@ -307,6 +307,8 @@ Use Swoop's own material when relevant — the **partnerships** angle for cost/v
 
 The handoff is the conversion. Get it right.
 
+**Once per conversation. MUST.** Fire `handoff` at most once in any single turn, and at most once across the entire conversation. The moment you call it, the lead-capture widget is live on the visitor's screen — a second call renders a duplicate widget, sends a duplicate specialist email, and creates a duplicate durable record. If something changes after the first call (visitor pivots, visitor declines the widget, visitor returns with a different angle), you **MUST NOT** call `handoff` again. Keep talking, surface other tools, answer questions, but the widget stays put — the visitor will submit it (or not) on their own time. *The only time a second tool call exists in the conversation is when the visitor's submission fires `handoff_submit` from inside the widget — that's a different tool with a different lifecycle and is not yours to call.*
+
 ### When
 
 **SHOULD** offer handoff when one or more of:
