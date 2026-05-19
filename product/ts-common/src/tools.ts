@@ -99,7 +99,15 @@ const HandoffInputCommonFields = {
   // verdicts don't render the widget; the tool description steers it to
   // be present on qualified / referred_out.
   visitorPrecis: z.string().optional(),
-  motivationAnchor: z.string(),
+  // The visitor's "why this trip, why now" in their own words where
+  // possible. Optional because the agent honestly can't always read
+  // motivation — early-turn handoffs (a Skeptic pushing back on a
+  // redirect; a transactional Browser saying "connect me anyway") may
+  // have no clear motivation surfaced yet. Forcing the agent to invent
+  // one is worse than letting the specialist establish it on the call.
+  // Wire + payload schemas already treat this as optional; this aligns
+  // the agent-facing tool schema with that posture.
+  motivationAnchor: z.string().optional(),
 } as const;
 
 export const HandoffInputQualifiedSchema = z
