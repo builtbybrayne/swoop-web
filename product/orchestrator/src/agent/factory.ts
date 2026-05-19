@@ -38,6 +38,7 @@ import type { Config } from '../config/index.js';
 import type { PromptLoader } from './prompt-loader.js';
 import { ClaudeLlm } from './claude-llm.js';
 import { loadSkillsFromDir, type LoadedSkill } from './skill-loader.js';
+import { buildSkillsPromptInjection } from './skills-prompt-injection.js';
 
 export interface BuildAgentParams {
   readonly config: Config;
@@ -83,6 +84,21 @@ export async function buildOrchestratorAgent({
     );
   }
 
+  // Build the skills-prompt injection ONCE at boot. Skill bodies don't
+  // change at runtime (dev hot-reload of the brief stays via promptLoader;
+  // skill bodies need a restart). The XML index + ADK-style "you MUST use
+  // load_skill" instruction reach the model on every turn via the
+  // InstructionProvider below. When PRELOAD_SKILL_BODIES is true the full
+  // body of every skill is appended — see config schema + skills-prompt-
+  // injection.ts header comment for the why.
+  const skillsInjection = buildSkillsPromptInjection(skills, {
+    includeBodies: config.PRELOAD_SKILL_BODIES,
+  });
+  console.log(
+    `[orchestrator] skills-prompt injection ready: xml-index always-on, ` +
+      `bodies=${config.PRELOAD_SKILL_BODIES ? 'PRELOADED' : 'on-demand via load_skill'}`,
+  );
+
   // SkillToolset accepts either a Skill[] or a Record<string, Skill>; we
   // pass the sorted array so iteration order matches the boot-log order.
   // No `additionalTools` — connector tools live alongside the toolset as
@@ -96,13 +112,19 @@ export async function buildOrchestratorAgent({
       "Puma's conversational discovery orchestrator for Swoop Adventures' Patagonia website. Single-agent layer; functional agents live behind tool boundaries (B.t7+).",
     model,
     // InstructionProvider: resolved per-invocation so dev edits to why.md
-    // are picked up without a restart.
-    instruction: () => promptLoader.load(),
+    // are picked up without a restart. The skills injection (ADK's
+    // DEFAULT_SKILL_SYSTEM_INSTRUCTION + <available_skills> XML, plus
+    // optional bodies appendix) is appended after the brief — manual
+    // replacement for ADK's broken SkillToolset.processLlmRequest
+    // pipeline. See skills-prompt-injection.ts + gotchas.md.
+    instruction: () => `${promptLoader.load()}\n\n---\n\n${skillsInjection}`,
     // Connector FunctionTools as top-level siblings of the SkillToolset.
     // The SkillToolset contributes the 5 skill-management tools
-    // (list_skills / load_skill / etc.) + injects its skills-XML system-
-    // prompt addendum via processLlmRequest. Connector tools (the eight
-    // intent-named WHAT layer) reach Sonnet directly via `toolsDict`.
+    // (list_skills / load_skill / etc.). Its processLlmRequest hook never
+    // fires (ADK bug — see gotchas.md), so the load_skill MUST-instruction
+    // and skills XML are injected manually via `instruction` above.
+    // Connector tools (the eight intent-named WHAT layer) reach Sonnet
+    // directly via `toolsDict`.
     tools: [skillToolset, ...tools],
   });
 
