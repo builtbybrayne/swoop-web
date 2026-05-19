@@ -64,6 +64,18 @@ This is very important:
 
 /**
  * Verbatim copy of ADK's `escapeHtml` helper from `skills/prompt.js`.
+ *
+ * Intentionally NOT consolidated to the `he` dep used elsewhere in the
+ * codebase (ingestion/chunk.ts, ui/widgets/text-utils.ts, harness/view-
+ * transcript.ts). This module's whole purpose is to reproduce what ADK
+ * *would* have emitted via SkillToolset.processLlmRequest if the
+ * framework's pipeline hadn't dropped it (see file header + gotchas.md).
+ * Swapping in `he.encode` would change the exact byte sequence Sonnet
+ * sees in the `<available_skills>` block — possibly subtly different
+ * named references / numeric ranges. We hold the wire-format invariant
+ * here even though it duplicates the encoder dep. If ADK ever ships
+ * their own helpers as named exports, replace this with their actual
+ * impl; do not switch to `he`.
  */
 function escapeHtml(unsafe: string): string {
   return unsafe

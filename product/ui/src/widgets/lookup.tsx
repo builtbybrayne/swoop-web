@@ -41,6 +41,7 @@ import {
   WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
+import { decodeHtmlEntities } from "./text-utils";
 
 // Cap the number of source-page affordances to keep the surface quiet — even
 // if many chunks return distinct canonical URLs, we surface at most this many
@@ -124,7 +125,7 @@ function SourceLink({ affordance }: { affordance: SourceAffordance }) {
           data-testid="lookup-hint"
           className="text-[11px] uppercase tracking-wide text-slate-500"
         >
-          {affordance.hint}
+          {decodeHtmlEntities(affordance.hint)}
         </span>
       ) : null}
       <a

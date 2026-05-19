@@ -37,6 +37,7 @@ type ParsedPassage = z.infer<
   typeof FindInspiringOutputSchema
 >["passages"][number];
 import { Card, ImageBlock } from "../shared";
+import { decodeHtmlEntities } from "./text-utils";
 import {
   renderLifecycleGate,
   safeParse,
@@ -118,7 +119,7 @@ function PassageCard({ passage }: { passage: ParsedPassage }) {
         ) : null}
         <div className="flex flex-col gap-2 p-4">
           <p className="text-sm leading-relaxed text-slate-800">
-            {passage.text}
+            {decodeHtmlEntities(passage.text)}
           </p>
           <div className="flex items-center justify-between gap-2 pt-1">
             {passage.region ? (

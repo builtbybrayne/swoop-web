@@ -23,6 +23,8 @@
  * accepts up to 32K tokens per input, our 800-token target is generous.
  */
 
+import { decode as decodeHtmlEntities } from 'he';
+
 const APPROX_CHARS_PER_TOKEN = 4;
 
 /** Soft target chunk size for sliding-window splits, in characters. */
@@ -66,27 +68,33 @@ export interface SourceChunk {
   text: string;
 }
 
-/** Strip HTML tags + collapse whitespace. */
+/** Strip HTML tags + decode entities + collapse whitespace. */
 export function stripHtml(html: string): string {
-  return html
-    // Drop scripts and styles entirely (with their contents).
+  // 1. Drop scripts / styles / iframes entirely (with their contents).
+  // 2. Convert structural breaks to whitespace so they survive collapsing.
+  // 3. Drop remaining tags.
+  const stripped = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<iframe[\s\S]*?<\/iframe>/gi, ' ')
-    // Convert structural breaks to whitespace so they survive collapsing.
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|li|h[1-6])>/gi, '\n\n')
-    // Drop remaining tags.
-    .replace(/<[^>]+>/g, ' ')
-    // Decode the most common HTML entities. Full decoder isn't worth the dep.
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    // Collapse whitespace.
+    .replace(/<[^>]+>/g, ' ');
+
+  // 4. Decode HTML entities. We use `he` (full HTML5 entity table) rather
+  //    than a hand-rolled replace chain because WordPress auto-converts
+  //    straight quotes/dashes to smart-typography entities on publish
+  //    (`&rsquo;`, `&ldquo;`, `&mdash;`, numeric `&#8217;`, …). A partial
+  //    decoder lets those slip through to the UI as visible markup.
+  //    Then normalise non-breaking spaces (U+00A0, what `&nbsp;` decodes
+  //    to) to regular spaces so the whitespace-collapse pass below
+  //    actually collapses them. The previous inline chain replaced
+  //    `&nbsp;` directly with a regular space; preserving that semantic
+  //    after delegating to `he` keeps embed/chunk text consistent.
+  const decoded = decodeHtmlEntities(stripped).replace(/\u00A0/g, ' ');
+
+  // 5. Collapse whitespace.
+  return decoded
     .replace(/\r\n/g, '\n')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')

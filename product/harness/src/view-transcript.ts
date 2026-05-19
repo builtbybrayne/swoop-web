@@ -17,6 +17,7 @@
  * 2026-05-18). Self-contained HTML: inline CSS, no external assets, no JS.
  */
 
+import { escape as escapeHtmlMinimal } from 'he';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
 
@@ -557,12 +558,14 @@ function renderRawEvents(model: ViewModel): string {
 // ---------------------------------------------------------------------------
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  // `he.escape` is the minimal-escape variant — only the 5 HTML-critical
+  // chars (&, <, >, ", '), emitted as named entity references (&amp; /
+  // &lt; / &gt; / &quot; / &#x27;). Matches the previous inline chain
+  // exactly; leaves all other Unicode (e.g. "×", em dashes) literal.
+  // We deliberately use `escape` rather than `encode` because tool-arg
+  // surfaces and transcript collation contain Unicode glyphs that should
+  // survive into the rendered HTML unchanged.
+  return escapeHtmlMinimal(s);
 }
 
 /**

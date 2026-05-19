@@ -43,6 +43,7 @@ type ParsedStory = z.infer<
   typeof FindSomeoneWhoOutputSchema
 >["stories"][number];
 import { Card, ImageBlock } from "../shared";
+import { decodeHtmlEntities } from "./text-utils";
 import {
   renderLifecycleGate,
   safeParse,
@@ -136,7 +137,7 @@ function StoryVignette({ story }: { story: ParsedStory }) {
             data-testid="find-someone-who-story"
             className="text-sm leading-relaxed text-slate-800"
           >
-            {story.text}
+            {decodeHtmlEntities(story.text)}
           </p>
           <div className="flex items-center justify-between gap-2 pt-1">
             {story.region ? (
