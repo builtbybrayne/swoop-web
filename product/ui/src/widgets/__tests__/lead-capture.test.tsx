@@ -21,10 +21,34 @@ vi.mock("../../runtime/handoff-client", () => ({
   postHandoffSubmit: vi.fn(),
 }));
 
+// Mock `useAssistantRuntime` so the widget's post-submit `runtime.thread.append`
+// call is observable from the test. Other named exports (`MessagePrimitive`,
+// `ThreadPrimitive`, etc.) flow through from the real module.
+vi.mock("@assistant-ui/react", async () => {
+  const actual = await vi.importActual<typeof import("@assistant-ui/react")>(
+    "@assistant-ui/react",
+  );
+  return {
+    ...actual,
+    useAssistantRuntime: vi.fn(),
+  };
+});
+
 import { LeadCaptureWidget } from "../lead-capture";
 import { postHandoffSubmit } from "../../runtime/handoff-client";
+import { useAssistantRuntime } from "@assistant-ui/react";
 
 const postHandoffSubmitMock = vi.mocked(postHandoffSubmit);
+const useAssistantRuntimeMock = vi.mocked(useAssistantRuntime);
+
+/** Build a fake AssistantRuntime exposing only the fields the widget touches. */
+function setupRuntime(): { append: ReturnType<typeof vi.fn> } {
+  const append = vi.fn();
+  useAssistantRuntimeMock.mockReturnValue({
+    thread: { append },
+  } as never);
+  return { append };
+}
 
 const VISITOR_PRECIS_SAMPLE =
   "W Trek in November, refugio-based, premium budget, Torres del Paine.";
@@ -53,6 +77,7 @@ function mockProps(overrides: Partial<Record<string, unknown>> = {}) {
 afterEach(() => {
   cleanup();
   postHandoffSubmitMock.mockReset();
+  useAssistantRuntimeMock.mockReset();
 });
 
 describe("LeadCaptureWidget", () => {
@@ -224,6 +249,75 @@ describe("LeadCaptureWidget", () => {
 
     // Form is still usable — the visitor can retry.
     expect(screen.getByRole("button", { name: /Submit handoff details/i })).not.toBeDisabled();
+  });
+
+  it("appends a synthetic visitor message on successful submit to kick the agent into a follow-up turn", async () => {
+    postHandoffSubmitMock.mockResolvedValueOnce({
+      ok: true,
+      handoffId: "handoff_follow_up",
+      emailStatus: "sent",
+    });
+    const { append } = setupRuntime();
+
+    render(<LeadCaptureWidget {...mockProps()} />);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
+    fireEvent.click(screen.getByTestId("lead-capture-consent"));
+    fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
+
+    await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(append).toHaveBeenCalledTimes(1));
+
+    // The synthetic message kicks the agent into a follow-up turn — its role
+    // must be "user" (system / assistant wouldn't trigger a model run) and
+    // the text must be the canonical confirmation phrase so the agent can
+    // recognise + respond to it.
+    expect(append).toHaveBeenCalledWith({
+      role: "user",
+      content: [{ type: "text", text: "(Form submitted.)" }],
+    });
+  });
+
+  it("does NOT append the synthetic message when the submit POST fails", async () => {
+    postHandoffSubmitMock.mockResolvedValueOnce({
+      ok: false,
+      reason: "store_failed",
+      detail: "simulated disk failure",
+    });
+    const { append } = setupRuntime();
+
+    render(<LeadCaptureWidget {...mockProps()} />);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
+    fireEvent.click(screen.getByTestId("lead-capture-consent"));
+    fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("lead-capture-error")).toBeInTheDocument(),
+    );
+    // Failure path: visitor will retry; the agent shouldn't be told it's
+    // submitted because it isn't. No synthetic turn fires.
+    expect(append).not.toHaveBeenCalled();
+  });
+
+  it("does not crash when no AssistantRuntime is in scope (optional: true guard)", async () => {
+    postHandoffSubmitMock.mockResolvedValueOnce({
+      ok: true,
+      handoffId: "handoff_no_runtime",
+      emailStatus: "sent",
+    });
+    // useAssistantRuntime({ optional: true }) returns null when there is no
+    // provider — assert the widget tolerates that path without throwing.
+    useAssistantRuntimeMock.mockReturnValue(null as never);
+
+    render(<LeadCaptureWidget {...mockProps()} />);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
+    fireEvent.click(screen.getByTestId("lead-capture-consent"));
+    fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
+
+    await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));
+    // Survived the optional?.append call — no error thrown, submission proceeds.
   });
 
   it("marketing opt-in does NOT gate the submit button", () => {

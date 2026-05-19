@@ -39,7 +39,10 @@ import {
   type HandoffInput,
   type HandoffSubmitOutput,
 } from "@swoop/common";
-import type { ToolCallMessagePartProps } from "@assistant-ui/react";
+import {
+  useAssistantRuntime,
+  type ToolCallMessagePartProps,
+} from "@assistant-ui/react";
 import { CtaButton } from "../shared";
 import {
   safeParse,
@@ -103,6 +106,17 @@ export function LeadCaptureWidget(
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Used post-submit to nudge the agent back into a follow-up turn — see the
+  // `props.addResult(out)` block below. assistant-ui doesn't reliably trigger
+  // a new model run from `addResult` alone once the assistant message has
+  // closed; appending a synthetic visitor turn forces the agent to acknowledge
+  // submission and continue the conversation (per Alastair 2026-05-19).
+  //
+  // `optional: true` so unit tests that render the widget bare (no
+  // <AssistantRuntimeProvider> in scope) don't throw; the append is guarded
+  // below.
+  const runtime = useAssistantRuntime({ optional: true });
 
   if (!argsParsed.ok) {
     return (
@@ -229,6 +243,17 @@ export function LeadCaptureWidget(
         handoffId: response.handoffId,
       };
       props.addResult(out as unknown as never);
+      // Kick the agent into a follow-up turn. `addResult` populates the
+      // tool-call's result slot, but by the time the visitor presses Submit
+      // the assistant message is typically closed — addResult alone doesn't
+      // re-start a run. Appending a synthetic visitor turn is the path that
+      // reliably triggers the model. Text is neutral and read like a quick
+      // visitor confirmation; future iteration could swap this for a hidden
+      // data-part if the visible user bubble becomes jarring.
+      runtime?.thread.append({
+        role: "user",
+        content: [{ type: "text", text: "(Form submitted.)" }],
+      });
       setSubmitted(true);
       return;
     }

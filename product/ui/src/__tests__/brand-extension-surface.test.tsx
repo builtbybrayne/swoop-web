@@ -12,6 +12,20 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
+// `LeadCaptureWidget` calls `useAssistantRuntime` at the top of its render —
+// `useAui()` inside doesn't honour the `optional: true` flag and throws when
+// no provider is in scope. We mock the hook to a no-op so the bare-render
+// brand-surface assertions still work. Other named exports flow through.
+vi.mock("@assistant-ui/react", async () => {
+  const actual = await vi.importActual<typeof import("@assistant-ui/react")>(
+    "@assistant-ui/react",
+  );
+  return {
+    ...actual,
+    useAssistantRuntime: vi.fn(() => null),
+  };
+});
+
 import { ChromeBadge } from "../disclosure/chrome-badge";
 import { OpeningScreen } from "../disclosure/opening-screen";
 import { ErrorBanner } from "../errors/error-banner";
