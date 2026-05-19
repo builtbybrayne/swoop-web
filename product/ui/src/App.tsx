@@ -36,7 +36,7 @@ import { emitUiEvent } from "./runtime/emit-ui-event";
 // Registers the `data-fyi` renderer + reasoning-guard (D.t2). Importing here
 // is what gives assistant-ui the component map below; the module itself has
 // no top-level side effects, but its named export encodes the full registry.
-import { messagePartComponents } from "./parts";
+import { messagePartComponents, TextThinkingIndicator } from "./parts";
 import {
   ChromeBadge,
   OpeningScreen,
@@ -112,6 +112,7 @@ function MessageView() {
           className="flex w-full max-w-2xl flex-col gap-2 py-3"
         >
           <MessagePrimitive.Parts components={messagePartComponents} />
+          <TextThinkingIndicator />
         </MessagePrimitive.Root>
       </MessagePrimitive.If>
     </>
