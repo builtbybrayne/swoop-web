@@ -24,11 +24,15 @@
     "format:write": "prettier --write .",
     "dev": "bash scripts/dev.sh",
     "mock-host": "npx --yes serve mock-host -l 4173",
-    "clean": "rm -rf node_modules */node_modules */dist",
+    "funnel": "bash scripts/funnel.sh",
+    "funnel:up": "bash scripts/funnel.sh up",
+    "funnel:down": "bash scripts/funnel.sh down",
+    "funnel:status": "bash scripts/funnel.sh status",
     "graph:check": "bash scripts/graphify.sh check",
     "graph:update": "bash scripts/graphify.sh update",
     "graph:rebuild": "bash scripts/graphify.sh rebuild",
-    "graph:query": "bash scripts/graphify.sh query"
+    "graph:query": "bash scripts/graphify.sh query",
+    "clean": "rm -rf node_modules */node_modules */dist"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
