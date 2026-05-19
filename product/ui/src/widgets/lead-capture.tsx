@@ -1,21 +1,30 @@
 // product/ui/src/widgets/lead-capture.tsx
 //
-// Renders the `handoff` tool call. Two-step flow:
+// Renders the `handoff` tool call as a single-step form. Per the
+// 2026-05-19 frosty-leavitt-handoff-form-polish Tier-3 plan, the prior
+// "summary preview → form" two-step flow is replaced with a single form
+// surface:
 //
-//   Step 1 — summary preview.  Verdict-aware intro, conversation summary,
-//            motivation anchor. A "Continue" button advances to step 2.
+//   - Verdict-aware intro line at the top (per VERDICT_INTRO).
+//   - Name + email (required), preferred method, phone (optional).
+//   - A collapsible <details> disclosure ("Show what we'll share with the
+//     specialist") rendering args.visitorPrecis — the agent's logistical-
+//     only summary, with a generic fallback if the agent didn't supply it.
+//     The rich, archetype-aware args.specialistSummary is NEVER shown to
+//     the visitor — it flows through reasonText to the durable record +
+//     specialist email only.
+//   - A free-text "Anything else the specialist should know? (optional)"
+//     textarea — persists to the durable record and renders into the
+//     specialist email.
+//   - Tier-2 handoff consent tickbox (required — submit disabled until
+//     checked), plus an optional marketing opt-in (unticked by default).
 //
-//   Step 2 — contact form.  Name + email (required), preferred method,
-//            phone (optional), the tier-2 handoff consent tickbox
-//            (required — submit disabled until checked), and a marketing
-//            opt-in (optional, unticked by default). On submit the widget
-//            POSTs to the orchestrator's `/handoff/submit` endpoint
-//            (E.t3) which runs the connector-side `submitHandoff`
-//            pipeline (consent backstop → durable store → verdict-aware
-//            email). On success the widget calls `props.addResult` with
-//            a `HandoffSubmitOutput` shape so assistant-ui can render
-//            the confirmation; on failure the widget shows an inline
-//            error and lets the visitor retry.
+// On submit the widget POSTs to the orchestrator's `/handoff/submit`
+// endpoint (E.t3) which runs the connector-side `submitHandoff` pipeline
+// (consent backstop → durable store → verdict-aware email). On success
+// the widget calls `props.addResult` with a `HandoffSubmitOutput` shape
+// so assistant-ui can render the confirmation; on failure the widget
+// shows an inline error and lets the visitor retry.
 //
 // Tier-1 (conversation-opening) consent is NOT captured here — that lives
 // in D.t4. This widget only captures the tier-2 handoff-specific consent.
@@ -61,12 +70,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *  field. Bump when the tier-2 consent text changes. */
 const CONSENT_COPY_VERSION = "consent-handoff/v1";
 
-type Step = "summary" | "form";
-
 const SHELL_CTX = {
   widgetType: "lead-capture",
   toolName: "handoff",
 } as const;
+
+const PRECIS_FALLBACK =
+  "A summary of what you've told us will be shared with the specialist.";
 
 export function LeadCaptureWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
@@ -81,12 +91,12 @@ export function LeadCaptureWidget(
 
   // Hooks must run unconditionally; we track the submit status regardless
   // of whether args parsed so the return-early below is safe.
-  const [step, setStep] = useState<Step>("summary");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [preferredMethod, setPreferredMethod] =
     useState<"email" | "phone" | "either">("email");
+  const [additionalNotes, setAdditionalNotes] = useState("");
   const [handoffConsent, setHandoffConsent] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
@@ -148,53 +158,7 @@ export function LeadCaptureWidget(
     );
   }
 
-  if (step === "summary") {
-    return (
-      <section
-        data-testid="lead-capture"
-        data-step="summary"
-        data-verdict={args.verdict}
-        data-swoop-part="widget"
-        data-swoop-widget="lead-capture"
-        data-swoop-widget-state="summary"
-        aria-label="Handoff summary"
-        className="my-2 w-full rounded-lg border border-slate-200 bg-white p-4"
-      >
-        <p className="text-sm text-slate-700">{VERDICT_INTRO[args.verdict]}</p>
-        <div className="mt-3 flex flex-col gap-3">
-          <div>
-            <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Conversation summary
-            </h3>
-            <p className="mt-1 text-sm text-slate-800">{args.conversationSummary}</p>
-          </div>
-          {args.motivationAnchor ? (
-            <div>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Motivation
-              </h3>
-              <p className="mt-1 text-sm text-slate-800">{args.motivationAnchor}</p>
-            </div>
-          ) : null}
-        </div>
-        {args.verdict === "disqualified" ? (
-          <p className="mt-4 text-xs italic text-slate-500">
-            No contact is required — you don&apos;t need to continue if you&apos;d rather not.
-          </p>
-        ) : null}
-        <div className="mt-4">
-          <CtaButton
-            onClick={() => setStep("form")}
-            ariaLabel="Continue to contact form"
-          >
-            Continue
-          </CtaButton>
-        </div>
-      </section>
-    );
-  }
-
-  // ----- step === "form" -----
+  // ----- single-step form -----
 
   function validate(): boolean {
     const next: typeof errors = {};
@@ -218,11 +182,15 @@ export function LeadCaptureWidget(
 
     const now = new Date().toISOString();
 
+    const trimmedNotes = additionalNotes.trim();
+
     const reqBody = {
       verdict: args.verdict,
       reasonCode: args.reasonCode,
-      reasonText: args.conversationSummary,
+      reasonText: args.specialistSummary,
       motivationAnchor: args.motivationAnchor || undefined,
+      ...(args.visitorPrecis ? { visitorPrecis: args.visitorPrecis } : {}),
+      ...(trimmedNotes ? { additionalNotes: trimmedNotes } : {}),
       contact: {
         name: name.trim(),
         email: email.trim(),
@@ -275,7 +243,6 @@ export function LeadCaptureWidget(
   return (
     <section
       data-testid="lead-capture"
-      data-step="form"
       data-verdict={args.verdict}
       data-swoop-part="widget"
       data-swoop-widget="lead-capture"
@@ -283,7 +250,13 @@ export function LeadCaptureWidget(
       aria-label="Contact form"
       className="my-2 w-full rounded-lg border border-slate-200 bg-white p-4"
     >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3" noValidate>
+      <p
+        data-testid="lead-capture-verdict-intro"
+        className="text-sm text-slate-700"
+      >
+        {VERDICT_INTRO[args.verdict]}
+      </p>
+      <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-3" noValidate>
         <div className="flex flex-col gap-1">
           <label htmlFor="lc-name" className="text-xs font-medium text-slate-700">
             Name
@@ -351,6 +324,46 @@ export function LeadCaptureWidget(
           </div>
         </fieldset>
 
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="lc-additional-notes"
+            className="text-xs font-medium text-slate-700"
+          >
+            Anything else the specialist should know?{" "}
+            <span className="text-slate-400">(optional)</span>
+          </label>
+          <textarea
+            id="lc-additional-notes"
+            data-testid="lead-capture-additional-notes"
+            value={additionalNotes}
+            onChange={(ev) => setAdditionalNotes(ev.target.value)}
+            rows={3}
+            maxLength={2000}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+          />
+        </div>
+
+        {/*
+          Visitor-facing precis. Default-collapsed; surfaces the agent's
+          `visitorPrecis` (logistical-only, never the rich specialist
+          summary). If the agent omitted it, a generic reassurance line
+          stands in so the disclosure still has substance.
+        */}
+        <details
+          data-testid="lead-capture-precis-disclosure"
+          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+        >
+          <summary className="cursor-pointer text-xs font-medium text-slate-700">
+            Show what we&apos;ll share with the specialist
+          </summary>
+          <p
+            data-testid="lead-capture-precis-body"
+            className="mt-2 text-sm text-slate-700"
+          >
+            {args.visitorPrecis?.trim() ? args.visitorPrecis : PRECIS_FALLBACK}
+          </p>
+        </details>
+
         <label className="mt-1 flex gap-2 text-sm text-slate-700">
           <input
             type="checkbox"
@@ -361,8 +374,8 @@ export function LeadCaptureWidget(
             required
           />
           <span>
-            I agree Swoop can share my conversation summary and contact details with a
-            specialist so they can follow up.
+            I agree my conversation summary can be shared with a Swoop specialist so they
+            can follow up.
           </span>
         </label>
 
@@ -403,13 +416,6 @@ export function LeadCaptureWidget(
               {submitting ? "Sending…" : "Send my details"}
             </CtaButton>
           </span>
-          <CtaButton
-            type="button"
-            onClick={() => setStep("summary")}
-            ariaLabel="Back to summary"
-          >
-            Back
-          </CtaButton>
         </div>
       </form>
     </section>

@@ -36,3 +36,13 @@ The four verdicts are `qualified` (this person is real, motivated, ready for a s
 - `inconclusive_other` — catch-all.
 
 For `qualified` and `referred_out` the lead-capture widget will collect contact details (name + email + optional preferences); for `disqualified` and `inconclusive` the widget renders a graceful close without asking for contact — the durable record is for analytics only.
+
+**Two summaries — who sees what.** Every `qualified` / `referred_out` call produces both:
+
+- **`specialistSummary`** is for the Swoop specialist who will pick up the conversation. Rich, sectioned-friendly prose — include archetype read, relational-mode read, the motivation arc, signal-pattern observations, direct quotes from the visitor, and the texture of what moved them. Favour richness; the specialist wants enough texture to hit the ground running. The visitor never sees this; it lands as the *Conversation summary* section in the specialist email.
+
+- **`visitorPrecis`** is shown to the visitor (default-collapsed) inside the form as reassurance their choices have been captured. **MUST** contain only logistical / practical content: destinations, travel windows, duration, budget band if shared, activity preferences, accommodation style, party composition. **MUST NOT** carry archetype reads, relational-mode reads, motivation interpretations, R×W reads, psychological framing, or any "profile" of the visitor. Use the visitor's own phrasings where you can. Keep it short — one or two sentences, under ~300 chars. This text is **never** sent to the specialist; persisting it in the durable record is for audit only.
+
+On `disqualified` / `inconclusive` the widget doesn't render, so `visitorPrecis` is optional and the specialist still gets `specialistSummary` via the durable record.
+
+The form also has an optional "Anything else the specialist should know?" textarea the visitor can fill in directly. That free text is sent to the specialist alongside your summary (under its own section in the email), but you don't produce it — the visitor does. Don't try to anticipate or pre-fill it.

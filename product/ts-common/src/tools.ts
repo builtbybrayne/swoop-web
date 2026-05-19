@@ -86,7 +86,19 @@ export type IllustrateOutput = z.infer<typeof IllustrateOutputSchema>;
 // -----------------------------------------------------------------------------
 
 const HandoffInputCommonFields = {
-  conversationSummary: z.string(),
+  // The rich, archetype-aware narrative the specialist will read. Carries
+  // motivation reads, signal-pattern observations, direct quotes — texture
+  // the specialist uses to pick up the conversation warm. Visitor never
+  // sees this. Wired through to `reason.text` on the durable record + email.
+  specialistSummary: z.string(),
+  // Short, logistical-only summary shown to the visitor inside the
+  // lead-capture form as reassurance their choices have been captured.
+  // MUST NOT carry archetype reads, relational-mode reads, or motivation
+  // interpretations — see cms/prompts/tools/handoff/description.md for the
+  // rule. Optional on the schema because disqualified / inconclusive
+  // verdicts don't render the widget; the tool description steers it to
+  // be present on qualified / referred_out.
+  visitorPrecis: z.string().optional(),
   motivationAnchor: z.string(),
 } as const;
 

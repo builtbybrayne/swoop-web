@@ -238,6 +238,14 @@ const HandoffPayloadCommon = {
   // motivation summary; prevents unbounded payloads landing in durable store +
   // sha256 inputs + email body.
   motivationAnchor: z.string().max(2_000),
+  // Short, logistical-only summary the visitor saw inside the lead-capture
+  // form. Persisted to the durable record for audit. NEVER appears in the
+  // specialist email — the visitor and the specialist see different
+  // summaries by design. See cms/prompts/tools/handoff/description.md.
+  visitorPrecis: z.string().max(500).optional(),
+  // Free text from the visitor's "Anything else the specialist should know?"
+  // textarea. Optional. Rendered into the email under its own section.
+  additionalNotes: z.string().max(2_000).optional(),
   consent: HandoffConsentSchema,
   session: HandoffSessionMetadataSchema,
 };
@@ -348,6 +356,14 @@ const HandoffSubmitRequestCommonFields = {
   sessionId: z.string().min(1),
   reasonText: z.string().min(1).max(500),
   motivationAnchor: z.string().optional(),
+  // Visitor-facing summary captured for audit. Persists into the durable
+  // record; NEVER reaches the email. Carries the agent's `visitorPrecis`
+  // tool arg verbatim. See cms/prompts/tools/handoff/description.md.
+  visitorPrecis: z.string().max(500).optional(),
+  // Free text from the visitor's "Anything else the specialist should know?"
+  // textarea. Trimmed on the widget side; absent if the visitor left it
+  // empty. Renders into the specialist email.
+  additionalNotes: z.string().max(2_000).optional(),
   consent: HandoffSubmitRequestConsentSchema,
 } as const;
 

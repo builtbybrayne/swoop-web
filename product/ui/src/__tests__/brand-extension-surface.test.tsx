@@ -115,11 +115,11 @@ describe("brand extension surface (data-swoop-part contract)", () => {
     expect(root).toHaveAttribute("data-swoop-widget", "inspiration");
   });
 
-  it("LeadCaptureWidget summary carries widget marker + lead-capture submit wrapper appears at form step", () => {
+  it("LeadCaptureWidget carries widget marker + lead-capture submit wrapper is visible on first paint", () => {
     const args = {
       verdict: SampleHandoff.verdict,
       reasonCode: SampleHandoff.reason.code,
-      conversationSummary: SampleHandoff.reason.text,
+      specialistSummary: SampleHandoff.reason.text,
       motivationAnchor: SampleHandoff.motivationAnchor,
     };
     const { container } = render(
@@ -132,13 +132,12 @@ describe("brand extension surface (data-swoop-part contract)", () => {
         })}
       />,
     );
-    const summary = screen.getByTestId("lead-capture");
-    expect(summary).toHaveAttribute("data-swoop-part", "widget");
-    expect(summary).toHaveAttribute("data-swoop-widget", "lead-capture");
-    expect(summary).toHaveAttribute("data-swoop-widget-state", "summary");
+    const root = screen.getByTestId("lead-capture");
+    expect(root).toHaveAttribute("data-swoop-part", "widget");
+    expect(root).toHaveAttribute("data-swoop-widget", "lead-capture");
+    // Single-step form per the 2026-05-19 polish — no summary preview.
+    expect(root).toHaveAttribute("data-swoop-widget-state", "form");
 
-    // Advance to form step — the submit wrapper only exists in form state.
-    fireEvent.click(screen.getByRole("button", { name: /Continue/i }));
     const submitWrapper = container.querySelector(
       '[data-swoop-part="lead-capture-submit"]',
     );

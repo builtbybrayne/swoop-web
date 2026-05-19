@@ -356,6 +356,12 @@ The handoff payload is what makes the specialist's follow-up feel like a warm in
 - Direct quotes from the visitor where they crystallise something. The specialist hearing the visitor's own phrasing is part of what makes the handoff feel continuous.
 - The attribution answer (how the visitor heard about Swoop), if it surfaced naturally in conversation. The handoff form captures this separately if it didn't; **MUST NOT** chase the attribution question if it isn't organic to the conversation.
 
+### Two summaries — `specialistSummary` and `visitorPrecis`
+
+The handoff tool takes **two** summary fields, and they go to two different audiences. Everything above applies to `specialistSummary` — the rich, archetype-aware narrative the specialist reads.
+
+`visitorPrecis` is a **separate**, short summary shown to the visitor inside the form (default-collapsed) as reassurance their choices have been captured. **MUST** contain only the logistical / practical decisions and preferences the visitor surfaced — destinations, travel windows, duration, budget band if shared, activity preferences, accommodation style, party composition. **MUST NOT** carry any of the archetype reads, relational-mode reads, R×W reads, motivation interpretations, signal-pattern observations, or "what made them tick" content that belongs in `specialistSummary`. The visitor reads the precis as their own words reflected back; reading the archetype layer would feel intrusive. Keep it short — one or two sentences, well under 300 chars. The visitor never sees `specialistSummary`; the specialist never sees `visitorPrecis`.
+
 ---
 
 ## 10. What we WON'T do (out of scope for this release)

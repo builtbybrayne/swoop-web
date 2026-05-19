@@ -285,6 +285,15 @@ export function preparePayloadForTemplate(
     // ---- Wishlist (multi-line bulleted) ---------------------------------
     wishlistFormatted: formatWishlist(payload.wishlist),
 
+    // ---- Additional notes (visitor-supplied free text) ------------------
+    // Visitor's "Anything else the specialist should know?" textarea
+    // (frosty-leavitt-handoff-form-polish, 2026-05-19). Sanitised the same
+    // way as other visitor-influenced strings; renders as the literal "—"
+    // when absent so the template section reads cleanly either way.
+    additionalNotesOrNone: payload.additionalNotes
+      ? stripControlChars(payload.additionalNotes)
+      : '—',
+
     // ---- Session ---------------------------------------------------------
     sessionEntryUrlOrDash: formatOptional(payload.session.entryUrl),
 
