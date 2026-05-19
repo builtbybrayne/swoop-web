@@ -652,6 +652,39 @@ function DevToolCallTrace(props: {
     .filter((s): s is string => s !== null)
     .join(" · ");
 
+  // Full diagnostic payload for the Copy button. Mirrors the fields rendered
+  // in the expanded body so a developer can paste the JSON into Claude Code /
+  // a bug report / a debugger session and have everything they need.
+  const [copied, setCopied] = useState(false);
+  const copyPayload = JSON.stringify(
+    {
+      toolName: props.toolName,
+      toolCallId: props.toolCallId,
+      statusType: props.status.type,
+      started: new Date(startedAt).toISOString(),
+      ended: endedAt !== null ? new Date(endedAt).toISOString() : null,
+      durationMs,
+      isError: hasError,
+      args: props.args,
+      result: props.result,
+    },
+    null,
+    2,
+  );
+  const onCopy = async (): Promise<void> => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(copyPayload);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard write can reject under iframe-permissions contexts.
+      // Developer can still expand the panel and copy fields manually.
+      setCopied(false);
+    }
+  };
+
   return (
     <details
       data-testid="dev-tool-trace"
@@ -671,11 +704,29 @@ function DevToolCallTrace(props: {
         <span className="font-mono text-[11px] text-slate-700">
           {summary}
         </span>
-        {hasError ? (
-          <span className="ml-auto rounded bg-rose-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rose-700">
-            isError
-          </span>
-        ) : null}
+        <div className="ml-auto flex items-center gap-2">
+          {hasError ? (
+            <span className="rounded bg-rose-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-rose-700">
+              isError
+            </span>
+          ) : null}
+          <button
+            type="button"
+            data-testid="dev-tool-trace-copy"
+            onClick={(ev) => {
+              // The button lives inside `<summary>`, so a bare click would
+              // both fire `onCopy` AND toggle the details panel open/closed.
+              // We want copy-without-toggle.
+              ev.preventDefault();
+              ev.stopPropagation();
+              void onCopy();
+            }}
+            title="Copy this tool call as JSON for review / debugging"
+            className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-400"
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
       </summary>
       <div className="border-t border-slate-200 px-2.5 py-2">
         <DevTraceField label="toolCallId" value={props.toolCallId} />
