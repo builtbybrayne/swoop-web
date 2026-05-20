@@ -26,6 +26,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     host: true,
+    // `allowedHosts` is a runtime option in Vite 5.4.12+ (added as a CVE-2025-30208
+    // mitigation), but the installed 5.4.11 types pre-date it. Runtime accepts it
+    // fine. Remove this directive when the Vite pin is bumped to ^5.4.12.
+    // @ts-expect-error — Vite 5.4.11 types lag the runtime option.
     allowedHosts: [".ts.net"],
     proxy: {
       "/api": {
