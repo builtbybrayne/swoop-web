@@ -7,8 +7,8 @@
 //
 //   - Verdict-aware intro line at the top (per VERDICT_INTRO).
 //   - Name + email (required), preferred method, phone (optional).
-//   - A collapsible <details> disclosure ("Show what we'll share with the
-//     specialist") rendering args.visitorPrecis — the agent's logistical-
+//   - A collapsible <details> disclosure ("Review what you've told us so
+//     far") rendering args.visitorPrecis — the agent's logistical-
 //     only summary, with a generic fallback if the agent didn't supply it.
 //     The rich, archetype-aware args.specialistSummary is NEVER shown to
 //     the visitor — it flows through reasonText to the durable record +
@@ -379,7 +379,7 @@ export function LeadCaptureWidget(
           className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
         >
           <summary className="cursor-pointer text-xs font-medium text-slate-700">
-            Show what we&apos;ll share with the specialist
+            Review what you&apos;ve told us so far
           </summary>
           <p
             data-testid="lead-capture-precis-body"
