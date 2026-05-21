@@ -243,8 +243,12 @@ Deliberately unresolved at the top level — pinned in Tier 2 where they bite.
 - **Chat UI library**: assistant-ui.
 - **Language throughout**: TypeScript. No Python in the runtime (validation harness may be Python — Tier 2 H decision).
 - **Primary model**: Claude (Sonnet tier). ADK abstracts the provider so swap is config.
-- **Runtime hosting**: Google Cloud Run (two services assumed — orchestrator + connector — subject to Tier 2 chunk B).
 - **Deployment surface**: iframe via Swoop nav button. Swoop's in-house team owns integration + brand styling.
+
+### Deferred at top level — deployment shape
+
+- **GCP for prod**, but the deployment *shape* (single-VM-all-on-one vs Cloud SQL + Cloud Run split) is **deliberately undecided** as of 2026-05-21. The earlier framing of "Cloud Run services + Cloud SQL" overcommitted on the evidence — at Puma's actual footprint (236 MB DB, two thin Node services, tens-to-hundreds of conversations/day) single-VM-all-on-one is genuinely competitive on cost, ops simplicity, and handover comprehensibility. Cloud SQL + Cloud Run is *an* option (the boring default that handles backups + patching + Auth Proxy automatically); single-VM is the *cheap+simple* option (one `systemctl`, one `pg_dump`, one disk snapshot, one DATABASE_URL string from laptop to prod). The decision settles in Tier 2 chunk B as part of M4 design — not before. Active roadmap stages **dev (laptop) → demo (Mac Mini at home, Tailscale Funnel) → Swoop staging (GCE VM) → Swoop prod (GCE VM in Swoop's project)** all run the single-VM shape; promotion to Cloud SQL is reserved for "scale demands it" rather than "the plan assumed it".
+- **Runtime hosting (related)**: was previously written here as "Google Cloud Run (two services assumed)". Withdrawn pending the M4 design decision above. Don't take "Cloud Run" as settled in any subordinate Tier 2 / Tier 3 plan.
 
 ## 10. Provenance
 

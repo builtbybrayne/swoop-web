@@ -6,6 +6,24 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-05-21 — pg_dump → pg_restore is the clean cross-machine path; halfvec survives, no Cloud SQL gymnastics needed
+
+Moved the 236 MB `puma_dev` (Postgres 18 + pgvector 0.8.1 + halfvec(3072) + 9 HNSW indexes) from laptop to the Mac Mini for the demo-server stage. End-to-end ~10 min including Box sync. Recipe:
+
+1. **Destination pre-flight**: confirm Postgres ≥ 16 AND `SELECT * FROM pg_available_extensions WHERE name='vector'` shows default version ≥ 0.7. Halfvec needs 0.7+; pgvector < 0.7 on the destination will fail migration-009 columns at restore with cryptic `type "halfvec" does not exist` errors. If too old, build from source against the destination's `pg_config`.
+2. **Dump** with `--format=custom --no-owner --no-acl`. Custom format compresses ~3× (the 236 MB DB came out at ~70 MB) and lets you parallel-restore later. `--no-owner --no-acl` strips ownership/grants so the dump applies even if the destination role isn't named `al`.
+3. **Destination prep**: `createdb`, then `CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;` **before** `pg_restore`. Extensions must exist at restore time or halfvec column DDL + GIN opclass references fail.
+4. **Different DB name on each machine** (`puma_dev` on laptop, `puma_demo` on Mini) so the connector's `DATABASE_URL` env tells you which substrate you're hitting at a glance.
+5. **Skip `npm run migrate:up`** post-restore — the dump brought the schema *and* the `pgmigrations` history, so the migrate runner correctly no-ops; running it just adds noise. Future migrations land normally.
+6. **`embedding_cache` (~25 MB) travels in the dump** — a `enrich --mode=all` on the destination is no-op for unchanged content. Re-runs cost zero Gemini tokens out of the box.
+7. **Verify**: `ANALYZE;` first (pg_stat_user_tables shows zeros until the planner has stats), then `SELECT id FROM inspire_passage ORDER BY embedding <=> (SELECT embedding FROM inspire_passage WHERE embedding IS NOT NULL LIMIT 1) LIMIT 3;` to exercise the HNSW + halfvec_cosine_ops path end-to-end.
+
+**Why this matters for staging / prod**: same recipe works laptop → Mini, laptop → GCE VM in Alastair's GCP project, and eventually Mini → Swoop's GCP project for prod handover. No Cloud SQL Auth Proxy, no service-account dance, no Cloud Run Unix socket detour. The Puma DB is small enough that snapshot-and-ship is the right operational primitive at every stage of the roadmap. See the related framing shift in [planning/02-impl-retrieval-and-data.md](planning/02-impl-retrieval-and-data.md) §1 (Cloud SQL is *an* option, not *the* assumed shape).
+
+**Where this can bite**: pgvector version drift on the destination is the only real failure mode and the one to pre-flight. Debian apt packages for pgvector tend to lag behind master; if `apt install postgresql-18-pgvector` lands you below 0.7, build from source (`PG_CONFIG=$(which pg_config) make && sudo PG_CONFIG=$(which pg_config) make install` against pgvector main is ~2 minutes). Postgres.app on macOS ships current pgvector — no issue there.
+
+---
+
 ## 2026-05-18 — `illustrate` tag-overlap gate was librarian-shaped on a prose substrate
 
 Live chat surfaced that `illustrate` returned `images: []` for the easiest possible query (`["patagonia", "mountains", "glaciers", "torres del paine", "hiking"]`). Two compounding causes; the architectural lesson sits above the bug.
