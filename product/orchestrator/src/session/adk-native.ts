@@ -26,6 +26,7 @@
  */
 
 import { getSessionServiceFromUri } from '@google/adk';
+import { defaultEmptySeenItems } from '@swoop/common';
 import type { SessionState } from '@swoop/common';
 import type { SessionStore } from './interface.js';
 
@@ -82,6 +83,9 @@ function buildDefaultState(
       handoff: ungranted,
     },
     metadata: initial?.metadata ?? {},
+    // Anti-repetition seen-set — defaults to every per-type array empty.
+    // Per planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+    seenItems: initial?.seenItems ?? defaultEmptySeenItems(),
   };
 }
 

@@ -37,6 +37,7 @@
  */
 
 import { FunctionTool } from '@google/adk';
+import type { Context } from '@google/adk';
 import {
   FindInspiringInputSchema,
   FindInspiringOutputSchema,
@@ -55,13 +56,21 @@ import {
   LookupInputSchema,
   LookupOutputSchema,
   TOOL_NAMES,
+  defaultEmptySeenItems,
+  mergeSeen,
   messageOf,
   type ToolName,
 } from '@swoop/common';
 import type { ToolDescriptions } from '@swoop/connector';
 import { z } from 'zod';
 
+import type { SessionStore } from '../session/index.js';
 import type { ConnectorClient, CallToolRawResult } from './client.js';
+import {
+  computeExcludes,
+  extractSeenDelta,
+  mergeExcludesIntoInput,
+} from './anti-repetition.js';
 
 /**
  * Structured error the agent sees when the adapter refuses to proceed —
@@ -172,6 +181,16 @@ export interface BuildConnectorToolsParams {
   readonly descriptions: ToolDescriptions;
   /** Names the connector reported at startup. Used as a sanity check. */
   readonly discoveredNames: readonly string[];
+  /**
+   * Session store for anti-repetition. When supplied, the orchestrator
+   * reads `seenItems` from session state before each tool call (computes
+   * per-tool exclude args) and merges returned ids/URLs back into session
+   * state after each successful call. Optional — when omitted (unit tests
+   * that don't exercise dedup), tool calls behave exactly as before.
+   *
+   * Per planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+   */
+  readonly sessionStore?: SessionStore;
 }
 
 /**
@@ -188,11 +207,12 @@ export function createConnectorTools({
   client,
   descriptions,
   discoveredNames,
+  sessionStore,
 }: BuildConnectorToolsParams): FunctionTool[] {
   warnOnMismatch(discoveredNames);
 
   return TOOL_SPECS.filter((spec) => spec.exposedToModel).map((spec) =>
-    buildFunctionTool(client, spec, descriptions[spec.name]),
+    buildFunctionTool(client, spec, descriptions[spec.name], sessionStore),
   );
 }
 
@@ -215,16 +235,38 @@ function buildFunctionTool(
   client: ConnectorClient,
   spec: ToolSpec,
   description: string,
+  sessionStore: SessionStore | undefined,
 ): FunctionTool {
   const parameters = spec.inputSchema as unknown as never;
   return new FunctionTool({
     name: spec.name,
     description,
     parameters,
-    execute: async (input: unknown) => {
-      return invokeTool(client, spec, input);
+    // ADK's FunctionTool execute callback receives the agent-supplied args
+    // plus a `tool_context` carrying the active session id (per
+    // `Context.sessionId` inherited from `ReadonlyContext`). When a
+    // session store + context are both available, we use them to
+    // auto-inject anti-repetition excludes and merge returned ids back.
+    execute: async (input: unknown, toolContext?: Context) => {
+      const sessionId = toolContext?.sessionId;
+      return invokeTool(client, spec, input, {
+        sessionStore,
+        sessionId,
+      });
     },
   });
+}
+
+/**
+ * Optional anti-repetition deps. When both `sessionStore` and `sessionId`
+ * are present, `invokeTool` brackets the connector call with a seen-set
+ * read (compute excludes) and a post-success seen-set merge (mark shown).
+ *
+ * Per planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+ */
+export interface InvokeToolDeps {
+  readonly sessionStore?: SessionStore;
+  readonly sessionId?: string;
 }
 
 /**
@@ -238,9 +280,42 @@ export async function invokeTool(
   client: ConnectorClient,
   spec: ToolSpec,
   input: unknown,
+  deps: InvokeToolDeps = {},
 ): Promise<ToolAdapterResult<unknown>> {
+  // 0. Anti-repetition (pre-dispatch). Read seen-set, compute per-tool
+  //    excludes, merge into the agent-supplied input BEFORE schema
+  //    validation so the validated input carries the orchestrator's
+  //    additions. Stays a no-op when sessionStore / sessionId aren't both
+  //    available (unit tests, utility tools).
+  let augmentedInput: unknown = input;
+  const antiRepActive =
+    deps.sessionStore !== undefined && deps.sessionId !== undefined;
+  if (antiRepActive) {
+    try {
+      const session = await deps.sessionStore!.get(deps.sessionId!);
+      const seenItems = session?.seenItems ?? defaultEmptySeenItems();
+      const autoExcludes = computeExcludes(spec.name, seenItems);
+      if (autoExcludes) {
+        const inputObj =
+          input && typeof input === 'object'
+            ? (input as Record<string, unknown>)
+            : {};
+        augmentedInput = mergeExcludesIntoInput(
+          spec.name,
+          inputObj,
+          autoExcludes,
+        );
+      }
+    } catch {
+      // Read failure shouldn't block the tool call — fall through with the
+      // unmodified input. The handler may repeat content this turn, but a
+      // session-state read error must not become a tool-call error.
+      augmentedInput = input;
+    }
+  }
+
   // 1. Input validation (before network).
-  const parsedInput = spec.inputSchema.safeParse(input);
+  const parsedInput = spec.inputSchema.safeParse(augmentedInput);
   if (!parsedInput.success) {
     return {
       ok: false,
@@ -300,6 +375,32 @@ export async function invokeTool(
         details: issues.success ? undefined : issues.error.issues,
       },
     };
+  }
+
+  // 4. Anti-repetition (post-success). Extract per-type ids/URLs from the
+  //    validated result and merge into session state. Trip/tour rows are
+  //    silently dropped by `extractSeenDelta` (carve-out). A merge failure
+  //    is logged but never propagates — the tool call itself succeeded.
+  if (antiRepActive) {
+    try {
+      const delta = extractSeenDelta(spec.name, parsed.value);
+      const hasAnyDelta = Object.keys(delta).some(
+        (k) => (delta[k as keyof typeof delta]?.length ?? 0) > 0,
+      );
+      if (hasAnyDelta) {
+        await deps.sessionStore!.update(deps.sessionId!, (s) => ({
+          ...s,
+          seenItems: mergeSeen(s.seenItems, delta),
+        }));
+      }
+    } catch (err) {
+      // Diagnostic only — the tool call already succeeded. Future turns
+      // may repeat content; live observation will tell us if this matters.
+      console.warn(
+        `[orchestrator] anti-repetition seen-set merge failed for tool ` +
+          `"${spec.name}" (session=${deps.sessionId}): ${messageOf(err)}`,
+      );
+    }
   }
 
   return { ok: true, value: parsed.value };

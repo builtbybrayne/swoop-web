@@ -26,6 +26,7 @@ import type { FunctionTool } from '@google/adk';
 import type { ToolDescriptions } from '@swoop/connector';
 
 import type { Config } from '../config/index.js';
+import type { SessionStore } from '../session/index.js';
 import { createConnectorClient, type ConnectorClient } from './client.js';
 import { createConnectorTools } from './tools.js';
 
@@ -52,6 +53,14 @@ export interface SetupConnectorParams {
    * `@swoop/connector`). Same fail-fast contract as the connector boot path.
    */
   readonly descriptions: ToolDescriptions;
+  /**
+   * Session store for anti-repetition bracketing (planning/03-exec-crosscut-
+   * anti-repetition.md, HITL-ratified 2026-05-27). When supplied, every
+   * tool dispatch reads `seenItems` pre-call and merges the returned
+   * ids/URLs back post-call. Optional — tests can omit to exercise the
+   * pre-AntiRepetition behaviour.
+   */
+  readonly sessionStore?: SessionStore;
 }
 
 /**
@@ -61,6 +70,7 @@ export interface SetupConnectorParams {
 export async function setupConnector({
   config,
   descriptions,
+  sessionStore,
 }: SetupConnectorParams): Promise<ConnectorSetup> {
   const client = createConnectorClient({
     url: config.CONNECTOR_URL,
@@ -71,7 +81,12 @@ export async function setupConnector({
   const discovered = await client.listTools();
   const discoveredNames = discovered.map((t) => t.name);
 
-  const tools = createConnectorTools({ client, descriptions, discoveredNames });
+  const tools = createConnectorTools({
+    client,
+    descriptions,
+    discoveredNames,
+    sessionStore,
+  });
 
   return { client, tools, discoveredNames };
 }
