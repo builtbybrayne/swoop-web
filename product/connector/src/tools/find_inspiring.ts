@@ -30,6 +30,10 @@ export async function findInspiringBody(
       region: input.region,
       mood: input.mood,
       limit: input.limit,
+      // Anti-repetition (planning/03-exec-crosscut-anti-repetition.md,
+      // HITL-ratified 2026-05-27). Orchestrator-supplied; connector stateless.
+      excludeIds: input.excludeIds,
+      excludeImageCanonicalUrls: input.excludeImageCanonicalUrls,
     }),
   );
   return FindInspiringOutputSchema.parse({

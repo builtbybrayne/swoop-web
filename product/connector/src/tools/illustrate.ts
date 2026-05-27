@@ -37,6 +37,10 @@ export async function illustrateBody(
     findImagesByKeywords(client, embedding, {
       regionSlug: input.regionSlug,
       limit,
+      // Anti-repetition (planning/03-exec-crosscut-anti-repetition.md,
+      // HITL-ratified 2026-05-27). Orchestrator-supplied; connector stateless.
+      // Keyed by canonical_url per HITL Q5.
+      excludeCanonicalUrls: input.excludeCanonicalUrls,
     }),
   );
   return IllustrateOutputSchema.parse({ images });

@@ -58,6 +58,14 @@ export const IllustrateInputSchema = z.object({
   keywords: z.array(z.string()).min(1),
   regionSlug: z.string().optional(),
   count: z.number().int().positive().max(6).optional(),
+  /**
+   * Image canonical URLs to omit — anti-repetition. The orchestrator
+   * auto-supplies this from `SessionState.seenItems.image`; the agent
+   * typically does not pass it. Keyed by URL per HITL Q5 ("never show the
+   * same picture twice").
+   * Per planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+   */
+  excludeCanonicalUrls: z.array(z.string()).optional(),
 });
 export type IllustrateInput = z.infer<typeof IllustrateInputSchema>;
 
@@ -212,6 +220,19 @@ export const FindInspiringInputSchema = z
     mood: z.string().optional(),
     /** Cap on returned passages. Defaults to 4 — enough variety, not overload. */
     limit: z.number().int().positive().max(8).default(4),
+    /**
+     * Passage uuids to omit — anti-repetition. The orchestrator auto-supplies
+     * from `SessionState.seenItems.inspire_passage`. Per
+     * planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+     */
+    excludeIds: z.array(z.string()).optional(),
+    /**
+     * Image canonical URLs to omit from embedded images — anti-repetition.
+     * Auto-supplied from `SessionState.seenItems.image`. Keyed by URL per
+     * HITL Q5 ("never show the same picture twice") and Q6 (embedded images
+     * are marked shown alongside their parent row).
+     */
+    excludeImageCanonicalUrls: z.array(z.string()).optional(),
   })
   .strict();
 export type FindInspiringInput = z.infer<typeof FindInspiringInputSchema>;
@@ -241,6 +262,17 @@ export const FindSomeoneWhoInputSchema = z
     region: z.string().optional(),
     /** Cap on returned stories. Defaults to 3 — enough echo, not crowding. */
     limit: z.number().int().positive().max(5).default(3),
+    /**
+     * Story uuids to omit — anti-repetition. The orchestrator auto-supplies
+     * from `SessionState.seenItems.customer_story`. Per
+     * planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+     */
+    excludeIds: z.array(z.string()).optional(),
+    /**
+     * Image canonical URLs to omit from embedded images — anti-repetition.
+     * Auto-supplied from `SessionState.seenItems.image`.
+     */
+    excludeImageCanonicalUrls: z.array(z.string()).optional(),
   })
   .strict();
 export type FindSomeoneWhoInput = z.infer<typeof FindSomeoneWhoInputSchema>;
@@ -269,6 +301,12 @@ export const FindProofInputSchema = z
     topic: TrustProofTopicSchema.optional(),
     /** Cap on returned proofs. Defaults to 3. */
     limit: z.number().int().positive().max(5).default(3),
+    /**
+     * Proof uuids to omit — anti-repetition. The orchestrator auto-supplies
+     * from `SessionState.seenItems.trust_proof`. Per
+     * planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+     */
+    excludeIds: z.array(z.string()).optional(),
   })
   .strict();
 export type FindProofInput = z.infer<typeof FindProofInputSchema>;
@@ -295,6 +333,12 @@ export const LookupInputSchema = z
     question: z.string().min(1).max(300),
     /** Cap on returned chunks. Defaults to 5. */
     limit: z.number().int().positive().max(8).default(5),
+    /**
+     * Chunk uuids to omit — anti-repetition. The orchestrator auto-supplies
+     * from `SessionState.seenItems.inform_chunk`. Per
+     * planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+     */
+    excludeIds: z.array(z.string()).optional(),
   })
   .strict();
 export type LookupInput = z.infer<typeof LookupInputSchema>;

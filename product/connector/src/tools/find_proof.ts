@@ -26,6 +26,9 @@ export async function findProofBody(
     findTrustProofsByConcern(client, embedding, input.concern, {
       topic: input.topic,
       limit: input.limit,
+      // Anti-repetition (planning/03-exec-crosscut-anti-repetition.md,
+      // HITL-ratified 2026-05-27). Orchestrator-supplied; connector stateless.
+      excludeIds: input.excludeIds,
     }),
   );
   return FindProofOutputSchema.parse({

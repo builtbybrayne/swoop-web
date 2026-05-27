@@ -14,6 +14,18 @@ import { resolveImagesByIds } from './resolve-image.js';
 
 export interface FindCustomerStoriesOptions {
   region?: string | null;
+  /**
+   * Story uuids to omit — anti-repetition. Orchestrator supplies from
+   * `SessionState.seenItems.customer_story`. Per
+   * planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+   */
+  excludeIds?: ReadonlyArray<string>;
+  /**
+   * Image canonical URLs already shown — anti-repetition. Embedded images
+   * that match a shown URL get blanked on output; the story prose still
+   * surfaces. Per HITL Q5 ("never show the same picture twice") + Q6.
+   */
+  excludeImageCanonicalUrls?: ReadonlyArray<string>;
   limit: number;
 }
 
@@ -29,6 +41,10 @@ export async function findCustomerStoriesByPersonaSignal(
     binds.push(`%${opts.region}%`);
     filterClauses.push(`region ILIKE $${binds.length}`);
   }
+  if (opts.excludeIds && opts.excludeIds.length > 0) {
+    binds.push([...opts.excludeIds]);
+    filterClauses.push(`id <> ALL($${binds.length}::uuid[])`);
+  }
 
   const sql = `
     SELECT id, text, canonical_url, region, persona_summary, image_id
@@ -42,14 +58,25 @@ export async function findCustomerStoriesByPersonaSignal(
   const imageIds = res.rows.map((r) => r.image_id as number | null);
   const images = await resolveImagesByIds(client, imageIds);
 
-  return res.rows.map((r) =>
-    CustomerStoryPublicSchema.parse({
+  // Anti-repetition: blank embedded images whose canonical_url is already
+  // shown; story prose still surfaces.
+  const excludeImageUrls = new Set<string>(opts.excludeImageCanonicalUrls ?? []);
+
+  return res.rows.map((r) => {
+    const candidateImage = r.image_id
+      ? (images.get(r.image_id as number) ?? null)
+      : null;
+    const imageToProject =
+      candidateImage && excludeImageUrls.has(candidateImage.canonicalUrl)
+        ? null
+        : candidateImage;
+    return CustomerStoryPublicSchema.parse({
       id: r.id as string,
       text: r.text as string,
       personaSummary: r.persona_summary as string,
       canonicalUrl: r.canonical_url as string | null,
       region: r.region as string | null,
-      image: r.image_id ? (images.get(r.image_id as number) ?? null) : null,
-    }),
-  );
+      image: imageToProject,
+    });
+  });
 }
