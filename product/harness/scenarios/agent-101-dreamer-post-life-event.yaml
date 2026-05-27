@@ -27,6 +27,8 @@ assertions:
     verdict: qualified
   - kind: tool_call
     toolName: find_options
+  - kind: tool_call
+    toolName: find_someone_who
   - kind: judge_rubric
     rubric: |
       Did the agent treat the emotional disclosure as load-bearing context rather than as decoration?
