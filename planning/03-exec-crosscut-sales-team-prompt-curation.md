@@ -1,5 +1,7 @@
 # 03-exec-crosscut — Sales-team prompt curation
 
+> **SUPERSEDED 2026-05-27** — workstream replaced by workflow docs at [planning/sales-team-prompt-workflow-sales.md](sales-team-prompt-workflow-sales.md) and [planning/sales-team-prompt-workflow-devs.md](sales-team-prompt-workflow-devs.md) per Alastair's 2026-05-27 reframe (Google Doc + complexity rubric instead of curation surface implementation).
+
 **Status**: Draft. Awaiting ratification.
 **Authored**: 2026-05-21
 **Position**: Inside M5. Adds contingency draw — flagged to Luke in the same contingency email that covers the renegotiated 21-day baseline.
