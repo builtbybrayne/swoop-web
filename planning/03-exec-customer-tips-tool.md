@@ -1,6 +1,6 @@
 # 03 — Execution: customer_tips ingest + new `find_tips` tool
 
-**Status**: **DRAFT — awaiting HITL ratification.** Authored 2026-05-27 by worktree-agent-a6fb8f93bb7ae4041 against the design call Alastair captured 2026-05-27.
+**Status**: **HITL-ratified 2026-05-27 — ready for execution.** Authored 2026-05-27 by worktree-agent-a6fb8f93bb7ae4041; HITL-ratified by Alastair the same day. See "2026-05-27 HITL ratification" addendum at the bottom of this file. **Hard prerequisite before dispatch**: the implementing agent's first task is to look up the `customer_tips` schema directly in the source MariaDB database (per Q1 resolution). Without that lookup the rest of the plan cannot be specified concretely.
 **Chunk**: C (retrieval & data) — a new tool surface on the eight-tool intent-named contract.
 **Implements**: [02-impl-retrieval-and-data.md §2.2 — tool surface (Inform job)](02-impl-retrieval-and-data.md), [02-impl-retrieval-and-data.md §2.5 — derived store shapes](02-impl-retrieval-and-data.md). Resolves the long-pending **customertip dependency** captured under [decisions.md C.26 — customertip pending](decisions.md) and [questions.md §"New from C.t0 inspection" item (a) — request for `customerreview` + `customertip` redacted export](../questions.md). Swoop has now delivered `customer_tips` (per Alastair 2026-05-27); this plan turns that data into a live conversational surface.
 **Depends on**: customer_tips source delivery from Swoop (acknowledged received; **schema not yet read at plan-authoring time — flagged as the first pre-execution HITL/Swoop question below**); [03-exec-c-t3.md — SQL dump → Postgres transform](03-exec-c-t3.md) closed (the ETL substrate this plan grows into); [03-exec-c-t3a.md — embedding pass + Haiku ETL classifiers](03-exec-c-t3a.md) closed (the per-row embedding + classifier pattern this plan reuses); [03-exec-c-t4.md — eight handlers + data primitives](03-exec-c-t4.md) closed (the tool-handler + data-primitive scaffolding this plan extends); Gemini-embedding-001 / halfvec(3072) corpus convention live (per migration `009_embeddings_dim_3072.sql`); embedding cache live (per [03-exec-crosscut-embedding-cache.md — content-hash-keyed cache surviving TRUNCATE](03-exec-crosscut-embedding-cache.md)).
@@ -366,9 +366,15 @@ Numbered for the HITL ratification pass.
 
 ### 1. Source data shape — what's the schema of Swoop's `customer_tips` table?
 
-**Status**: **unknown at plan-authoring time (2026-05-27).** Alastair confirmed delivery; the actual dump hasn't been read. **This is the blocking pre-execution question** — every other choice in this plan depends on it.
+**RESOLVED (2026-05-27 HITL) — INVESTIGATE**: the implementing agent's **first task** is to look up the `customer_tips` schema directly in the source **MariaDB** database. The dump-file-driven framing originally proposed in this section is superseded: the MariaDB database itself is the source of truth, and the schema lookup happens there.
 
-Look for any reference in [data-ontology.md §11 — junction tables: customerreview, customertip, pressreview](../data-ontology.md) or recent [questions.md](../questions.md) items. The most likely shape (mirroring `customerreview`):
+This is a **hard prerequisite for implementation dispatch**, not a HITL question routed to Swoop. The plan cannot fully specify columns, types, PII surfaces, region columns, or publish-state columns until the lookup completes — every downstream choice (transformation filter, classifier prompt, derived-table column list) sharpens against the real schema.
+
+**An additional Step 0 is therefore inserted into the implementation order in §"Sub-step ordering"**:
+
+> **0. MariaDB schema lookup** — connect to the source MariaDB instance and read the `customer_tips` table definition. Capture: column names + types, row count (live + soft-deleted if a deletion flag exists), PII surface (email, IP, name, etc.) for the ETL boundary filter, optional region/country column, optional publish-state column, optional `ntag` / classification linkage. Update the placeholder migration shape in §"Components" → "Migration" to match the actual fields. Confirm the ~119-row estimate (carried forward from `contentblock_customertip` junction count under C.t0) is in the right ballpark.
+
+Only once that lookup is in hand does the rest of the plan become concretely actionable. The most-likely shape (sketch, for orientation only — actual schema overrides):
 
 ```
 customer_tips (
@@ -380,51 +386,46 @@ customer_tips (
 
 The 119 `contentblock_customertip` junction rows from C.t0 suggest the source table is ~119 rows give-or-take (some may be unpublished/deleted). Sparse compared to `customerreview` (~2,563); informs Open Q #7 (per-call result count) — keep default modest.
 
-**HITL ask**: read the source dump, confirm the schema, confirm the ~119-row count, confirm whether there's PII to filter (email, IP, name). Then ratify the rest of this plan against the actual shape.
+### 2. Tool name — `find_tips` (LOCKED)
 
-### 2. Tool name — `find_tips` vs `lookup_tips` vs `get_tips`?
+**RESOLVED (2026-05-27 HITL)**: **`find_tips`** — locked. Aligns with the `find_*` convention across the existing content tools (`find_inspiring`, `find_someone_who`, `find_proof`, `find_options`). The other candidates (`lookup_tips`, `get_tips`) are dropped.
 
-**Recommendation**: **`find_tips`**.
-
-Three reasons:
-- **Convention alignment**: the existing content tools follow `find_*` for retrieval (`find_inspiring`, `find_someone_who`, `find_proof`, `find_options`). `lookup` is the deliberate outlier — it's "the FAQ-shaped one" and its name carries that connotation. Adding a *second* `lookup_*` would dilute that signal; visitors-to-Sonnet's-prompt would have to reason about *"`lookup` vs `lookup_tips` — what's the difference?"*. `find_tips` is unambiguously parallel to `find_someone_who`.
-- **Intent-named per C.25**: *"finding traveller tips on a topic"* reads as the conversational move. `lookup_tips` reads as a database verb. `get_tips` reads as an imperative — also wrong shape.
+Three reasons (carried from the original recommendation, retained for record):
+- **Convention alignment**: `lookup` is the deliberate outlier — it's "the FAQ-shaped one" and its name carries that connotation. Adding a second `lookup_*` would dilute that signal. `find_tips` is unambiguously parallel to `find_someone_who`.
+- **Intent-named per C.25**: *"finding traveller tips on a topic"* reads as the conversational move. `lookup_tips` reads as a database verb; `get_tips` reads as an imperative — both wrong shape.
 - **Tool-selection accuracy**: Sonnet picks tools partly by name affinity. `find_tips` cleanly slots into the "I'm looking for retrieval content" mental model the existing tools already establish.
-
-**HITL ask**: confirm `find_tips`.
 
 ### 3. Derived table or direct query?
 
-**Recommendation**: **derived `customer_tip` table** (Option (a-modified) in §"Naming note" — skip the source mirror, ETL writes directly into the derived shape).
+**RESOLVED (2026-05-27 HITL)**: **derived table** — locked. The MariaDB source table will not have embeddings (or `topic_tags`, `tsv`, `content_hash`); we need those columns on a derived table that the connector queries. Option (a-modified) in §"Naming note" — skip the source mirror, ETL writes directly into the derived shape.
 
-Reasons:
+Reasons (carried from recommendation, retained for record):
 - Consistent with the rest of the eight-tool surface — every content tool queries a derived table, not a source mirror.
-- The enrich-pass columns (`embedding`, `tsv`, `content_hash`, `topic_tags`) belong on the queried surface anyway; building a separate source mirror just to copy them through adds infrastructure for no gain.
+- The enrich-pass columns (`embedding`, `tsv`, `content_hash`, `topic_tags`) belong on the queried surface anyway; a separate source mirror would just copy them through, adding infrastructure for no gain.
 - Idempotent re-runs are clean: `ON CONFLICT (id) DO UPDATE` against the derived works the same as against a source mirror.
 - Saves a migration + a table + an ETL pass.
 
-Counter: if Swoop's source dump has fields we want raw for debugging that we'd PII-strip in the derived, the source-mirror layer is worth it. **HITL ask** during execution: read the source schema, decide if there's any debug-only field worth keeping raw. Default to skip-source-mirror unless something jumps out.
+**Carry-through to execution**: the Step-0 MariaDB schema lookup (per Q1) may surface a debug-only field worth keeping raw. If it does, the executing agent can add a thin source mirror at that point; default posture is skip-source-mirror unless the schema lookup turns up something specific.
 
 ### 4. Embedding pass shape
 
-**Recommendation**: **per-row, no chunking, no aggregation.** Mirrors [03-exec-c-t3a.md §C — per-source-row embedding](03-exec-c-t3a.md) but simpler — tips are already 1–3 sentences each, so no chunking step is needed.
+**RESOLVED (2026-05-27 HITL)**: defaults aligned, no change needed.
 
+- **Per-row, no chunking, no aggregation.** Mirrors [03-exec-c-t3a.md §C — per-source-row embedding](03-exec-c-t3a.md) but simpler — tips are already 1–3 sentences each, so no chunking step is needed.
 - Embedding model: **Gemini-embedding-001 / halfvec(3072)** per the current corpus convention (migration `009_embeddings_dim_3072.sql`).
 - Cache: route through the [03-exec-crosscut-embedding-cache.md — content-hash-keyed cache](03-exec-crosscut-embedding-cache.md) so re-runs against unchanged content are free.
 - `content_hash = sha256(text || '|' || version)` with version starting at 1.
 
-No HITL ask — defaults align with existing corpus.
-
 ### 5. Topic classification — what taxonomy?
 
-**Recommendation**: **Haiku at ETL with the 8-topic taxonomy named in §"Components" → "Enrich" above.** Light, fixed, drawn from observation of plausible visitor questions.
+**RESOLVED (2026-05-27 HITL)**: accept the 8-topic draft taxonomy as the starting point ("rest as you recommended"). **Haiku at ETL with the 8-topic taxonomy named in §"Components" → "Enrich" above.** Light, fixed, drawn from observation of plausible visitor questions.
 
 The taxonomy:
 - packing / weather / money / safety / transit / food / accommodation / etiquette
 
 Per [03-exec-c-t3a.md §D — Haiku ETL classifier passes](03-exec-c-t3a.md), this runs once per `content_hash` change, persists to `topic_tags TEXT[]`, never on the request path. Pricing: pence (~119 tips × 1 Haiku call ≈ <£0.10 baseline; Anthropic Message Batches API per [03-exec-c-t3a.md HITL Q4 — Haiku via Message Batches](03-exec-c-t3a.md) cuts that in half).
 
-**HITL ask**: ratify the 8-topic taxonomy, OR tune it against actual data once Open Q #1 closes. Likely candidates for changes once we see real tips:
+**Carry-through to execution**: tune against actual data once the Step-0 MariaDB schema lookup (per Q1) plus a first-pass classify run reveal the natural clusters. Likely candidates for post-data adjustments (named for the executing agent, not committed):
 - May need to merge `food` + `accommodation` (if sparse).
 - May need to split `safety` (altitude / wildlife / route-finding).
 - May need to add `language` (if many tips are about Spanish phrases).
@@ -433,60 +434,51 @@ The classifier's frontmatter `version: 1` field means a taxonomy update is a one
 
 ### 6. Retrieval mechanism — hybrid (RRF) or pure cosine?
 
-**Recommendation**: **hybrid (pgvector cosine + tsvector RRF, k=60)** — same as the four other content tools.
+**RESOLVED (2026-05-27 HITL)**: **hybrid (pgvector cosine + tsvector RRF, k=60)** — same as the four other content tools. Recommendation accepted as ratified.
 
-Reasons:
+Reasons (carried for record):
 - Tips are short; cosine alone risks ranking on superficial semantic overlap. Adding tsvector keyword matching grounds retrieval against literal terms ("wind", "tip", "ATM") that visitors often use directly.
 - The full RRF helper is already shipped at `product/connector/src/data/hybrid-search.ts` per [03-exec-c-t4.md §"data primitives" — hybrid-search.ts](03-exec-c-t4.md); reusing it costs nothing.
-- Quality risk asymmetric: pure cosine is fine for long-form prose ("customer_story" works) but risky for short tips where literal keywords carry more signal.
-
-No HITL ask unless quality signal post-ship suggests otherwise.
+- Quality risk asymmetric: pure cosine is fine for long-form prose (`customer_story` works) but risky for short tips where literal keywords carry more signal.
 
 ### 7. Per-call result count
 
-**Recommendation**: **default 4, range 3–5.** Mirrors `find_someone_who`'s default (1–3 with a slight bump for the multi-tip framing — visitors asking "any tips for X" expect multiple, not one).
+**RESOLVED (2026-05-27 HITL)**: **default 4** — recommendation accepted. Range 3–5; hard cap 6. Mirrors `find_someone_who`'s default (1–3) with a slight bump for the multi-tip framing — visitors asking "any tips for X" expect multiple, not one.
 
-Tradeoffs:
+Tradeoffs (retained for record):
 - More results = better coverage, more material for the agent to weave.
-- Too many = dilutes per-tip attention in the prose, more excludeIds noise for AntiRepetition.
-
-**HITL ask**: ratify 4 as default. Hard cap probably 6 (anything more is widget territory, not prose-weave territory).
+- Too many = dilutes per-tip attention in the prose, more `excludeIds` noise for AntiRepetition.
 
 ### 8. AntiRepetition forward-dependency — `excludeIds` from inception
 
-**Recommendation**: **yes, ship with `excludeIds: number[]` on the input schema from day one.**
+**RESOLVED (2026-05-27 HITL)**: **yes — ship with `excludeIds: number[]` on the input schema from day one.** Cross-links to the now-ratified [03-exec-crosscut-anti-repetition.md — AntiRepetition crosscut (orchestrator-side, canonical_url dedup, no reset)](03-exec-crosscut-anti-repetition.md), which is also HITL-ratified 2026-05-27.
 
-The [03-exec-crosscut-anti-repetition.md crosscut](03-exec-crosscut-anti-repetition.md) **has not been authored at plan-authoring time (2026-05-27)** — the brief notes it's being planned in parallel. Whether or not it ships before `find_tips`, having `excludeIds` already on the input means:
-- No schema break when AntiRepetition lands.
-- No tool-description rewrite to add the parameter.
-- Cheap to support: one CTE clause `WHERE id <> ALL($excludeIds)` in the primitive.
+The AntiRepetition resolution means the orchestrator will be the sole producer of `excludeIds` on `find_tips` calls (per Q1 of that crosscut — orchestrator adds exclusions dynamically at call time, connector stays stateless). The `find_tips` primitive therefore accepts `excludeIds: number[]` from inception so it plugs into the AntiRepetition mechanism at implementation time, no schema-break required.
 
-Precedent: `find_options` already accepts `excludeIds` per the `BF-FO-v2` work in [03-exec-crosscut-find-options-v2-backfill.md](03-exec-crosscut-find-options-v2-backfill.md). The pattern is established.
+Carried-through detail (record): the orchestrator computes the per-type exclude list from `SessionState.seenItems.customer_tip`, merges into the tool-call arguments before dispatch, and on result reads the returned tip ids out of the structured result and marks them shown in session state. No `customer_tip` UI surfaces canonical URLs (tips aren't URL-bearing), so the dedup key is the natural integer `id` — matching the existing `excludeIds: number[]` shape.
 
-**HITL ask**: ratify. No-op if the crosscut never lands; modest forward-compat insurance if it does.
+Precedent: `find_options` already accepts `excludeIds` per the BF-FO-v2 work in [03-exec-crosscut-find-options-v2-backfill.md — agent-supplied exclude list (C.focused-shamir-5)](03-exec-crosscut-find-options-v2-backfill.md). The AntiRep crosscut generalises that pattern; this plan adopts it from inception.
 
 ### 9. UI — widget or prose-only?
 
-**Recommendation**: **prose-only at ship.** Forward extension path to a card-shape widget if quality signal warrants.
+**RESOLVED (2026-05-27 HITL)**: **prose-only at ship**. No widget initially. Document this clearly — no card-shape, no `TipList` React component, no entry in the discriminated `ProposalCardPublicSchema` union. The agent weaves 2–4 tips into prose with traveller-voice attribution; the right-panel future UI is the natural home if a card surface ever lands, but that's not in scope for `find_tips`'s ship.
 
-Reasons:
+Reasons (carried for record):
 - Per Luke's future right-panel + carousel UI direction (per the [03-exec-chat-surface-t9.md — chat surface widgets](03-exec-chat-surface-t9.md) widget patterns), a card surface is the natural future home. But 2–4 tips weave easily into prose — *"travellers tell us to bring a buff for the wind, layer up cotton-free, and budget pesos for park entry"* — and a widget is a heavier surface than the content needs at launch.
 - The brave-pare wave (per [03-exec-crosscut-brave-pare-card-expandable-prose.md — expandable prose](03-exec-crosscut-brave-pare-card-expandable-prose.md) and related) is pushing widgets *toward* prose, not the other way. Don't add a widget for tips against that gradient.
 - Adding a widget later is additive — `TipCardPublicSchema` as a new variant in the `ProposalCardPublicSchema` discriminated union per [03-exec-crosscut-find-options-polymorphism.md — polymorphic ProposalCard](03-exec-crosscut-find-options-polymorphism.md), with a `TipCard` React component. Defer until the prose-only ship reveals a gap.
 
-**HITL ask**: ratify prose-only at ship. Flag the widget extension path explicitly for the future agent who picks it up.
+**Flagged explicitly for the future agent**: the widget extension path exists at the precedents above. Pick it up if-and-only-if prose-only ship reveals a quality gap (visitors wanting to "see all the tips" or "save these"). Default state is no-widget.
 
 ### 10. Existing `lookup` tool — displaced or complemented?
 
-**Recommendation**: **complement, not displace.** `lookup` stays unchanged.
+**RESOLVED (2026-05-27 HITL)**: **complement, not displace.** `lookup` stays unchanged. Recommendation accepted.
 
 The carve:
 - `lookup` → Swoop-authored FAQ (`faqitem` → `inform_chunk`). Canonical Swoop voice; structured Q&A; agent quotes as "Swoop's guide says…".
 - `find_tips` → traveller-sourced practical wisdom (`customer_tip`). Traveller voice; per-tip granularity; agent attributes as "travellers often say…".
 
 Both serve the Inform job. Both have legitimate moments. The SHOULD-rule in `00_why.md` (§"Components" above) carves the line for Sonnet's tool-selection.
-
-**HITL ask**: ratify the complement posture. No `lookup` changes.
 
 ---
 
@@ -602,9 +594,10 @@ The brief references `planning/reviews/2026-05-27-find-someone-who-debug.md` for
 
 For a single execution agent:
 
-1. **Read the customer_tips source dump** (Open Q #1). Confirm schema, confirm row count, confirm PII surface to filter.
-2. **HITL ratification pass** — Alastair reviews this DRAFT, ratifies tool name + derived-vs-direct + topic taxonomy + UI shape + the other open questions. Status flips DRAFT → ready-for-execution.
-3. **Land the migration** — `013_customer_tip_table.sql`. Apply against `puma_dev`.
+0. **MariaDB schema lookup (hard prerequisite for dispatch)** — per Q1 resolution. Connect to the source MariaDB instance and read the `customer_tips` table definition. Capture column names + types, row count, PII surface, optional region/publish-state/ntag linkage. Update the placeholder migration shape in §"Components" → "Migration" before authoring the real migration.
+1. *(superseded by Step 0)* — kept for plan-reading continuity; the dump-driven framing is replaced by the MariaDB-direct lookup above.
+2. *(completed 2026-05-27)* — HITL ratification pass. Status flipped DRAFT → ready-for-execution. See "2026-05-27 HITL ratification" addendum at the bottom.
+3. **Land the migration** — `013_customer_tip_table.sql`, shaped against the Step-0 schema findings. Apply against `puma_dev`.
 4. **Author the ETL transformation** — `transformCustomerTip` + registration. Verify against the dump: row count matches expectations, PII fields dropped.
 5. **Author the classifier prompt + Zod output schema** — `cms/prompts/etl/tip-topic/`. Start with the 8-topic taxonomy; iterate after sample-quality gate.
 6. **Author the embed pass + classify pass drivers** — `enrich/embed/customer-tips.ts` + `enrich/classify/tip-topic.ts`. Run against `puma_dev`; verify `embedding` + `tsv` + `topic_tags` populated for the full corpus.
@@ -624,26 +617,37 @@ For a single execution agent:
 
 ---
 
-## DRAFT status — awaiting HITL ratification
+## 2026-05-27 HITL ratification
 
-This is a DRAFT. The blocking pre-execution step is **Open Q #1 — read the source schema**. Once the schema is read and the 10 open questions are ratified, this plan flips DRAFT → ready-for-execution (mirror the C.t3a + C.t4 ratification pattern at the bottom of those plans).
+Open questions Q1–Q10 resolved per Alastair's HITL session 2026-05-27. Status flipped from DRAFT to ready-for-execution. **Hard prerequisite before dispatch: Q1's MariaDB schema lookup must be the executing agent's first task — without it the plan can't be executed.**
 
-**Items requiring HITL sign-off before code lands:**
-- Open Q #1 — source data shape (blocking).
-- Open Q #2 — tool name `find_tips` (recommended).
-- Open Q #3 — derived-table-only, skip source mirror (recommended).
-- Open Q #5 — 8-topic taxonomy (recommended, refine post-data).
-- Open Q #7 — default 4 results per call (recommended).
-- Open Q #8 — `excludeIds` from inception (recommended).
-- Open Q #9 — prose-only at ship, widget deferred (recommended).
-- Open Q #10 — complement `lookup`, no displacement (recommended).
-- Naming asymmetry call — skip source mirror entirely (recommended).
-- Region-filter posture — OR-with-NULL vs strict equals (flag for execution-time call).
+### Resolutions
 
-Open Qs #4 + #6 align with existing corpus convention and don't need explicit ratification — just noted for completeness.
+1. **Q1 — Source data shape**: **INVESTIGATE**. The implementing agent's first task is to look up the `customer_tips` schema directly in the source MariaDB database. Step 0 inserted into the implementation order. Hard prerequisite, not a HITL question routed to Swoop.
+2. **Q2 — Tool name**: **`find_tips`** — locked. Aligns with the `find_*` convention. Other candidates (`lookup_tips`, `get_tips`) dropped.
+3. **Q3 — Derived table or direct query**: **derived table** — locked. The MariaDB source won't have embeddings; derived table is the right home for `embedding` / `topic_tags` / `tsv` / `content_hash`. Skip the source mirror unless the Step-0 schema lookup reveals a debug-only field worth keeping raw.
+4. **Q4 — Embedding pass shape**: defaults aligned. Gemini-embedding-001 / halfvec(3072) / content-hash-keyed cache, per existing C.t3a pattern (in [03-exec-c-t3a.md — embedding pass + Haiku ETL classifiers + derived-table population](03-exec-c-t3a.md)).
+5. **Q5 — Topic taxonomy**: accept the 8-topic draft (packing / weather / money / safety / transit / food / accommodation / etiquette). Tune against actual data once Step 0 + first classify run complete.
+6. **Q6 — Retrieval**: hybrid (pgvector cosine + tsvector RRF, k=60). Same as the other content tools.
+7. **Q7 — Per-call result count**: default 4. Range 3–5, hard cap 6.
+8. **Q8 — AntiRepetition forward-dependency**: yes — ship `excludeIds: number[]` from inception. Cross-links to the now-ratified [03-exec-crosscut-anti-repetition.md — AntiRepetition crosscut (orchestrator-side, canonical_url dedup, no reset)](03-exec-crosscut-anti-repetition.md), HITL-ratified the same day. The orchestrator is the sole producer of `excludeIds` on `find_tips` calls; tips are not URL-bearing so the dedup key is the natural integer `id`.
+9. **Q9 — UI**: **prose-only at ship**. No widget. No `TipCardPublicSchema`, no `TipList` React component. Documented as a flagged forward extension only.
+10. **Q10 — `lookup` displaced or complemented**: complement, not displace. `lookup` stays unchanged. SHOULD-rule in `00_why.md` carves the line.
+
+### Notes for the executing agent
+
+- **Step 0 (MariaDB schema lookup) is non-negotiable.** Without it, the migration shape in §"Components" → "Migration" is a sketch, not a spec. Begin there; sharpen every downstream artefact (ETL filter, classifier prompt scope, derived-table column list) against the real schema once captured.
+- **AntiRepetition wiring**: the AntiRep crosscut's resolved shape (orchestrator owns seen sets; passes `excludeIds` as regular tool-call arguments; no `__seenItems` envelope convention) is the wire-level posture for `find_tips` too. Implement the primitive to accept `excludeIds: number[]` from day one; the orchestrator will populate it on dispatch and mark IDs shown on result. No further `find_tips`-side work required when AntiRepetition lands — the schema is already forward-compatible.
+- **No widget at ship.** Do not add `TipList.tsx` or any new variant in the `ProposalCardPublicSchema` discriminated union for tips. If quality signal post-ship suggests a widget is needed, that's a future agent's task, not this one's.
+- **Tool name is locked.** Do not relitigate `find_tips` vs `lookup_tips` vs `get_tips` during execution.
+- **Topic taxonomy is a starting point, not a contract.** Tune via `version` bump + re-classify after Step 0 + first classify run. The 8-topic draft is the v1 shape.
+
+### Plan is READY FOR EXECUTION
+
+Pending Step 0 (MariaDB schema lookup) as the hard prerequisite, every other Tier-3 artefact in this plan stands: the migration shape (§"Migration"), ETL transformation (§"ETL (sql-transform)"), enrich passes (§"Enrich (embed + classify)"), tool I/O schemas (§"ts-common — tool I/O schemas"), data primitive (§"Data primitive"), handler (§"Handler"), description.md (§"Tool description"), `00_why.md` SHOULD-rule (§"System prompt SHOULD-rule"), and harness scenario (§"Harness scenario") all proceed in the order given by §"Sub-step ordering", with Step 0 inserted at the front.
 
 ---
 
 ## Execution log
 
-*(Appended by the executing agent post-execution. Empty until ratification + execution.)*
+*(Appended by the executing agent post-execution. Empty until execution.)*
