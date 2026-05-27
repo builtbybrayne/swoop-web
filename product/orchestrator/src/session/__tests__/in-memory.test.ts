@@ -19,6 +19,7 @@ import {
   canAcceptTurn,
   createSessionStore,
 } from '../index.js';
+import { defaultEmptySeenItems } from '@swoop/common';
 import type { SessionState } from '@swoop/common';
 
 /**
@@ -149,6 +150,7 @@ describe('canAcceptTurn consent gate', () => {
         handoff: { granted: false, timestamp: ts },
       },
       metadata: {},
+      seenItems: defaultEmptySeenItems(),
     };
   }
 
