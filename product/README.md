@@ -49,3 +49,10 @@ Read the relevant Tier 3 plan verbatim before starting any task — it names eve
 ## Per-package working notes
 
 Each code package carries a `STREAM.md` with its current working context (active task, open questions, decisions in flight). Consult it before touching the package; update it when you finish.
+
+## Documentation
+
+Operational workflow docs live at the repo root under `../docs/`:
+
+- [../docs/sales-team-prompt-workflow-sales.md — guide for sales-team contributors filing prompt-change feedback](../docs/sales-team-prompt-workflow-sales.md). Read this if you're Luke, Julie, or anyone else on the Swoop sales team wanting to shape the agent's behaviour. Covers the meta-cognition shift from briefing a human, the three-tier rubric (smaller/moderate/higher), and the data/outcomes asymmetry that decides what's cheap vs expensive.
+- [../docs/sales-team-prompt-workflow-devs.md — workflow for the assigned prompt engineer](../docs/sales-team-prompt-workflow-devs.md). Read this if you own the prompt-iteration loop — currently the project lead, post-handover the inheriting Swoop dev. Covers the five prompt-system surfaces, the data-vs-pattern triage diagnostic, push-back scripts, and the operational cadence.

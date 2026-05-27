@@ -1,5 +1,15 @@
 # 03-exec-crosscut — Prompt overrides setup (`agent_prompts` repo)
 
+> **DEPRECATED 2026-05-27**. This workstream is replaced by the docs at
+> [docs/sales-team-prompt-workflow-sales.md](../docs/sales-team-prompt-workflow-sales.md) and
+> [docs/sales-team-prompt-workflow-devs.md](../docs/sales-team-prompt-workflow-devs.md), plus a
+> future Claude skill for sales teams to refine feedback before submission. This plan was
+> the upstream dependency of the sales-team curation workstream (also deprecated); both
+> were displaced together when the git PR approach was judged unlikely to fit
+> non-technical contributors' workflow. The override-repo + bootstrap-clone design stays
+> on the shelf in case sales-team write access becomes a real need later. Body preserved
+> as path-not-taken design thinking.
+
 **Status**: Draft. Awaiting ratification.
 **Authored**: 2026-05-21
 **Position**: Inside M5, sequenced **before** [03-exec-crosscut-sales-team-prompt-curation.md — Sales-team prompt curation](03-exec-crosscut-sales-team-prompt-curation.md) — the Curator's PAT scopes, GitHub Action location, repo URLs, and edit semantics all depend on this landing first.
