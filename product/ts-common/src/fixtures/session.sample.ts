@@ -61,4 +61,18 @@ export const SampleSession: SessionState = {
     variantId: "puma-demo-A",
     warmPoolHit: true,
   },
+  // Anti-repetition seen-set — per planning/03-exec-crosscut-anti-repetition.md.
+  // Empty in this sample (visitor hasn't been shown any tracked content yet);
+  // trip/tour deliberately absent (carve-out — Swoop sells those, repeats are fine).
+  seenItems: {
+    inspire_passage: [],
+    customer_story: [],
+    trust_proof: [],
+    inform_chunk: [],
+    image: [],
+    blog_post: [],
+    hotel: [],
+    region_base: [],
+    customer_tip: [],
+  },
 };

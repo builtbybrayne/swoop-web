@@ -17,6 +17,8 @@
 
 import { z } from "zod";
 
+import { SeenItemsSchema } from "./seen-items.js";
+
 // -----------------------------------------------------------------------------
 // Conversation-history entry — a minimal stub. The real ADK SessionService
 // manages full history; this shape is what Puma exposes to code that reads
@@ -159,6 +161,11 @@ export const SessionStateSchema = z.object({
   wishlist: WishlistSchema,
   consent: ConsentStateSchema,
   metadata: SessionMetadataSchema,
+  // Anti-repetition state — per-type sets of "already shown to the visitor
+  // this session". Per planning/03-exec-crosscut-anti-repetition.md
+  // (HITL-ratified 2026-05-27). Optional + defaulted so sessions persisted
+  // before the field landed (in-memory adapter) round-trip cleanly.
+  seenItems: SeenItemsSchema,
 });
 export type SessionState = z.infer<typeof SessionStateSchema>;
 
