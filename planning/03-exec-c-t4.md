@@ -516,3 +516,11 @@ Result: 0 rows — exactly as expected (`region_tags` is empty across the corpus
 - **Quality monitoring**: `ui.widget_rendered{widgetType: 'inspiration', toolName: 'illustrate', outputCount: N}` already exists per F-a wiring. Post-launch, watch the distribution of `outputCount` per `illustrate` call — if many calls still return 0 results, the cosine substrate is the bottleneck and the facet-aware v2 becomes urgent.
 - **Agent empty-state silence**: the brave-pare wave (2026-05-13) still applies — when `illustrate` returns 0, the widget renders nothing and the agent's prose carries the moment. No agent-prompt change needed for this fix.
 - **C.t6 prompt + reminder**: when a future v2 effort touches the image annotation pipeline, the [vision-client.ts:117-120](../product/ingestion/src/images/vision-client.ts) reminder string is the first thing to fix. The system prompt + Zod schema + write-back SQL are already aligned to six outputs; only the reminder lags.
+
+### 2026-05-27 — reminder string aligned
+
+Verified at HEAD: bug still present. `vision-client.ts:117-120` reminder named only `description` + `annotation`; `output-schema.ts` declares all six fields (four with `.default([])`); `cms/prompts/etl/image-annotation/prompt.md` is `version: 2` demanding six outputs. C.40 fold gap confirmed; nothing was silently patched in the five intervening weeks.
+
+Changed `vision-client.ts:117-120` to list all six keys (`description`, `annotation`, `subject_tags`, `mood_tags`, `region_tags`, `tags`), kept the "no preamble" instruction. Added guarding test in `__tests__/vision-client.test.ts` (`reminder names all six v2 output fields`) — red before fix, green after. Full ingestion suite green against a fresh `rm -rf node_modules && npm install`: 291/291 passing, typecheck clean.
+
+Re-annotation of the 5,325 already-annotated images stays deferred per the parked v2 facet decision; this fix closes the latent footgun so any future re-run produces all six outputs. Commit `8e94f97` (placeholder until git commit lands), worktree branch `worktree-agent-aaccca0099e0d9f48`. Worktree only — does not touch main.

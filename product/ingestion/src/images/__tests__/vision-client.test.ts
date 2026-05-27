@@ -49,6 +49,29 @@ describe('buildVisionMessageBody', () => {
     expect(body.system).toBe('do the thing');
   });
 
+  it('reminder names all six v2 output fields (description, annotation, four tag arrays)', () => {
+    // Guards against the 2026-05-02 fold gap diagnosed in 03-exec-c-t4.md
+    // 2026-05-18 addendum: the inline reminder lagged the v2 system prompt
+    // and Zod schema by listing only `description` and `annotation`. Any
+    // future re-annotation pass must produce all six outputs.
+    const body = buildVisionMessageBody({
+      systemPrompt: 'sys',
+      imageUrl: 'https://x/y.jpg',
+    });
+    const userContent = body.messages[0]?.content as unknown as Array<{
+      type: string;
+      [k: string]: unknown;
+    }>;
+    const reminder = (userContent[1] as { type: string; text: string }).text;
+    expect(reminder).toMatch(/description/);
+    expect(reminder).toMatch(/annotation/);
+    expect(reminder).toMatch(/subject_tags/);
+    expect(reminder).toMatch(/mood_tags/);
+    expect(reminder).toMatch(/region_tags/);
+    expect(reminder).toMatch(/\btags\b/);
+    expect(reminder).toMatch(/no preamble/i);
+  });
+
   it('honours model + maxTokens + temperature overrides', () => {
     const body = buildVisionMessageBody({
       systemPrompt: 'sys',

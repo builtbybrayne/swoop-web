@@ -116,7 +116,8 @@ export function buildVisionMessageBody(args: {
       type: 'text',
       text:
         'Annotate this image per the system instructions. ' +
-        'Return ONLY a JSON object with `description` and `annotation` keys, no preamble.',
+        'Return ONLY a JSON object with `description`, `annotation`, ' +
+        '`subject_tags`, `mood_tags`, `region_tags`, and `tags` keys, no preamble.',
     },
   ];
 
