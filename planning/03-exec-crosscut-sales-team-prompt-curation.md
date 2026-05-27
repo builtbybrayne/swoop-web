@@ -1,6 +1,11 @@
 # 03-exec-crosscut — Sales-team prompt curation
 
-> **SUPERSEDED 2026-05-27** — workstream replaced by workflow docs at [planning/sales-team-prompt-workflow-sales.md](sales-team-prompt-workflow-sales.md) and [planning/sales-team-prompt-workflow-devs.md](sales-team-prompt-workflow-devs.md) per Alastair's 2026-05-27 reframe (Google Doc + complexity rubric instead of curation surface implementation).
+> **DEPRECATED 2026-05-27**. This workstream is replaced by the docs at
+> [docs/sales-team-prompt-workflow-sales.md](../docs/sales-team-prompt-workflow-sales.md) and
+> [docs/sales-team-prompt-workflow-devs.md](../docs/sales-team-prompt-workflow-devs.md), plus a
+> future Claude skill for sales teams to refine feedback before submission. The git PR
+> approach was judged unlikely to fit non-technical contributors' workflow. Body preserved
+> as path-not-taken design thinking.
 
 **Status**: Draft. Awaiting ratification.
 **Authored**: 2026-05-21
