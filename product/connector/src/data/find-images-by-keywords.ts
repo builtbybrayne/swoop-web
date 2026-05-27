@@ -42,6 +42,15 @@ export type ImageRow = z.infer<typeof ImageRowSchema>;
 
 export interface FindImagesByKeywordsOptions {
   regionSlug?: string | null;
+  /**
+   * Image canonical URLs already shown — anti-repetition. Keyed by
+   * canonical_url (not image.id) per HITL Q5: "never show the same picture
+   * twice". Two image rows pointing at the same imgix URL count as one to
+   * the visitor's eye, and the dedup must follow that reality.
+   *
+   * Per planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+   */
+  excludeCanonicalUrls?: ReadonlyArray<string>;
   limit: number;
 }
 
@@ -69,6 +78,13 @@ export async function findImagesByKeywords(
   if (opts.regionSlug) {
     binds.push([opts.regionSlug]);
     clauses.push(`region_tags @> $${binds.length}`);
+  }
+  // Anti-repetition: exclude images whose canonical_url has already been
+  // shown. Keyed by URL per HITL Q5 — "never show the same picture twice".
+  // Empty-array safe via `<> ALL($N::text[])`.
+  if (opts.excludeCanonicalUrls && opts.excludeCanonicalUrls.length > 0) {
+    binds.push([...opts.excludeCanonicalUrls]);
+    clauses.push(`canonical_url <> ALL($${binds.length}::text[])`);
   }
 
   binds.push(opts.limit);

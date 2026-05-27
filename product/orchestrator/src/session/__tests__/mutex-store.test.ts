@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { defaultEmptySeenItems } from '@swoop/common';
 import type { SessionState } from '@swoop/common';
 import type { SessionStore } from '../interface.js';
 import { MutexSessionStore } from '../mutex-store.js';
@@ -37,6 +38,7 @@ class AsyncRaceStore implements SessionStore {
         handoff: { granted: false, timestamp: nowIso },
       },
       metadata: {},
+      seenItems: defaultEmptySeenItems(),
       ...initial,
     };
     this.states.set(id, state);

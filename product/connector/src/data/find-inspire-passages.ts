@@ -15,6 +15,25 @@ import { resolveImagesByIds } from './resolve-image.js';
 export interface FindInspirePassagesOptions {
   region?: string | null;
   mood?: string | null;
+  /**
+   * Passage uuids to omit — anti-repetition. The orchestrator supplies the
+   * list from `SessionState.seenItems.inspire_passage`. Empty / undefined
+   * means no exclusion. Per planning/03-exec-crosscut-anti-repetition.md
+   * (HITL-ratified 2026-05-27).
+   */
+  excludeIds?: ReadonlyArray<string>;
+  /**
+   * Image canonical URLs already shown — anti-repetition. Applied at the
+   * outer DISTINCT ON projection so the candidate set still competes on
+   * passage-id excludes, but a previously-shown image gets the embedded
+   * image blanked on output rather than dropping the passage. (We never
+   * want fresh prose to be hidden just because its hero image was shown;
+   * the visitor still gets the passage, just without a re-used image.)
+   *
+   * Per HITL Q5: "never show the same picture twice" — key is canonical_url.
+   * Per HITL Q6: embedded images are marked shown alongside their parent row.
+   */
+  excludeImageCanonicalUrls?: ReadonlyArray<string>;
   limit: number;
 }
 
@@ -34,6 +53,13 @@ export async function findInspirePassages(
   if (opts.mood) {
     filterBinds.push(`%${opts.mood}%`);
     filterClauses.push(`mood ILIKE $${filterBinds.length + 3}`);
+  }
+  // Anti-repetition: exclude already-shown passage ids inside both CTEs so
+  // they don't burn one of the top-50 candidate slots. Empty-array safe via
+  // `<> ALL($N::uuid[])`.
+  if (opts.excludeIds && opts.excludeIds.length > 0) {
+    filterBinds.push([...opts.excludeIds]);
+    filterClauses.push(`id <> ALL($${filterBinds.length + 3}::uuid[])`);
   }
   const whereFilter =
     filterClauses.length > 0 ? `AND ${filterClauses.join(' AND ')}` : '';
@@ -85,15 +111,27 @@ export async function findInspirePassages(
   const imageIds = res.rows.map((r) => r.image_id as number | null);
   const images = await resolveImagesByIds(client, imageIds);
 
-  const passages: InspirePassagePublic[] = res.rows.map((r) =>
-    InspirePassagePublicSchema.parse({
+  // Anti-repetition: blank embedded images whose canonical_url has already
+  // been shown. Passage prose still surfaces — only the duplicated image is
+  // dropped. Per HITL Q5/Q6 on the AntiRepetition plan.
+  const excludeImageUrls = new Set<string>(opts.excludeImageCanonicalUrls ?? []);
+
+  const passages: InspirePassagePublic[] = res.rows.map((r) => {
+    const candidateImage = r.image_id
+      ? (images.get(r.image_id as number) ?? null)
+      : null;
+    const imageToProject =
+      candidateImage && excludeImageUrls.has(candidateImage.canonicalUrl)
+        ? null
+        : candidateImage;
+    return InspirePassagePublicSchema.parse({
       id: r.id as string,
       text: r.text as string,
       canonicalUrl: r.canonical_url as string,
       region: r.region as string | null,
       mood: r.mood as string | null,
-      image: r.image_id ? (images.get(r.image_id as number) ?? null) : null,
-    }),
-  );
+      image: imageToProject,
+    });
+  });
   return passages;
 }

@@ -76,7 +76,21 @@ async function main(): Promise<void> {
   // registrations.
   const toolDescriptions = loadAllToolDescriptions(config.toolsPromptDirAbsolutePath);
 
-  const connector = await setupConnector({ config, descriptions: toolDescriptions });
+  // Session store created BEFORE setupConnector so it can be threaded into
+  // the anti-repetition bracketing on every tool dispatch
+  // (planning/03-exec-crosscut-anti-repetition.md, HITL-ratified 2026-05-27).
+  // Order rearrangement is safe — the session store has no connector dep.
+  const sessionStore = createSessionStore({
+    backend: config.SESSION_BACKEND,
+    idleTtlMs: config.SESSION_TTL_IDLE_HOURS * 3_600_000,
+    archiveTtlMs: config.SESSION_TTL_ARCHIVE_DAYS * 86_400_000,
+  });
+
+  const connector = await setupConnector({
+    config,
+    descriptions: toolDescriptions,
+    sessionStore,
+  });
 
   const { agent } = await buildOrchestratorAgent({ config, promptLoader, tools: connector.tools });
 
@@ -86,15 +100,6 @@ async function main(): Promise<void> {
   // two-layer agent model end-to-end. Placeholder pending G.t0 HITL
   // flow-mapping.
   const triageClassifier = buildTriageClassifier({ config });
-
-  // Session store — explicit backend + TTL wiring (per B.t5 Tier 3 cross-task
-  // cleanup: the env read in src/session/index.ts was removed, every caller
-  // now passes these values from config/).
-  const sessionStore = createSessionStore({
-    backend: config.SESSION_BACKEND,
-    idleTtlMs: config.SESSION_TTL_IDLE_HOURS * 3_600_000,
-    archiveTtlMs: config.SESSION_TTL_ARCHIVE_DAYS * 86_400_000,
-  });
 
   // InMemoryRunner owns its own ADK session service. /chat uses `runAsync`
   // which expects an ADK session keyed by (appName, userId, sessionId); we

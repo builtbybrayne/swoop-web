@@ -16,6 +16,12 @@ import { buildHybridSearchSql } from './hybrid-search.js';
 
 export interface FindTrustProofsOptions {
   topic?: TrustProofTopic | null;
+  /**
+   * Proof uuids to omit — anti-repetition. Orchestrator supplies from
+   * `SessionState.seenItems.trust_proof`. Per
+   * planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+   */
+  excludeIds?: ReadonlyArray<string>;
   limit: number;
 }
 
@@ -30,6 +36,10 @@ export async function findTrustProofsByConcern(
   if (opts.topic) {
     binds.push(opts.topic);
     filterClauses.push(`topic = $${binds.length}`);
+  }
+  if (opts.excludeIds && opts.excludeIds.length > 0) {
+    binds.push([...opts.excludeIds]);
+    filterClauses.push(`id <> ALL($${binds.length}::uuid[])`);
   }
   const whereFilter =
     filterClauses.length > 0 ? `AND ${filterClauses.join(' AND ')}` : '';

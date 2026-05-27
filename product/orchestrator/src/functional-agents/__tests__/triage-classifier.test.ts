@@ -12,6 +12,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { LlmRequest, LlmResponse } from '@google/adk';
+import { defaultEmptySeenItems } from '@swoop/common';
 import type { SessionState } from '@swoop/common';
 
 import {
@@ -100,6 +101,7 @@ function blankSession(): SessionState {
       handoff: { granted: false, timestamp: now },
     },
     metadata: {},
+    seenItems: defaultEmptySeenItems(),
   };
 }
 
