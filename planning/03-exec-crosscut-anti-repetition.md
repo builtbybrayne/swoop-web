@@ -1,6 +1,6 @@
 # 03 — Execution: Crosscut — AntiRepetition (server-side session-scoped exclude tracking)
 
-> **Status**: DRAFT awaiting HITL ratification — author 2026-05-27, worktree `agent-a287106f12323edf1`, base [ee21254 — house-keeping](#). Decision IDs proposed `C.anti-rep-{1..}` (wave-named, numeric ids TBD on merge). Authored in response to Alastair's 2026-05-27 framing: *the agent should never repeat content it has already shown to a visitor in the same session — for **all** content types except trips and tours, which Swoop is literally trying to sell.*
+> **Status**: HITL-ratified 2026-05-27 — ready for execution. (Authored 2026-05-27, worktree `agent-a287106f12323edf1`, base [ee21254 — house-keeping](#). Decision IDs proposed `C.anti-rep-{1..}` (wave-named, numeric ids TBD on merge). Authored in response to Alastair's 2026-05-27 framing: *the agent should never repeat content it has already shown to a visitor in the same session — for **all** content types except trips and tours, which Swoop is literally trying to sell.* See "2026-05-27 HITL ratification" addendum at the bottom of this file for resolutions to all nine open questions in §6.)
 >
 > Sister plans this builds on / supersedes-in-default: [03-exec-crosscut-find-options-v2-backfill.md §2.5.b — agent-supplied exclude list (C.focused-shamir-5)](03-exec-crosscut-find-options-v2-backfill.md). The agent-supplied `exclude` lever stays as an override channel; the new default is **automatic, server-side, per-session tracking**.
 
@@ -422,55 +422,64 @@ Nine settled-as-recommendations. Alastair ratifies on merge.
 
 ### Q1 — How does session id thread from orchestrator into connector tool handlers?
 
-**Recommendation**: Option A wire-shape (per-call `__seenItems` payload in MCP args) with Option B handler-facing accessor (`deps.seenItems.get/markShown`). Payload rides the MCP envelope; handler API is clean. See §2.2.
+**RESOLVED (2026-05-27 HITL)**: orchestrator adds exclusions dynamically at call time. The connector remains stateless (architectural posture preserved); the orchestrator computes per-type exclude lists from its ADK session state and passes them in as **regular tool-call arguments** (the existing per-primitive `excludeIds` parameter), not as a hidden `__seenItems` envelope field. No new connector-side session-state machinery; no `__seenItems` / `__newlySeen` envelope convention.
 
-**Why**: connector stays request-scoped and stateless; orchestrator owns session lifecycle authoritatively. The B.t11 precedent ([B.t11 — server-side session history projection endpoint](03-exec-agent-runtime-t11.md)) lifts `sessionService` into `BuildServerDeps` for similar plumbing; same pattern here lifts `sessionStore` into `BuildConnectorToolsParams`.
+**Implication for §2.2 / §2.7**: the elaborate `__seenItems` payload + `__newlySeen` delta machinery described in §2.2.a / §2.2.b is **not the chosen shape**. Instead: orchestrator-side `invokeTool` reads `seenItems` from session state, computes per-type exclude arrays, merges them with any agent-supplied excludes, and adds them to the regular tool-call arguments before dispatch. The connector handler bodies receive `excludeIds` (and image-equivalents where relevant) as normal tool inputs. After the call, orchestrator marks shown by reading the IDs out of the **structured tool result** (which the connector already returns) and merging into session state. Connector-side `_handler-runtime.ts` does not gain a `seenItems` accessor; handler bodies do not call `deps.seenItems.get/markShown`.
+
+**Why**: simpler. Stateless connector preserved. No new wire convention. The existing per-primitive `excludeIds` mechanism (per [03-exec-crosscut-find-options-v2-backfill.md §2.5.b — C.focused-shamir-5](03-exec-crosscut-find-options-v2-backfill.md)) is already the right shape; this plan generalises it across every dedup-eligible tool rather than inventing a parallel mechanism.
 
 ### Q2 — Where does the session-state accessor physically live?
 
-**Recommendation**: handler-facing accessor is built fresh per call inside the connector's `_handler-runtime.ts` from the `__seenItems` snapshot in the inbound MCP envelope. Accumulates `markShown` calls into an outbound `__newlySeen` delta on the result envelope. The orchestrator merges the delta into `SessionState.seenItems`.
+**RESOLVED (2026-05-27 HITL — by Q1)**: lives in the orchestrator's ADK session state, never in the connector. There is no connector-side "seen-items accessor"; the connector handlers receive exclude IDs as normal tool inputs and return result rows as normal tool outputs. All read+write of seen-state happens orchestrator-side in `invokeTool` (read pre-dispatch, write post-result), bracketing the connector call.
 
-**Why**: keeps the connector stateless; the accessor is a thin in-memory shim around the per-call snapshot. Survives a connector restart trivially (orchestrator state is authoritative). Tests are easy — inject a synthetic snapshot.
+**Why**: a direct consequence of Q1's resolution. No connector-side state machinery means there is no accessor to physically locate.
 
 ### Q3 — Existing `excludeIds` machinery — what happens?
 
-**Recommendation**: keep agent-supplied `exclude` on `find_options` as an additive override. Auto-injection from `seenItems` is the default; agent-supplied excludes union into the same `excludeIds` parameter at dispatch time. Never subtractive.
+**RESOLVED (2026-05-27 HITL)**: **keep it — and make it the foundation**. The existing per-primitive `excludeIds` parameter in find_options v2 (per [03-exec-crosscut-find-options-v2-backfill.md §2.5.b — agent-supplied exclude list (C.focused-shamir-5)](03-exec-crosscut-find-options-v2-backfill.md)) is the foundational mechanism that AntiRepetition builds on. AntiRepetition expands it in two ways:
 
-**Why**: the agent's lever was always meant to be "I want fewer of these specific ones," not "I want to override what's tracked." Union semantics are the principle of least surprise. Per [C.focused-shamir-5 — agent-supplied exclude list on find_options primitives](03-exec-crosscut-find-options-v2-backfill.md), this parameter's documented intent is "cards to omit" — fully compatible with union.
+1. **Sole producer becomes the orchestrator.** Today the agent supplies the exclude list (via the `exclude: [{type, id}, ...]` lever on `find_options`). Post-AntiRepetition, the orchestrator computes the exclude list from its session state and supplies it. The agent's lever, where it still applies, unions in additively (never subtractively) — same union semantics as the original recommendation.
+2. **Per-primitive contract extends to every dedup-eligible tool.** Today only the find_options primitives accept `excludeIds`. Post-AntiRepetition, every primitive whose tool surfaces dedup-eligible content gains the same parameter shape (per §2.4) — `findInspirePassagesByText`, `findCustomerStoriesByPersonaSignal`, `findTrustProofsByConcern`, `findInformChunksByQuestion`, `findImagesByKeywords`, plus the future `findCustomerTips`.
+
+**Why**: union semantics are the principle of least surprise, and the existing parameter's documented intent ("cards to omit") is fully compatible with this expansion. The agent's lever stays as an additive override channel; the new default is orchestrator-supplied exclusions.
 
 ### Q4 — Turn-scoped vs whole-session shown set?
 
-**Recommendation**: whole-session for now. Turn-scoped (e.g. "only exclude what was shown in the last 3 turns") is a deferred axis if live use shows the visitor wants the agent to genuinely re-surface something it mentioned 10 turns ago.
+**RESOLVED (2026-05-27 HITL)**: **whole-session**. Once shown, never shown again in the same session. No turn-window, no decay, no timeout.
 
 **Why**: the entire premise is "the visitor saw this already." That doesn't time out within a session. If a real need for "I'd like to revisit X" emerges, it's an agent-action (Sonnet calls a tool with explicit `forceInclude: [...]` or asks the visitor's permission), not a passive timeout.
 
 ### Q5 — Image dedup key: `image.id` or `canonical_url`?
 
-**Recommendation**: `image.id` (stringified integer).
+**RESOLVED (2026-05-27 HITL)**: **`canonical_url`**, not `image.id`. The rule is: **never show the same picture twice**. If the same underlying picture is represented by two distinct `image.id` rows in the database (which can happen — same picture re-uploaded, same picture catalogued under different ids by different ingest passes), they still count as "the same picture" to the visitor's eye, and AntiRepetition must treat them as one.
 
-**Why**: source-of-truth identity; URLs are derived. Two distinct image rows sharing a canonical_url would be a data integrity issue worth surfacing (via observability), not papering over at the dedup layer.
+**Same principle applies to web page references**: dedup by canonical URL. Any tool that ever surfaces a URL-bearing item (blog posts, FAQ pages, external references) keys its seen-set by canonical URL rather than by row id.
+
+**Implication for §2.1 / §2.6**: the `SeenItemsSchema` shape changes — the per-type set for `image` (and for any future URL-bearing type such as `blog_post`) is a set of canonical URLs (strings), not stringified integer ids. Other types (uuid-keyed `inspire_passage`, `customer_story`, `trust_proof`, `inform_chunk`, integer-keyed `hotel`, `region_base`) continue to key by their natural id. The data primitives' `excludeIds` parameter for image-bearing tools becomes `excludeCanonicalUrls?: string[]` (or similar — name TBD at execution time, consistent with the column name on the `image` table).
+
+**Why**: source-of-truth identity *for the visitor's reality* is the rendered URL, not the database row. Treating two rows with the same URL as one is the user-correct behaviour. If duplicate-URL rows surface a data-integrity concern, that's a separate observability concern, not a reason to force the dedup layer to under-protect the visitor experience.
 
 ### Q6 — Images returned inside other rows: mark them shown too?
 
-**Recommendation**: yes. The visitor saw both the passage AND its hero image. Both get marked.
+**RESOLVED (2026-05-27 HITL)**: **yes**. If an `inspire_passage` (or `customer_story`, or any other row-shape) carries an embedded `image_id` / `canonical_url`, the image is marked shown alongside the parent row. The visitor saw both.
 
-**Why**: the visitor's reality is "I saw an image of a granite tower and read a passage about it" — both are shown content. The right-panel UI makes this even more literal.
+**Why**: the visitor's reality is "I saw an image of a granite tower and read a passage about it" — both are shown content. The right-panel UI makes this even more literal. Any subsequent `illustrate` call therefore cannot re-surface the same picture, and (per Q5) it's the canonical URL that's the dedup key.
 
 ### Q7 — Where do per-tool primitives get the seen-set?
 
-**Recommendation**: via the handler body. Each handler body reads `deps.seenItems.get(<type>)` once and passes the resulting array as `excludeIds` to the primitive. Primitives don't know about session state; they just accept an exclude list.
+**RESOLVED (2026-05-27 HITL — by Q1/Q2)**: the orchestrator passes them in as normal tool-call arguments. Primitives don't know about session state; they just accept an exclude list. Handler bodies don't read from a connector-side accessor (there isn't one — see Q2); they receive `excludeIds` directly from the validated tool input.
 
-**Why**: keeps primitives as pure data functions (testable in isolation against `puma_dev`). The session-state interface lives one layer up (the handler), exactly mirroring the find_options precedent.
+**Why**: consistent with Q1 and Q2. Primitives stay pure data functions (testable in isolation against `puma_dev`); the session-state interface lives at the orchestrator boundary.
 
 ### Q8 — Connector tool surface for "show all available" / "reset shown"?
 
-**Recommendation**: **none for Puma**. No agent-facing reset, no agent-facing "force re-show." If a future need emerges (e.g. operator debugging in dev) it's a separate HTTP route on the connector or an admin tool, not part of the eight intent-named tool surface.
+**RESOLVED (2026-05-27 HITL)**: **none for now**. No reset surface — not for the agent, not for operators. Future addition only if a real operational need surfaces.
 
-**Why**: keeping the connector tool surface stable and minimal is a chunk-C principle ([decisions.md C.25 — eight intent-named tools, no more](decisions.md)). Reset is a debug affordance, not a conversational move.
+**Why**: keeping the connector tool surface stable and minimal is a chunk-C principle ([decisions.md C.25 — eight intent-named tools, no more](decisions.md)). Reset is a debug affordance at best, and Puma doesn't have a confirmed need. Defer until live observation surfaces one.
 
 ### Q9 — What happens when the pool is exhausted (every candidate is already shown)?
 
-**Recommendation**: return empty `[]` from the primitive. The handler returns `{ <plural>: [], count: 0 }`. The widget renders nothing; the agent prose carries the moment (consistent with [brave-pare empty-state silence](inbox.md) wave). No special "you've seen everything" indicator.
+**RESOLVED (2026-05-27 HITL)**: **returns empty**. The connector returns an empty array; the handler returns `{ <plural>: [], count: 0 }`. The agent handles the empty case gracefully — prose carries the moment, no special "you've seen everything" indicator on the wire.
 
 **Why**: empty result is already the well-trodden path. Adding a `coverage_warning` channel would be schema noise. Observability via `tool.invoked` event with `outputCount: 0` is enough — once operations sees that pattern, that's the signal to either grow the corpus or revisit the carve-out (e.g. should `customer_story` actually be allowed to repeat in long sessions?).
 
@@ -523,3 +532,39 @@ The agent-supplied `exclude: Array<{type, id}>` parameter on `find_options` ([C.
 - **For hotel and region_base**: agent-supplied excludes union into the auto-injected `seenItems.hotel` / `seenItems.region_base` set. The final `excludeIds` passed to the primitive is the union.
 
 Sonnet doesn't need to know that auto-injection is happening underneath. Its tool-description for `find_options.exclude` ([cms/prompts/tools/find_options/description.md](../product/cms/prompts/tools/find_options/description.md)) doesn't change. If, after live observation, the agent's use of `exclude` becomes redundant (because auto-injection covers the use case), we can simplify by deprecating the field — but that's a future call, not part of this plan.
+
+---
+
+## 2026-05-27 HITL ratification
+
+Open questions Q1–Q9 in §6 resolved per Alastair's HITL session 2026-05-27. Status flipped from DRAFT to ready-for-execution.
+
+### Resolutions
+
+1. **Q1 — Session id threading**: orchestrator adds exclusions dynamically at call time. The connector stays stateless. Exclusions ride as **regular tool-call arguments** (the existing per-primitive `excludeIds` shape), not as a hidden `__seenItems` / `__newlySeen` envelope convention.
+2. **Q2 — Session-state accessor location**: resolved by Q1 — lives orchestrator-side in ADK session state. There is no connector-side accessor.
+3. **Q3 — Existing `excludeIds` machinery**: keep it, and make it the foundation. The per-primitive `excludeIds` parameter from [03-exec-crosscut-find-options-v2-backfill.md §2.5.b — agent-supplied exclude list (C.focused-shamir-5)](03-exec-crosscut-find-options-v2-backfill.md) generalises to every dedup-eligible tool; the orchestrator becomes the sole producer of those exclude lists; the agent's lever (where it still applies) unions in additively.
+4. **Q4 — Turn-scoped vs whole-session**: whole-session. Once shown, never shown again in the same session.
+5. **Q5 — Image dedup key**: **canonical_url**, not `image.id`. The rule is "never show the same picture twice." Same principle applies to web page references — dedup by canonical URL.
+6. **Q6 — Embedded images mark shown too**: yes. If an `inspire_passage` or other parent row carries an `image_id` / `canonical_url`, the image is marked shown alongside the parent.
+7. **Q7 — Where primitives get the seen-set**: orchestrator passes them in as normal tool-call arguments. Primitives stay pure data functions.
+8. **Q8 — Reset / show-all surface**: none for now. No reset surface — for the agent or otherwise. Future addition only if a real operational need surfaces.
+9. **Q9 — Pool exhausted**: returns empty array. Agent handles the empty case gracefully in prose. No special wire-level indicator.
+
+### Notes for the executing agent
+
+The plan's implementation shape simplifies significantly from the DRAFT:
+
+- **Orchestrator owns the seen sets** keyed by canonical URL (for images and any URL-bearing types — blog_post when it lands, etc.) or by natural id (uuid for `inspire_passage` / `customer_story` / `trust_proof` / `inform_chunk`; integer for `hotel` / `region_base`; future `customer_tip` per the parallel customer_tips plan).
+- **No new connector-side state machinery.** Drop the `__seenItems` / `__newlySeen` envelope convention. Drop the `_handler-runtime.ts` accessor proposal. Drop the `deps.seenItems.get/markShown` API. The connector handlers continue to receive validated tool inputs (now including `excludeIds`-like fields) and return validated tool outputs; nothing more.
+- **Wire layer**: the existing per-primitive `excludeIds` mechanism extends across every dedup-eligible tool. For URL-bearing types (images, future blog_post), the parameter shape is `excludeCanonicalUrls?: string[]` (or equivalent — match the column name on the underlying table at execution time). For id-bearing types, `excludeIds` keeps its current shape per primitive.
+- **Orchestrator-side plumbing** (§2.7): on each tool dispatch, orchestrator reads `SessionState.seenItems`, computes per-type exclude arrays, merges with any agent-supplied `find_options.exclude` lever, injects into the tool-call arguments. On result, orchestrator reads the returned row ids / canonical URLs out of the structured result and merges into `SessionState.seenItems`. The connector returns whatever it would have returned anyway.
+- **Schema (§2.1)**: `SeenItemsSchema` shape adjusts — the `image` (and future `blog_post`) per-type set is canonical URLs (strings), not stringified integer ids. Keep the deliberate absence of `trip` and `tour` keys.
+- **No reset surface anywhere.** No `tool.invoked` `excludedCount` field is required by HITL, though it remains a "nice to have" observability addition the executing agent may choose to include (per §9 item 4).
+- **Pool exhausted**: handler returns `{ <plural>: [], count: 0 }`. Agent prose handles the moment. Add a tiny note to the harness scenarios that this is the expected behaviour for a small corpus pushed past its capacity.
+
+The architectural elaboration in §2.2 (Option A / Option B / payload-vs-callback debate) is **historical context** — superseded by Q1's resolution. Leave it in the document as a record of the design exploration; the addendum is the authoritative answer.
+
+### Plan is READY FOR EXECUTION
+
+Schema updates (§2.1), data-primitive extensions (§2.4), per-tool handler edits (§2.3), orchestrator-side `invokeTool` plumbing (§2.7), helpers in `@swoop/common` (§2.8), tests (§2.9), and decision-log entries (§2.10) all stand — read each through the lens of the addendum's simplified wire shape. Where §2.2 describes the `__seenItems` envelope convention, the executing agent skips that machinery entirely and uses the existing `excludeIds` argument shape generalised across every dedup-eligible primitive.
