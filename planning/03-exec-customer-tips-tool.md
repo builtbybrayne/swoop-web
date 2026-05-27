@@ -646,6 +646,208 @@ Open questions Q1–Q10 resolved per Alastair's HITL session 2026-05-27. Status 
 
 Pending Step 0 (MariaDB schema lookup) as the hard prerequisite, every other Tier-3 artefact in this plan stands: the migration shape (§"Migration"), ETL transformation (§"ETL (sql-transform)"), enrich passes (§"Enrich (embed + classify)"), tool I/O schemas (§"ts-common — tool I/O schemas"), data primitive (§"Data primitive"), handler (§"Handler"), description.md (§"Tool description"), `00_why.md` SHOULD-rule (§"System prompt SHOULD-rule"), and harness scenario (§"Harness scenario") all proceed in the order given by §"Sub-step ordering", with Step 0 inserted at the front.
 
+**Status update 2026-05-27 (post-Step-0-lookup)**: Step 0 has been **completed by a separate Cowork investigation agent (worktree-agent-acdc60c7dbc1a2f20-v2)** — findings inline below in §"Step 0 findings (2026-05-27)". The executing agent can skip Step 0 and proceed directly to the migration (Step 3 in §"Sub-step ordering"), shaped against the findings captured below. Schema, row count, content shape, PII surface, region/publish-state inventory, junction linkage, and ETL data-cleanup pitfalls are all written down.
+
+---
+
+## Step 0 findings (2026-05-27)
+
+Schema lookup completed against the local Homebrew MariaDB on `localhost:3306`, database `swoop_patagonia`, table `customertip` (singular, no underscore — matches the junction's FK `customertip_id`). Connection via socket auth as user `al`. All queries read-only.
+
+### Headline numbers
+
+- **Row count**: **47 rows**. Sparser than the C.t0-era ~119 estimate (which came from the `contentblock_customertip` junction). The junction has more rows than the source because tips are reused across multiple contentblocks — see §"Junction relationships" below. 47 unique tips, surface size confirmed.
+- **All 47 rows are live**: `deleted` is NULL for every row; `deleted_by` is NULL for every row. **The 24 rows where `deleted_by_id` is non-NULL are not deletions** — that column carries non-NULL values for live rows, which is database-dirt (likely a CMS-side bug or an audit-trail repurposing). **ETL filter rule**: filter on `deleted IS NULL` (the canonical soft-delete flag), not on `deleted_by_id`. Result: all 47 rows pass.
+- **No publish-state column.** No `is_published`, no `status`, no equivalent of `customerreview.is_published = TRUE`. Every live (non-deleted) row is considered published.
+- **No region / country column.** The source table carries no location field. Region tagging at ETL (per Open Q #5 + classifier `region` output) is the only mechanism — must be derived from the tip text via Haiku, or left NULL.
+
+### Full schema
+
+```sql
+CREATE TABLE `customertip` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `content` text DEFAULT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `created` datetime DEFAULT NULL,
+  `deleted` tinyint(1) unsigned DEFAULT NULL,
+  `deleted_by` tinyint(1) unsigned DEFAULT NULL,
+  `deleted_by_id` tinyint(1) unsigned DEFAULT NULL,
+  `image_id` int(11) unsigned DEFAULT NULL,
+  `created_by_id` int(11) unsigned DEFAULT NULL,
+  `modified` datetime DEFAULT NULL,
+  `modified_by_id` int(11) unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `index_foreignkey_customertip_image` (`image_id`),
+  KEY `index_foreignkey_customertip_user` (`created_by_id`),
+  KEY `c_fk_customertip_modified_by_id` (`modified_by_id`),
+  CONSTRAINT `c_fk_customertip_created_by_id` FOREIGN KEY (`created_by_id`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE SET NULL,
+  CONSTRAINT `c_fk_customertip_image_id` FOREIGN KEY (`image_id`) REFERENCES `image` (`id`) ON DELETE SET NULL ON UPDATE SET NULL,
+  CONSTRAINT `c_fk_customertip_modified_by_id` FOREIGN KEY (`modified_by_id`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=52 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+```
+
+| Column | Type | Null | Notes for ETL |
+|---|---|---|---|
+| `id` | int unsigned | NO (PK, auto_increment) | Carry forward as the derived `customer_tip.id`. AUTO_INCREMENT=52 with 47 live rows means 5 ids are missing in the range — minor curiosity, not a problem. |
+| `content` | text | YES | **The tip prose itself.** Always populated (0 NULLs / 0 empty strings across all 47 rows). Maps to derived `text NOT NULL`. **Source-of-truth utf8mb4** (table collation `utf8mb4_unicode_ci`) — the storage is clean; the latin1 client-default rendering during inspection produced replacement characters (`you�re`), but the raw bytes are correct UTF-8 (`E2 80 99` = `'`). ETL must use `--default-character-set=utf8mb4` on its MariaDB connection, or set it explicitly on the driver. |
+| `name` | varchar(255) | YES | The traveller's display name (e.g. `Lauren`, `Sarah, USA`, `Nic & Julie`). 43 distinct values across 47 rows. **Treat as low-PII / public-domain attribution** per Alastair's "sales-curated published content" posture (same as `customerreview.author_name` per C.26). **Data cleanup at ETL**: trim trailing whitespace (e.g. `Bill, Australia ` has a trailing space); replace literal tab characters (e.g. id 41 has `Joey\tAltchech` where `\t` is a literal U+0009 inside the string). Public projection: include as `author_name` field on `TipPublicSchema` (the agent can use it for voice attribution — *"as Lauren put it: pack light"*) **OR** strip entirely if the design prefers anonymous traveller-voice. **Recommended**: include — names lend authenticity to the traveller-voice attribution; the sample is public-facing CMS content. **HITL flag** if a different posture is wanted. |
+| `created` | datetime | YES | Original authoring timestamp. Range: **2016-09-05 to 2025-07-24** (most rows clustered 2016–2018; 1 outlier in 2024-04-22; 1 in 2025-07-24). Carry forward as `created_at` for provenance. |
+| `deleted` | tinyint(1) unsigned | YES | Canonical soft-delete flag. **All NULL across all 47 rows.** ETL filter: `WHERE deleted IS NULL`. |
+| `deleted_by` | tinyint(1) unsigned | YES | All NULL. Drop. |
+| `deleted_by_id` | tinyint(1) unsigned | YES | Mis-named: **24/47 rows have non-NULL values despite `deleted` being NULL** — this column does NOT mean "the user who deleted this row". Likely an audit-trail repurpose or CMS-side bug. **Do NOT filter on this; do NOT carry forward.** |
+| `image_id` | int unsigned | YES (FK → `image.id`) | **12/47 rows have an associated image.** Could surface as a thumbnail in a future widget; for the prose-only ship (Q9), drop. **Out of scope for v1**; flag for the widget extension path. |
+| `created_by_id` | int unsigned | YES (FK → `user.id`) | **CMS author**, not the traveller — only 5 distinct creators across all 47 rows (CMS staff curating tips on travellers' behalf). The traveller is named in `name`. **Drop at ETL boundary** (PII filter: user-table FKs leak into the derived store). |
+| `modified` | datetime | YES | Last modified timestamp. Most modified dates fall in 2016-10 to 2017-05 — older than `created` for the 2024/2025 outliers (likely because modified never updated after a CMS migration). Not load-bearing for retrieval; drop. |
+| `modified_by_id` | int unsigned | YES (FK → `user.id`) | PII (user FK). Drop. |
+
+### Foreign keys inbound and outbound
+
+- **Outbound** (FROM `customertip` → other tables):
+    - `image_id → image.id` — 12/47 populated; ETL ignores for v1.
+    - `created_by_id → user.id` — CMS author audit; ETL drops.
+    - `modified_by_id → user.id` — CMS author audit; ETL drops.
+- **Inbound** (FROM other tables → `customertip`):
+    - `contentblock_customertip.customertip_id → customertip.id` — the only junction.
+
+### Content shape
+
+- **Length distribution** (LENGTH of `content`, 47 rows, no NULLs):
+    - min: 35 chars
+    - max: 288 chars
+    - avg: 144 chars
+    - stddev: 63 chars
+
+- **Length histogram (50-char buckets)**:
+    | Bucket | Count |
+    |---|---|
+    | 0–49 | 2 |
+    | 50–99 | 10 |
+    | 100–149 | 17 |
+    | 150–199 | 10 |
+    | 200–249 | 4 |
+    | 250–299 | 4 |
+
+  **Implication**: tips are **short snippets, not long-form**. Average is ~144 chars (~25 words / ~1 sentence). The longest is 288 chars (~50 words / ~3 sentences). This validates the plan's "no chunking" decision (Q4) — every tip fits in a single embedding window with vast headroom (Gemini-embedding-001's 2048-token cap is ~8192 chars, ~28× the longest tip).
+
+- **Sample tips (representative)**:
+    - id 6 (35 chars, shortest): *"Trekking poles are recommended for the W Trek."* — Jon
+    - id 4 (159 chars): *"There are very few Trekkers out in the winter so if you're planning on going but not a confident camper/trekker then definitely book in a guide with Swoop."* — Morwenna
+    - id 10 (181 chars): *"Splurge for the refugios (sleep is important), bring gaiters for the snow, bring cash for drinks at refugios, have quality boots, quality outer-jacket, bring blister care materials."* — Daniel
+    - id 9 (288 chars, longest): *"The only slight difficulty I had was trying to find a working cash machine, especially in El Calafate. There were also limits on the amount of cash you could withdraw so I would advise / warn people to pay online in advance as much as possible, and to bring some cash with them."* — Simon
+
+  **Voice**: traveller-direct, often imperative ("Pack light", "Trekking poles are recommended"), often confessional ("We got stranded both ways…"). The 8-topic taxonomy in §"Components" → "Enrich" maps cleanly: id 6 → `safety`/`packing`; id 9 → `money`; id 10 → `packing`/`accommodation`; id 4 → `weather`/`safety`. Validates the taxonomy.
+
+- **Author concentration**: 43 distinct `name` values across 47 rows. The 3 repeats are all `Lauren` (3 tips, all 2016 sequential authoring under the same session). Single-author dominance is negligible — this is not customer-story persona-shaped content. No need for aggregation; the per-tip granularity holds.
+
+### Junction relationships
+
+- `contentblock_customertip` is the only junction:
+    - 119 rows total
+    - 30 distinct `customertip_id` values referenced (the 30 that ARE surfaced on the live website via the CMS)
+    - 58 distinct `contentblock_id` values (tips are reused across multiple contentblocks — same tip surfaces on multiple page-sections)
+    - **0 dangling junction rows** (all 30 referenced ids exist in `customertip` — the source table delivery resolved every dangling FK from C.t0's 2026-04-29 finding)
+    - **17 of 47 source rows are NOT referenced by any junction** — these are tips that exist in the CMS but aren't currently surfaced on the live website. **Recommendation: include them in the ETL anyway.** The agent doesn't need a tip to be "page-visible on swoop.com" to use it conversationally; the curated/quality bar is satisfied by the source table's editorial provenance (CMS staff selected them). The orphans are not lower-quality — they're just not currently page-placed.
+
+- **Pagetype distribution of tip-bearing pages** (via the junction → `contentblock.page_id` → `page.pagetype_id` → `pagetype.title`):
+    | Pagetype | Junction rows | Distinct tips |
+    |---|---|---|
+    | NULL (pages without a pagetype) | 93 | 14 |
+    | Guidebook | 13 | 11 |
+    | Swoop | 6 | 4 |
+    | Month | 3 | 3 |
+    | Region-Activity | 2 | 2 |
+    | Activity | 1 | 1 |
+    | Region | 1 | 1 |
+
+  **The 93 NULL-pagetype junction rows are concentrated on "Preparing for your X trip" pages** (sample titles: *"Preparing for the W Trek based at Serrano Camp"*, *"Preparing for the Original W Trek in Torres del Paine"*, *"Preparing for your Best of the Chilean Lake District trip"*). These are the natural home for tip content — pre-trip practical-wisdom moments — but they exist outside the pagetype taxonomy. **Not load-bearing for the retrieval design** (the tool searches by topic, not by page); flagged for general orientation.
+
+- **`page_trip` linkage**: joining tip-bearing contentblocks → page_id → `page_trip` returns **0 trip-linked tips**. Tips do NOT sit on trip-bound pages via the `page_trip` table; they sit on the "Preparing for..." pages which appear to be a separate page taxonomy. **Implication**: there is no clean MariaDB-side path to derive a `trip_id` for a tip. Region/topic classification at ETL via Haiku is the only structural enrichment available — confirms the plan's Q5 decision to use the classifier rather than join-table inference.
+
+### PII surface
+
+- `name` — traveller's first name / display name. Posture: **public-domain published content** (same as `customerreview.author_name` per C.26). Carry forward as `author_name` on the derived table. Strip if a stricter posture is wanted at HITL.
+- `created_by_id`, `modified_by_id`, `deleted_by_id`, `deleted_by` — internal user-table FKs (CMS author audit). **Drop at ETL boundary**, per the C.14 pattern (`swooper_*` columns on `trip`).
+- `image_id` — internal FK to `image`. Not PII; drop because the prose-only ship doesn't render images.
+- No email column. No IP column. No customer FK. Cleaner PII surface than `customerreview`.
+
+### Data cleanup pitfalls (must address in `transformCustomerTip`)
+
+1. **Trailing whitespace on `name`**: e.g. `Bill, Australia ` (id 33), `Stephen, UK ` (id 34) — `TRIM()` at ETL.
+2. **Literal tab characters mid-string**: id 41 has `name = 'Joey\tAltchech'` where `\t` is U+0009 inside the string. Strip or replace with single space at ETL.
+3. **Mixed punctuation in `content`**: curly apostrophes (`'`), straight apostrophes (`'`), em dashes, ellipses — all present and all properly encoded as UTF-8. **Keep as-is** (the agent should reproduce the traveller's punctuation faithfully); no normalisation needed.
+4. **Charset gotcha**: the MariaDB server's `character_set_client` / `character_set_connection` / `character_set_results` defaults are `latin1` even though `character_set_database` is `utf8mb4` and the table itself is `utf8mb4_unicode_ci`. **The data IS utf8mb4-clean**; the latin1 client default produces visible mojibake during shell inspection. The ETL must explicitly request utf8mb4 on its connection — either via `--default-character-set=utf8mb4` (CLI) or `SET NAMES utf8mb4` (driver-level). This is a Homebrew MariaDB local-dev quirk and not a data-corruption issue.
+5. **5 missing ids**: AUTO_INCREMENT=52, 47 live rows, no deletions — 5 ids are gaps in the sequence. Not a problem; just don't assume contiguous integer ids.
+
+### Revised migration shape
+
+The placeholder in §"Components" → "Migration" can now be sharpened. Recommended actual shape (changes vs the placeholder marked **bold**):
+
+```sql
+CREATE TABLE customer_tip (
+  id              INTEGER PRIMARY KEY,                  -- carry source customertip.id forward
+  source_id       TEXT NOT NULL,                        -- TEXT-form id per C.33 (e.g. 'customertip:6')
+  text            TEXT NOT NULL,                        -- the tip prose; sourced from customertip.content
+  author_name     TEXT,                                 -- ** NEW vs placeholder ** — sourced from customertip.name, TRIMmed, tabs replaced with space
+  topic_tags      TEXT[] NOT NULL DEFAULT '{}',         -- Haiku-classified, 8-topic taxonomy
+  region          TEXT,                                 -- best-effort, NULL where unknown
+  ntag_ids        INTEGER[] NOT NULL DEFAULT '{}',      -- ** EMPTY for tips ** — source has no ntag linkage; carry the column for shape-symmetry only
+  source_provenance TEXT NOT NULL DEFAULT 'customertip',-- ** updated default ** — matches the source table name
+  source_created_at TIMESTAMPTZ,                        -- ** NEW vs placeholder ** — sourced from customertip.created for provenance display
+  embedding       halfvec(3072),                        -- Gemini-embedding-001 per migration 009
+  tsv             tsvector,                             -- to_tsvector('english', text)
+  content_hash    TEXT,                                 -- sha256(text || version) for idempotent re-runs
+  embedded_at     TIMESTAMPTZ,
+  classified_at   TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX customer_tip_embedding_idx ON customer_tip USING hnsw (embedding halfvec_cosine_ops);
+CREATE INDEX customer_tip_tsv_idx       ON customer_tip USING gin (tsv);
+CREATE INDEX customer_tip_topic_tags_idx ON customer_tip USING gin (topic_tags);
+CREATE INDEX customer_tip_region_idx    ON customer_tip (region) WHERE region IS NOT NULL;
+```
+
+### Revised `TipPublicSchema`
+
+Add `author_name` to the public projection (handler maps `customer_tip.author_name → author_name`):
+
+```ts
+TipPublicSchema = z.object({
+  id: z.number().int(),
+  text: z.string(),
+  author_name: z.string().nullable(),  // NEW vs §"ts-common — tool I/O schemas"
+  topic_tags: z.array(z.string()),
+  region: z.string().nullable(),
+});
+```
+
+The agent uses `author_name` for voice attribution where present (*"as Daniel put it, splurge for the refugios"*); falls back to anonymous traveller-voice where NULL.
+
+### Tip surface size at ship
+
+47 tips. Sparse but high-quality. Risk R5 in §"Risks" (sparser-than-expected corpus) **partially materialised**: not the ~119 the junction-count implied, but the 47 are clean editorial selections and serve the Inform job well for v1. The recommendation in R5 ("name the corpus size in the execution log; if quality signal post-ship suggests too thin, route to sales-team prompt curation") stands.
+
+### What this lookup did NOT change
+
+Every Q1–Q10 HITL resolution stands. The tool name, derived-table-only, Gemini embedding, 8-topic taxonomy, hybrid retrieval, per-call default of 4, `excludeIds` from inception, prose-only ship, and complement-not-displace-`lookup` postures are all still correct given the actual schema. The only additive concrete refinements are:
+
+- **Add `author_name`** to the derived table + `TipPublicSchema` (recommended) or strip name entirely (alternative; HITL flag).
+- **Add `source_created_at`** to the derived table for provenance display.
+- **`ntag_ids` is column-shape symmetry only** for tips; never populated (no source linkage).
+- **`source_provenance` default = `'customertip'`** (singular, matching the source table name).
+- **ETL must request utf8mb4 explicitly** on its MariaDB connection (latin1 is the server-side client default).
+- **TRIM + tab-strip on `name`** at ETL boundary.
+- **Filter on `deleted IS NULL`** (the 24-row `deleted_by_id` non-NULL signal is database-dirt, not a deletion).
+- **Include all 47 rows** including the 17 unreferenced-by-junction tips — they're CMS-curated, just not currently page-placed.
+
+### Investigation provenance
+
+- Lookup performed 2026-05-27 by Cowork agent `worktree-agent-acdc60c7dbc1a2f20-v2` per the brief at `/Users/al/Studio/projects/swoop_web/.claude/worktrees/agent-acdc60c7dbc1a2f20-v2/`.
+- All queries read-only against `swoop_patagonia` on `localhost:3306`.
+- No source-table modifications. No Postgres writes. No code changes — planning doc update only.
+- Findings consistent with C.t0 (the junction shape) plus the post-2026-04-29 customertip delivery from Swoop.
+
 ---
 
 ## Execution log
