@@ -1,7 +1,7 @@
 # Sales-team prompt-iteration loop — workflow for the assigned prompt engineer
 
 **Status**: Active workflow doc. Lives in `docs/` because it's operational guidance for whoever owns the prompt-iteration loop, not a planning artefact in flight.
-**Audience**: The currently assigned prompt engineer (Alastair while the engagement is live; future Swoop dev who inherits this loop post-handover). The role is the durable thing — the person occupying it may change.
+**Audience**: The assigned prompt engineer — initially the project owner during the engagement, then whichever Swoop dev inherits this loop post-handover. The role is the durable thing; the person occupying it may change.
 **Replaces**: [planning/03-exec-crosscut-sales-team-prompt-curation.md — git-PR sales curation surface workstream](../planning/03-exec-crosscut-sales-team-prompt-curation.md) and its sibling [planning/03-exec-crosscut-prompts-repo-split.md — prompts repo split with agent_prompts override repo](../planning/03-exec-crosscut-prompts-repo-split.md). Both deprecated 2026-05-27 in favour of this lighter doc-based workflow plus a future sales-team-facing Claude skill. See §8.
 
 The sister doc for the sales side is [sales-team-prompt-workflow-sales.md — what Luke, Julie, and the team read](sales-team-prompt-workflow-sales.md).
@@ -266,7 +266,7 @@ The original plan ([commit 058f26f — Tier 3 plans for sales-team prompt curati
 - A GitHub Action that notified a reviewer
 - An end-to-end M5 demo where Luke landed a PR live
 
-Alastair's 2026-05-27 reframe: the underlying bottleneck is contributors not being able to size their own requests, and the git-PR workflow is unlikely to fit non-technical contributors' working pattern. A workflow doc closes the sizing gap directly — the rubric in the sales doc lets contributors self-size, and this implementer-side doc sharpens the triage loop. A future sales-team-facing Claude skill will pick up the interactive-shaping role the Curator was sketched for, without the git-PR machinery underneath.
+The 2026-05-27 reframe from the project owner: the underlying bottleneck is contributors not being able to size their own requests, and the git-PR workflow is unlikely to fit non-technical contributors' working pattern. A workflow doc closes the sizing gap directly — the rubric in the sales doc lets contributors self-size, and this implementer-side doc sharpens the triage loop. A future sales-team-facing Claude skill will pick up the interactive-shaping role the Curator was sketched for, without the git-PR machinery underneath.
 
 What's preserved from the curation plan:
 
