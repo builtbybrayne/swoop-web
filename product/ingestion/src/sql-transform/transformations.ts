@@ -22,6 +22,8 @@
  * you've drifted bottom-up. Stop and re-anchor.
  */
 
+import { createHash } from 'node:crypto';
+
 import { canonicalUrl, IMGIX_HOST, SWOOP_PATAGONIA_HOST } from '@swoop/common';
 
 import type { DumpRow } from './parser.js';
@@ -592,6 +594,57 @@ export function transformCustomerReviewTrip(row: DumpRow): Record<string, unknow
     customerreview_id: reviewId,
     trip_id: tripId,
     position: numOrNull(row.values.position),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Customertip (find_tips tool — the 9th MCP tool)
+// ---------------------------------------------------------------------------
+
+/**
+ * content_hash for a customer_tip row: sha256(text || '|customer_tip|1').
+ *
+ * Mirrors enrich/hash.ts `contentHash(text, sourceType, version=1)` — the
+ * source-type-segregated idempotent re-embedding key (theme 5). Re-runs skip
+ * rows whose text (and therefore hash) is unchanged; a hash change re-triggers
+ * embed + classify. version=1 is the bump lever if the canonical text shape
+ * ever changes.
+ */
+function customerTipContentHash(text: string): string {
+  return createHash('sha256').update(`${text}|customer_tip|1`).digest('hex');
+}
+
+/**
+ * customertip → customer_tip. Base columns only: sql-transform owns
+ * id/source_provenance/source_id/text/author_name/source_created_at/
+ * content_hash; the enrich pipeline fills topic_tags/region (per-row classify)
+ * and embedding/tsv (embed-derived pass). NO compose pass.
+ *
+ * Filters: drop soft-deleted rows and rows with empty content. author_name is
+ * trimmed and has internal whitespace runs collapsed (some source names carry
+ * literal tabs, e.g. id 41 "Joey\tAltchech"); blank → null.
+ */
+export function transformCustomerTip(row: DumpRow): Record<string, unknown> | null {
+  if (isDeleted(row.values.deleted)) return null;
+  const id = numOrNull(row.values.id);
+  const text = strOrNull(row.values.content);
+  if (id === null || text === null) return null;
+  const trimmedText = text.trim();
+  if (trimmedText.length === 0) return null;
+  const rawName = strOrNull(row.values.name);
+  let authorName: string | null = null;
+  if (rawName !== null) {
+    const cleaned = rawName.replace(/\s+/g, ' ').trim();
+    authorName = cleaned.length > 0 ? cleaned : null;
+  }
+  return {
+    id,
+    source_provenance: 'customertip',
+    source_id: String(id),
+    text: trimmedText,
+    author_name: authorName,
+    source_created_at: strOrNull(row.values.created),
+    content_hash: customerTipContentHash(trimmedText),
   };
 }
 

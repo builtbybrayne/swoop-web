@@ -27,6 +27,7 @@ import { run, type RunResult } from './run.js';
 interface Args {
   dump: string;
   customerReviewDump: string | undefined;
+  customerTipDump: string | undefined;
   databaseUrl: string;
   dryRun: boolean;
   only: Set<string> | undefined;
@@ -36,6 +37,7 @@ interface Args {
 function parseArgs(argv: string[]): Args {
   let dump: string | undefined;
   let customerReviewDump: string | undefined;
+  let customerTipDump: string | undefined;
   let databaseUrl: string | undefined;
   let dryRun = false;
   let only: Set<string> | undefined;
@@ -47,6 +49,8 @@ function parseArgs(argv: string[]): Args {
     else if (a.startsWith('--dump=')) dump = a.slice('--dump='.length);
     else if (a === '--customerreview-dump') customerReviewDump = argv[++i];
     else if (a.startsWith('--customerreview-dump=')) customerReviewDump = a.slice('--customerreview-dump='.length);
+    else if (a === '--customertip-dump') customerTipDump = argv[++i];
+    else if (a.startsWith('--customertip-dump=')) customerTipDump = a.slice('--customertip-dump='.length);
     else if (a === '--database-url') databaseUrl = argv[++i];
     else if (a.startsWith('--database-url=')) databaseUrl = a.slice('--database-url='.length);
     else if (a === '--dry-run') dryRun = true;
@@ -90,7 +94,16 @@ function parseArgs(argv: string[]): Args {
     if (existsSync(candidate)) customerReviewDump = candidate;
   }
 
-  return { dump, customerReviewDump, databaseUrl, dryRun, only, yes };
+  // Auto-detect customertip dump if not supplied (mirrors customerreview).
+  if (!customerTipDump) {
+    const candidate = path.resolve(
+      path.dirname(dump),
+      'customertip_tables_-_swoop-patagonia_prod.sql',
+    );
+    if (existsSync(candidate)) customerTipDump = candidate;
+  }
+
+  return { dump, customerReviewDump, customerTipDump, databaseUrl, dryRun, only, yes };
 }
 
 function printHelp(): void {
@@ -100,6 +113,8 @@ function printHelp(): void {
 Options:
   --dump <path>                   MariaDB SQL dump path. Required.
   --customerreview-dump <path>    Supplementary customerreview dump.
+                                  Auto-detected next to --dump if present.
+  --customertip-dump <path>       Supplementary customertip dump (find_tips).
                                   Auto-detected next to --dump if present.
   --database-url <url>            DATABASE_URL override; otherwise loads from
                                   product/connector/.env.
@@ -152,6 +167,7 @@ export async function main(argv: string[]): Promise<RunResult> {
         client,
         dumpPath: args.dump,
         customerReviewDumpPath: args.customerReviewDump,
+        customerTipDumpPath: args.customerTipDump,
         only: args.only,
         dryRun: args.dryRun,
       });
