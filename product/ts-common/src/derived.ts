@@ -245,6 +245,54 @@ export const InformChunkPublicSchema = z
 export type InformChunkPublic = z.infer<typeof InformChunkPublicSchema>;
 
 // -----------------------------------------------------------------------------
+// CustomerTip — Inform job, second shape (find_tips tool).
+//
+// Per planning/03-exec-customer-tips-tool.md (HITL-ratified 2026-05-27).
+// Where InformChunk carries Swoop's own authoritative guidance, CustomerTip
+// carries traveller-sourced practical wisdom — short, first-person, surfaced
+// WITH attribution. Distinct retrieval axis from Mirror's persona-shaped
+// customer_story: tips are topic-shaped (content embedding + topic_tags).
+//
+// id is a plain integer carried from the upstream `customertip` table (not a
+// generated UUID), mirroring the trip_card convention. `authorName` is the
+// traveller display name shown alongside the tip. `topicTags` is the 8-topic
+// taxonomy {packing, weather, money, safety, transit, food, accommodation,
+// etiquette} assigned per-row by the tip-topic classifier.
+// -----------------------------------------------------------------------------
+
+export const CustomerTipProvenanceSchema = z.enum(["customertip"]);
+export type CustomerTipProvenance = z.infer<typeof CustomerTipProvenanceSchema>;
+
+export const CustomerTipSchema = z
+  .object({
+    id: z.number().int().positive(),
+    sourceProvenance: CustomerTipProvenanceSchema,
+    sourceId: z.string(),
+    text: z.string().min(1),
+    authorName: z.string().nullable().optional(),
+    topicTags: z.array(z.string()).default([]),
+    region: z.string().nullable().optional(),
+    ntagIds: z.array(z.number().int().positive()).default([]),
+    sourceCreatedAt: z.coerce.date().nullable().optional(),
+    embedding: EmbeddingSchema.nullable().optional(),
+    tsv: TsvectorSchema.nullable().optional(),
+    contentHash: z.string().min(1),
+  })
+  .strict();
+export type CustomerTip = z.infer<typeof CustomerTipSchema>;
+
+export const CustomerTipPublicSchema = z
+  .object({
+    id: z.number().int().positive(),
+    text: z.string().min(1),
+    authorName: z.string().nullable().optional(),
+    topicTags: z.array(z.string()).default([]),
+    region: z.string().nullable().optional(),
+  })
+  .strict();
+export type CustomerTipPublic = z.infer<typeof CustomerTipPublicSchema>;
+
+// -----------------------------------------------------------------------------
 // TripCard — Propose options job (full ETL row only).
 //
 // Public projection lives in `tools.ts` as a `ProposalCardPublicSchema` variant

@@ -33,6 +33,7 @@ import { z } from "zod";
 
 import {
   CustomerStoryPublicSchema,
+  CustomerTipPublicSchema,
   DerivedImageSchema,
   InformChunkPublicSchema,
   InspirePassagePublicSchema,
@@ -525,6 +526,51 @@ export const FindOptionsOutputSchema = z
   .strict();
 export type FindOptionsOutput = z.infer<typeof FindOptionsOutputSchema>;
 
+// -----------------------------------------------------------------------------
+// find_tips — Inform job, second shape. The 9th tool.
+//
+// Where `lookup` answers a concrete question with Swoop's own authoritative
+// guidance, `find_tips` surfaces traveller-sourced practical wisdom — short,
+// first-person tips written by people who've actually made the trip, shown
+// WITH attribution ("— Joey A."). Reach for this when the visitor wants the
+// kind of lived-experience advice a fellow traveller gives, not an
+// institutional answer: "what do people wish they'd known", "any packing
+// tips", "is it worth bringing X".
+//
+// Per planning/03-exec-customer-tips-tool.md (HITL-ratified 2026-05-27).
+// `topic` is the free-text subject the visitor is curious about; the optional
+// `region` narrows to tips that name a matching Patagonian sub-region (tips
+// with no region still surface — most practical wisdom is region-agnostic).
+// `excludeIds` carries the anti-repetition set (integer tip ids, not uuids).
+// -----------------------------------------------------------------------------
+
+export const FindTipsInputSchema = z
+  .object({
+    /** Free-text subject — "packing", "what to bring", "altitude", "ferry crossing". */
+    topic: z.string().min(1).max(200),
+    /** Optional region narrowing; region-agnostic tips still surface alongside. */
+    region: z.string().optional(),
+    /** Cap on returned tips. Defaults to 4 (range 3–5, hard cap 6). */
+    limit: z.number().int().positive().max(6).default(4),
+    /**
+     * Tip ids to omit — anti-repetition. The orchestrator auto-supplies from
+     * `SessionState.seenItems.customer_tip`. Integer-keyed (tip ids are plain
+     * integers carried from upstream, not uuids). Per
+     * planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
+     */
+    excludeIds: z.array(z.number().int()).optional(),
+  })
+  .strict();
+export type FindTipsInput = z.infer<typeof FindTipsInputSchema>;
+
+export const FindTipsOutputSchema = z
+  .object({
+    tips: z.array(CustomerTipPublicSchema),
+    count: z.number().int().nonnegative(),
+  })
+  .strict();
+export type FindTipsOutput = z.infer<typeof FindTipsOutputSchema>;
+
 // =============================================================================
 // TOOL_NAMES — single source of truth for tool name strings.
 //
@@ -539,6 +585,7 @@ export const TOOL_NAMES = {
   FindProof: "find_proof",
   Lookup: "lookup",
   FindOptions: "find_options",
+  FindTips: "find_tips",
   Illustrate: "illustrate",
   Handoff: "handoff",
   HandoffSubmit: "handoff_submit",
@@ -583,6 +630,12 @@ export const TOOL_DESCRIPTIONS = {
     "duration, budget band, activity, accommodation style). Reach for this " +
     "when the visitor is ready to consider specific trips. See " +
     "cms/prompts/tools/find_options/description.md.",
+  find_tips:
+    "Surface short, first-person practical tips from travellers who've made " +
+    "the trip — packing, weather, money, transit, food, and the like — shown " +
+    "with attribution. Reach for this when the visitor wants lived-experience " +
+    "advice from fellow travellers rather than Swoop's own answer (use lookup " +
+    "for that). See cms/prompts/tools/find_tips/description.md.",
   illustrate:
     "Return curated imagery matching a conversation moment. Use keywords or " +
     "a region slug. Visual companion to any of the content tools. See " +
