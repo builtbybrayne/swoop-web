@@ -261,6 +261,11 @@ export function createChatHandler(
       for await (const part of translateAdkStream(adkStream, {
         onFiltered: onFilteredTallying,
         now,
+        // ClaudeLlm emits a consolidated non-partial copy of the assistant's
+        // text at end-of-turn so ADK persists it to the session; the wire has
+        // already received that text via the partial deltas, so drop the copy
+        // here to avoid rendering the whole message twice.
+        suppressNonPartialText: true,
       })) {
         if (closed) break;
         writeSsePart(res, part);

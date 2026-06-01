@@ -100,13 +100,60 @@ describe('ClaudeLlm.generateContentAsync', () => {
       client: stubClient(events),
     });
     const results = await collect(llm.generateContentAsync(baseRequest()));
-    // Two text deltas + one turnComplete.
-    expect(results).toHaveLength(3);
+    // Two partial text deltas + one consolidated NON-partial text aggregate
+    // (for session persistence) + one turnComplete.
+    expect(results).toHaveLength(4);
     expect(results[0]?.content?.parts?.[0]).toEqual({ text: 'Hello' });
     expect(results[0]?.partial).toBe(true);
     expect(results[1]?.content?.parts?.[0]).toEqual({ text: ', world' });
-    expect(results[2]?.turnComplete).toBe(true);
-    expect(results[2]?.finishReason).toBeDefined();
+    expect(results[1]?.partial).toBe(true);
+    // The aggregate carries the FULL text and is non-partial so ADK's runner
+    // appends it to the session (it only persists `!partial` events). Without
+    // it the model never sees its own prior turns.
+    expect(results[2]?.content?.parts?.[0]).toEqual({ text: 'Hello, world' });
+    expect(results[2]?.partial).toBeFalsy();
+    expect(results[2]?.turnComplete).toBeFalsy();
+    expect(results[3]?.turnComplete).toBe(true);
+    expect(results[3]?.finishReason).toBeDefined();
+  });
+
+  it('does NOT emit a separate text aggregate on a tool-call turn (replay-structure invariant)', async () => {
+    // A turn that emits text then a tool_use must persist as a SINGLE assistant
+    // event (the non-partial functionCall). Emitting an extra text event would
+    // create two consecutive assistant events that break Anthropic message
+    // structure on replay. So no non-partial plain-text aggregate is produced.
+    const events: RawMessageStreamEvent[] = [
+      { type: 'message_start', message: { id: 'm1' } as never },
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '', citations: null } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Let me check.' } },
+      { type: 'content_block_stop', index: 0 },
+      {
+        type: 'content_block_start',
+        index: 1,
+        content_block: { type: 'tool_use', id: 'toolu_1', name: 'search', input: {} } as never,
+      },
+      { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{}' } },
+      { type: 'content_block_stop', index: 1 },
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'tool_use', stop_sequence: null } as never,
+        usage: { output_tokens: 5 } as never,
+      },
+      { type: 'message_stop' },
+    ];
+    const llm = new ClaudeLlm({
+      model: 'claude-sonnet-4-5-20250929',
+      apiKey: 'test',
+      client: stubClient(events),
+    });
+    const results = await collect(llm.generateContentAsync(baseRequest()));
+    // No non-partial plain-text part: the only non-partial content carrier is
+    // the functionCall.
+    const nonPartialText = results.filter(
+      (r) => r.partial !== true && typeof r.content?.parts?.[0]?.text === 'string',
+    );
+    expect(nonPartialText).toHaveLength(0);
+    expect(results.find((r) => r.content?.parts?.[0]?.functionCall)).toBeDefined();
   });
 
   it('maps thinking_delta events to Part.thought === true (reasoning invariant)', async () => {

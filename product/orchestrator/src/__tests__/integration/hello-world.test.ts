@@ -178,8 +178,13 @@ function makeStubRunner(orchestratorModel: string): StubRunner {
   const runner = {
     async *runAsync(_params: unknown): AsyncGenerator<AdkEvent, void, undefined> {
       modelSeen = orchestratorModel;
+      // Assistant text streams as `partial: true` deltas (real ClaudeLlm
+      // contract). The live SSE path's suppressNonPartialText filter drops
+      // only the end-of-turn non-partial aggregate, so partial text must be
+      // used here for the wire to carry it.
       yield mkEvent({
         content: { role: 'model', parts: [{ text: 'Let me check what we have on Patagonia. ' }] },
+        partial: true,
       });
       yield mkEvent({
         content: {
@@ -218,6 +223,7 @@ function makeStubRunner(orchestratorModel: string): StubRunner {
       });
       yield mkEvent({
         content: { role: 'model', parts: [{ text: "Here's one highlight: Patagonia Classic." }] },
+        partial: true,
       });
       yield mkEvent({ turnComplete: true });
     },
