@@ -23,7 +23,14 @@
  * accepts up to 32K tokens per input, our 800-token target is generous.
  */
 
-import { decode as decodeHtmlEntities } from 'he';
+// `he` is CommonJS. A named ESM import (`import { decode } from 'he'`) is
+// fragile: under Node 20's native ESM loader, cjs-module-lexer fails to detect
+// `he`'s dynamically-assigned named exports, throwing "does not provide an
+// export named 'decode'" at module-load time (surfaced when tsx delegates the
+// import to the native loader). The default-import form resolves the CJS
+// module object and is robust under both Node and tsx.
+import he from 'he';
+const decodeHtmlEntities = he.decode;
 
 const APPROX_CHARS_PER_TOKEN = 4;
 

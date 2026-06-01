@@ -47,6 +47,7 @@ import {
   transformCountry,
   transformCustomerReview,
   transformCustomerReviewTrip,
+  transformCustomerTip,
   transformFaqItem,
   transformHotel,
   transformImage,
@@ -65,6 +66,8 @@ export interface RunOptions {
   dumpPath: string;
   /** Optional supplementary dump for `customerreview` + `customerreview_trip`. */
   customerReviewDumpPath?: string;
+  /** Optional supplementary dump for `customertip` (find_tips source). */
+  customerTipDumpPath?: string;
   /** Subset of target tables to process. If absent, all tables are processed. */
   only?: Set<string>;
   /** If true, parse + log counts but skip writes. */
@@ -161,6 +164,16 @@ const COLS = {
     'image_id', 'feedbacksnippet_id', 'created', 'modified',
   ] as const,
   customerreview_trip: ['id', 'customerreview_id', 'trip_id', 'position'] as const,
+  // customer_tip — base columns only. The enrich pipeline owns embedding / tsv
+  // (embed-derived pass); those are NOT listed here, so flushBuffer's
+  // column-restricted upsert never clobbers them on conflict (theme 5
+  // idempotency). `region` is a nullable column with no populator today (the
+  // region classifier was retired 2026-06-01, C.tip-6) — it stays out of this
+  // list so a future source-mapped value wouldn't be clobbered either.
+  customer_tip: [
+    'id', 'source_provenance', 'source_id', 'text', 'author_name',
+    'source_created_at', 'content_hash',
+  ] as const,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -205,6 +218,12 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   if (opts.customerReviewDumpPath) {
     log(`[etl:sql]   reading supplementary dump=${opts.customerReviewDumpPath}`);
     for await (const row of streamDump(opts.customerReviewDumpPath)) {
+      routeRow(row, buffers, subtypeByContentblockId, dayByDayByTripId, lookups);
+    }
+  }
+  if (opts.customerTipDumpPath) {
+    log(`[etl:sql]   reading supplementary dump=${opts.customerTipDumpPath}`);
+    for await (const row of streamDump(opts.customerTipDumpPath)) {
       routeRow(row, buffers, subtypeByContentblockId, dayByDayByTripId, lookups);
     }
   }
@@ -517,6 +536,28 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       ],
     );
 
+  // customer_tip (find_tips). No FK rules — the table references nothing. The
+  // column-restricted upsert (COLS.customer_tip) preserves enrich-owned
+  // columns (embedding / tsv) on conflict. Skipped silently when migration 013
+  // isn't applied (sentinel below only hard-requires customerreview /
+  // migration 006).
+  if (want('customer_tip')) {
+    const tipSentinel = await opts.client.query<{ exists: boolean }>(
+      `SELECT to_regclass('public.customer_tip') IS NOT NULL AS exists`,
+    );
+    if (tipSentinel.rows[0]?.exists) {
+      tables.customer_tip = await flushBuffer(
+        opts,
+        'customer_tip',
+        COLS.customer_tip,
+        buffers.customertip,
+        transformCustomerTip,
+      );
+    } else {
+      log(`[etl:sql]   customer_tip table absent (migration 013 not applied) — skipping`);
+    }
+  }
+
   const durationMs = Date.now() - start;
 
   log(`[etl:sql] done in ${(durationMs / 1000).toFixed(2)}s`);
@@ -554,6 +595,7 @@ interface Buffers {
   cabin: DumpRow[];
   customerreview: DumpRow[];
   customerreview_trip: DumpRow[];
+  customertip: DumpRow[];
 }
 
 function makeEmptyBuffers(): Buffers {
@@ -562,6 +604,7 @@ function makeEmptyBuffers(): Buffers {
     image: [], page: [], contentblock: [], chunk: [], faqitem: [],
     trip: [], tours: [], tour_items: [], hotel: [], vessel: [],
     cabintype: [], cabin: [], customerreview: [], customerreview_trip: [],
+    customertip: [],
   };
 }
 
@@ -594,6 +637,11 @@ function routeRow(
   else if (t === 'cabin') buffers.cabin.push(row);
   else if (t === 'customerreview') buffers.customerreview.push(row);
   else if (t === 'customerreview_trip') buffers.customerreview_trip.push(row);
+  // `customertip` (singular) is the find_tips source table. Checked here,
+  // BEFORE the CONTENTBLOCK_SUBTYPE_TABLES block — that block keys on
+  // `contentblock_customertip` (the junction), a different table name, so
+  // there's no collision, but the explicit ordering keeps intent obvious.
+  else if (t === 'customertip') buffers.customertip.push(row);
 
   // Subtype-junction tables — derive contentblock.subtype.
   else if (t in CONTENTBLOCK_SUBTYPE_TABLES) {
@@ -627,7 +675,7 @@ function routeRow(
 
   // Anything else (currency, file, pagetype, ntags_lookup, image_trip,
   // image_page, swooper_*, partner*, tripvariant, season, adventurousness,
-  // pressreview, customertip, etc.) — silently dropped at routing.
+  // pressreview, etc.) — silently dropped at routing.
 }
 
 // ---------------------------------------------------------------------------

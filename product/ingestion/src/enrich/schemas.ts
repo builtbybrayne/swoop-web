@@ -75,6 +75,19 @@ export const BlogTagNormalisationOutputSchema = z.object({
 
 export type BlogTagNormalisationOutput = z.infer<typeof BlogTagNormalisationOutputSchema>;
 
+// -----------------------------------------------------------------------------
+// 5. (retired 2026-06-01) — tip-region classifier
+// -----------------------------------------------------------------------------
+//
+// customer_tip had a region-only Haiku classifier (itself the stripped-down
+// remnant of the topic-tag classifier dropped earlier). Retired entirely per
+// HITL 2026-06-01 (decision C.tip-6): find_tips retrieval is pure hybrid
+// (content embedding + tsv RRF) — the tip text IS the topic signal, and the
+// source `customertip` record carries no region, so the pass could only ever
+// *infer* a label the embedding already encodes. The `region` column survives
+// as a nullable cross-corpus query dimension (populated only if source data
+// ever carries one); nothing classifies tips now.
+
 /**
  * Map of classifier names to schemas. Used by the prompts loader to wire
  * the right schema per folder name.

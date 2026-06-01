@@ -20,7 +20,6 @@ import type pg from 'pg';
 import {
   CostLedger,
   DEFAULT_HARD_CAP_GBP_DEV,
-  DEFAULT_HARD_CAP_GBP_PROD,
   DEFAULT_SOFT_WARNING_GBP,
 } from './cost.js';
 import { withEnrichClient, closeEnrichPool, type EnrichPoolConfig } from './pool.js';
@@ -151,6 +150,26 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
             dryRun: opts.dryRun,
           });
         }
+        // customer_tip is a DERIVED table populated directly by sql-transform
+        // (no compose pass), so its embed runs here in the EMBED block — its
+        // `text` is present without composition. The generic embed-derived
+        // helper handles the halfvec(3072) write + tsv + embedding_cache.
+        if (!opts.source || opts.source === 'customer_tip' || opts.source === 'all') {
+          log(`[enrich/embed/customer_tip] starting`);
+          passResults['embed:customer_tip'] = await embedDerivedTable({
+            client,
+            embeddingClient: opts.embeddingClient,
+            ledger,
+            table: 'customer_tip',
+            textColumn: 'text',
+            embedColumn: 'embedding',
+            ledgerKey: 'gemini:customer_tip',
+            populateTsv: true,
+            idColumn: 'integer',
+            limit: opts.limit,
+            dryRun: opts.dryRun,
+          });
+        }
       }
 
       // ---------- CLASSIFY ------------------------------------------------
@@ -207,6 +226,10 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
             dryRun: opts.dryRun,
           });
         }
+        // tip-region classifier retired 2026-06-01 (C.tip-6): find_tips
+        // retrieves purely via hybrid search (content embedding + tsv RRF);
+        // customer_tip has no classify pass. The `region` column survives but
+        // is only populated if source data ever carries one.
       }
 
       // ---------- COMPOSE -------------------------------------------------
@@ -303,7 +326,7 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
 }
 
 async function readDerivedRowCounts(client: pg.PoolClient): Promise<Record<string, number>> {
-  const tables = ['inspire_passage', 'customer_story', 'trust_proof', 'inform_chunk', 'trip_card', 'tour_card'];
+  const tables = ['inspire_passage', 'customer_story', 'trust_proof', 'inform_chunk', 'trip_card', 'tour_card', 'customer_tip'];
   const out: Record<string, number> = {};
   for (const t of tables) {
     const r = await client.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM ${t}`);

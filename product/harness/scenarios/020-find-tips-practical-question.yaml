@@ -1,0 +1,35 @@
+# find_tips tool-selection scenario (customer-tips tool, 9th MCP tool).
+#
+# The Inform job has two shapes: `lookup` (Swoop-authored canon) and
+# `find_tips` (traveller-sourced practical wisdom). This scenario pins the
+# carve: a practical mid-flow question — handling the Patagonian wind — should
+# send the agent to find_tips, and the reply should ATTRIBUTE the advice to
+# fellow travellers rather than voice it as Swoop's own authoritative guidance.
+#
+# The utterance is the plan's end-to-end smoke line
+# (planning/03-exec-customer-tips-tool.md §Verification item 6).
+
+name: "find-tips-practical-wind"
+description: >
+  A practical mid-flow question about handling the Torres del Paine wind should
+  send the agent to find_tips (traveller wisdom), not lookup (Swoop canon), and
+  the reply should attribute the advice to travellers, not voice it as Swoop's.
+
+turns:
+  - user: "I'm sold on Torres del Paine. Quick practical one — any tips for handling the wind out there?"
+
+assertions:
+  - kind: tool_call
+    toolName: find_tips
+  - kind: judge_rubric
+    rubric: >
+      The assistant was asked a practical question and should have surfaced
+      short, concrete, traveller-sourced tips and ATTRIBUTED them to past
+      travellers (e.g. "travellers who've done the W often say…", "one walker
+      put it this way…") rather than presenting the advice as Swoop's own
+      authoritative guidance. PASS if the reply offers concrete wind-handling
+      tips AND frames them as lived traveller experience. FAIL if it gives only
+      generic Swoop-voiced guidance, refuses to answer, or fabricates a named
+      attribution for a tip the tool did not return.
+
+judge: null

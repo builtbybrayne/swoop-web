@@ -84,11 +84,7 @@ Where it lands: Tier 2 chunk C.
 
 Routed during the chunk-C ETL design pass (C.t3). Surfaced by the SELECTs in `planning/03-exec-c-t0.md`:
 
-a. **`customerreview` and `customertip` source tables are missing from the SQL dump — formally requesting a redacted export.** The junction tables `contentblock_customerreview` (2,390 rows) and `contentblock_customertip` (119 rows) carry FK constraints pointing at `customerreview.id` and `customertip.id`, but those source tables don't exist in the export. PII redaction at export time is the most likely cause. Without the prose, the supply for the agent's Mirror tool (`find_someone_who` per C.25) collapses from ~2,400 short customer-voice rows to ~15 first-person blog posts.
-
-**The ask** (route to Julie initially; she may bring in Thomas/Richard for the technical export): can Swoop provide a separate redacted export of `customerreview` + `customertip` (names stripped, any other identifying detail removed)? The data is sales-curated review excerpts already published on Swoop's website, so the privacy fence around the prose itself is much smaller than the privacy fence around the customer record they came from. If granted, those rows feed `find_someone_who` directly (with persona-signal extraction at ETL time, per C.t3a). If not granted, the architecture supports dropping `find_someone_who` from the eight-tool surface — see decision C.26.
-
-**Decision gate**: Al has confirmed (2026-04-29) that the Mirror tool ships if-and-only-if Swoop grants permission. Otherwise it's deferred to a post-Puma release that may pivot to a different supply (Trustpilot scrape, curated story library, etc.). Tracked as C.26 in [planning/decisions.md](planning/decisions.md).
+a. ✅ **CLOSED 2026-06-01 — both source tables delivered and live.** `customerreview` arrived 2026-04-30 (→ `find_someone_who`, C.26); `customertip` arrived 2026-05-27 (→ `find_tips`, the 9th MCP tool, built 2026-06-01). Full closure detail in the [Closed §"2026-06-01 — customertip delivered → `find_tips` live"](#closed) entry below. Original request preserved there for context.
 
 b. **`daybyday` is much sparser than expected — confirm canonical filter.** The `daybyday` table holds 88,367 rows but only 13 trips have an `active` `tripvariant`, with 125 active rows. Of `presale`-typed rows (the candidate for sales-page rendering), 12,415 have `tripvariant_id=NULL` (i.e. not linked through a variant) and 0 are active. Best-guess ETL filter: `WHERE type='presale' AND trip_id IS NOT NULL AND deleted IS NULL` — but only 12,415 candidate rows for 852 trips means many trips will have no day-by-day data. **Question**: confirm the website renders these `presale` rows (or which other source it draws from). Critical for C.t3.
 
@@ -179,6 +175,15 @@ Where it lands: Tier 2 chunk E.
 ---
 
 ## Closed
+
+### 2026-06-01 — customertip delivered → `find_tips` live (closes item (a) fully)
+
+The long-pending customertip half of item (a) ("New from C.t0 inspection") is now closed. Both source tables the C.t0 inspection flagged as missing have been delivered and turned into live conversational surfaces:
+
+- **`customerreview`** — delivered 2026-04-30, powers `find_someone_who` (Mirror). Closed at [decisions.md C.26](planning/decisions.md).
+- **`customertip`** — delivered 2026-05-27, powers **`find_tips`** (Inform job, second shape — traveller-sourced practical wisdom). Schema-lookup confirmed **47 live rows** (not the 119 the junction-count implied — clean editorial selections), no email/IP/customer-FK PII. Built 2026-06-01 per [planning/03-exec-customer-tips-tool.md — customer_tips ingest + `find_tips` tool](planning/03-exec-customer-tips-tool.md); decisions C.tip-1…C.tip-4 in [decisions.md](planning/decisions.md).
+
+**Original ask (preserved for context)**: Swoop was formally asked for a redacted export of `customerreview` + `customertip` (the junction tables `contentblock_customerreview` (2,390) and `contentblock_customertip` (119) carried FKs to source tables absent from the original dump — PII redaction at export time the likely cause). The ask was routed via Julie. Both grants landed within Swoop's normal turnaround. The data is sales-curated excerpts already published on Swoop's website, so the privacy fence around the prose was always smaller than around the customer record. `pressreview` was never delivered and is unused — out of scope for Puma.
 
 ### 2026-04-27 — Data pipeline batch (closed by SQL-dump inspection)
 

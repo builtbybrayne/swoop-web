@@ -56,6 +56,7 @@ export type LedgerPassKey =
   | 'gemini:inform_chunk'
   | 'gemini:trip_card'
   | 'gemini:tour_card'
+  | 'gemini:customer_tip'
   | 'haiku:blog_post_job'
   | 'haiku:persona_summary'
   | 'haiku:image_annotation'

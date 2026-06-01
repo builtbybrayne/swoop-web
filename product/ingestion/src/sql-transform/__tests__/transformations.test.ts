@@ -19,6 +19,7 @@ import {
   transformCountry,
   transformCustomerReview,
   transformCustomerReviewTrip,
+  transformCustomerTip,
   transformFaqItem,
   transformHotel,
   transformImage,
@@ -600,5 +601,104 @@ describe('transformCustomerReviewTrip', () => {
         values: { id: 1, customerreview_id: null, trip_id: 5 },
       }),
     ).toBeNull();
+  });
+});
+
+describe('transformCustomerTip', () => {
+  it('keeps a valid tip with id + content, mapping base columns', () => {
+    const out = transformCustomerTip({
+      table: 'customertip',
+      values: {
+        id: 42,
+        content: 'Bring windproof everything.',
+        name: 'Sarah',
+        created: '2024-03-01 09:00:00',
+        deleted: null,
+      },
+    });
+    expect(out).toMatchObject({
+      id: 42,
+      source_provenance: 'customertip',
+      source_id: '42',
+      text: 'Bring windproof everything.',
+      author_name: 'Sarah',
+      source_created_at: '2024-03-01 09:00:00',
+    });
+  });
+
+  it('trims surrounding whitespace from the tip text', () => {
+    const out = transformCustomerTip({
+      table: 'customertip',
+      values: { id: 1, content: '   pack layers  \n' },
+    });
+    expect(out?.text).toBe('pack layers');
+  });
+
+  it('collapses internal whitespace in the author name', () => {
+    const out = transformCustomerTip({
+      table: 'customertip',
+      values: { id: 1, content: 'x', name: '  Jane   Q.   Doe ' },
+    });
+    expect(out?.author_name).toBe('Jane Q. Doe');
+  });
+
+  it('null/blank author name → author_name null', () => {
+    const a = transformCustomerTip({
+      table: 'customertip',
+      values: { id: 1, content: 'x', name: null },
+    });
+    const b = transformCustomerTip({
+      table: 'customertip',
+      values: { id: 2, content: 'x', name: '   ' },
+    });
+    expect(a?.author_name).toBeNull();
+    expect(b?.author_name).toBeNull();
+  });
+
+  it('drops a soft-deleted tip (numeric deleted flag)', () => {
+    expect(
+      transformCustomerTip({
+        table: 'customertip',
+        values: { id: 1, content: 'x', deleted: 1 },
+      }),
+    ).toBeNull();
+  });
+
+  it('keeps a tip whose deleted flag is 0 (not deleted)', () => {
+    expect(
+      transformCustomerTip({
+        table: 'customertip',
+        values: { id: 1, content: 'x', deleted: 0 },
+      }),
+    ).not.toBeNull();
+  });
+
+  it('drops a tip with null or empty-after-trim content', () => {
+    expect(
+      transformCustomerTip({ table: 'customertip', values: { id: 1, content: null } }),
+    ).toBeNull();
+    expect(
+      transformCustomerTip({ table: 'customertip', values: { id: 2, content: '   ' } }),
+    ).toBeNull();
+  });
+
+  it('drops a tip with no id', () => {
+    expect(
+      transformCustomerTip({ table: 'customertip', values: { id: null, content: 'x' } }),
+    ).toBeNull();
+  });
+
+  it('emits a 64-char sha256 content_hash derived from the trimmed text', () => {
+    const out = transformCustomerTip({
+      table: 'customertip',
+      values: { id: 1, content: '  same text  ' },
+    });
+    const out2 = transformCustomerTip({
+      table: 'customertip',
+      values: { id: 2, content: 'same text' },
+    });
+    expect(out?.content_hash).toMatch(/^[0-9a-f]{64}$/);
+    // Hash keys on trimmed text only → identical text, identical hash.
+    expect(out?.content_hash).toBe(out2?.content_hash);
   });
 });

@@ -10,7 +10,8 @@
  *      tool.invoked event emission).
  *
  * The MCP server retires the C.t1 no-op `ping` tool — `tools/list` returns the
- * eight intent-named tools and nothing else.
+ * nine intent-named tools (find_tips joined at the customer-tips chunk) and
+ * nothing else.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -27,6 +28,7 @@ import { findSomeoneWhoSpec, findSomeoneWhoBody } from './find_someone_who.js';
 import { findProofSpec, findProofBody } from './find_proof.js';
 import { lookupSpec, lookupBody } from './lookup.js';
 import { findOptionsSpec, findOptionsBody } from './find_options.js';
+import { findTipsSpec, findTipsBody } from './find_tips.js';
 import { illustrateSpec, illustrateBody } from './illustrate.js';
 import { handoffSpec, handoffBody } from './handoff.js';
 import { handoffSubmitSpec, handoffSubmitBody } from './handoff_submit.js';
@@ -269,6 +271,15 @@ export function registerAllTools(
     findOptionsSpec.inputSchema,
     findOptionsSpec.outputSchema,
     (input) => findOptionsBody(input, baseDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    findTipsSpec.name,
+    lookupDescription(findTipsSpec.name),
+    findTipsSpec.inputSchema,
+    findTipsSpec.outputSchema,
+    (input) => findTipsBody(input, baseDeps),
     runtimeDeps,
   );
   registerOne(
