@@ -17,7 +17,19 @@
  *        - `text_delta` blocks        -> LlmResponse{content.parts[{text, partial:true}]}
  *        - `thinking_delta` blocks    -> LlmResponse{content.parts[{text, thought:true}]}
  *        - `tool_use` blocks at stop  -> LlmResponse{content.parts[{functionCall:{id,name,args}}]}
- *        - `message_stop` + stop_reason -> LlmResponse{turnComplete:true}
+ *        - `message_stop` (text turn) -> ONE consolidated NON-partial
+ *          LlmResponse{content.parts[{text}]} carrying the full assistant text,
+ *          then LlmResponse{turnComplete:true}.
+ *        - `message_stop` (tool turn) -> LlmResponse{turnComplete:true} only
+ *          (the non-partial functionCall already carries the turn).
+ *
+ *   Why the consolidated text event matters: every `text_delta` response is
+ *   `partial:true`, and ADK's runner only appends NON-partial events to the
+ *   session (it gates `appendEvent` on `!event.partial`). Without a final
+ *   non-partial text event the model's own turn never enters session history,
+ *   so the next turn it cannot see what it said. The live SSE translator
+ *   suppresses this event's text (already streamed via the deltas); the
+ *   session-rehydration translator keeps it (its sole carrier there).
  *   3. Respect the `abortSignal` argument — Anthropic's SDK accepts a
  *      `signal` RequestOption, so cancellation flows cleanly from Express
  *      `req.on('close')` → Runner abort → Anthropic HTTP abort.
@@ -154,6 +166,21 @@ export class ClaudeLlm extends BaseLlm {
 
     let stopReason: StopReason | null = null;
 
+    // Accumulate the visible (non-thought) text of this message so we can emit
+    // one consolidated NON-partial LlmResponse at `message_stop`. The streamed
+    // `text_delta` responses below are all `partial: true`, and ADK's runner
+    // only appends NON-partial events to the session (runner.js gates
+    // `appendEvent` on `!event.partial`). Without this aggregate the model's
+    // own turn never enters session history, so on the next turn it cannot see
+    // what it just said — the Puma "agent forgets its own words" bug.
+    let accumulatedText = '';
+    // Whether this message produced a tool_use block. Tool turns are already
+    // persisted via their non-partial `functionCall` event; emitting a separate
+    // text event alongside would yield two consecutive assistant events that
+    // break Anthropic's message structure on replay (`splitContents` does not
+    // merge same-role events). So we suppress the text aggregate on tool turns.
+    let sawToolUse = false;
+
     // Per-block streaming state. Anthropic keys blocks by `index`.
     interface BlockAccumulator {
       /** Discriminator. */
@@ -195,6 +222,7 @@ export class ClaudeLlm extends BaseLlm {
             } else if (block.type === 'thinking' || block.type === 'redacted_thinking') {
               blocks.set(event.index, { kind: 'thinking', jsonBuf: '' });
             } else if (block.type === 'tool_use') {
+              sawToolUse = true;
               blocks.set(event.index, {
                 kind: 'tool_use',
                 id: block.id,
@@ -215,6 +243,7 @@ export class ClaudeLlm extends BaseLlm {
             if (!acc) break;
             const delta = event.delta;
             if (delta.type === 'text_delta' && acc.kind === 'text') {
+              accumulatedText += delta.text;
               yield textChunkResponse(delta.text, /* thought */ false);
             } else if (delta.type === 'thinking_delta' && acc.kind === 'thinking') {
               yield textChunkResponse(delta.thinking, /* thought */ true);
@@ -244,6 +273,16 @@ export class ClaudeLlm extends BaseLlm {
             break;
 
           case 'message_stop': {
+            // Emit the consolidated non-partial text turn for session
+            // persistence BEFORE the (content-less) turnComplete. See the
+            // `accumulatedText` declaration above for the full rationale. This
+            // event is what ADK appends to the session so the model can see its
+            // own prior turns. On the live SSE path the translator suppresses
+            // its text (already streamed via the partial deltas); on the
+            // rehydration path it is the only carrier of the assistant's words.
+            if (accumulatedText.length > 0 && !sawToolUse) {
+              yield { content: { role: 'model', parts: [{ text: accumulatedText }] } };
+            }
             const finishReason = mapStopReason(stopReason);
             const resp: LlmResponse = { turnComplete: true };
             if (finishReason) resp.finishReason = finishReason;

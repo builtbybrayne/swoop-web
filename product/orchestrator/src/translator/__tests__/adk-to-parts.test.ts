@@ -215,3 +215,32 @@ describe('translateAdkStream — end-to-end (mapper + reasoning filter)', () => 
     expect(parts.some((p) => p.type === 'reasoning')).toBe(false);
   });
 });
+
+describe('adkEventsToParts — suppressNonPartialText (memory-bug aggregate)', () => {
+  // ClaudeLlm streams assistant text as partial deltas, then emits ONE
+  // non-partial copy of the full text so ADK persists the turn. The live SSE
+  // path must drop that copy (already streamed); the rehydration path must keep
+  // it (it is the only persisted carrier of the assistant's words).
+  it('live path: drops the non-partial aggregate, keeps the partial deltas', async () => {
+    const events = stream([
+      textEvent('Hello', { partial: true }),
+      textEvent(', world', { partial: true }),
+      textEvent('Hello, world'), // consolidated aggregate (partial undefined)
+    ]);
+    const parts = await collect(
+      adkEventsToParts(events, { now: FIXED_NOW, suppressNonPartialText: true }),
+    );
+    expect(parts).toEqual([
+      { type: 'text', text: 'Hello' },
+      { type: 'text', text: ', world' },
+    ]);
+  });
+
+  it('rehydration path: keeps the non-partial aggregate (flag off)', async () => {
+    // Persisted history contains only the non-partial aggregate (deltas are
+    // never appended to the session), so it must surface here.
+    const events = stream([textEvent('Hello, world')]);
+    const parts = await collect(adkEventsToParts(events, { now: FIXED_NOW }));
+    expect(parts).toEqual([{ type: 'text', text: 'Hello, world' }]);
+  });
+});

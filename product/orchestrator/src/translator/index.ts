@@ -37,6 +37,16 @@ export interface TranslateOptions {
   readonly onFiltered?: FilteredPartSink;
   /** Clock source; overridable for deterministic tests. */
   readonly now?: () => Date;
+  /**
+   * Live SSE path only. When true, plain-text parts on NON-partial events are
+   * dropped from the outbound stream. ClaudeLlm streams assistant text as
+   * `partial: true` deltas and then emits one consolidated non-partial copy of
+   * the same text solely so ADK persists the turn to the session; without this
+   * flag the consumer would render that whole message a second time. The
+   * rehydration path leaves this off (it replays only persisted non-partial
+   * events, which are the sole carrier of the assistant's words there).
+   */
+  readonly suppressNonPartialText?: boolean;
 }
 
 /**
@@ -47,6 +57,9 @@ export async function* translateAdkStream(
   source: AsyncIterable<AdkEvent>,
   opts: TranslateOptions = {},
 ): AsyncGenerator<MessagePart, void, void> {
-  const mapped = adkEventsToParts(source, { now: opts.now });
+  const mapped = adkEventsToParts(source, {
+    now: opts.now,
+    suppressNonPartialText: opts.suppressNonPartialText,
+  });
   yield* filterReasoning(mapped, opts.onFiltered);
 }

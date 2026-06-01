@@ -52,9 +52,10 @@ import type { AdkEvent } from './types.js';
  */
 export async function* adkEventsToParts(
   source: AsyncIterable<AdkEvent>,
-  opts: { now?: () => Date } = {},
+  opts: { now?: () => Date; suppressNonPartialText?: boolean } = {},
 ): AsyncGenerator<MessagePart, void, void> {
   const parser = new BlockParser({ now: opts.now });
+  const suppressNonPartialText = opts.suppressNonPartialText ?? false;
   // Track the most recent tool call per `id` so we can attach `input` to the
   // matching output-available part. ADK's FunctionCall doesn't ship a
   // lifecycle-state field; it's two distinct events (call then response).
@@ -128,6 +129,14 @@ export async function* adkEventsToParts(
         // Plain text -> through the block parser. This is where `<fyi>`
         // extraction happens.
         if (typeof part.text === 'string' && part.text.length > 0) {
+          // On the live SSE path, ClaudeLlm streams the assistant's text as
+          // `partial: true` deltas (already on the wire) and then emits ONE
+          // consolidated NON-partial copy of the same text purely so ADK
+          // persists the turn to the session. Re-feeding that copy here would
+          // show the whole message to the user a second time. Skip it. The
+          // rehydration path replays only persisted (non-partial) events and
+          // leaves this flag off, so it still surfaces the consolidated text.
+          if (suppressNonPartialText && event.partial !== true) continue;
           const emitted = parser.feed(part.text);
           for (const p of emitted) yield p;
           continue;

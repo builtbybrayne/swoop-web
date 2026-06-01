@@ -311,9 +311,13 @@ describe('POST /chat — pre-stream gates', () => {
 describe('POST /chat — SSE happy path', () => {
   it('streams text parts and ends with event:done', async () => {
     const { app, runner } = buildTestApp();
+    // Assistant text streams as `partial: true` deltas — this mirrors the real
+    // ClaudeLlm contract. The live SSE path runs with suppressNonPartialText,
+    // which drops the end-of-turn non-partial aggregate (ADK-persistence copy);
+    // only the partial deltas reach the wire and session history.
     runner.emit([
-      mkEvent({ content: { role: 'model', parts: [{ text: 'Hello, ' }] } }),
-      mkEvent({ content: { role: 'model', parts: [{ text: 'Patagonia.' }] } }),
+      mkEvent({ content: { role: 'model', parts: [{ text: 'Hello, ' }] }, partial: true }),
+      mkEvent({ content: { role: 'model', parts: [{ text: 'Patagonia.' }] }, partial: true }),
       mkEvent({ turnComplete: true }),
     ]);
     const sessionId = await bootstrapSession(app);
@@ -334,7 +338,7 @@ describe('POST /chat — SSE happy path', () => {
     const { app, runner } = buildTestApp(store);
     runner.emit([
       mkEvent({ content: { role: 'model', parts: [{ text: 'deliberating…', thought: true }] } }),
-      mkEvent({ content: { role: 'model', parts: [{ text: 'Hello.' }] } }),
+      mkEvent({ content: { role: 'model', parts: [{ text: 'Hello.' }] }, partial: true }),
       mkEvent({ turnComplete: true }),
     ]);
     const sessionId = await bootstrapSession(app);
@@ -514,7 +518,7 @@ describe('POST /chat — Perf-3 turn-1 triage skip', () => {
     const classifier = makeCountingClassifier();
     const { app, runner } = buildTestApp(undefined, undefined, classifier);
     runner.emit([
-      mkEvent({ content: { role: 'model', parts: [{ text: 'hi' }] } }),
+      mkEvent({ content: { role: 'model', parts: [{ text: 'hi' }] }, partial: true }),
       mkEvent({ turnComplete: true }),
     ]);
     const sessionId = await bootstrapSession(app);
@@ -580,7 +584,7 @@ describe('POST /chat — error path coverage (Test-1)', () => {
     const store = new InMemorySessionStore();
     const runner = {
       async *runAsync(): AsyncGenerator<AdkEvent, void, undefined> {
-        yield mkEvent({ content: { role: 'model', parts: [{ text: 'partial ' }] } });
+        yield mkEvent({ content: { role: 'model', parts: [{ text: 'partial ' }] }, partial: true });
         throw new Error('runner exploded mid-stream');
       },
     } as unknown as Runner;
@@ -647,7 +651,10 @@ describe('POST /chat — error path coverage (Test-1)', () => {
             release.pending?.();
           });
         }
-        yield mkEvent({ content: { role: 'model', parts: [{ text: 'streaming ' }] } });
+        // Partial delta so it survives the live path's suppressNonPartialText
+        // filter and reaches the wire — the client waits on this first `data`
+        // frame before destroying the socket to trigger the abort.
+        yield mkEvent({ content: { role: 'model', parts: [{ text: 'streaming ' }] }, partial: true });
         await new Promise<void>((resolve) => {
           release.pending = resolve;
         });
