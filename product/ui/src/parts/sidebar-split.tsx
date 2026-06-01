@@ -27,8 +27,14 @@ import {
   type ReactNode,
 } from "react";
 
-/** Sidebar share of the row, in percent, at the default 50/50 split. */
-export const DEFAULT_SPLIT_RATIO = 50;
+/** The golden ratio, φ. */
+const PHI = 1.618033988749895;
+/**
+ * Sidebar share of the row, in percent, at the default split. Golden ratio:
+ * chat : sidebar = φ : 1, so the chat gets the larger ~61.8% and the sidebar
+ * the smaller ~38.2% (= 100 / (1 + φ)).
+ */
+export const DEFAULT_SPLIT_RATIO = 100 / (1 + PHI);
 /** Narrowest the sidebar may be dragged (percent of the row). */
 export const MIN_SPLIT_RATIO = 20;
 /** Widest the sidebar may be dragged (percent of the row). */

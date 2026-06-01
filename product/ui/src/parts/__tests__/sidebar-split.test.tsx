@@ -13,7 +13,13 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { SidebarSplitLayout, clampSplitRatio } from "../sidebar-split";
+import {
+  SidebarSplitLayout,
+  clampSplitRatio,
+  DEFAULT_SPLIT_RATIO,
+} from "../sidebar-split";
+
+const DEFAULT_NOW = String(Math.round(DEFAULT_SPLIT_RATIO));
 
 afterEach(() => cleanup());
 
@@ -46,22 +52,29 @@ describe("SidebarSplitLayout", () => {
     expect(screen.getByTestId("aside-content")).toBeInTheDocument();
   });
 
-  it("defaults to a 50/50 split", () => {
+  it("defaults to a golden-ratio split with the chat larger than the sidebar", () => {
     const { separator, pane } = setup();
-    expect(separator).toHaveAttribute("aria-valuenow", "50");
+    expect(separator).toHaveAttribute("aria-valuenow", DEFAULT_NOW);
     expect(separator).toHaveAttribute("aria-orientation", "vertical");
-    expect(pane.style.flexBasis).toBe("50%");
+    // Sidebar's share is the smaller side: ~38.2%, chat ~61.8%.
+    expect(DEFAULT_SPLIT_RATIO).toBeCloseTo(38.2, 1);
+    expect(DEFAULT_SPLIT_RATIO).toBeLessThan(50);
+    expect(pane.style.flexBasis).toBe(`${DEFAULT_SPLIT_RATIO}%`);
   });
 
   it("ArrowLeft grows the sidebar, ArrowRight shrinks it", () => {
     const { separator, pane } = setup();
     fireEvent.keyDown(separator, { key: "ArrowLeft" });
-    expect(Number(separator.getAttribute("aria-valuenow"))).toBeGreaterThan(50);
+    expect(Number(separator.getAttribute("aria-valuenow"))).toBeGreaterThan(
+      DEFAULT_SPLIT_RATIO,
+    );
     const grown = pane.style.flexBasis;
 
     fireEvent.keyDown(separator, { key: "ArrowRight" });
     fireEvent.keyDown(separator, { key: "ArrowRight" });
-    expect(Number(separator.getAttribute("aria-valuenow"))).toBeLessThan(50);
+    expect(Number(separator.getAttribute("aria-valuenow"))).toBeLessThan(
+      DEFAULT_SPLIT_RATIO,
+    );
     expect(pane.style.flexBasis).not.toBe(grown);
   });
 
@@ -76,17 +89,17 @@ describe("SidebarSplitLayout", () => {
     expect(separator).toHaveAttribute("aria-valuenow", "80");
   });
 
-  it("Home and double-click snap back to 50/50", () => {
+  it("Home and double-click snap back to the default golden-ratio split", () => {
     const { separator, pane } = setup();
     fireEvent.keyDown(separator, { key: "ArrowLeft" });
-    expect(separator).not.toHaveAttribute("aria-valuenow", "50");
+    expect(separator).not.toHaveAttribute("aria-valuenow", DEFAULT_NOW);
 
     fireEvent.keyDown(separator, { key: "Home" });
-    expect(separator).toHaveAttribute("aria-valuenow", "50");
+    expect(separator).toHaveAttribute("aria-valuenow", DEFAULT_NOW);
 
     fireEvent.keyDown(separator, { key: "ArrowRight" });
     fireEvent.doubleClick(separator);
-    expect(separator).toHaveAttribute("aria-valuenow", "50");
-    expect(pane.style.flexBasis).toBe("50%");
+    expect(separator).toHaveAttribute("aria-valuenow", DEFAULT_NOW);
+    expect(pane.style.flexBasis).toBe(`${DEFAULT_SPLIT_RATIO}%`);
   });
 });
