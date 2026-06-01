@@ -36,6 +36,7 @@ import { CLASSIFIER_SCHEMAS } from './schemas.js';
 import { classifyBlogPostJob } from './classify/blog-post-job.js';
 import { classifyPersonaSummary } from './classify/persona-summary.js';
 import { classifyBlogTagNormalisation } from './classify/blog-tag-normalisation.js';
+import { classifyTipTopic } from './classify/tip-topic.js';
 // Image-annotation classifier retired 2026-05-02: folded into C.t6's
 // unified Vision call (one Claude Vision call → description + annotation
 // + 4 tag arrays). See product/ingestion/src/images/.
@@ -151,6 +152,26 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
             dryRun: opts.dryRun,
           });
         }
+        // customer_tip is a DERIVED table populated directly by sql-transform
+        // (no compose pass), so its embed runs here in the EMBED block — its
+        // `text` is present without composition. The generic embed-derived
+        // helper handles the halfvec(3072) write + tsv + embedding_cache.
+        if (!opts.source || opts.source === 'customer_tip' || opts.source === 'all') {
+          log(`[enrich/embed/customer_tip] starting`);
+          passResults['embed:customer_tip'] = await embedDerivedTable({
+            client,
+            embeddingClient: opts.embeddingClient,
+            ledger,
+            table: 'customer_tip',
+            textColumn: 'text',
+            embedColumn: 'embedding',
+            ledgerKey: 'gemini:customer_tip',
+            populateTsv: true,
+            idColumn: 'integer',
+            limit: opts.limit,
+            dryRun: opts.dryRun,
+          });
+        }
       }
 
       // ---------- CLASSIFY ------------------------------------------------
@@ -203,6 +224,21 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
             ledger,
             prompt,
             unmappedLogPath: opts.unmappedLogPath,
+            limit: opts.limit,
+            dryRun: opts.dryRun,
+          });
+        }
+        if (!opts.source || opts.source === 'tip-topic' || opts.source === 'all') {
+          log(`[enrich/classify/tip-topic] starting`);
+          const prompt = await loadClassifierPrompt('tip-topic', {
+            rootDir: promptsRoot,
+            schema: CLASSIFIER_SCHEMAS['tip-topic'],
+          });
+          passResults['classify:tip-topic'] = await classifyTipTopic({
+            client,
+            batch: opts.batch,
+            ledger,
+            prompt,
             limit: opts.limit,
             dryRun: opts.dryRun,
           });
@@ -303,7 +339,7 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
 }
 
 async function readDerivedRowCounts(client: pg.PoolClient): Promise<Record<string, number>> {
-  const tables = ['inspire_passage', 'customer_story', 'trust_proof', 'inform_chunk', 'trip_card', 'tour_card'];
+  const tables = ['inspire_passage', 'customer_story', 'trust_proof', 'inform_chunk', 'trip_card', 'tour_card', 'customer_tip'];
   const out: Record<string, number> = {};
   for (const t of tables) {
     const r = await client.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM ${t}`);
