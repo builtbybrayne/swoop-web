@@ -852,4 +852,46 @@ Every Q1–Q10 HITL resolution stands. The tool name, derived-table-only, Gemini
 
 ## Execution log
 
-*(Appended by the executing agent post-execution. Empty until execution.)*
+### 2026-06-01 — built in worktree `claude/find-tips` (find-tips session)
+
+Executed against the HITL-ratified plan. The static build (migration → ETL → enrich → tool → schemas → prose → tests) landed and is green; **live-data steps are staged-and-flagged, not run** (this is an autonomous parallel worktree with no `puma_dev` Postgres — Verification 4/6/8/9 require a populated database + a real Sonnet turn and are owned by the HITL live-data pass at merge).
+
+**Commits (branch `claude/find-tips`):**
+
+| sha | what |
+|---|---|
+| `0119324` | `customer_tip` migration `013_customer_tip_table.sql` + ts-common tip schemas |
+| `388bfff` | sql-transform writes `customer_tip` base columns (`transformCustomerTip`) |
+| `90179e3` | tip-topic Haiku classifier (`cms/prompts/etl/tip-topic/`) + customer_tip embed/classify enrich pass |
+| `69c055b` | register `find_tips` — 9th MCP tool (data primitive, handler, description, registration, mcp/migrate test bumps 8→9 / 012→013) |
+| `66175cd` | data-primitive + prompt-loader + transformCustomerTip + orchestration (00_why SHOULD-rule, harness scenario 020) test coverage |
+
+**What landed (static):**
+- Migration `013_customer_tip_table.sql` — derived `customer_tip` table per the §schema-addendum shape (incl. `author_name`, `source_created_at`, `topic_tags[]`, `region`, `embedding halfvec(3072)`, `tsv`, `content_hash`; hnsw + gin + region indexes).
+- ETL `transformCustomerTip` — base columns from the source mirror; soft-delete via the shared numeric `isDeleted` tinyint convention (consistent with all sibling transforms — the plan's "deleted IS NULL" is source-SQL phrasing), TRIM + tab-strip on `name`, drop empty content / missing id, `source_provenance='customertip'`, `content_hash = sha256(trimmed text | 'customer_tip' | 1)`.
+- Enrich pass — embed (Gemini-embedding-001, cache-keyed by content_hash) + Haiku topic-classify against the 8-topic taxonomy; `classified_at` NULL gate; idempotent re-run by content_hash.
+- Tool surface — `find_tips` 9th MCP tool, inserted after `find_options`, before `illustrate`. Data primitive `findCustomerTipsByTopic` (hybrid RRF k=60 via `buildHybridSearchSql`, optional `(region = $N OR region IS NULL)`, `excludeIds` cast `::int[]`), handler `findTipsBody`, fail-fast description at `cms/prompts/tools/find_tips/description.md`.
+- Content — `00_why.md` SHOULD-rule carving `find_tips` (traveller wisdom, attribute the voice) from `lookup` (Swoop canon) and `find_someone_who` (persona); added to the tool rosters (NOT the widget roster — prose-only).
+- Tests (all green): `find-customer-tips.test.ts` (10, SQL shape), `find_tips.test.ts` (4, handler), `transformations.test.ts` `transformCustomerTip` block (9), `prompts.test.ts` tip-topic loader (5), plus mcp/migrate roster bumps. Connector 189 pass / ingestion 305 pass / lint clean on new files. Decision entries C.tip-1…C.tip-4; questions.md item (a) closed; C.26 closure note added.
+
+**Deviations from the plan sketch (all minor, all logged):**
+- Public projection schema is **`CustomerTipPublicSchema`** (not the sketched `TipPublicSchema`) and uses **camelCase** keys (`authorName`, `topicTags`) — matches the connector's existing public-schema convention.
+- Tool I/O is `FindTipsInputSchema` / `FindTipsOutputSchema`; output is `{ tips, count }`.
+- `limit` default 4, **max 6**.
+- Derived table carries `created_at` / `updated_at` (named per migration convention) alongside `embedded_at` / `classified_at`.
+
+**Pre-existing baseline reds (NOT touched — unrelated to find_tips, documented for the merge):**
+- `connector` typecheck: 5 errors in `src/data/__tests__/embed-query.test.ts` (vitest mock.calls tuple-typing drift in this worktree's newer node_modules; file byte-identical to commit `67c2dda`). C.t9 territory.
+- `ui` lint: ~40 errors in `src/session/*` (react-hooks rule resolution + unused vars). Pre-existing.
+
+**Flagged for the HITL live-data pass (Verification 4, 6, 8, 9 — require populated `puma_dev` + real Sonnet):**
+1. `mysqldump customertip --default-character-set=utf8mb4` (latin1 client default produces mojibake — §"Data cleanup pitfalls" #4).
+2. Run ETL → embed → classify against the 47-row corpus.
+3. Per-tool integration test: `find_tips({topic})` for "Patagonian wind" / "tipping etiquette" / "altitude sickness" → ≥1 TipPublic (or `count:0` flag-don't-fail on sparse topics).
+4. End-to-end Sonnet smoke (Verification 6): utterance *"any tips for handling the wind in Torres del Paine?"* routes to `find_tips` (not `lookup`/`find_someone_who`); capture transcript. Harness scenario `020-find-tips-practical-question.yaml` pins this for the agent-eval harness.
+5. **Sample-quality HITL gate (Alastair)**: read ~10 random `customer_tip.text` + `topic_tags` post-classify; sign off voice/coverage/tag accuracy or bump prompt frontmatter version + re-classify.
+6. Idempotent re-run check (zero writes second pass).
+
+**Surfaced for downstream:**
+- **AntiRepetition crosscut**: `find_tips` ships `excludeIds` from inception (`::int[]`). When the orchestrator-side seen-set wiring (C.anti-rep-*) generalises to `customer_tip`, no tool-schema change is needed — add `customer_tip` to the `SeenItems` keys + the `extractSeenDelta` switch.
+- **Corpus thinness (R5)**: 47 tips is serviceable for v1 but thin. If live signal shows coverage gaps, route to sales-team tip curation (the eventual CMS path).
