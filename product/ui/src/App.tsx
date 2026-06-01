@@ -39,6 +39,7 @@ import { emitUiEvent } from "./runtime/emit-ui-event";
 import {
   messagePartComponents,
   resetSidebar,
+  SidebarSplitLayout,
   TextThinkingIndicator,
   VisualSidebar,
 } from "./parts";
@@ -226,7 +227,8 @@ function ThreadSurface({
   const { current, retry, restart, dismiss } = useRuntimeErrors({ onRestart });
   const devHidden = useDevAffordanceToggle();
   return (
-    <div data-swoop-part="thread-layout" className="flex h-full w-full">
+    <SidebarSplitLayout
+      main={
       <ThreadPrimitive.Root className="flex h-full min-w-0 flex-1 flex-col bg-slate-50">
       <div
         data-swoop-part="thread-header"
@@ -274,13 +276,15 @@ function ThreadSurface({
         <Composer />
       </div>
       </ThreadPrimitive.Root>
-      {/* Visual channel. Hidden below the desktop breakpoint (mobile keeps the
-          inline widgets); on desktop it shows the relocated display widgets and
-          the inline copies are hidden via `sidebar-publish`. The `lg`
-          breakpoint here is the single source of truth shared with the inline
-          marker's `lg:hidden`. */}
-      <VisualSidebar className="hidden w-80 shrink-0 lg:flex xl:w-96" />
-    </div>
+      }
+      /* Visual channel. The split layout's sidebar pane is hidden below the
+         desktop `lg` breakpoint (mobile keeps the inline widgets); on desktop
+         it shows the relocated display widgets while the inline copies hide via
+         `sidebar-publish`. That `lg` breakpoint is the single source of truth
+         shared with the inline marker's `lg:hidden`. The pane owns width (the
+         50/50-default resizable split), so the sidebar just fills it. */
+      aside={<VisualSidebar className="flex w-full" />}
+    />
   );
 }
 

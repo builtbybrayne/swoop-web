@@ -149,4 +149,5 @@ export {
   resetFyiChannel,
 } from "./fyi-channel";
 export { VisualSidebar } from "./visual-sidebar";
+export { SidebarSplitLayout } from "./sidebar-split";
 export { resetSidebar } from "./sidebar-channel";
