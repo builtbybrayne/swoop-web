@@ -1,10 +1,10 @@
 /**
  * Tool description loader (C.t4 / C.34).
  *
- * Reads each of the eight tools' `cms/prompts/tools/<tool>/description.md` at
- * boot, caches the result for the connector lifetime. Per HITL Q3 ratification:
- * **fail-fast on ALL 8 tools** — development-time visibility beats silent
- * degradation.
+ * Reads each tool's `cms/prompts/tools/<tool>/description.md` at boot, caches
+ * the result for the connector lifetime. Per HITL Q3 ratification: **fail-fast
+ * on ALL tools** (eight at C.t4; nine after find_tips) — development-time
+ * visibility beats silent degradation.
  *
  * Pattern mirrors the orchestrator's prompt-loader.ts. Single-file-per-tool
  * read; not generic across `cms/prompts/{system,skills,tools}/` (per G.11 —
@@ -21,6 +21,7 @@ export const ALL_TOOL_NAMES = [
   TOOL_NAMES.FindProof,
   TOOL_NAMES.Lookup,
   TOOL_NAMES.FindOptions,
+  TOOL_NAMES.FindTips,
   TOOL_NAMES.Illustrate,
   TOOL_NAMES.Handoff,
   TOOL_NAMES.HandoffSubmit,

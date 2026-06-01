@@ -20,7 +20,6 @@ import type pg from 'pg';
 import {
   CostLedger,
   DEFAULT_HARD_CAP_GBP_DEV,
-  DEFAULT_HARD_CAP_GBP_PROD,
   DEFAULT_SOFT_WARNING_GBP,
 } from './cost.js';
 import { withEnrichClient, closeEnrichPool, type EnrichPoolConfig } from './pool.js';
