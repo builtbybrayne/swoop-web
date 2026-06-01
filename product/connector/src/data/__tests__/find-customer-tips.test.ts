@@ -162,7 +162,6 @@ describe('findCustomerTipsByTopic', () => {
           id: 42,
           text: 'Bring windproof everything — the Patagonian gusts are no joke.',
           author_name: 'Sarah',
-          topic_tags: ['packing', 'weather'],
           region: 'torres del paine',
           rrf_score: 0.031,
         },
@@ -180,19 +179,17 @@ describe('findCustomerTipsByTopic', () => {
       'Bring windproof everything — the Patagonian gusts are no joke.',
     );
     expect(tip.authorName).toBe('Sarah');
-    expect(tip.topicTags).toEqual(['packing', 'weather']);
     expect(tip.region).toBe('torres del paine');
     expect(() => CustomerTipPublicSchema.parse(tip)).not.toThrow();
   });
 
-  it('maps an anonymous, region-agnostic row (null author / null region / null tags)', async () => {
+  it('maps an anonymous, region-agnostic row (null author / null region)', async () => {
     const client = makeMockClient(async () => ({
       rows: [
         {
           id: 7,
           text: 'Layer up and keep snacks handy.',
           author_name: null,
-          topic_tags: null,
           region: null,
           rrf_score: 0.02,
         },
@@ -207,8 +204,6 @@ describe('findCustomerTipsByTopic', () => {
     const tip = out[0]!;
     expect(tip.authorName).toBeNull();
     expect(tip.region).toBeNull();
-    // null topic_tags coalesces to [] before the schema parse.
-    expect(tip.topicTags).toEqual([]);
     expect(() => CustomerTipPublicSchema.parse(tip)).not.toThrow();
   });
 });

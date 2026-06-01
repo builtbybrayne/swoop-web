@@ -617,8 +617,9 @@ function customerTipContentHash(text: string): string {
 /**
  * customertip → customer_tip. Base columns only: sql-transform owns
  * id/source_provenance/source_id/text/author_name/source_created_at/
- * content_hash; the enrich pipeline fills topic_tags/region (per-row classify)
- * and embedding/tsv (embed-derived pass). NO compose pass.
+ * content_hash; the enrich pipeline fills embedding/tsv (embed-derived pass).
+ * NO compose pass and NO classify pass — `region` is a nullable column with no
+ * populator today (the region classifier was retired 2026-06-01, C.tip-6).
  *
  * Filters: drop soft-deleted rows and rows with empty content. author_name is
  * trimmed and has internal whitespace runs collapsed (some source names carry

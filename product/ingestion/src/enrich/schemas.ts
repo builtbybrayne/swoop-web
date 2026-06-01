@@ -76,34 +76,17 @@ export const BlogTagNormalisationOutputSchema = z.object({
 export type BlogTagNormalisationOutput = z.infer<typeof BlogTagNormalisationOutputSchema>;
 
 // -----------------------------------------------------------------------------
-// 5. Tip-topic classifier (find_tips — the 9th MCP tool)
+// 5. (retired 2026-06-01) — tip-region classifier
 // -----------------------------------------------------------------------------
 //
-// Per-row (NO aggregation — distinct from persona-summary): each customer_tip
-// row is tagged with zero-or-more topics from the fixed 8-topic taxonomy, plus
-// an optional Patagonian sub-region where the text names one concretely.
-// Per planning/03-exec-customer-tips-tool.md §"Tip-topic classifier".
-
-/** The fixed find_tips topic taxonomy. Mirrors migration 013's column comment. */
-export const TIP_TOPICS = [
-  'packing',
-  'weather',
-  'money',
-  'safety',
-  'transit',
-  'food',
-  'accommodation',
-  'etiquette',
-] as const;
-
-export const TipTopicLabel = z.enum(TIP_TOPICS);
-
-export const TipTopicOutputSchema = z.object({
-  topic_tags: z.array(TipTopicLabel).default([]),
-  region: z.string().optional(),
-});
-
-export type TipTopicOutput = z.infer<typeof TipTopicOutputSchema>;
+// customer_tip had a region-only Haiku classifier (itself the stripped-down
+// remnant of the topic-tag classifier dropped earlier). Retired entirely per
+// HITL 2026-06-01 (decision C.tip-6): find_tips retrieval is pure hybrid
+// (content embedding + tsv RRF) — the tip text IS the topic signal, and the
+// source `customertip` record carries no region, so the pass could only ever
+// *infer* a label the embedding already encodes. The `region` column survives
+// as a nullable cross-corpus query dimension (populated only if source data
+// ever carries one); nothing classifies tips now.
 
 /**
  * Map of classifier names to schemas. Used by the prompts loader to wire
@@ -113,7 +96,6 @@ export const CLASSIFIER_SCHEMAS = {
   'blog-post-job': BlogPostJobOutputSchema,
   'persona-summary': PersonaSummaryOutputSchema,
   'blog-tag-normalisation': BlogTagNormalisationOutputSchema,
-  'tip-topic': TipTopicOutputSchema,
 } as const;
 
 export type ClassifierName = keyof typeof CLASSIFIER_SCHEMAS;

@@ -164,10 +164,12 @@ const COLS = {
     'image_id', 'feedbacksnippet_id', 'created', 'modified',
   ] as const,
   customerreview_trip: ['id', 'customerreview_id', 'trip_id', 'position'] as const,
-  // customer_tip — base columns only. The enrich pipeline owns topic_tags /
-  // region (per-row classify) + embedding / tsv / classified_at; those are NOT
-  // listed here, so flushBuffer's column-restricted upsert never clobbers them
-  // on conflict (theme 5 idempotency).
+  // customer_tip — base columns only. The enrich pipeline owns embedding / tsv
+  // (embed-derived pass); those are NOT listed here, so flushBuffer's
+  // column-restricted upsert never clobbers them on conflict (theme 5
+  // idempotency). `region` is a nullable column with no populator today (the
+  // region classifier was retired 2026-06-01, C.tip-6) — it stays out of this
+  // list so a future source-mapped value wouldn't be clobbered either.
   customer_tip: [
     'id', 'source_provenance', 'source_id', 'text', 'author_name',
     'source_created_at', 'content_hash',
@@ -536,9 +538,9 @@ export async function run(opts: RunOptions): Promise<RunResult> {
 
   // customer_tip (find_tips). No FK rules — the table references nothing. The
   // column-restricted upsert (COLS.customer_tip) preserves enrich-owned
-  // columns (embedding / tsv / topic_tags / region / classified_at) on
-  // conflict. Skipped silently when migration 013 isn't applied (sentinel
-  // below only hard-requires customerreview / migration 006).
+  // columns (embedding / tsv) on conflict. Skipped silently when migration 013
+  // isn't applied (sentinel below only hard-requires customerreview /
+  // migration 006).
   if (want('customer_tip')) {
     const tipSentinel = await opts.client.query<{ exists: boolean }>(
       `SELECT to_regclass('public.customer_tip') IS NOT NULL AS exists`,

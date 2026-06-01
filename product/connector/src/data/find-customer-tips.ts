@@ -4,9 +4,10 @@
  * Cosine + ts_rank fused via RRF, k=60 — the same shape as `find-inform-chunks`
  * (lookup), but against the traveller-sourced tip corpus instead of Swoop's own
  * inform_chunk guidance. The visitor's `topic` rides as the query (embedded +
- * tsquery); topic_tags are NOT a hard filter — relevance comes from cosine
- * alignment, not structured narrowing (the "surface the data, let retrieval
- * reason" default for a small, fuzzy corpus).
+ * tsquery); relevance comes purely from cosine + lexical alignment, not
+ * structured tag narrowing (the "surface the data, let retrieval reason"
+ * default for a small, fuzzy corpus). The tip text IS the topic signal — there
+ * are no topic tags.
  *
  * The one structured narrowing we DO apply is an optional region filter:
  * `region = $r OR region IS NULL` — a region-specific ask still sees the large
@@ -71,7 +72,6 @@ export async function findCustomerTipsByTopic(
     `,
     outerSelect: `
       SELECT ct.id, ct.text, ct.author_name,
-             COALESCE(ct.topic_tags, '{}') AS topic_tags,
              ct.region,
              fused.rrf_score
       FROM fused
@@ -86,7 +86,6 @@ export async function findCustomerTipsByTopic(
       id: r.id as number,
       text: r.text as string,
       authorName: r.author_name as string | null,
-      topicTags: (r.topic_tags ?? []) as string[],
       region: r.region as string | null,
     }),
   );

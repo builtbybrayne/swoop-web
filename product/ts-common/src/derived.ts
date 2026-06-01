@@ -251,13 +251,19 @@ export type InformChunkPublic = z.infer<typeof InformChunkPublicSchema>;
 // Where InformChunk carries Swoop's own authoritative guidance, CustomerTip
 // carries traveller-sourced practical wisdom — short, first-person, surfaced
 // WITH attribution. Distinct retrieval axis from Mirror's persona-shaped
-// customer_story: tips are topic-shaped (content embedding + topic_tags).
+// customer_story: tips are content-shaped (content embedding + tsv hybrid).
 //
 // id is a plain integer carried from the upstream `customertip` table (not a
 // generated UUID), mirroring the trip_card convention. `authorName` is the
-// traveller display name shown alongside the tip. `topicTags` is the 8-topic
-// taxonomy {packing, weather, money, safety, transit, food, accommodation,
-// etiquette} assigned per-row by the tip-topic classifier.
+// traveller display name shown alongside the tip. Retrieval is pure hybrid
+// (content embedding + tsv RRF); there are no tags of any kind — the tip text
+// itself is the topic signal. `region` survives as an optional cross-corpus
+// query dimension (the same filter find_options / find_someone_who /
+// find_inspiring expose), but nothing classifies tips: the source `customertip`
+// record carries no region, so it is currently always null. There is no
+// classify pass for customer_tip (the region-only classifier was retired
+// 2026-06-01, C.tip-6); region would only ever be filled if source data starts
+// carrying one. The region filter stays soft (region = $r OR region IS NULL).
 // -----------------------------------------------------------------------------
 
 export const CustomerTipProvenanceSchema = z.enum(["customertip"]);
@@ -270,7 +276,6 @@ export const CustomerTipSchema = z
     sourceId: z.string(),
     text: z.string().min(1),
     authorName: z.string().nullable().optional(),
-    topicTags: z.array(z.string()).default([]),
     region: z.string().nullable().optional(),
     ntagIds: z.array(z.number().int().positive()).default([]),
     sourceCreatedAt: z.coerce.date().nullable().optional(),
@@ -286,7 +291,6 @@ export const CustomerTipPublicSchema = z
     id: z.number().int().positive(),
     text: z.string().min(1),
     authorName: z.string().nullable().optional(),
-    topicTags: z.array(z.string()).default([]),
     region: z.string().nullable().optional(),
   })
   .strict();

@@ -60,8 +60,7 @@ export type LedgerPassKey =
   | 'haiku:blog_post_job'
   | 'haiku:persona_summary'
   | 'haiku:image_annotation'
-  | 'haiku:blog_tag_normalisation'
-  | 'haiku:tip_topic';
+  | 'haiku:blog_tag_normalisation';
 
 interface PassEntry {
   /** Tokens spent (input). For Voyage this is input only; for Haiku in/out separate. */

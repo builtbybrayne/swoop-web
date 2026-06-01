@@ -35,7 +35,6 @@ import { CLASSIFIER_SCHEMAS } from './schemas.js';
 import { classifyBlogPostJob } from './classify/blog-post-job.js';
 import { classifyPersonaSummary } from './classify/persona-summary.js';
 import { classifyBlogTagNormalisation } from './classify/blog-tag-normalisation.js';
-import { classifyTipTopic } from './classify/tip-topic.js';
 // Image-annotation classifier retired 2026-05-02: folded into C.t6's
 // unified Vision call (one Claude Vision call → description + annotation
 // + 4 tag arrays). See product/ingestion/src/images/.
@@ -227,21 +226,10 @@ export async function runEnrich(opts: EnrichRunOptions): Promise<EnrichRunResult
             dryRun: opts.dryRun,
           });
         }
-        if (!opts.source || opts.source === 'tip-topic' || opts.source === 'all') {
-          log(`[enrich/classify/tip-topic] starting`);
-          const prompt = await loadClassifierPrompt('tip-topic', {
-            rootDir: promptsRoot,
-            schema: CLASSIFIER_SCHEMAS['tip-topic'],
-          });
-          passResults['classify:tip-topic'] = await classifyTipTopic({
-            client,
-            batch: opts.batch,
-            ledger,
-            prompt,
-            limit: opts.limit,
-            dryRun: opts.dryRun,
-          });
-        }
+        // tip-region classifier retired 2026-06-01 (C.tip-6): find_tips
+        // retrieves purely via hybrid search (content embedding + tsv RRF);
+        // customer_tip has no classify pass. The `region` column survives but
+        // is only populated if source data ever carries one.
       }
 
       // ---------- COMPOSE -------------------------------------------------

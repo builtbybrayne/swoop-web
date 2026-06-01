@@ -895,3 +895,22 @@ Executed against the HITL-ratified plan. The static build (migration → ETL →
 **Surfaced for downstream:**
 - **AntiRepetition crosscut**: `find_tips` ships `excludeIds` from inception (`::int[]`). When the orchestrator-side seen-set wiring (C.anti-rep-*) generalises to `customer_tip`, no tool-schema change is needed — add `customer_tip` to the `SeenItems` keys + the `extractSeenDelta` switch.
 - **Corpus thinness (R5)**: 47 tips is serviceable for v1 but thin. If live signal shows coverage gaps, route to sales-team tip curation (the eventual CMS path).
+
+---
+
+## SUPERSEDED 2026-06-01 — tagging removed entirely (C.tip-5 + C.tip-6)
+
+> **Read this before trusting anything above about tags or classification.** During the live-data sample review (45-row corpus on `puma_dev`), the entire tagging approach for `customer_tip` was withdrawn in two cuts. The retrieval design (hybrid RRF k=60 over content embedding + tsv), the tool surface, the prose-only handoff, the `region` query filter, and `excludeIds` are all **unchanged and correct**. What's dead is everything describing topic tags and ETL classification.
+
+**Decisions:** [C.tip-5 — drop `topic_tags` entirely; retrieve on embeddings; classifier stripped to region-only](decisions.md#ctip-5--drop-topic_tags-entirely-find_tips-retrieves-on-embeddings-classifier-stripped-to-region-only) then [C.tip-6 — retire the region classifier too; `customer_tip` has no classify pass; region column kept nullable](decisions.md#ctip-6--retire-the-region-classifier-too-no-classify-pass-for-customer_tip-region-column-kept-nullable).
+
+**Why:** `find-customer-tips.ts` never filtered or ranked on `topic_tags` — retrieval was always pure hybrid; the tags were `SELECT`-ed as metadata doing zero work. The region pass then failed the same scrutiny: the source `customertip` record carries no region field, so it could only *infer* a label the content embedding already encodes, and it fired on just 8 of 45 rows. For a small fuzzy corpus the tip text **is** the topic signal (the agent reads all 45 in full). Consistent with the "embeddings / conversational reasoning over programmatic tagging on small data" posture.
+
+**Now dead in the body above** (kept for historical record; do NOT build against):
+- The **8-topic taxonomy** (`packing / weather / money / safety / transit / food / accommodation / etiquette`) — §"Topic taxonomy", §"Components → Enrich", §"Open Q #5 RESOLVED", and the schema sketch's `topic_tags TEXT[]` column + `customer_tip_topic_tags_idx` GIN index. Column dropped by migration [014](../product/connector/migrations/014_customer_tip_drop_topic_tags.sql).
+- The **`tip-topic` classifier** (`classify/tip-topic.ts`, `cms/prompts/etl/tip-topic/`, `output-schema.ts`) — deleted. There is **no classify pass for `customer_tip` at all** now; only the embed-derived pass (embedding + tsv).
+- `topicTags` on `CustomerTip{,Public}Schema` — removed.
+- **`classified_at`** column — was solely the classifier's idempotency gate; dropped by migration [015](../product/connector/migrations/015_customer_tip_drop_classified_at.sql). (Note: the "Deviations" section above lists `classified_at` / `embedded_at` as carried columns — both are gone; the live gate is `content_hash`.)
+- The **Sample-quality HITL gate** keyed on "topic-tag accuracy" (Verification #5 above) — **dissolved**: there are no tags to sign off. The live-voice read still has value, but it's no longer a tag-quality gate.
+
+**Still live and correct above:** derived-table-only design, hybrid RRF retrieval + per-call default 4 / max 6, `region` as an optional soft filter (`region = $r OR region IS NULL`, kept as a cross-corpus query dimension, now always NULL until source data carries one), prose-only handoff with author attribution, `excludeIds ::int[]`, the `content_hash` idempotency gate. `inform_chunk`'s separate `topic_tags` (the `lookup` tool) was never in scope and is untouched.

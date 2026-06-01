@@ -49,7 +49,6 @@ const TIP = {
   id: 1,
   text: 'Bring windproof everything — the Patagonian gusts are no joke.',
   authorName: 'Sarah',
-  topicTags: ['packing', 'weather'],
   region: 'torres del paine',
 };
 

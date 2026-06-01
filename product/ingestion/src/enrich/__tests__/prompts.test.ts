@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { writeFileSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -10,7 +9,7 @@ import {
   resolveEtlPromptsRoot,
   DEFAULT_HAIKU_MODEL,
 } from '../prompts.js';
-import { CLASSIFIER_SCHEMAS, TipTopicOutputSchema } from '../schemas.js';
+import { CLASSIFIER_SCHEMAS } from '../schemas.js';
 
 describe('parseFrontmatter', () => {
   it('returns empty when no frontmatter present', () => {
@@ -115,51 +114,5 @@ Hello prompt body.`,
 describe('resolveEtlPromptsRoot', () => {
   it('honours explicit override', () => {
     expect(resolveEtlPromptsRoot('/tmp', '/explicit/path')).toBe('/explicit/path');
-  });
-});
-
-describe('tip-topic classifier (real prompt + schema)', () => {
-  // Walk up from this test file to the real cms/prompts/etl root so we exercise
-  // the committed prompt, not a fixture — this guards the find_tips ETL stage.
-  const startDir = path.dirname(fileURLToPath(import.meta.url));
-  const etlRoot = resolveEtlPromptsRoot(startDir);
-
-  it('loads the committed tip-topic prompt with version 1, haiku, temp 0.0', async () => {
-    const r = await loadClassifierPrompt('tip-topic', {
-      rootDir: etlRoot,
-      schema: CLASSIFIER_SCHEMAS['tip-topic'],
-    });
-    expect(r.frontmatter.version).toBe(1);
-    expect(r.frontmatter.model).toBe('claude-haiku-4-5-20251001');
-    expect(r.frontmatter.temperature).toBe(0.0);
-    // Body is the classifier instructions, frontmatter stripped.
-    expect(r.systemPrompt).toMatch(/find_tips/);
-    expect(r.systemPrompt).not.toMatch(/^---/);
-    expect(r.schema).toBe(TipTopicOutputSchema);
-  });
-
-  it('wires the tip-topic schema into CLASSIFIER_SCHEMAS', () => {
-    expect(CLASSIFIER_SCHEMAS['tip-topic']).toBe(TipTopicOutputSchema);
-  });
-
-  it('defaults topic_tags to [] and leaves region absent on an empty object', () => {
-    const parsed = TipTopicOutputSchema.parse({});
-    expect(parsed.topic_tags).toEqual([]);
-    expect(parsed.region).toBeUndefined();
-  });
-
-  it('accepts the fixed taxonomy and an optional region', () => {
-    const parsed = TipTopicOutputSchema.parse({
-      topic_tags: ['packing', 'weather'],
-      region: 'Torres del Paine',
-    });
-    expect(parsed.topic_tags).toEqual(['packing', 'weather']);
-    expect(parsed.region).toBe('Torres del Paine');
-  });
-
-  it('rejects a topic label outside the fixed taxonomy', () => {
-    expect(() =>
-      TipTopicOutputSchema.parse({ topic_tags: ['wildlife'] }),
-    ).toThrow();
   });
 });
