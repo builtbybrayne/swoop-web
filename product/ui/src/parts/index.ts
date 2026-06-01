@@ -42,6 +42,22 @@ import {
   UnregisteredToolFallback,
   wrapWithDevTrace,
 } from "../widgets/widget-shell";
+import { wrapWithSidebarPublish } from "./sidebar-publish";
+
+// The six *display* widgets that relocate to the visual sidebar on desktop
+// (planning/02-impl-visual-sidebar.md §1). Each is additionally wrapped so it
+// publishes its tool-part into the sidebar store and hides its inline copy on
+// desktop. `handoff` is deliberately absent: its lead-capture form is an
+// interactive CTA bound to the conversational moment, so it stays inline in
+// both layouts.
+const SIDEBAR_DISPLAY_TOOLS: ReadonlySet<string> = new Set([
+  "find_inspiring",
+  "find_someone_who",
+  "find_proof",
+  "lookup",
+  "find_options",
+  "illustrate",
+]);
 
 // Bridge `UnregisteredToolFallback` (a narrow `{toolName, args, result}`
 // shape) to the full `ToolCallMessagePartProps` the registry's `Fallback`
@@ -63,12 +79,21 @@ RawToolFallback.displayName = "RawToolFallback";
 // dev-only `DevToolCallTrace` so each tool call shows a collapsible
 // diagnostic — toolCallId, duration, args, result, isError — below the
 // widget's own render. In production `wrapWithDevTrace` is a pass-through.
+//
+// Display widgets get an additional outer wrap, `wrapWithSidebarPublish`,
+// which (a) mirrors the tool-part into the sidebar store and (b) hides the
+// inline copy on desktop. It composes OUTSIDE the dev-trace so the inline
+// trace card hides together with its widget on desktop rather than orphaning.
+// `handoff` is wrapped with dev-trace only — it never relocates.
 const wrappedToolComponents: Record<string, ToolCallMessagePartComponent> =
   Object.fromEntries(
-    Object.entries(toolWidgetComponents).map(([name, Component]) => [
-      name,
-      wrapWithDevTrace(name, Component),
-    ]),
+    Object.entries(toolWidgetComponents).map(([name, Component]) => {
+      const traced = wrapWithDevTrace(name, Component);
+      const wired = SIDEBAR_DISPLAY_TOOLS.has(name)
+        ? wrapWithSidebarPublish(name, traced)
+        : traced;
+      return [name, wired];
+    }),
   );
 const ToolFallback: ToolCallMessagePartComponent = wrapWithDevTrace(
   "(unregistered)",
@@ -123,3 +148,5 @@ export {
   emitFyiChannel,
   resetFyiChannel,
 } from "./fyi-channel";
+export { VisualSidebar } from "./visual-sidebar";
+export { resetSidebar } from "./sidebar-channel";

@@ -36,7 +36,12 @@ import { emitUiEvent } from "./runtime/emit-ui-event";
 // Registers the `data-fyi` renderer + reasoning-guard (D.t2). Importing here
 // is what gives assistant-ui the component map below; the module itself has
 // no top-level side effects, but its named export encodes the full registry.
-import { messagePartComponents, TextThinkingIndicator } from "./parts";
+import {
+  messagePartComponents,
+  resetSidebar,
+  TextThinkingIndicator,
+  VisualSidebar,
+} from "./parts";
 import {
   ChromeBadge,
   OpeningScreen,
@@ -221,7 +226,8 @@ function ThreadSurface({
   const { current, retry, restart, dismiss } = useRuntimeErrors({ onRestart });
   const devHidden = useDevAffordanceToggle();
   return (
-    <ThreadPrimitive.Root className="flex h-full w-full flex-col bg-slate-50">
+    <div data-swoop-part="thread-layout" className="flex h-full w-full">
+      <ThreadPrimitive.Root className="flex h-full min-w-0 flex-1 flex-col bg-slate-50">
       <div
         data-swoop-part="thread-header"
         className="flex w-full items-center justify-between border-b border-slate-200 bg-white px-4 py-2"
@@ -267,7 +273,14 @@ function ThreadSurface({
         />
         <Composer />
       </div>
-    </ThreadPrimitive.Root>
+      </ThreadPrimitive.Root>
+      {/* Visual channel. Hidden below the desktop breakpoint (mobile keeps the
+          inline widgets); on desktop it shows the relocated display widgets and
+          the inline copies are hidden via `sidebar-publish`. The `lg`
+          breakpoint here is the single source of truth shared with the inline
+          marker's `lg:hidden`. */}
+      <VisualSidebar className="hidden w-80 shrink-0 lg:flex xl:w-96" />
+    </div>
   );
 }
 
@@ -363,9 +376,11 @@ export default function App() {
       consent.clearSilently();
       // Switch to a fresh assistant-ui thread + clear any drafted composer
       // text so neither bleeds across the OpeningScreen boundary into the
-      // subsequent post-consent render.
+      // subsequent post-consent render. Clear the visual sidebar on the same
+      // path so it empties alongside the transcript.
       runtime.threads.switchToNewThread();
       runtime.thread.composer.setText("");
+      resetSidebar();
     },
   });
 
@@ -398,6 +413,8 @@ export default function App() {
         // unresponsive to further typing.
         runtime.threads.switchToNewThread();
         runtime.thread.composer.setText("");
+        // Empty the visual sidebar so it tracks the fresh thread.
+        resetSidebar();
       },
       () => {
         // refreshSession already emitted; banner handles display.
