@@ -1,6 +1,12 @@
 # Progress — Swoop Web Discovery (Puma)
 
-**Snapshot date**: 2026-05-14 (chunk G content layer authored end-to-end in a single Cowork HITL session — G.t0 + G.t1 + G.t3 substantively done; details below. Previous snapshot at 2026-05-13 covered four sequenced code-side waves on `main` + `brave-pare`.)
+**Snapshot date**: 2026-06-10 (Luke Loom feedback round 2 triaged; 8 DRAFT Tier-3 plans authored, pending HITL ratification — see below. ⚠ The per-chunk sections of this file lag reality from 2026-05-14 onwards; read [planning/reviews/2026-05-27-ingest-and-state-of-play.md](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the 27 May build snapshot, then git log for the late-May/early-June waves: find_tips ninth tool, AntiRepetition, visual sidebar, Puma memory-bug fix.)
+
+## 2026-06-10 — Luke Loom feedback round 2: triage + plan authoring (Cowork session, worktree `magical-poincare-53e479`)
+
+Luke's second feedback round (Loom video, 10 Jun; transcript at [planning/meetings/luke_loom_feedback_100626.md](planning/meetings/luke_loom_feedback_100626.md)) triaged end-to-end. Master ledger with per-item stances: **[planning/reviews/2026-06-10-luke-loom-feedback.md](planning/reviews/2026-06-10-luke-loom-feedback.md)** — 16 items across layout, data accuracy, persuasion, the agent's missing today's-date, handoff-form UI tweaks, and a refresh/history-loss bug.
+
+Eight Tier-3 plans authored as DRAFT (all pending Alastair's ratification before any execution): handoff form round 2, retrieval provenance (source titles + dates — the agent currently cannot see how old any retrieved content is, root cause of the 2011-blog-prices incident), content pass G.t6 (formatting calibration, **Swoop Planning Specialists** terminology, complexity-of-choice + group-tours-on-price-signals persuasion, pricing contemporaneity policy), B.t12 browser timestamp, visual channel (one image / hidden annotations / one-page emphasis), terminology card, demo stability (refresh-bug investigation + Mini hardening + B.t13 durable-sessions stub). Three Swoop-side asks added to [questions.md](questions.md) (Planning Specialists wording; the 4 Swoop Group Tours; production-first prioritisation of the Product Library + search-sophistication work — Alastair putting that to Luke by email, gated on conversion-rate evidence); commercial-fence note in [inbox.md](inbox.md) 2026-06-10.
 
 ## 2026-05-14 — Chunk G content layer authored (G.t0 + G.t1 + G.t3)
 

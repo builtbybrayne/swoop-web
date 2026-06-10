@@ -172,6 +172,37 @@ Why it matters: M5 ships only after legal sign-off. SLA uncertainty is the bigge
 
 Where it lands: Tier 2 chunk E.
 
+### "Swoop Planning Specialists" canonical wording + terminology-card copy — Luke (raised 2026-06-10)
+
+Two asks from the 10 Jun Loom feedback round ([triage ledger](planning/reviews/2026-06-10-luke-loom-feedback.md) item P1):
+
+1. **The exact canonical term.** Luke wants the sales team treated "almost as sacredly as a trademark" with consistent, always-bold naming — transcript says *"swoops, uh, planning specialists or something like that"* and that he'd *"put this in an email somewhere"*. We're proceeding with **"Swoop Planning Specialists"** as the working term (centralised — a rename is one edit). Need his email with the final wording.
+2. **Card copy sign-off.** A small "About Swoop Planning Specialists" card will appear in the sidebar on first mention ([terminology-card plan](planning/03-exec-crosscut-magical-poincare-terminology-card.md)) — 2–3 lines pitching their experience and what they do. We'll draft from existing brand material; Luke/Julie to review the wording.
+
+Why it matters: the term lands across the system prompt, skills, handoff form, emails, and the new card — getting the string wrong means a sweep twice.
+
+### Swoop Group Tours — which 4, and the page URL — Luke, then Thomas / Richard (raised 2026-06-10)
+
+Luke (10 Jun Loom): there are **4 Swoop Group Tours**, listed on the Swoop Group Tours page, which he can point us to; they're a business priority and price-conscious visitors should be steered toward them. Our `tour_card` table holds **11** CMS-derived tours (see "Tour content population" above). Need:
+
+1. The Swoop Group Tours page URL (Luke offered).
+2. Which 4 of our 11 tours are the current Swoop Group Tours — or whether some of the 4 aren't in the dump at all. Ideally a CMS-side discriminator (flag / page placement) so the mapping survives content changes; route the mechanics to Thomas / Richard.
+3. Whether the other 7 tours should surface at all, or only the 4.
+
+Why it matters: the [content plan](planning/03-exec-content-t6-luke-loom.md) adds price-consciousness as a tour-surfacing signal now, but the agent can't privilege "the 4" until we can identify them in data.
+
+### Production-first prioritisation of data-layer investments — Luke (Alastair emailing, 2026-06-10)
+
+Luke's 10 Jun feedback surfaced two non-trivial data-layer items ([ledger D2 + D5](planning/reviews/2026-06-10-luke-loom-feedback.md)): **Product Library ingestion** (the authoritative pricing source — website/blog content can't guarantee contemporary figures) and **trip-card relevance** (needs better data *and* more sophisticated search methodologies than vector search alone). **Neither is being planned now** — both are deliberate deferrals pending a priorities conversation.
+
+Alastair is proposing to Luke by email: **prioritise getting Puma into production**, and come back to these if and when there's evidence they're suppressing **marketing conversion rates** — conversion being the project's real aim.
+
+The ask: Luke's agreement on that prioritisation (or a steer that one of these matters enough to pull forward — which then becomes a scoped commercial conversation, not a quiet absorption).
+
+In the meantime, the standing in-fence mitigations ship with the current wave: provenance dates + broad-band/contemporaneity pricing policy ([retrieval-provenance plan](planning/03-exec-crosscut-magical-poincare-retrieval-provenance.md) + [content plan §2.4](planning/03-exec-content-t6-luke-loom.md)), and the cheap budgetBand/region probes (ledger D5).
+
+Why it matters: keeps the build pointed at production and conversion rather than speculative data work — and names the evidence gate so the deferral stays principled instead of forgotten.
+
 ---
 
 ## Closed

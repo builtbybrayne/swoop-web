@@ -4,6 +4,12 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## Status (2026-06-10 — Luke feedback round 2 triaged; ratification is the gate)
+
+**The active work queue is the [2026-06-10 Luke Loom feedback ledger](planning/reviews/2026-06-10-luke-loom-feedback.md)** — 16 items triaged, 8 DRAFT Tier-3 plans authored, none ratified or executed yet. Next action: Alastair ratifies (or amends) the plans, then dispatch — the ledger's sequencing note says which can run in parallel. Three new Swoop asks live in [questions.md](questions.md) (Planning Specialists wording / 4 Group Tours / production-first data-layer prioritisation — no Product Library or search-depth planning until Luke's priorities conversation lands). Everything below this section predates 2026-05-18 and lags reality — see the [2026-05-27 state-of-play](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the most recent verified build snapshot.
+
+---
+
 ## Status (2026-05-18 — B.t9 tool-surface regression fixed)
 
 Live-traffic observation by Alastair surfaced that after [B.t9 ADK skill-loader integration (commit `9965d64`, 2026-05-18)](planning/03-exec-agent-runtime-t9.md) merged, Sonnet could see the 14 skills but could not call any of the eight intent-named connector tools (`find_inspiring` / `find_someone_who` / `find_proof` / `lookup` / `find_options` / `illustrate` / `handoff` / `handoff_submit`). Root cause: B.t9 stashed connector tools inside `SkillToolset.additionalTools`, which ADK gates behind per-skill `frontmatter.metadata.adk_additional_tools` declarations — none of the 14 SKILL.md files declare those.

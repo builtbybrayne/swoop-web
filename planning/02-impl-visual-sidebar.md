@@ -128,3 +128,15 @@ These are all Tier-3-sized; none changes the shape above.
 ---
 
 *Back-link: this plan was created in response to Luke's Jun-2026 conversational-AI feedback (Google Doc "Conversational AI Jun26 Feedback"). The conversational/prompt items from the same doc were applied separately in commit `c93262a`.*
+
+---
+
+## 2026-06-10 Luke Loom feedback — deferred items activated
+
+Luke's second feedback round ([triage ledger](reviews/2026-06-10-luke-loom-feedback.md)) reviewed the shipped sidebar and activates three things this plan's "Not outcomes" (§1) deliberately deferred. Each now has its own Tier-3 plan; this Tier-2's shape is unchanged:
+
+- **Image fixes** (was "No image fixes"): single large image instead of the strip; annotations hidden from display (alt text retained) → [03-exec-crosscut-magical-poincare-visual-channel.md](03-exec-crosscut-magical-poincare-visual-channel.md).
+- **Link surface** (was "No new link surface"): the `lookup` widget converges on the **one most relevant source page**, with the page title as link text → same plan + [03-exec-crosscut-magical-poincare-retrieval-provenance.md](03-exec-crosscut-magical-poincare-retrieval-provenance.md) (titles into schemas).
+- **A static-card sidebar entry kind**: the "About Swoop Planning Specialists" terminology card extends the sidebar store with a non-tool-part entry → [03-exec-crosscut-magical-poincare-terminology-card.md](03-exec-crosscut-magical-poincare-terminology-card.md).
+
+Still out of scope at this tier: curation/dedup/pinning, mobile drawer, prompt-side visual-channel retuning.
