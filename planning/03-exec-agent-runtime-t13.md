@@ -63,3 +63,51 @@ Environment gotchas that WILL bite (see [gotchas.md](../gotchas.md)): `dotenv({ 
 ## 5. Estimate
 
 1–2 days. The restart-survival integration test (7a) and live smoke (8) are the acceptance spine — without them this plan is not done, per the [B.t9 "boot-log gates are necessary but not sufficient" rule](../discoveries.md).
+
+---
+
+## 2026-06-10 execution log
+
+**Agent**: claude-sonnet-4-6 in worktree `agent-a3ced01a797d21b20`
+
+### Step-0 Layer Map
+
+**Layer 1 — Puma `SessionState` (orchestrator's `SessionStore` interface)**
+- Lives in `InMemorySessionStore` — a `Map<string, Entry>` in `session/in-memory.ts`
+- Holds typed `SessionState`: consent, triage, wishlist, conversationHistory, seenItems, metadata
+- Swap seam: `SessionStore` interface + `createSessionStore` factory in `session/index.ts`
+- `conversationHistory` is a downsampled log (role/text/blockType). NOT used for history projection. The history projection (`session-history.ts`) reads from ADK layer 2.
+
+**Layer 2 — ADK event history (`BaseSessionService`)**
+- Lives in ADK `InMemorySessionService`, owned by `InMemoryRunner` which creates it internally
+- Runner accessed via `runner.sessionService` in `src/index.ts`
+- Holds `session.events[]`: full `LlmResponse`/`LlmRequest` event log (functionCall, functionResponse, text, thought)
+- `session-history.ts` reads this via `deps.sessionService.getSession()` for `/session/:id/history`
+- `onSessionCreated` hook calls `runner.sessionService.createSession(...)` to mirror a Puma session into ADK
+
+**What `InMemoryRunner` does**: hardcodes `new InMemorySessionService()` — no way to inject. Must replace with `new Runner({ ..., sessionService: pgAdkSvc, ... })` using ADK's exported `Runner` class.
+
+**ADK exports confirmed** (from `common.js` re-exported via `@google/adk`): `Runner`, `BaseSessionService`, `InMemorySessionService`, `InMemoryArtifactService`, `InMemoryMemoryService` — all available for clean extension.
+
+### Decision B.poincare-4 — ADK event durability mechanism
+
+**Chosen: custom `PgAdkSessionService extends BaseSessionService`** (Option A — interface implementation, not bridge write-through).
+
+Evidence:
+- `DatabaseSessionService` (ADK's own Postgres backend) uses MikroORM, manages its own schema via `validateDatabaseSchemaVersion`, cannot store events in `puma_session_event`. Would bypass our migration chain.
+- ADK exports `BaseSessionService` cleanly. Extending it and implementing `createSession`, `getSession`, `deleteSession`, `appendEvent` against our own tables is straightforward and satisfies the plan's "implement against ADK's exported interface" guardrail.
+- `InMemoryRunner` hardcodes its session service — replaced with `new Runner({ sessionService: pgAdkSvc, artifactService: new InMemoryArtifactService(), memoryService: new InMemoryMemoryService(), appName, agent })` using ADK's exported classes.
+- This keeps `puma_session` + `puma_session_event` fully in our migration chain (migration 016) and avoids MikroORM in orchestrator.
+
+**Warm-pool sessions**: stay memory-only (disposable, pre-visitor). `onSessionCreated` called for warm-pool entries will create ADK sessions in `PgAdkSessionService` too — fine, they're TTL'd by the pool and swept by the SQL sweeper. No code change needed for warm pool compatibility.
+
+### Deviations
+- Used `new Runner(...)` directly instead of `new InMemoryRunner(...)` since `InMemoryRunner` doesn't accept `sessionService` injection. `Runner` is exported from `@google/adk` via `common.js`.
+- `pg` added as direct dep to `@swoop/orchestrator` (not importing connector's pool — separate pool, separate service, same DB per plan).
+
+### Test counts
+- Before: 3 test files in `session/__tests__/` (in-memory, mutex-store, warm-pool)
+- After: + `postgres.test.ts` + `pg-adk-session-service.test.ts` (DB-gated, skip without `ORCHESTRATOR_DATABASE_URL`)
+
+### Pending
+- Step-8 live restart smoke: requires running orchestrator with `SESSION_BACKEND=postgres` + browser interaction. Stated in report as pending operator run per plan's escape hatch (ANTHROPIC_API_KEY availability in Claude Code shell is limited). Session-creation + consent + history-projection smoke covered by integration tests.

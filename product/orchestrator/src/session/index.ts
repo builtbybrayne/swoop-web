@@ -31,6 +31,16 @@ export { VertexAiSessionStore } from './vertex-ai.js';
 export { FirestoreSessionStore } from './firestore.js';
 export { MutexSessionStore } from './mutex-store.js';
 export {
+  PostgresSessionStore,
+  sweepPostgresSessions,
+  startPostgresSessionSweep,
+  type PostgresSessionStoreOptions,
+  type PostgresSessionSweepDeps,
+  type StartPostgresSessionSweepDeps,
+  type SweepResult,
+} from './postgres.js';
+export { PgAdkSessionService, type PgAdkSessionServiceOptions } from './pg-adk-session-service.js';
+export {
   DirectAllocator,
   WarmSessionPool,
   type SessionAllocator,
@@ -43,10 +53,11 @@ import { InMemorySessionStore } from './in-memory.js';
 import { AdkNativeSessionStore } from './adk-native.js';
 import { VertexAiSessionStore } from './vertex-ai.js';
 import { FirestoreSessionStore } from './firestore.js';
+import { PostgresSessionStore } from './postgres.js';
 import { MutexSessionStore } from './mutex-store.js';
 
 /**
- * The four valid `SESSION_BACKEND` values. `in-memory` is the default.
+ * The five valid `SESSION_BACKEND` values. `in-memory` is the default.
  *
  * Kept as a string-literal tuple so both the config parser (B.t6 / current
  * ad-hoc reader in B.t5) and the factory share one source of truth.
@@ -54,6 +65,7 @@ import { MutexSessionStore } from './mutex-store.js';
 export const SESSION_BACKENDS = [
   'in-memory',
   'adk-native',
+  'postgres',
   'vertex-ai',
   'firestore',
 ] as const;
@@ -70,18 +82,22 @@ export interface CreateSessionStoreOptions {
    */
   backend?: SessionBackend | string;
   /**
-   * Idle TTL (ms) for the in-memory sweeper. Passed through only for the
-   * `in-memory` backend. Other backends have their own lifecycle rules.
+   * Idle TTL (ms) for the in-memory and postgres sweepers.
    */
   idleTtlMs?: number;
   /**
-   * Archive retention (ms) for the in-memory sweeper. Passed through only
-   * for the `in-memory` backend.
+   * Archive retention (ms) for the in-memory and postgres sweepers.
    */
   archiveTtlMs?: number;
   /**
+   * Connection URL for the postgres backend. Required when backend='postgres'.
+   * Falls back to `ORCHESTRATOR_DATABASE_URL` then `DATABASE_URL` env vars
+   * if not supplied. Fail-fast at construction if URL is absent.
+   */
+  databaseUrl?: string;
+  /**
    * Clock injection. Only honoured by adapters that have a testable clock
-   * (currently `in-memory` and `adk-native`).
+   * (currently `in-memory`, `adk-native`, and `postgres`).
    */
   now?: () => number;
 }
@@ -135,6 +151,24 @@ function buildBackend(
       });
     case 'adk-native':
       return new AdkNativeSessionStore({ now: opts.now });
+    case 'postgres': {
+      // Fail-fast: postgres backend requires a connection URL.
+      const url =
+        opts.databaseUrl ??
+        process.env['ORCHESTRATOR_DATABASE_URL'] ??
+        process.env['DATABASE_URL'];
+      if (!url) {
+        throw new Error(
+          'SESSION_BACKEND=postgres requires a database URL. ' +
+            'Set ORCHESTRATOR_DATABASE_URL (or DATABASE_URL) in .env, ' +
+            'or pass databaseUrl to createSessionStore().',
+        );
+      }
+      return new PostgresSessionStore({
+        connectionString: url,
+        now: opts.now,
+      });
+    }
     case 'vertex-ai':
       return new VertexAiSessionStore();
     case 'firestore':

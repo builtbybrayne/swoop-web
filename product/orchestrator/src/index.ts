@@ -30,7 +30,14 @@ loadDotenv({ override: true });
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { InMemoryRunner } from '@google/adk';
+import pg from 'pg';
+import {
+  InMemoryRunner,
+  Runner,
+  BaseSessionService,
+  InMemoryArtifactService,
+  InMemoryMemoryService,
+} from '@google/adk';
 import { emitErrorRaised, messageOf } from '@swoop/common';
 import {
   FsHandoffStore,
@@ -43,7 +50,13 @@ import { loadConfig } from './config/index.js';
 import { createPromptLoader } from './agent/prompt-loader.js';
 import { buildOrchestratorAgent } from './agent/factory.js';
 import { setupConnector } from './connector/index.js';
-import { createSessionStore, startWarmPool } from './session/index.js';
+import {
+  createSessionStore,
+  startWarmPool,
+  PgAdkSessionService,
+  PostgresSessionStore,
+  startPostgresSessionSweep,
+} from './session/index.js';
 import { buildServer } from './server/index.js';
 import { buildTriageClassifier } from './functional-agents/triage-classifier.js';
 
@@ -101,11 +114,54 @@ async function main(): Promise<void> {
   // flow-mapping.
   const triageClassifier = buildTriageClassifier({ config });
 
-  // InMemoryRunner owns its own ADK session service. /chat uses `runAsync`
-  // which expects an ADK session keyed by (appName, userId, sessionId); we
-  // pre-create one in `onSessionCreated` after every `POST /session` so
-  // turns can flow without a per-turn session-creation round trip.
-  const runner = new InMemoryRunner({ agent, appName: ORCHESTRATOR_APP_NAME });
+  // Build the ADK runner. When SESSION_BACKEND=postgres we replace the
+  // InMemoryRunner's hardcoded InMemorySessionService with PgAdkSessionService
+  // (B.t13 — ADK Layer 2 durability). For all other backends InMemoryRunner
+  // suffices (its internal InMemorySessionService is the default).
+  //
+  // Runner (the ADK base class) is used directly so we can inject a custom
+  // sessionService; InMemoryRunner doesn't accept one (it hardcodes the
+  // in-memory variant). Both InMemoryArtifactService and InMemoryMemoryService
+  // stay in-memory — they're ADK internals we don't use for Puma state.
+  let postgresPool: pg.Pool | undefined;
+  let stopSessionSweep: (() => void) | undefined;
+
+  let runner: InstanceType<typeof Runner>;
+  if (config.SESSION_BACKEND === 'postgres') {
+    const dbUrl = config.ORCHESTRATOR_DATABASE_URL;
+    postgresPool = new pg.Pool({
+      connectionString: dbUrl,
+      max: 5,
+      idleTimeoutMillis: 30_000,
+      application_name: 'swoop-orchestrator',
+      options: `-c statement_timeout=5000`,
+    });
+    postgresPool.on('error', (err) => {
+      console.error(`[orchestrator] postgres session pool error: ${messageOf(err)}`);
+    });
+
+    const pgAdkSessionService = new PgAdkSessionService({
+      pool: postgresPool,
+      appName: ORCHESTRATOR_APP_NAME,
+    });
+
+    runner = new Runner({
+      agent,
+      appName: ORCHESTRATOR_APP_NAME,
+      sessionService: pgAdkSessionService as unknown as InstanceType<typeof BaseSessionService>,
+      artifactService: new InMemoryArtifactService(),
+      memoryService: new InMemoryMemoryService(),
+    });
+
+    stopSessionSweep = startPostgresSessionSweep({
+      store: sessionStore as PostgresSessionStore,
+      pool: postgresPool,
+      idleTtlMs: config.SESSION_TTL_IDLE_HOURS * 3_600_000,
+      archiveTtlMs: config.SESSION_TTL_ARCHIVE_DAYS * 86_400_000,
+    });
+  } else {
+    runner = new InMemoryRunner({ agent, appName: ORCHESTRATOR_APP_NAME });
+  }
 
   const version = readPackageVersion(config.packageRoot);
 
@@ -239,7 +295,9 @@ async function main(): Promise<void> {
     // Stop retention sweeper timers first so an in-flight sweep doesn't fight
     // shutdown for the file lock.
     if (retentionSweepInterval !== undefined) clearInterval(retentionSweepInterval);
-    if (retentionSweepInitialTimer !== undefined) clearTimeout(retentionSweepInitialTimer);
+    if (retentionSweepInitialTimer !== undefined) clearInterval(retentionSweepInitialTimer);
+    // Stop postgres session sweeper if running.
+    if (stopSessionSweep !== undefined) stopSessionSweep();
     // Drop warm-pool entries first — they own session records in the store,
     // and we want those deleted before the process exits so nothing leaks
     // into a long-lived backend (when one eventually replaces in-memory).
@@ -255,6 +313,12 @@ async function main(): Promise<void> {
         err,
       });
     });
+    // Close the postgres pool (B.t13) after warm pool drains.
+    if (postgresPool !== undefined) {
+      postgresPool.end().catch((err) => {
+        console.warn('[orchestrator] postgres pool close failed during shutdown:', err);
+      });
+    }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5_000).unref();
   };
