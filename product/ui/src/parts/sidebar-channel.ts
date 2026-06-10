@@ -28,6 +28,26 @@
 //     from App.tsx's fresh-chat + rehydrate-expired flows). No persistence of
 //     its own — on reload the replayed history re-publishes for free.
 //
+// Static cards (planning/03-exec-crosscut-magical-poincare-terminology-card.md,
+// decision D.poincare-4): alongside the tool-part entries the store holds a
+// second entry kind, `static-card` — client-side keyword-triggered explainer
+// cards (today: the "About Swoop Planning Specialists" terminology card).
+//
+//   - Keyed by a stable card id (e.g. `terminology:specialists`), so the
+//     once-per-conversation guard falls out of id-keying for free: however many
+//     times the trigger fires (multi-mention conversations, rehydrate replay,
+//     StrictMode double-effects), the Map holds one entry.
+//   - Static cards sort ABOVE tool-part entries in the snapshot — they're
+//     explainers, not part of the flow's chronology.
+//   - Dismissable: `dismissStaticCard(id)` removes the entry AND records the id
+//     so later trigger fires in the same conversation don't resurrect it. The
+//     dismissed set is in-memory only — on a page reload the replayed history
+//     re-triggers and the card legitimately reappears (same posture as the
+//     tool-part entries: the store is a projection, not a persistence; see the
+//     plan's §1.3 rehydrate outcome).
+//   - `resetSidebar()` clears cards and the dismissed set together with the
+//     tool-parts, so a fresh conversation can re-earn the card.
+//
 // Scope note: like `fyi-channel`, this is UI-side coordination only. It is not
 // wired to the orchestrator stream; the SSE shape is still the source of truth.
 // The store holds whatever assistant-ui rendered, nothing more.
@@ -49,20 +69,53 @@ export interface SidebarWidgetEntry {
   readonly isError: boolean | undefined;
 }
 
-// Insertion-ordered, id-keyed store. `Map` keeps first-insert position even
+/**
+ * Content payload for a static sidebar card. Authored in `cms/` (content as
+ * data — e.g. cms/content/terminology/swoop-planning-specialists.json) and
+ * loaded by the trigger module; the store never hardcodes copy.
+ */
+export interface StaticCardPayload {
+  readonly title: string;
+  readonly lines: readonly string[];
+}
+
+/** A tool-part entry as held in the store (the publish payload + kind tag). */
+export interface SidebarToolPartEntry extends SidebarWidgetEntry {
+  readonly kind: "tool-part";
+}
+
+/** A static explainer card, keyed by a stable card id. */
+export interface SidebarStaticCardEntry {
+  readonly kind: "static-card";
+  readonly id: string;
+  readonly payload: StaticCardPayload;
+}
+
+/** What the sidebar renders: static cards first, then tool-parts in arrival order. */
+export type SidebarEntry = SidebarToolPartEntry | SidebarStaticCardEntry;
+
+// Insertion-ordered, id-keyed stores. `Map` keeps first-insert position even
 // when an existing key is re-`set`, giving us append-then-update-in-place.
-const entries = new Map<string, SidebarWidgetEntry>();
+// Two maps rather than one so "static cards sort above tool-parts" is a
+// concatenation, not a sort, and the two id namespaces can't collide.
+const toolParts = new Map<string, SidebarToolPartEntry>();
+const staticCards = new Map<string, SidebarStaticCardEntry>();
+
+// Card ids dismissed this conversation. Checked by `publishStaticCard` so a
+// later trigger fire can't resurrect a card the visitor closed. In-memory
+// only; cleared by `resetSidebar()`.
+const dismissedStaticCards = new Set<string>();
 
 // Cached snapshot array. `useSyncExternalStore` requires `getSnapshot` to
 // return a referentially-stable value between mutations, so we rebuild this
 // only when the store actually changes and hand back the same reference
 // otherwise.
-let snapshot: readonly SidebarWidgetEntry[] = [];
+let snapshot: readonly SidebarEntry[] = [];
 
 const listeners = new Set<() => void>();
 
 function rebuildSnapshot(): void {
-  snapshot = Array.from(entries.values());
+  snapshot = [...staticCards.values(), ...toolParts.values()];
 }
 
 function emit(): void {
@@ -99,21 +152,54 @@ function sameEntry(a: SidebarWidgetEntry, b: SidebarWidgetEntry): boolean {
  * an unchanged payload.
  */
 export function publishSidebarWidget(entry: SidebarWidgetEntry): void {
-  const prev = entries.get(entry.toolCallId);
+  const prev = toolParts.get(entry.toolCallId);
   if (prev && sameEntry(prev, entry)) return;
-  entries.set(entry.toolCallId, entry);
+  toolParts.set(entry.toolCallId, { kind: "tool-part", ...entry });
+  rebuildSnapshot();
+  emit();
+}
+
+/**
+ * Publish a static card. Once-per-conversation by construction: a card id
+ * already present keeps its first payload and position (no-op), and a
+ * dismissed id stays gone until the next `resetSidebar()`. Safe to call from
+ * every trigger fire — multi-mention conversations, rehydrate replays and
+ * StrictMode double-effects all collapse to a single entry.
+ */
+export function publishStaticCard(
+  id: string,
+  payload: StaticCardPayload,
+): void {
+  if (dismissedStaticCards.has(id) || staticCards.has(id)) return;
+  staticCards.set(id, { kind: "static-card", id, payload });
+  rebuildSnapshot();
+  emit();
+}
+
+/**
+ * Dismiss a static card for the rest of the conversation. Removes the entry
+ * and blocks re-publication of the same id until `resetSidebar()`.
+ */
+export function dismissStaticCard(id: string): void {
+  dismissedStaticCards.add(id);
+  if (!staticCards.delete(id)) return;
   rebuildSnapshot();
   emit();
 }
 
 /**
  * Clear the projection. Called by the thread-reset paths (fresh-chat, expired
- * rehydrate) so the sidebar empties alongside the transcript. No-op when
- * already empty so we don't wake subscribers for nothing.
+ * rehydrate) so the sidebar empties alongside the transcript. Also clears the
+ * static-card dismissals — a fresh conversation can re-earn the card. No
+ * subscriber notification when nothing was visible, so we don't wake them
+ * for nothing.
  */
 export function resetSidebar(): void {
-  if (entries.size === 0) return;
-  entries.clear();
+  const hadVisibleEntries = toolParts.size > 0 || staticCards.size > 0;
+  toolParts.clear();
+  staticCards.clear();
+  dismissedStaticCards.clear();
+  if (!hadVisibleEntries) return;
   rebuildSnapshot();
   emit();
 }
@@ -130,8 +216,9 @@ export function subscribeSidebar(listener: () => void): () => void {
 }
 
 /**
- * Current ordered snapshot. Referentially stable between mutations.
+ * Current ordered snapshot (static cards first, then tool-parts in arrival
+ * order). Referentially stable between mutations.
  */
-export function getSidebarSnapshot(): readonly SidebarWidgetEntry[] {
+export function getSidebarSnapshot(): readonly SidebarEntry[] {
   return snapshot;
 }
