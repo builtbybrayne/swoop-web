@@ -424,10 +424,19 @@ export function createOrchestratorTransport<
         }
       }
 
+      // B.t12 — attach the visitor's clock on every request so the agent can
+      // reason about relative dates ("February 2027 is ~8 months away").
+      // Read fresh each turn: correct even across midnight or DST changes.
+      const clientTime: { iso: string; timeZone: string } = {
+        iso: new Date().toISOString(),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
+
       const body = JSON.stringify({
         ...(extraBody ?? {}),
         sessionId,
         message: latestUserMessage,
+        clientTime,
       });
 
       let response: Response;
