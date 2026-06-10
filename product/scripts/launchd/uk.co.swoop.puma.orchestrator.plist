@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  uk.co.swoop.puma.orchestrator.plist
+  launchd service descriptor for @swoop/orchestrator on the Puma demo Mac Mini.
+
+  Install / uninstall:
+    bash product/scripts/setup-demo-services.sh install
+    bash product/scripts/setup-demo-services.sh uninstall
+
+  Logs:
+    stdout → ~/Library/Logs/puma/orchestrator.log
+    stderr → ~/Library/Logs/puma/orchestrator.err.log
+
+  Behaviour:
+    • Restarts automatically if the process exits (KeepAlive true).
+    • NO file-watch: runs the pre-built dist/index.js (requires
+      `npm run build -w @swoop/orchestrator` before install).
+    • ThrottleInterval 5s prevents restart storms on crash loops.
+    • Connector must be up before orchestrator starts; the setup script loads
+      connector first then waits 3s before loading orchestrator.
+
+  npm is deliberately BYPASSED: `node dist/index.js` is the package's `start`
+  script without the npm wrapper. The npm shell wrapper does not propagate
+  SIGTERM to its child (see gotchas.md "npm shell wrapper doesn't propagate
+  SIGTERM cleanly") — under npm, launchctl unload would orphan the node child
+  and leave :8080 occupied. With node as the supervised process, SIGTERM
+  reaches the service directly and graceful shutdown works. CWD is the
+  orchestrator package dir so dotenv finds orchestrator/.env. Keep
+  ProgramArguments in sync with the `start` script in orchestrator/package.json
+  if that ever changes.
+
+  IMPORTANT: WorkingDirectory and ProgramArguments paths are absolute and
+  must match the actual checkout path on the Mini. The setup script writes
+  this plist with the correct path substituted — do not hand-edit after install.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>uk.co.swoop.puma.orchestrator</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>dist/index.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>PRODUCT_DIR_PLACEHOLDER/orchestrator</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>LOGS_DIR_PLACEHOLDER/orchestrator.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>LOGS_DIR_PLACEHOLDER/orchestrator.err.log</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
