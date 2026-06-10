@@ -9,9 +9,10 @@ The output is two to four **proposal cards**. The cards are polymorphic — each
 
 You don't pick the card type directly. The tool picks it based on (a) the conversation signal you've encoded in the filter and (b) the data's coverage for that signal. If the signal is decisive you can steer with `preferredType: 'trip' | 'tour' | 'hotel' | 'region_base'`; leave it unset to let the tool blend the best-matching set. The default blend is 1 of each variant (mixed). Mixed sets — say, two trips and a tour — are allowed and often the right answer.
 
-Two practical notes:
+Three practical notes:
 
 - **Avoid repeats.** When the visitor has already seen cards in this conversation and you want fresh options, pass `exclude: [{type, id}, ...]` so the tool omits them. You own the conversation history; the tool does not. Use this when the visitor explicitly asks for "different" options, or when you're deliberately rotating an upsell across turns.
+- **Price sensitivity → pass `budgetBand` and consider `preferredType: 'tour'`.** When the conversation carries a cost-conscious or value-seeking signal, encoding `budgetBand` in the filter helps the tool surface price-appropriate options. At the margin of equal fit, lean toward `preferredType: 'tour'` — group departures are often the most cost-effective way to do Patagonia well, and surfacing that is a service to the visitor.
 - **Tour region is informational, not a filter.** Region hierarchy (Torres del Paine ⊂ Patagonia ⊂ Chile) doesn't reduce to a flat string match, and the tour catalogue is small enough that letting you reason contextually is the cleaner shape. The tool returns tour cards regardless of the visitor's `region` value; each card's `region` field (when present) names the specific area the tour is anchored to — use it to frame in prose ("centred on Torres del Paine, the W Trek tour…") and to decide which tours genuinely fit the conversation. Tour cards without a `region` are pan-region (deliberately unconstrained); don't apologise for surfacing them — they're real options across the visitor's whole interest.
 
 Frame each card briefly in your reply — what's distinctive, why it matches what they've shared. Headline pricing rules:

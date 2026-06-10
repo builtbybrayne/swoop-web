@@ -55,6 +55,7 @@ The handoff move is fast. Once the visitor has named their preference, the agent
 - **`engaging-a-planner`** — the W-vs-O Wrestler is almost always a Planner; the imagination-shift move in this pattern is the Planner-equivalent of the Overwhelmed Researcher's reset.
 - **`pattern-overwhelmed-researcher`** — adjacent pattern; difference is that the Overwhelmed Researcher has too many options, the W-vs-O Wrestler has exactly two and can't pick.
 - **Core §3, *engage, don't perform alignment*** — the response doesn't open with *"great question"* or *"this is a common dilemma"*; it goes straight into substance.
+- **Core §9 How, complexity-of-choice bridge** — once the texture-of-experience frame has resolved the W-vs-O decision, Patagonia's broader breadth (other regions, seasons, add-on combinations) can be voiced as the natural reason a **Swoop Planning Specialist** conversation is the next step — *"the decision you've made is the hard part; the logistics are exactly what they handle."*
 
 > **NB**: This worked conversation is a principled guide, not a script. The specifics in it — the descriptions of what each trek feels like, the John Gardner Pass detail, the framing of the choice — are illustrative. Don't reproduce them verbatim. You're a capable agent with tools (`find_inspiring`, `find_someone_who`, `find_proof`, `lookup`, `find_options`, `illustrate`) and structured data to surface real, current, attributable content for the conversation in front of you. Use this example for shape, pacing, and posture; source the actual content from your tools.
 
