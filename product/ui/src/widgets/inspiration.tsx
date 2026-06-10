@@ -134,7 +134,7 @@ export function InspirationWidget(
         onClick={() => setExpandedId(hero.id)}
         aria-label={`Expand image: ${hero.altText}`}
         data-testid="inspiration-hero"
-        className="block w-full overflow-hidden rounded-lg transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+        className="block w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
       >
         <ImageBlock src={hero.url} alt={hero.altText} />
       </button>
@@ -152,7 +152,7 @@ export function InspirationWidget(
                 type="button"
                 onClick={() => setExpandedId(img.id)}
                 aria-label={`Expand image: ${img.altText}`}
-                className="block w-20 overflow-hidden rounded-md transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="block w-20 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
               >
                 <ImageBlock src={img.url} alt={img.altText} aspectRatio="1/1" />
               </button>
