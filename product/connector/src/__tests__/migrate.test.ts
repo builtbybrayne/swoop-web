@@ -36,7 +36,7 @@ const PLACEHOLDER_MIGRATIONS = new Set<string>([
 ]);
 
 describe('migrate.ts setup', () => {
-  it('migrations directory contains the expected SQL files (001–015)', () => {
+  it('migrations directory contains the expected SQL files (001–016)', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith('.sql'))
       .sort();
@@ -57,6 +57,7 @@ describe('migrate.ts setup', () => {
       '013_customer_tip_table.sql',
       '014_customer_tip_drop_topic_tags.sql',
       '015_customer_tip_drop_classified_at.sql',
+      '016_puma_session.sql',
     ]);
   });
 
