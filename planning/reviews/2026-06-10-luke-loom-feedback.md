@@ -62,8 +62,8 @@ The eight Tier-3 plans authored from this ledger:
 ### D2 — Price ranges broad; pricing guidance should come from the Product Library (not ingested today)
 
 **Luke / Alastair**: narrow ranges induce sticker shock; the Product Library is the right pricing source; ingesting it is a work item worth Swoop sign-off; we did partial exploration in the Phase-1 PoC so it's not from scratch.
-**Stance**: agree on both halves. Broad-bands is prompt policy (lands now, free). Product Library ingestion is a **new scoped work item outside the current fence** — needs access, a data exploration pass, and commercial sign-off. It also plausibly improves D5 (card relevance) de facto, which strengthens the pitch.
-**Disposition**: CONTENT (broad bands) → [content plan §2.4](../03-exec-content-t6-luke-loom.md). EXTERNAL (Product Library access + sign-off) → [questions.md](../../questions.md) "Product Library ingestion". Commercial-fence note captured in [inbox.md](../../inbox.md) 2026-06-10.
+**Stance**: agree on the broad-bands half — prompt policy, lands now, free. Product Library ingestion is deliberately **not planned this round** (Alastair, 2026-06-10): it's a non-trivial scope addition that needs a priorities conversation with Luke first. Alastair is proposing to Luke by email that we **prioritise production**, and return to data-layer investments like this if and when there's evidence they're suppressing **marketing conversion rates** — conversion being the project's real aim. Until that gate opens, the standing answer is the in-fence mitigation set: provenance dates + broad-band/contemporaneity policy.
+**Disposition**: CONTENT (broad bands) → [content plan §2.4](../03-exec-content-t6-luke-loom.md). PARKED (production-first; gate = conversion-rate evidence) + EXTERNAL (Luke's agreement, via Alastair's email) → [questions.md](../../questions.md) "Production-first prioritisation". Commercial framing in [inbox.md](../../inbox.md) 2026-06-10.
 
 ### D3 — Image annotations weak ("immense landscape" isn't); 3-image block → single large image; don't display annotations
 
@@ -81,7 +81,7 @@ The eight Tier-3 plans authored from this ledger:
 
 **Luke**: concept good; relevance hard. Alastair: this is data-quality-in/data-quality-out plus a vector-search ceiling; a proper fix needs agentic data pipelines + richer search — a data-engineer engagement (recommendation available), not a cost-effective blocker to trialling in production; Product Library integration likely improves it de facto.
 **Stance**: agree with the park — with two cheap wins first: (1) **`budgetBand` audit** — the filter exists end-to-end ([find_options.ts](../../product/connector/src/tools/find_options.ts) → `BUDGET_CEILING` in every card query incl. hotels) but the Explorer-on-a-budget-query symptom says either the agent isn't passing it or hotel price data is NULL (filter no-ops). Probe + prompt-nudge are hours, not days. (2) Region coherence: the blend's `ORDER BY RANDOM()` variety is by design, but a region-filtered conversation shouldn't surface off-region properties — verify region filters apply on the blend path.
-**Disposition**: cheap wins → [retrieval-provenance plan §5 verification probes](../03-exec-crosscut-magical-poincare-retrieval-provenance.md) + [content plan §2.4 budgetBand nudge](../03-exec-content-t6-luke-loom.md). Strategic fix → PARKED + EXTERNAL (data-engineer recommendation + Product Library — for commercials conversation; [inbox.md](../../inbox.md) 2026-06-10).
+**Disposition**: cheap wins → [retrieval-provenance plan §5 verification probes](../03-exec-crosscut-magical-poincare-retrieval-provenance.md) + [content plan §2.4 budgetBand nudge](../03-exec-content-t6-luke-loom.md). Strategic fix → PARKED on the same production-first basis as D2 (Alastair's email to Luke): better data + more sophisticated search methodologies are non-trivial builds that only earn priority on conversion-rate evidence. The data-engineer recommendation stays on file for when/if that gate opens; no planning happens now.
 
 ---
 
@@ -164,7 +164,7 @@ The eight Tier-3 plans authored from this ledger:
 - [ ] L3 formatting calibration — [content plan](../03-exec-content-t6-luke-loom.md)
 - [ ] D1 provenance dates (plumbing) — [retrieval-provenance plan](../03-exec-crosscut-magical-poincare-retrieval-provenance.md)
 - [ ] D1/D2 pricing policy (prompt) — [content plan](../03-exec-content-t6-luke-loom.md)
-- [ ] D2 Product Library — questions.md ask sent / answered
+- [ ] D2/D5 production-first deferral — Luke aligned via Alastair's email (no planning until conversion-rate evidence)
 - [ ] D3 single image + hidden annotations — [visual-channel plan](../03-exec-crosscut-magical-poincare-visual-channel.md)
 - [ ] D4 one-page emphasis — [visual-channel plan](../03-exec-crosscut-magical-poincare-visual-channel.md)
 - [ ] D5 budgetBand audit probes — [retrieval-provenance plan §5](../03-exec-crosscut-magical-poincare-retrieval-provenance.md)

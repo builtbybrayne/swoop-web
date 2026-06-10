@@ -6,7 +6,7 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ## Status (2026-06-10 — Luke feedback round 2 triaged; ratification is the gate)
 
-**The active work queue is the [2026-06-10 Luke Loom feedback ledger](planning/reviews/2026-06-10-luke-loom-feedback.md)** — 16 items triaged, 8 DRAFT Tier-3 plans authored, none ratified or executed yet. Next action: Alastair ratifies (or amends) the plans, then dispatch — the ledger's sequencing note says which can run in parallel. Three new Swoop asks live in [questions.md](questions.md) (Planning Specialists wording / 4 Group Tours / Product Library). Everything below this section predates 2026-05-18 and lags reality — see the [2026-05-27 state-of-play](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the most recent verified build snapshot.
+**The active work queue is the [2026-06-10 Luke Loom feedback ledger](planning/reviews/2026-06-10-luke-loom-feedback.md)** — 16 items triaged, 8 DRAFT Tier-3 plans authored, none ratified or executed yet. Next action: Alastair ratifies (or amends) the plans, then dispatch — the ledger's sequencing note says which can run in parallel. Three new Swoop asks live in [questions.md](questions.md) (Planning Specialists wording / 4 Group Tours / production-first data-layer prioritisation — no Product Library or search-depth planning until Luke's priorities conversation lands). Everything below this section predates 2026-05-18 and lags reality — see the [2026-05-27 state-of-play](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the most recent verified build snapshot.
 
 ---
 

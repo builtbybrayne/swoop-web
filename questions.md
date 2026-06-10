@@ -191,16 +191,17 @@ Luke (10 Jun Loom): there are **4 Swoop Group Tours**, listed on the Swoop Group
 
 Why it matters: the [content plan](planning/03-exec-content-t6-luke-loom.md) adds price-consciousness as a tour-surfacing signal now, but the agent can't privilege "the 4" until we can identify them in data.
 
-### Product Library ingestion — access + sign-off — Luke / Julie, mechanics via Thomas / Richard (raised 2026-06-10)
+### Production-first prioritisation of data-layer investments — Luke (Alastair emailing, 2026-06-10)
 
-Luke's pricing concern (10 Jun: stale blog prices, sticker-shock risk — [ledger items D1/D2](planning/reviews/2026-06-10-luke-loom-feedback.md)) points at the **Product Library** as the authoritative pricing source. It is not in the current ingest (the SQL dump covers the website CMS). Proposed work item, needing Swoop sign-off as a scope addition:
+Luke's 10 Jun feedback surfaced two non-trivial data-layer items ([ledger D2 + D5](planning/reviews/2026-06-10-luke-loom-feedback.md)): **Product Library ingestion** (the authoritative pricing source — website/blog content can't guarantee contemporary figures) and **trip-card relevance** (needs better data *and* more sophisticated search methodologies than vector search alone). **Neither is being planned now** — both are deliberate deferrals pending a priorities conversation.
 
-1. **Access**: where does the Product Library live and what's the export/access path? (Phase-1 PoC did partial exploration of Swoop product data — not from scratch.)
-2. **Scope sign-off**: a short exploration pass (understand the data) → ingest + mapping → pricing surfaces the agent can trust. Likely also improves trip-card relevance de facto (richer attributes than the website data).
+Alastair is proposing to Luke by email: **prioritise getting Puma into production**, and come back to these if and when there's evidence they're suppressing **marketing conversion rates** — conversion being the project's real aim.
 
-Why it matters: contemporaneous pricing can't be guaranteed from website/blog content alone; the interim policy (broad bands, dated-source rule) is a stopgap. Also feeds the trip-card relevance conversation (ledger D5).
+The ask: Luke's agreement on that prioritisation (or a steer that one of these matters enough to pull forward — which then becomes a scoped commercial conversation, not a quiet absorption).
 
-Where it lands: Tier 2 chunk C extension; commercial fence note in [inbox.md](inbox.md) 2026-06-10.
+In the meantime, the standing in-fence mitigations ship with the current wave: provenance dates + broad-band/contemporaneity pricing policy ([retrieval-provenance plan](planning/03-exec-crosscut-magical-poincare-retrieval-provenance.md) + [content plan §2.4](planning/03-exec-content-t6-luke-loom.md)), and the cheap budgetBand/region probes (ledger D5).
+
+Why it matters: keeps the build pointed at production and conversion rather than speculative data work — and names the evidence gate so the deferral stays principled instead of forgotten.
 
 ---
 
