@@ -39,6 +39,25 @@ export default defineConfig({
       },
     },
   },
+  // preview: mirrors server.proxy so `vite preview` (used by `npm run demo`)
+  // preserves the /api/* → :8080 proxy contract. vite preview reads
+  // config.preview.proxy, NOT config.server.proxy — without this block the
+  // built UI would 404 on every API call. Verified in vite 5.4.11 source:
+  // chunks/dep-CB_7IfJ-.js `const { proxy } = config.preview`.
+  preview: {
+    port: 5173,
+    strictPort: true,
+    host: true,
+    // @ts-expect-error — same Vite 5.4.11 types lag as server.allowedHosts above.
+    allowedHosts: [".ts.net"],
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
+  },
   build: {
     outDir: "dist",
     sourcemap: true,
