@@ -159,22 +159,24 @@ The eight Tier-3 plans authored from this ledger:
 
 ## Checklist (tick at merge of each item's work)
 
-- [ ] L1 form-after-text — [handoff-form plan](../03-exec-crosscut-magical-poincare-handoff-form.md)
-- [ ] L2 page-title links — [retrieval-provenance plan](../03-exec-crosscut-magical-poincare-retrieval-provenance.md)
-- [ ] L3 formatting calibration — [content plan](../03-exec-content-t6-luke-loom.md)
-- [ ] D1 provenance dates (plumbing) — [retrieval-provenance plan](../03-exec-crosscut-magical-poincare-retrieval-provenance.md)
-- [ ] D1/D2 pricing policy (prompt) — [content plan](../03-exec-content-t6-luke-loom.md)
-- [ ] D2/D5 production-first deferral — Luke aligned via Alastair's email (no planning until conversion-rate evidence)
-- [ ] D3 single image + hidden annotations — [visual-channel plan](../03-exec-crosscut-magical-poincare-visual-channel.md)
-- [ ] D4 one-page emphasis — [visual-channel plan](../03-exec-crosscut-magical-poincare-visual-channel.md)
-- [ ] D5 budgetBand audit probes — [retrieval-provenance plan §5](../03-exec-crosscut-magical-poincare-retrieval-provenance.md)
-- [ ] P1 specialist terminology (prompt + UI) — [content plan](../03-exec-content-t6-luke-loom.md) + [handoff-form plan](../03-exec-crosscut-magical-poincare-handoff-form.md)
-- [ ] P1 terminology card — [terminology-card plan](../03-exec-crosscut-magical-poincare-terminology-card.md)
-- [ ] P2 complexity-of-choice — [content plan](../03-exec-content-t6-luke-loom.md)
-- [ ] P3 group-tours price signal — [content plan](../03-exec-content-t6-luke-loom.md); 4-tour identification — questions.md
-- [ ] A1 browser timestamp — [B.t12 plan](../03-exec-agent-runtime-t12.md)
-- [ ] U1–U4 form tweaks — [handoff-form plan](../03-exec-crosscut-magical-poincare-handoff-form.md)
-- [ ] B1 investigation + demo hardening — [demo-stability plan](../03-exec-crosscut-magical-poincare-demo-stability.md)
-- [ ] B1 durable sessions (B.t13) — ✅ ratified + promoted 2026-06-10 ("postgres sessions asap") → [03-exec-agent-runtime-t13.md](../03-exec-agent-runtime-t13.md); execution pending
+**2026-06-10 execution wave (same day)**: all eight plans executed by a 7-agent background swarm + one staged dispatch, merged sequentially to `main` (`879d0d7` → `727c4ac`), fresh-install verification green at tip (1,303 tests + 26 skipped across six workspaces). Per-plan execution logs live at the bottom of each plan file. Residual operator steps marked ⚠ below.
 
-**Sequencing note**: the content plan and the provenance plan both inform the agent about dates/pricing — the provenance plan owns *tool descriptions* (`cms/prompts/tools/*/description.md`), the content plan owns *system prompt* (`cms/prompts/system/*`). No file overlap; safe to parallelise. The handoff-form, visual-channel, terminology-card, B.t12 and demo-stability plans are mutually independent. All eight are DRAFT pending Alastair's HITL ratification.
+- [x] L1 form-after-text — ✅ merged `879d0d7` (CSS `order-last`; D.poincare-1)
+- [x] L2 page-title links — ✅ merged (`727c4ac` data + `f56834c` widgets; 100% of titleable rows carry titles — 619/665 inspire, 906 FAQ rows headline via `question` instead; anchors fall back gracefully where untitled)
+- [x] L3 formatting calibration — ✅ merged `bdc5272` · ⚠ Alastair editorial pass pending on `b90ff8b..e17d7ba`
+- [x] D1 provenance dates (plumbing) — ✅ merged `727c4ac` · ⚠ blog corpus currently ABSENT from `puma_dev` (0 rows) so blog-date branches sit idle until blog re-ingest (chip raised); page-derived rows undated by design (page dates in the dump are ETL timestamps, not editorial)
+- [x] D1/D2 pricing policy (prompt) — ✅ merged `bdc5272` (contemporaneity MUST + broad bands + C.14-consistent) · ⚠ editorial pass pending · NB Luke's stale "$300–350/day" actually lives in an **undated FAQ row** — guarded by the new undated rule; source-side correction asked in questions.md
+- [ ] D2/D5 production-first deferral — Luke aligned via Alastair's email (no planning until conversion-rate evidence)
+- [x] D3 single image + hidden annotations — ✅ merged `f56834c` (hero + alt-only; illustrate default 1 server-side; D.poincare-2/3)
+- [x] D4 one-page emphasis — ✅ merged `f56834c` (lookup renders top source only)
+- [x] D5 budgetBand audit probes — ✅ done; findings in the [provenance plan execution log](../03-exec-crosscut-magical-poincare-retrieval-provenance.md): `hotel_pricing` has 0 rows (budget filter no-ops on hotels — the Explora case explained), 28.5% of trips pass budget filters, `budgetBand` was under-described to the agent (now nudged via the content pass). Reinforces the Product-Library-deferral case.
+- [x] P1 specialist terminology (prompt + UI) — ✅ merged `bdc5272` + `879d0d7`; term centralised in `product/ui/src/shared/specialist-term.ts` · ⚠ Luke's final wording pending (one-edit rename)
+- [x] P1 terminology card — ✅ merged `624cb56` (D.poincare-4) · ⚠ card copy = DRAFT pending Luke/Julie sign-off (JSON-only swap)
+- [x] P2 complexity-of-choice — ✅ merged `bdc5272`
+- [x] P3 group-tours price signal — ✅ merged `bdc5272`; 4-tour identification — still open in questions.md
+- [x] A1 browser timestamp — ✅ merged `001f87b` (dateline in user-message parts — prompt-cache-safe; B.poincare-1) · ⚠ live cache-read + spoofed-clock smokes pending operator
+- [x] U1–U4 form tweaks — ✅ merged `879d0d7`
+- [x] B1 demo hardening (Part B) — ✅ merged `343d1e2` (vite preview + launchd + runbook; OPS.poincare-1) · ⚠ Mini-side install + Part A investigation remain operator steps
+- [x] B1 durable sessions (B.t13) — ✅ ratified, executed, merged `abe299b` (+ merge-time fixes `e28e9f3` supertest / `90211e2` migration-list pin); `puma_session*` tables live on `puma_dev`; restart-survival integration-tested · ⚠ live browser restart smoke pending operator (env in the plan's execution log)
+
+**Sequencing note (historical)**: the wave ran the content + provenance plans in parallel (tool descriptions vs system prompt — no file overlap held), with B.t12 staged behind B.t13 (shared `chat.ts`/config surface — the staging avoided a real conflict). One cross-branch conflict materialised as predicted (`migrate.test.ts` migration manifest) and resolved to the union.

@@ -203,6 +203,14 @@ In the meantime, the standing in-fence mitigations ship with the current wave: p
 
 Why it matters: keeps the build pointed at production and conversion rather than speculative data work — and names the evidence gate so the deferral stays principled instead of forgotten.
 
+### Stale cost figures in FAQ content — Luke / Julie (raised 2026-06-10)
+
+The 2026-06-10 provenance work traced Luke's "$300–350/day" complaint to its actual source: it is **not** the 2011 blog post — it lives in an **undated FAQ row** ("How much does hiking in Patagonia cost?"), which is the top retrieval hit for cost-shaped questions. FAQ content carries no editorial date in the CMS dump, so the agent's new dated-source rule can only treat it as *undated* (usable for colour, not citable figures) — it cannot age it out the way it now can with blog content.
+
+The ask: have someone Swoop-side **correct or retire the stale figures in that FAQ entry** (and any sibling cost FAQs) at source. One content edit fixes what no amount of agent-side guardrail fully can; the corrected row flows in at the next weekly SQL dump.
+
+Why it matters: pricing is the highest-sensitivity accuracy item in Luke's feedback; the guardrail now prevents the agent *citing* the stale figure, but the right answer to "what does it cost?" needs a current source to exist.
+
 ---
 
 ## Closed
