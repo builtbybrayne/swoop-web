@@ -68,3 +68,84 @@ Extend §5's pricing rule (the "MAY speak in published cost bands" paragraph):
 ## 5. Estimate
 
 ~0.5 day authoring + smokes. Editorial pass HITL.
+
+---
+
+## 2026-06-10 execution log
+
+**Agent**: Claude Sonnet 4.6 in worktree `agent-a2ba5a4157aecfb37`, branch `claude/magical-poincare-53e479`. Merged from `64dd1320bdef673ee22991c979062538b834ae3c` (fast-forward).
+
+### What changed and where
+
+#### §2.1 — Formatting calibration (commit `b90ff8b`)
+
+**`product/cms/prompts/system/00_why.md`** (1 file, +9/-2 lines):
+- §3 pillar 3: replaced `"Bold sparingly — a word or two to help a skimming eye is fine (see §4); bold for emphasis or excitement is not"` with `"Formatting should serve the eye — every reply carries some structure; the detail of how is in §4"`. Removes the prescriptive minimalism from pillar-3 text; delegates to §4.
+- §4 "Shape of a reply": replaced the single "Bold sparingly" paragraph with a four-bullet positive spec:
+  - Italics for named places and regions consistently across all replies
+  - Bold for promise-phrases (~1–3 per reply), calls-to-action, and **Swoop Planning Specialists** brand term
+  - Ceiling retained (MUST NOT): never whole sentences; remove bold if it loses nothing
+  - Inline HTML comment marking this as client-led (Luke Loom 2026-06-10, supersedes round-1 `c93262a` rule); instructs future editors not to revert without a new client pass
+- Word-count delta: §4 paragraph grew from ~85 words to ~130 words.
+
+#### §2.2 — Specialist terminology (commit `3c2803d`)
+
+**`product/cms/prompts/system/00_why.md`** (8 files total, +24/-22 lines):
+- §1 "A note on Swoop's people": replaced the 1-sentence note with a 3-paragraph block establishing **Swoop Planning Specialists** as the canonical bold brand term; adding first-mention introduction guidance (one clause of context, not a biography); and the UI terminology-card note (agent gives intro clause, card does the rest — **SHOULD NOT** replicate the full pitch).
+- §1 identity sentence: `"a Swoop specialist — someone who designs trips like theirs for a living"` → `"a **Swoop Planning Specialist** — someone whose full-time job is designing trips like theirs"`.
+- §5 redirect lines (two specimen phrasings): updated to use `**Swoop Planning Specialists**` and `**Swoop Planning Specialist**`.
+- §9 How frame paragraph: `"Swoop's specialists design trips"` → `"**Swoop Planning Specialists** design trips"`.
+- §9 How three template lines: all updated to use bold canonical form.
+- §9 NB note: updated "specialist introductions" → "Specialist introductions"; `real specialists` → `real Specialists`.
+
+**`product/cms/prompts/tools/handoff/description.md`** (+1/-1): `"a real Swoop specialist"` → `"a real **Swoop Planning Specialist**"`.
+
+**Skills** (6 files): agent-voiced lines in worked examples and key framing sentences updated in `tailor-made-prospect-posture`, `engaging-a-browser`, `engaging-a-planner`, `pattern-overwhelmed-researcher`, `pattern-w-vs-o-wrestler`, `pattern-budget-solo-traveller`. Internal commentary prose (explaining what the agent is doing) left as bare "specialist/s" — the brand term in commentary would be pedantic. Judgment call: the sweep applies to lines where the *agent's voice* uses the term.
+
+#### §2.3 — Persuasion levers (commit `a9457f8`)
+
+**`product/cms/prompts/system/00_why.md`** (+13/-2 lines):
+- §9 How: added the complexity-of-choice bridge paragraph (SHOULD) immediately after the opening frame. Names the Patagonia breadth pattern explicitly, gives the worked phrasing (*"this is exactly the kind of untangling our **Swoop Planning Specialists** do"*), includes the SHOULD NOT caveat (don't manufacture overwhelm), and forward-links to `pattern-overwhelmed-researcher` + `pattern-w-vs-o-wrestler`.
+- §6 Tour lean: added a second paragraph on price-consciousness as a tour-surfacing signal. Explicit honest-guard: shoestring/backpacker triage posture unchanged.
+
+**`product/cms/prompts/skills/group-tour-surfacing-for-solos/SKILL.md`** (+18/-2 lines):
+- Frontmatter `description`: updated to include price-signal triggers alongside solo triggers; added explicit DO NOT for shoestring (use triage-to-referral). Description now uses single-quoted string per the js-yaml colon-space gotcha rule (description contains `: ` sequences).
+- Recognition signals: added "Price-consciousness and value-seeking" block paragraph with explicit signal examples.
+- Sign-off: added data-caveat NB about `tour_card` table (11 rows) vs official "Swoop Group Tours" 4-product set; instructs agent not to claim exact counts until Swoop provides the mapping.
+
+**`product/cms/prompts/skills/pattern-overwhelmed-researcher/SKILL.md`** (+4/-0): added cross-reference to §9 How complexity-of-choice bridge.
+
+**`product/cms/prompts/skills/pattern-w-vs-o-wrestler/SKILL.md`** (+4/-0): added cross-reference to §9 How complexity-of-choice bridge.
+
+**`product/cms/prompts/tools/find_options/description.md`** (+4/-2): changed "Two practical notes" → "Three practical notes"; inserted new second bullet on price-sensitivity → pass `budgetBand` + consider `preferredType: 'tour'`.
+
+#### §2.4 — Pricing policy (commit `e17d7ba`)
+
+**`product/cms/prompts/system/00_why.md`** (+11/-1 lines):
+- §5 MUST NOT "Quote specific prices" bullet: expanded the "MAY speak in published cost bands" line into a four-sub-rule block:
+  - Contemporaneity (MUST): ≤24 month guideline, `publishedAt` field, no-figure rule if no contemporary source, MUST NOT fall back to stale corpus
+  - Breadth (SHOULD): deliberately broad ranges; pair with what moves them; worked shape example
+  - Steering: `lookup` preferred for cost-type questions; newest source wins on title collision; NB note marks stale-blog example as shape-only
+  - C.14 consistency: card-level `base_price` "from £X" unaffected; policy governs prose figures from retrieved content only
+
+`pattern-budget-solo-traveller` NB already contains `"The price ranges in particular should be treated with care; reproduce them only if your tools confirm they're current"` — sufficient, no additional edit needed. `engaging-a-planner` has no stale pricing prose.
+
+### Options chosen between plan alternatives
+
+- §2.1: No change to §3 other than removing the prescriptive bold-sparingly sentence; the new "Formatting should serve the eye" line is deliberately light so §4 remains the single source of truth on the spec. This avoids the §3/§4 contradiction that existed after round-1.
+- §2.2: Bare "specialist/s" retained in internal commentary prose (explaining what's happening); only agent-voiced lines updated. Keeps commentary readable without the brand term repeating every paragraph.
+- §2.3: Complexity-of-choice bridge placed in §9 How (not §9 When), since it's a *framing* note for how to present the handoff, not a new *when* trigger.
+- §2.4: No additional edits to `engaging-a-planner` or `pattern-budget-solo-traveller` beyond existing NB notes — both are already adequate; adding further pricing policy text would be redundant.
+
+### Test results (2026-06-10)
+
+- **Orchestrator unit tests**: 208 passed / 0 failed across 18 test files (vitest run, `@swoop/orchestrator`). Includes `prompt-loader.test.ts` (12 tests) and `factory.test.ts` (skills loading).
+- **YAML parse check**: 14 skills parsed cleanly via js-yaml (`.gitkeep` excluded — not a skill folder). All `name` and `description` fields present and valid. `group-tour-surfacing-for-solos` description correctly single-quoted (contains `: ` sequence).
+
+### Pending live smokes (operator-led, not run here)
+
+Per plan §4 verification items 2–3:
+- **(a)** Generic opener → reply contains italic place names + ≥1 bold key phrase, no whole-sentence bold.
+- **(b)** Price-conscious opener → tours surface or are voiced, `budgetBand` passed (check tool args in dev trace), broad band with no stale figure.
+- **(c)** Overwhelm-shaped message → complexity-of-choice bridge voiced with bold brand term.
+- **(d)** Harness: re-run style cluster + `agent-2xx` pattern scenarios; add/adjust assertions where cheap.
