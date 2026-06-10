@@ -50,11 +50,10 @@ export const DEFAULT_CLASSIFIER_MODEL = 'claude-haiku-4-5-20251001';
 export const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /**
- * Session backend selector. `in-memory` is the only backend wired in B; the
- * rest are reserved names for later chunks so we can flip without a schema
- * change. Unknown values fail validation cleanly.
+ * Session backend selector. `in-memory` is the default; `postgres` is B.t13.
+ * Unknown values fail validation cleanly.
  */
-export const SessionBackend = z.enum(['in-memory', 'adk-native', 'vertex-ai', 'firestore']);
+export const SessionBackend = z.enum(['in-memory', 'adk-native', 'postgres', 'vertex-ai', 'firestore']);
 export type SessionBackend = z.infer<typeof SessionBackend>;
 
 /**
@@ -137,6 +136,12 @@ export const configSchema = z
     SESSION_BACKEND: SessionBackend.default('in-memory'),
     SESSION_TTL_IDLE_HOURS: z.coerce.number().int().positive().default(24),
     SESSION_TTL_ARCHIVE_DAYS: z.coerce.number().int().positive().default(7),
+    // Connection URL for postgres session backend (B.t13). Required when
+    // SESSION_BACKEND=postgres. Falls back to DATABASE_URL if absent so
+    // operators can share the connector's DB URL without duplication.
+    // Empty string = not set; the cross-field refine below enforces presence
+    // when postgres is selected.
+    ORCHESTRATOR_DATABASE_URL: z.string().trim().default(''),
 
     // --- Connector -------------------------------------------------------
     // Default points at the real @swoop/connector service on :3002 (per
@@ -232,6 +237,20 @@ export const configSchema = z
       .nonnegative()
       .default(60_000),
   })
+  // Postgres session backend requires a database URL. Fail-fast so a
+  // misconfigured SESSION_BACKEND=postgres deploy doesn't reach a user turn
+  // before the error surfaces.
+  .refine(
+    (cfg) =>
+      cfg.SESSION_BACKEND !== 'postgres' ||
+      cfg.ORCHESTRATOR_DATABASE_URL.length > 0,
+    {
+      path: ['ORCHESTRATOR_DATABASE_URL'],
+      message:
+        'SESSION_BACKEND=postgres requires ORCHESTRATOR_DATABASE_URL. ' +
+        'Set it in .env (e.g. postgresql://al:pick-a-password@localhost:5432/puma_dev).',
+    },
+  )
   // Warm-pool TTL must be strictly shorter than the idle-session TTL.
   // A warm entry outliving the session sweeper is a footgun: the pool could
   // hand out an id the sweeper archived between ticks. Fail-fast at config
