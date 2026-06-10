@@ -12,10 +12,11 @@
 //
 // The visitor sees: below Sonnet's framing prose, a "pulled-quote" treatment
 // per proof — small claim lead-in (when present), the evidence text in
-// emphasised italic body type, an inline "Read more →" link to the
-// canonical source (new tab). NOT a card with "CLAIM:" / "EVIDENCE:" labels;
-// NOT a coloured-border alert box; NOT a shield/badge. The visual
-// emphasis is *typographic*, not structural.
+// emphasised italic body type, an inline link to the canonical source (new
+// tab) — "Find out more about {title} →" when the proof carries the
+// retrieval-provenance source title, "Read more →" otherwise. NOT a card
+// with "CLAIM:" / "EVIDENCE:" labels; NOT a coloured-border alert box; NOT
+// a shield/badge. The visual emphasis is *typographic*, not structural.
 //
 // What the visitor does next: reads, accepts, returns to the conversation.
 // A small minority click through to verify or forward to a sceptical
@@ -27,9 +28,11 @@
 // Per `planning/03-exec-chat-surface-t9.md` §"`find_proof`" (HITL Q1
 // reversal — quiet pulled-quote, not card; not no-widget) + the
 // conversational-moment calibration in
-// `product/cms/prompts/tools/find_proof/description.md`.
+// `product/cms/prompts/tools/find_proof/description.md`. Anchor pattern per
+// planning/03-exec-crosscut-magical-poincare-retrieval-provenance.md §1.4.
 // =============================================================================
 
+import { z } from "zod";
 import {
   FindProofOutputSchema,
   type TrustProofPublic,
@@ -38,11 +41,31 @@ import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import {
   renderLifecycleGate,
   safeParse,
+  unwrapEnvelope,
   WidgetMalformedPlaceholder,
   WidgetSilentPlaceholder,
   type ToolCallLifecycle,
 } from "./widget-shell";
-import { decodeHtmlEntities } from "./text-utils";
+import { decodeHtmlEntities, truncateText } from "./text-utils";
+
+// Loosened local read of the provenance enrichment (same pattern as
+// inspiration.tsx's EnrichedImageSchema): `sourceTitle` is being added to the
+// Public schemas by the retrieval-provenance work — parse it off the RAW
+// result so this widget needs no compile-time dependency on that schema
+// vintage, and falls back gracefully when the field is absent.
+const EnrichedProofSchema = z.object({
+  sourceTitle: z.string().nullish(),
+});
+
+function readSourceTitle(raw: unknown): string | null {
+  const parsed = EnrichedProofSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const title = parsed.data.sourceTitle;
+  return typeof title === "string" && title.trim().length > 0 ? title : null;
+}
+
+/** Anchor copy length cap — per the provenance plan §1.4 (~60 chars). */
+const SOURCE_TITLE_MAX_CHARS = 60;
 
 const SHELL_CTX = {
   widgetType: "find-proof",
@@ -79,6 +102,13 @@ export function FindProofWidget(
     );
   }
 
+  // Raw proof list for the loosened enrichment read — index-aligned with the
+  // parsed proofs (Zod preserves array order).
+  const unwrapped = unwrapEnvelope(props.result);
+  const rawProofs = Array.isArray((unwrapped as { proofs?: unknown })?.proofs)
+    ? ((unwrapped as { proofs: unknown[] }).proofs)
+    : [];
+
   return (
     <section
       data-testid="find-proof"
@@ -87,8 +117,12 @@ export function FindProofWidget(
       aria-label="Supporting evidence"
       className="my-3 flex w-full flex-col gap-4"
     >
-      {proofs.map((proof) => (
-        <PulledQuote key={proof.id} proof={proof} />
+      {proofs.map((proof, i) => (
+        <PulledQuote
+          key={proof.id}
+          proof={proof}
+          sourceTitle={readSourceTitle(rawProofs[i])}
+        />
       ))}
     </section>
   );
@@ -98,11 +132,17 @@ FindProofWidget.displayName = "FindProofWidget";
 
 // -----------------------------------------------------------------------------
 // PulledQuote — claim lead-in (small caps-tracked), evidence prose in
-// emphasised italic body, "Read more →" inline link. Typography is the
-// emphasis, not borders or fills.
+// emphasised italic body, inline source link (title-named when provenance
+// supplies one). Typography is the emphasis, not borders or fills.
 // -----------------------------------------------------------------------------
 
-function PulledQuote({ proof }: { proof: TrustProofPublic }) {
+function PulledQuote({
+  proof,
+  sourceTitle,
+}: {
+  proof: TrustProofPublic;
+  sourceTitle: string | null;
+}) {
   return (
     <figure
       data-swoop-part="find-proof-pulled-quote"
@@ -130,7 +170,18 @@ function PulledQuote({ proof }: { proof: TrustProofPublic }) {
           data-testid="find-proof-link"
           className="mt-2 inline-block text-xs font-medium text-slate-700 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-400"
         >
-          Read more →
+          {sourceTitle ? (
+            <>
+              Find out more about{" "}
+              {truncateText(
+                decodeHtmlEntities(sourceTitle),
+                SOURCE_TITLE_MAX_CHARS,
+              )}{" "}
+              →
+            </>
+          ) : (
+            <>Read more →</>
+          )}
         </a>
       ) : null}
     </figure>
