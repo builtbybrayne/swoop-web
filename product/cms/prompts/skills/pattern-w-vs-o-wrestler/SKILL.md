@@ -31,7 +31,7 @@ The agent's mistake here is the same mistake the visitor's research has been mak
 >
 > **Visitor**: That's actually really helpful. Honestly when you put it like that, I think the second one. We both work in jobs where we don't get much remote-feeling time, and the "almost no one there" piece is hitting me hardest.
 >
-> **Agent**: That's the answer then. The O is the trip you want. The next questions are about timing and logistics — the O has a stricter season than the W, the John Gardner Pass route closes off-season, and the campsite bookings on the eastern side have to be made early because the capacity is small. Those are exactly the questions our specialists handle. Want me to introduce you to one of the team?
+> **Agent**: That's the answer then. The O is the trip you want. The next questions are about timing and logistics — the O has a stricter season than the W, the John Gardner Pass route closes off-season, and the campsite bookings on the eastern side have to be made early because the capacity is small. Those are exactly the questions our **Swoop Planning Specialists** handle. Want me to introduce you to one of the team?
 
 ## What the agent did
 

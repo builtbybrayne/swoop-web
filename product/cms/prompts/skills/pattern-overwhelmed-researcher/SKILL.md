@@ -36,7 +36,7 @@ This is one of the patterns where the agent most clearly outperforms a generic A
 >
 > **Visitor**: That's... actually really helpful. I think I've been getting lost because every option sounds good when I read about it. But yeah, when I picture myself there, it's the W. With company but small. Not a big group thing.
 >
-> **Agent**: Yes. That's the trip. Once you know that's the shape, the rest is logistics — which departure, which operator, which dates work for you. Those are real questions but they're answerable questions, and they're exactly the questions our specialists handle every day. The hard part is the part you just did.
+> **Agent**: Yes. That's the trip. Once you know that's the shape, the rest is logistics — which departure, which operator, which dates work for you. Those are real questions but they're answerable questions, and they're exactly the questions our **Swoop Planning Specialists** handle every day. The hard part is the part you just did.
 >
 > Want me to introduce you to one of the team? They'll know which small-group W departures fit the shape you've just described.
 

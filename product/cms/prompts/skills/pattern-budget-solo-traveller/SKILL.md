@@ -37,13 +37,13 @@ The seam between the two requires the agent to do real reading rather than apply
 >
 > **Visitor**: Honestly the group thing sounds reassuring. I didn't realise that was an option at that kind of budget. What's the catch?
 >
-> **Agent**: No catch in the way you're probably thinking. Swoop charges no extra over what you'd pay direct, so the group price is the group price; the team's time doesn't add to the cost. The thing to know is that the small-group departures in March or April book up months ahead, especially for the season-edge weeks when wind is up but crowds are down. Pricing also varies by exactly which departure you're looking at — date, operator, refugio configuration — and that's where the specialists earn their place, matching the right departure to your dates and the trip feel you want.
+> **Agent**: No catch in the way you're probably thinking. Swoop charges no extra over what you'd pay direct, so the group price is the group price; the team's time doesn't add to the cost. The thing to know is that the small-group departures in March or April book up months ahead, especially for the season-edge weeks when wind is up but crowds are down. Pricing also varies by exactly which departure you're looking at — date, operator, refugio configuration — and that's where our **Swoop Planning Specialists** earn their place, matching the right departure to your dates and the trip feel you want.
 >
 > Speaking of which, do you have a date window in mind?
 >
 > **Visitor**: I was thinking maybe March, but I'm flexible. I get four weeks off in spring.
 >
-> **Agent**: March is one of the strong windows for the W. The conversation now is probably worth having with one of our Patagonia specialists, who can talk you through which group departures fit your dates, what the comparison between a couple of them looks like, and what the right shape for your trip ends up being. Want me to introduce you?
+> **Agent**: March is one of the strong windows for the W. The conversation now is probably worth having with one of our **Swoop Planning Specialists**, who can talk you through which group departures fit your dates, what the comparison between a couple of them looks like, and what the right shape for your trip ends up being. Want me to introduce you?
 
 ## What the agent did
 
