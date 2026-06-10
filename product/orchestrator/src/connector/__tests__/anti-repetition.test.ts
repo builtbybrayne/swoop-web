@@ -63,6 +63,7 @@ describe('computeExcludes', () => {
       image: ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg'],
       hotel: ['12', '13'],
       region_base: ['9'],
+      customer_tip: ['101', '102'],
     };
   }
 
@@ -96,6 +97,11 @@ describe('computeExcludes', () => {
   it('lookup receives chunk uuids only', () => {
     const out = computeExcludes('lookup', seedSeenItems());
     expect(out).toEqual({ excludeIds: ['ic1'] });
+  });
+
+  it('find_tips receives INTEGER tip ids (numified from the stringified seen-set)', () => {
+    const out = computeExcludes('find_tips', seedSeenItems());
+    expect(out).toEqual({ excludeIds: [101, 102] });
   });
 
   it('illustrate receives image canonical URLs (not ids)', () => {
@@ -199,6 +205,14 @@ describe('extractSeenDelta', () => {
       count: 1,
     });
     expect(delta.inform_chunk).toEqual(['ic1']);
+  });
+
+  it('find_tips marks tip ids stringified (integer ids → string seen-set)', () => {
+    const delta = extractSeenDelta('find_tips', {
+      tips: [{ id: 101 }, { id: 102 }],
+      count: 2,
+    });
+    expect(delta.customer_tip).toEqual(['101', '102']);
   });
 
   it('illustrate marks image canonical URLs (from `url` field)', () => {

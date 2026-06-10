@@ -19,7 +19,10 @@
 //                     same URL-based dedup as images.
 //   hotel           : hotel.id (integer, stringified)
 //   region_base     : area.id (integer, stringified)
-//   customer_tip    : tip.id (uuid string) — reserved for future tool
+//   customer_tip    : tip.id (integer, stringified) — find_tips. NB the
+//                     tool's `excludeIds` input is z.number[]; the
+//                     orchestrator numifies on the way out (computeExcludes)
+//                     and stringifies on the way in (extractSeenDelta).
 //
 // `trip` and `tour` are DELIBERATELY ABSENT from the schema. Swoop is selling
 // trips and tours; repeating an option ("did you want to revisit the

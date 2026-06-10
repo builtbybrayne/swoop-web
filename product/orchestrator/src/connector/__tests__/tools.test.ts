@@ -45,8 +45,8 @@ function stubClient(overrides: Partial<ConnectorClient> = {}): ConnectorClient {
   };
 }
 
-describe('TOOL_SPECS — eight intent-named tools', () => {
-  it('registers exactly the eight intent-named tools (no deprecated search / get_detail)', () => {
+describe('TOOL_SPECS — nine intent-named tools', () => {
+  it('registers exactly the nine intent-named tools (no deprecated search / get_detail)', () => {
     const names = TOOL_SPECS.map((s) => s.name).sort();
     expect(names).toEqual(
       [
@@ -54,6 +54,7 @@ describe('TOOL_SPECS — eight intent-named tools', () => {
         'find_options',
         'find_proof',
         'find_someone_who',
+        'find_tips',
         'handoff',
         'handoff_submit',
         'illustrate',
@@ -62,16 +63,21 @@ describe('TOOL_SPECS — eight intent-named tools', () => {
     );
   });
 
-  it('exposes seven tools to the model — handoff_submit stays internal', () => {
+  it('exposes eight tools to the model — handoff_submit stays internal', () => {
     const exposed = TOOL_SPECS.filter((s) => s.exposedToModel).map((s) => s.name);
     expect(exposed).toContain('find_inspiring');
     expect(exposed).toContain('find_someone_who');
     expect(exposed).toContain('find_proof');
     expect(exposed).toContain('lookup');
     expect(exposed).toContain('find_options');
+    // Regression guard: find_tips was registered connector-side on 2026-06-01
+    // but missing from TOOL_SPECS — boot warned "no schema for — ignoring"
+    // and the model couldn't call a tool the system prompt teaches.
+    expect(exposed).toContain('find_tips');
     expect(exposed).toContain('illustrate');
     expect(exposed).toContain('handoff');
     expect(exposed).not.toContain('handoff_submit');
+    expect(exposed).toHaveLength(8);
   });
 });
 

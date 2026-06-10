@@ -47,6 +47,8 @@ import {
   FindProofOutputSchema,
   FindSomeoneWhoInputSchema,
   FindSomeoneWhoOutputSchema,
+  FindTipsInputSchema,
+  FindTipsOutputSchema,
   HandoffInputSchema,
   HandoffOutputSchema,
   HandoffSubmitInputSchema,
@@ -115,10 +117,11 @@ interface ToolSpec {
 }
 
 /**
- * Canonical spec table — the eight intent-named tools. Order here drives the
+ * Canonical spec table — the nine intent-named tools. Order here drives the
  * order in which tools land in the agent's `tools` array (diagnostic, not
- * semantic). The `exposedToModel` flag filters `handoff_submit` out of the
- * model-facing list.
+ * semantic) and mirrors the connector's registration order. The
+ * `exposedToModel` flag filters `handoff_submit` out of the model-facing
+ * list.
  */
 const TOOL_SPECS: ReadonlyArray<ToolSpec> = [
   {
@@ -149,6 +152,12 @@ const TOOL_SPECS: ReadonlyArray<ToolSpec> = [
     name: TOOL_NAMES.FindOptions,
     inputSchema: FindOptionsInputSchema,
     outputSchema: FindOptionsOutputSchema,
+    exposedToModel: true,
+  },
+  {
+    name: TOOL_NAMES.FindTips,
+    inputSchema: FindTipsInputSchema,
+    outputSchema: FindTipsOutputSchema,
     exposedToModel: true,
   },
   {

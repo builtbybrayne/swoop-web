@@ -6,6 +6,22 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## New connector tool? It's invisible to the model until it's in the orchestrator's TOOL_SPECS
+
+**Symptom**: boot log prints `[connector] Connector reports tool "<name>" which the orchestrator has no schema for — ignoring.` and the exposed-count line is one short. The connector serves the tool fine over MCP, the system prompt may even teach it — but Sonnet can't call it.
+
+**Cause**: tool registration is deliberately two-sided. The connector registers handlers; the orchestrator only exposes tools listed in `TOOL_SPECS` ([product/orchestrator/src/connector/tools.ts](product/orchestrator/src/connector/tools.ts)) with their Zod I/O schemas. `find_tips` shipped connector-side on 2026-06-01 and sat invisible for nine days because the spec entry was never added (caught from a boot log, 2026-06-10).
+
+**Fix checklist when adding a tool**: connector handler + `ALL_TOOL_NAMES` + `description.md` ➜ `TOOL_NAMES` + I/O schemas in `@swoop/common` ➜ **orchestrator `TOOL_SPECS` entry** ➜ AntiRepetition `computeExcludes`/`extractSeenDelta` branches if the tool has an exclude lever ➜ `tools.test.ts` name-list pin (it now also pins `toHaveLength(8)` on the exposed set, so the next missing tool fails tests instead of warning at boot).
+
+---
+
+## ADK warns `Failed to load directory …/references|assets|scripts: ENOENT` per skill at boot — benign
+
+ADK 1.0's skill loader probes three optional subdirectories (`references/`, `assets/`, `scripts/`) inside every `SKILL.md` folder and logs a WARN for each that's absent — 3 × 14 skills = 42 lines of boot noise. Nothing is wrong: the skills load fine (`loaded 14 skills` line is the real signal). Don't create 42 `.gitkeep` dirs to silence it; if the noise ever matters, filter ADK's logger. Watch the `loaded N skills` line, ignore the ENOENT WARNs.
+
+---
+
 ## ADK's `SkillToolset.processLlmRequest` never fires — manual prompt-injection required
 
 **Symptom**: agent has `SkillToolset` wired in `tools: [skillToolset, ...]`, the 5 skill meta-tools (`list_skills` / `load_skill` / etc.) are callable, `loadAllSkillsInDir` loads all the SKILL.md files at boot — but Sonnet never calls `load_skill`, even when a description is an obvious match. The ADK-shipped "you MUST use load_skill when a skill is relevant" instruction is also nowhere visible to the model.

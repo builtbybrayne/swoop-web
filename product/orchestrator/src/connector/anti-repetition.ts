@@ -50,6 +50,7 @@ export type ToolExcludePayload =
   | FindSomeoneWhoExcludes
   | FindProofExcludes
   | LookupExcludes
+  | FindTipsExcludes
   | IllustrateExcludes
   | FindOptionsExcludes
   | undefined;
@@ -67,6 +68,17 @@ export interface FindProofExcludes {
 }
 export interface LookupExcludes {
   excludeIds?: string[];
+}
+/**
+ * `find_tips` excludeIds are INTEGER tip ids (`FindTipsInputSchema`), unlike
+ * the uuid-string ids elsewhere. The seen-set stores them stringified (the
+ * `SeenItems` wire shape is arrays-of-strings); `computeExcludes` numifies on
+ * the way out and `extractSeenDelta` stringifies on the way in. The generic
+ * array-union in `mergeExcludesIntoInput` is value-type-agnostic, so numbers
+ * survive it unchanged.
+ */
+export interface FindTipsExcludes {
+  excludeIds?: number[];
 }
 export interface IllustrateExcludes {
   excludeCanonicalUrls?: string[];
@@ -111,6 +123,12 @@ export function computeExcludes(
       return { excludeIds: dedupe(seenItems.trust_proof) };
     case 'lookup':
       return { excludeIds: dedupe(seenItems.inform_chunk) };
+    case 'find_tips':
+      return {
+        excludeIds: dedupe(seenItems.customer_tip)
+          .map(Number)
+          .filter((n) => Number.isInteger(n)),
+      };
     case 'illustrate':
       return { excludeCanonicalUrls: dedupe(seenItems.image) };
     case 'find_options': {
@@ -250,6 +268,16 @@ export function extractSeenDelta(
       const chunks = (r.chunks ?? []) as Array<{ id: string }>;
       if (chunks.length > 0) {
         delta.inform_chunk = chunks.map((c) => c.id);
+      }
+      return delta;
+    }
+    case 'find_tips': {
+      // Tip ids are integers (`CustomerTipPublicSchema.id`); the seen-set
+      // stores strings, so stringify on the way in (hotel/region_base
+      // precedent).
+      const tips = (r.tips ?? []) as Array<{ id: number }>;
+      if (tips.length > 0) {
+        delta.customer_tip = tips.map((t) => String(t.id));
       }
       return delta;
     }
