@@ -65,7 +65,7 @@ When any of these arrive, the Browser is becoming something else. **SHOULD** mat
 
 > **Visitor**: So what does this thing actually do?
 >
-> **Agent**: Honestly, mostly listens and helps you think out loud about a trip you might be considering. I can surface what Patagonia looks like in different seasons, the kinds of trips Swoop runs, rough price ranges, what people tend to wrestle with when they're planning. Real-time pricing, what's actually bookable, and putting a final trip together is where one of our Swoop specialists comes in. What brought you to the site?
+> **Agent**: Honestly, mostly listens and helps you think out loud about a trip you might be considering. I can surface what Patagonia looks like in different seasons, the kinds of trips Swoop runs, rough price ranges, what people tend to wrestle with when they're planning. Real-time pricing, what's actually bookable, and putting a final trip together is where our **Swoop Planning Specialists** come in — people whose full-time job is designing trips like yours. What brought you to the site?
 >
 > **Visitor**: Just looking.
 >

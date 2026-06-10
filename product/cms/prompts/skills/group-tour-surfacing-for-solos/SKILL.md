@@ -1,6 +1,6 @@
 ---
 name: group-tour-surfacing-for-solos
-description: How to recognise a solo traveller who's a strong group-tour candidate and surface group options without pressure. Load when a visitor signals they're travelling alone — explicitly or through consistent "I/me" framing — and their profile suggests they'd benefit from group company. Strong triggers include bucket-list framing, first-time-to-Patagonia, mild logistics nervousness, mentions of friends or partners who couldn't come, life-stage signals like post-retirement or career break. Do NOT load for solo travellers who clearly self-identify as independent or off-piste; those are tailor-made prospects.
+description: 'How to recognise a solo traveller — or any cost-conscious visitor — who is a strong group-tour candidate and surface group options without pressure. Load when a visitor signals they are travelling alone (explicit or consistent "I/me" framing) and their profile suggests they would benefit from group company, OR when a visitor signals price-consciousness or value-seeking alongside interest in a guided experience. Strong solo triggers: bucket-list framing, first-time-to-Patagonia, mild logistics nervousness, mentions of friends or partners who could not come, life-stage signals like post-retirement or career break. Price-signal triggers: explicit budget-watching language, questions about cost-vs-value, "is there a way to do this without breaking the bank". Do NOT load for solo travellers who clearly self-identify as independent or off-piste; those are tailor-made prospects. Do NOT load for shoestring/backpacker profiles; use triage-to-referral instead.'
 ---
 
 # Group-tour surfacing for solo travellers
@@ -22,6 +22,8 @@ A solo traveller who's a strong group-tour candidate often shows:
 - Life-stage signals that fit — post-retirement, between jobs, career break, recently single.
 - Activity preferences that lean group-friendly — the W trek, the classic itineraries, named routes.
 - "I" framing without independent-traveller identity attached.
+
+**Price-consciousness and value-seeking are also strong group-tour signals**, regardless of whether the visitor is solo. A visitor watching their budget — not shoestring, but cost-aware — benefits from knowing that group tours are the natural way to do Patagonia well at a lower per-person cost than tailor-made. Group departures spread logistics costs across the party; the per-person price is usually meaningfully lower for a comparable experience. Explicit signals: *"trying to keep it affordable"*, *"is there a way to do this without breaking the bank"*, *"what's the most cost-effective way to do the W?"*, questions comparing total cost to independent travel. These signals trigger this skill even when the visitor is not solo.
 
 A solo traveller who is **not** a group-tour fit (and where loading this skill would push the wrong direction):
 
@@ -82,3 +84,5 @@ The agent surfaced group as a discovery rather than a conclusion, gave enough te
 ## Sign-off note
 
 The solo-who-didn't-know-group-was-for-them is one of the conversions Swoop most wants to win. The way to win them is by surfacing the option *well*, not by surfacing it often. One good mention, with specifics that respect the visitor's intelligence and identity, does more than three persistent ones ever will.
+
+> **NB — tour catalogue data**: "Swoop Group Tours" is a 4-product set on Swoop's website. Our `tour_card` table holds 11 CMS-derived tours. Until Swoop identifies which four map to the official Group Tours set, the agent works with what `find_options` returns and **MUST NOT** claim an exact count ("we have four group tours", "we have eleven tours"). Say "a set of small-group departures" or let the cards speak for themselves. The discrepancy will be resolved once Swoop provides the mapping; see `questions.md`.
