@@ -1,8 +1,11 @@
 // product/ui/src/widgets/__tests__/lookup.test.tsx
 //
-// Covers the Inform quiet source-page affordance: single-URL collapse to one
-// affordance, multi-URL up-to-two stacked, no-URL renders nothing, and
-// empty-chunks renders nothing.
+// Covers the Inform source-page affordance: exactly ONE link card — the top
+// (retrieval-rank-first) source page — even when chunks span multiple
+// canonical URLs (planning/03-exec-crosscut-magical-poincare-visual-channel.md
+// §2.2, Luke Loom feedback D4). No-URL renders nothing; empty-chunks renders
+// nothing. Title-anchor rendering (provenance `sourceTitle`) is covered in
+// source-title-anchors.test.tsx against the loosened schema vintage.
 
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
@@ -23,6 +26,24 @@ function mockProps(overrides: Partial<Record<string, unknown>>) {
     resume: () => {},
     status: { type: "complete" as const },
     ...overrides,
+  } as unknown as React.ComponentProps<typeof LookupWidget>;
+}
+
+/** The prop shape parts/visual-sidebar.tsx reconstructs from the store —
+ *  inert transport fields, empty argsText. Rendering through this shape
+ *  covers the sidebar mounting path at the widget level. */
+function sidebarProps(result: unknown) {
+  return {
+    type: "tool-call",
+    toolCallId: "call_lookup_sidebar",
+    toolName: "lookup",
+    args: {},
+    argsText: "",
+    result,
+    status: { type: "complete" },
+    isError: false,
+    addResult: () => {},
+    resume: () => {},
   } as unknown as React.ComponentProps<typeof LookupWidget>;
 }
 
@@ -53,7 +74,10 @@ describe("LookupWidget", () => {
     expect(links[0]).toHaveAttribute("target", "_blank");
   });
 
-  it("renders up to two affordances when chunks span multiple canonicalUrls", () => {
+  it("renders ONLY the top source page when chunks span multiple canonicalUrls", () => {
+    // Pre-Luke-feedback this stacked up to two affordances; per visual-channel
+    // plan §2.2 the single most-relevant source page is the whole surface —
+    // secondary sources live in the agent's prose, not the widget.
     const result = {
       chunks: [
         SampleInformChunkPublic,
@@ -75,12 +99,42 @@ describe("LookupWidget", () => {
     render(<LookupWidget {...mockProps({ result })} />);
 
     const links = screen.getAllByTestId("lookup-link");
-    // Capped at 2.
-    expect(links).toHaveLength(2);
+    expect(links).toHaveLength(1);
+    // The first chunk (retrieval rank order) wins.
+    expect(links[0]).toHaveAttribute("href", SampleInformChunkPublic.canonicalUrl);
 
-    // Hints visible above each link.
+    // One hint (the top chunk's question), in the no-title fallback shape.
     const hints = screen.getAllByTestId("lookup-hint");
-    expect(hints).toHaveLength(2);
+    expect(hints).toHaveLength(1);
+    expect(hints[0]).toHaveTextContent(SampleInformChunkPublic.question ?? "");
+  });
+
+  it("skips URL-less chunks and surfaces the first chunk that has a canonicalUrl", () => {
+    const result = {
+      chunks: [
+        { ...SampleInformChunkPublic, canonicalUrl: null },
+        {
+          ...SampleInformChunkPublic,
+          id: "44444444-4444-4444-8444-444444444448",
+          canonicalUrl: "https://swoop-patagonia.com/practical/transport",
+        },
+      ],
+      count: 2,
+    };
+    render(<LookupWidget {...mockProps({ result })} />);
+
+    const links = screen.getAllByTestId("lookup-link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute(
+      "href",
+      "https://swoop-patagonia.com/practical/transport",
+    );
+  });
+
+  it("renders the single link card from sidebar-reconstructed props", () => {
+    render(<LookupWidget {...sidebarProps(SampleLookupOutput)} />);
+    expect(screen.getByTestId("lookup")).toBeInTheDocument();
+    expect(screen.getAllByTestId("lookup-link")).toHaveLength(1);
   });
 
   it("renders the dev silent indicator when chunks lack canonicalUrls (prod stays silent)", () => {
@@ -130,5 +184,7 @@ describe("LookupWidget", () => {
       "href",
       SampleLookupOutput.chunks[0].canonicalUrl,
     );
+    // No provenance title in the fixture → the legacy fallback anchor copy.
+    expect(link).toHaveTextContent(/Read the full guide on swoop-patagonia\.com/);
   });
 });

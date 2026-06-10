@@ -43,11 +43,14 @@ describe("FindInspiringWidget", () => {
       passage.region ?? "",
     );
 
-    // Deep-link opens in new tab.
+    // Deep-link opens in new tab. No provenance title in the fixture → the
+    // legacy generic anchor copy (title anchors are covered in
+    // source-title-anchors.test.tsx).
     const link = screen.getByTestId("find-inspiring-link");
     expect(link).toHaveAttribute("href", passage.canonicalUrl);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link).toHaveTextContent(/Read more on swoop-patagonia\.com/);
   });
 
   it("renders the dev silent indicator when passages are empty (prod stays silent)", () => {
