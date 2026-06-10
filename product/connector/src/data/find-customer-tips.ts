@@ -21,6 +21,7 @@ import type pg from 'pg';
 import { CustomerTipPublicSchema, type CustomerTipPublic } from '@swoop/common';
 
 import { buildHybridSearchSql } from './hybrid-search.js';
+import { provenanceFields } from './provenance.js';
 
 export interface FindCustomerTipsOptions {
   /** Optional Patagonian sub-region filter. Region-agnostic tips always pass. */
@@ -73,6 +74,7 @@ export async function findCustomerTipsByTopic(
     outerSelect: `
       SELECT ct.id, ct.text, ct.author_name,
              ct.region,
+             ct.source_created_at AS source_published_at,
              fused.rrf_score
       FROM fused
       JOIN customer_tip ct ON ct.id = fused.id
@@ -87,6 +89,10 @@ export async function findCustomerTipsByTopic(
       text: r.text as string,
       authorName: r.author_name as string | null,
       region: r.region as string | null,
+      // publishedAt ← customer_tip.source_created_at (tips have no titled
+      // source, so provenanceFields never sets sourceTitle here — and
+      // CustomerTipPublicSchema doesn't carry one).
+      ...provenanceFields(r),
     }),
   );
 }

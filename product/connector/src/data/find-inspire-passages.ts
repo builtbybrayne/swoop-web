@@ -10,6 +10,7 @@ import type pg from 'pg';
 import { InspirePassagePublicSchema, type InspirePassagePublic } from '@swoop/common';
 
 import { buildHybridSearchSql } from './hybrid-search.js';
+import { provenanceFields } from './provenance.js';
 import { resolveImagesByIds } from './resolve-image.js';
 
 export interface FindInspirePassagesOptions {
@@ -82,7 +83,8 @@ export async function findInspirePassages(
     outerSelect: `
       SELECT * FROM (
         SELECT DISTINCT ON (ip.canonical_url, img.canonical_url)
-          ip.id, ip.text, ip.canonical_url, ip.region, ip.mood, ip.image_id, fused.rrf_score
+          ip.id, ip.text, ip.canonical_url, ip.region, ip.mood, ip.image_id,
+          ip.source_title, ip.source_published_at, fused.rrf_score
         FROM fused
         JOIN inspire_passage ip ON ip.id = fused.id
         LEFT JOIN image img ON img.id = ip.image_id
@@ -131,6 +133,7 @@ export async function findInspirePassages(
       region: r.region as string | null,
       mood: r.mood as string | null,
       image: imageToProject,
+      ...provenanceFields(r),
     });
   });
   return passages;

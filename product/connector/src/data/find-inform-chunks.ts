@@ -10,6 +10,7 @@ import type pg from 'pg';
 import { InformChunkPublicSchema, type InformChunkPublic } from '@swoop/common';
 
 import { buildHybridSearchSql } from './hybrid-search.js';
+import { provenanceFields } from './provenance.js';
 
 export interface FindInformChunksOptions {
   /**
@@ -56,6 +57,7 @@ export async function findInformChunksByQuestion(
     outerSelect: `
       SELECT ic.id, ic.question, ic.text, ic.canonical_url,
              COALESCE(ic.topic_tags, '{}') AS topic_tags,
+             ic.source_title, ic.source_published_at,
              fused.rrf_score
       FROM fused
       JOIN inform_chunk ic ON ic.id = fused.id
@@ -71,6 +73,7 @@ export async function findInformChunksByQuestion(
       text: r.text as string,
       canonicalUrl: r.canonical_url as string | null,
       topicTags: (r.topic_tags ?? []) as string[],
+      ...provenanceFields(r),
     }),
   );
 }

@@ -88,6 +88,8 @@ export const InspirePassageSchema = z
     region: z.string().nullable().optional(),
     mood: z.string().nullable().optional(),
     imageId: z.number().int().positive().nullable().optional(),
+    sourceTitle: z.string().nullable().optional(),
+    sourcePublishedAt: z.coerce.date().nullable().optional(),
     embedding: EmbeddingSchema.nullable().optional(),
     tsv: TsvectorSchema.nullable().optional(),
     contentHash: z.string().min(1),
@@ -103,6 +105,15 @@ export const InspirePassagePublicSchema = z
     region: z.string().nullable().optional(),
     mood: z.string().nullable().optional(),
     image: DerivedImageSchema.nullable().optional(),
+    /** Title of the source page / blog post. Omitted when the source has none. */
+    sourceTitle: z.string().optional(),
+    /**
+     * ISO date (YYYY-MM-DD) the source was published. Present only for
+     * reliably-dated sources (blog posts). Omitted ≠ current: undated content
+     * is evergreen-but-unverified for volatile facts (prices, schedules).
+     * Per crosscut retrieval-provenance plan (Luke L2 + D1, 2026-06-10).
+     */
+    publishedAt: z.string().optional(),
   })
   .strict();
 export type InspirePassagePublic = z.infer<typeof InspirePassagePublicSchema>;
@@ -133,6 +144,8 @@ export const CustomerStorySchema = z
     personaSummary: z.string().min(1),
     personaEmbedding: EmbeddingSchema.nullable().optional(),
     imageId: z.number().int().positive().nullable().optional(),
+    sourceTitle: z.string().nullable().optional(),
+    sourcePublishedAt: z.coerce.date().nullable().optional(),
     tsv: TsvectorSchema.nullable().optional(),
     contentHash: z.string().min(1),
   })
@@ -147,6 +160,13 @@ export const CustomerStoryPublicSchema = z
     canonicalUrl: z.string().url().nullable().optional(),
     region: z.string().nullable().optional(),
     image: DerivedImageSchema.nullable().optional(),
+    /** Blog post title for blog-sourced stories. Omitted for review-sourced rows. */
+    sourceTitle: z.string().optional(),
+    /**
+     * ISO date (YYYY-MM-DD): blog publication date, or the (latest) review
+     * date for review-sourced stories. Omitted when unknown.
+     */
+    publishedAt: z.string().optional(),
   })
   .strict();
 export type CustomerStoryPublic = z.infer<typeof CustomerStoryPublicSchema>;
@@ -185,6 +205,8 @@ export const TrustProofSchema = z
     claim: z.string().min(1),
     evidence: z.string().min(1),
     canonicalUrl: z.string().url().nullable().optional(),
+    sourceTitle: z.string().nullable().optional(),
+    sourcePublishedAt: z.coerce.date().nullable().optional(),
     embedding: EmbeddingSchema.nullable().optional(),
     tsv: TsvectorSchema.nullable().optional(),
     contentHash: z.string().min(1),
@@ -199,6 +221,13 @@ export const TrustProofPublicSchema = z
     claim: z.string().min(1),
     evidence: z.string().min(1),
     canonicalUrl: z.string().url().nullable().optional(),
+    /** Title of the source page / blog post. Omitted when the source has none. */
+    sourceTitle: z.string().optional(),
+    /**
+     * ISO date (YYYY-MM-DD) the source was published. Present only for
+     * reliably-dated sources (blog posts). Omitted ≠ current.
+     */
+    publishedAt: z.string().optional(),
   })
   .strict();
 export type TrustProofPublic = z.infer<typeof TrustProofPublicSchema>;
@@ -226,6 +255,8 @@ export const InformChunkSchema = z
     text: z.string().min(1),
     canonicalUrl: z.string().url().nullable().optional(),
     topicTags: z.array(z.string()).default([]),
+    sourceTitle: z.string().nullable().optional(),
+    sourcePublishedAt: z.coerce.date().nullable().optional(),
     embedding: EmbeddingSchema.nullable().optional(),
     tsv: TsvectorSchema.nullable().optional(),
     contentHash: z.string().min(1),
@@ -240,6 +271,14 @@ export const InformChunkPublicSchema = z
     text: z.string().min(1),
     canonicalUrl: z.string().url().nullable().optional(),
     topicTags: z.array(z.string()).default([]),
+    /** Title of the source page / blog post. Omitted for FAQ-sourced chunks. */
+    sourceTitle: z.string().optional(),
+    /**
+     * ISO date (YYYY-MM-DD) the source was published. Present only for
+     * reliably-dated sources (blog posts). Omitted ≠ current: undated content
+     * is evergreen-but-unverified for volatile facts (prices, schedules).
+     */
+    publishedAt: z.string().optional(),
   })
   .strict();
 export type InformChunkPublic = z.infer<typeof InformChunkPublicSchema>;
@@ -292,6 +331,12 @@ export const CustomerTipPublicSchema = z
     text: z.string().min(1),
     authorName: z.string().nullable().optional(),
     region: z.string().nullable().optional(),
+    /**
+     * ISO date (YYYY-MM-DD) the tip was given (customer_tip.source_created_at,
+     * 2016–2025). No sourceTitle here — tips have no titled source. Per
+     * crosscut retrieval-provenance plan (Luke D1, 2026-06-10).
+     */
+    publishedAt: z.string().optional(),
   })
   .strict();
 export type CustomerTipPublic = z.infer<typeof CustomerTipPublicSchema>;

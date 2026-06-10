@@ -13,6 +13,7 @@ import {
 } from '@swoop/common';
 
 import { buildHybridSearchSql } from './hybrid-search.js';
+import { provenanceFields } from './provenance.js';
 
 export interface FindTrustProofsOptions {
   topic?: TrustProofTopic | null;
@@ -60,7 +61,8 @@ export async function findTrustProofsByConcern(
       LIMIT 50
     `,
     outerSelect: `
-      SELECT tp.id, tp.topic, tp.claim, tp.evidence, tp.canonical_url, fused.rrf_score
+      SELECT tp.id, tp.topic, tp.claim, tp.evidence, tp.canonical_url,
+             tp.source_title, tp.source_published_at, fused.rrf_score
       FROM fused
       JOIN trust_proof tp ON tp.id = fused.id
     `,
@@ -75,6 +77,7 @@ export async function findTrustProofsByConcern(
       claim: r.claim as string,
       evidence: r.evidence as string,
       canonicalUrl: r.canonical_url as string | null,
+      ...provenanceFields(r),
     }),
   );
 }
