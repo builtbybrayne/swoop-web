@@ -1,0 +1,9 @@
+{
+  "$schema-notes": "Content for the 'About Swoop Planning Specialists' sidebar terminology card (planning/03-exec-crosscut-magical-poincare-terminology-card.md). Shape: { title, lines[2-3] }, no CTA. Loaded by ui/src/parts/terminology-trigger.ts via Vite JSON import — same mechanism as errors/en.json. DRAFT COPY pending Luke/Julie sign-off, drafted 2026-06-10 from the team-depth framing in prompts/system/00_why.md §9 (design trips for a living; 400,000 hours on-the-ground; no invented individual CVs). The trigger term itself is centralised in ui/src/shared/specialist-term.ts; if Luke's final wording changes the term, update both.",
+  "title": "About Swoop Planning Specialists",
+  "lines": [
+    "Swoop Planning Specialists design trips at the ends of the Earth for a living — drawing on the team's 400,000 hours of on-the-ground experience.",
+    "They know the operators, seasons and routes first-hand, so their advice is candid, impartial, and costs no more than booking direct.",
+    "When you're ready, one of them picks up your conversation and shapes the trip around you."
+  ]
+}
