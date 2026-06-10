@@ -175,6 +175,6 @@ The eight Tier-3 plans authored from this ledger:
 - [ ] A1 browser timestamp — [B.t12 plan](../03-exec-agent-runtime-t12.md)
 - [ ] U1–U4 form tweaks — [handoff-form plan](../03-exec-crosscut-magical-poincare-handoff-form.md)
 - [ ] B1 investigation + demo hardening — [demo-stability plan](../03-exec-crosscut-magical-poincare-demo-stability.md)
-- [ ] B1 durable sessions (B.t13) — ratify + promote stub
+- [ ] B1 durable sessions (B.t13) — ✅ ratified + promoted 2026-06-10 ("postgres sessions asap") → [03-exec-agent-runtime-t13.md](../03-exec-agent-runtime-t13.md); execution pending
 
 **Sequencing note**: the content plan and the provenance plan both inform the agent about dates/pricing — the provenance plan owns *tool descriptions* (`cms/prompts/tools/*/description.md`), the content plan owns *system prompt* (`cms/prompts/system/*`). No file overlap; safe to parallelise. The handoff-form, visual-channel, terminology-card, B.t12 and demo-stability plans are mutually independent. All eight are DRAFT pending Alastair's HITL ratification.

@@ -29,7 +29,11 @@ Also rule in/out while there: sessionStorage is per-tab — a link re-opened in 
 
 **Decision (proposed) OPS.poincare-1**: the demo box serves a production UI build and supervised non-watch services; dev-mode serving is for development machines only.
 
-## Part C — Durable sessions (B.t13 stub — the structural fix; promote to `03-exec-agent-runtime-t13.md` on ratification)
+## Part C — Durable sessions (B.t13) — ✅ PROMOTED 2026-06-10
+
+**Ratified by Alastair 2026-06-10 ("postgres sessions asap") and promoted to its own Tier-3 plan: [03-exec-agent-runtime-t13.md — B.t13 Postgres-backed durable sessions](03-exec-agent-runtime-t13.md).** The stub below is retained for context only; the plan file is canonical.
+
+### (superseded stub)
 
 Hardening reduces restart frequency; it cannot make restarts safe. The structural fix is the long-planned session-backend swap (decision B.2 named Vertex/Firestore, pre-dating the [single-VM reframe](reviews/2026-05-27-ingest-and-state-of-play.md)): a **Postgres-backed ADK `SessionService`** against the same instance the connector already uses — sessions survive orchestrator restarts and deploys; rehydrate then *always* has something to rehydrate; demo and prod share the durability story.
 
