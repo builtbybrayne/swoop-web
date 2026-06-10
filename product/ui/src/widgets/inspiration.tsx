@@ -1,9 +1,16 @@
 // product/ui/src/widgets/inspiration.tsx
 //
-// Renders the output of the `illustrate` tool. A horizontally-scrolling
-// strip of curated images with optional mood tags + captions. Tapping an
-// image expands it into an inline lightbox overlay; the overlay is
-// dismissable via button, Escape key, or click-outside.
+// Renders the output of the `illustrate` tool as ONE large hero image —
+// sidebar-width, no visible caption, no mood-tag chips. The annotation stays
+// retrieval substrate + `alt` text only (decision D.poincare-2); one strong
+// image carries the conversational moment (decision D.poincare-3, Luke Loom
+// feedback D3 — planning/03-exec-crosscut-magical-poincare-visual-channel.md).
+//
+// When the agent explicitly asked for more than one image, the first renders
+// as the hero and the rest as a row of small thumbnails below — multi-image
+// is agent-explicit, never the default. Tapping any image expands it into an
+// inline lightbox overlay (no caption line; `aria-label` carries the alt
+// text); the overlay is dismissable via button, Escape key, or click-outside.
 
 import { useEffect, useState } from "react";
 import { z } from "zod";
@@ -45,7 +52,9 @@ export function InspirationWidget(
   // Validate the outer envelope against the shared schema (ensures the
   // contract in @swoop/common is the source of truth), and re-parse each
   // image with a loosened schema so connector-supplied enrichment fields
-  // (moodTags) survive Zod's default strip.
+  // (caption, moodTags) survive Zod's default strip. They're parse-tolerated
+  // but no longer rendered — annotations are retrieval substrate + alt text,
+  // never visitor-visible captions (D.poincare-2).
   const outer = safeParse(IllustrateOutputSchema, props.result, SHELL_CTX);
   if (!outer.ok) {
     return <WidgetMalformedPlaceholder {...SHELL_CTX} debug={outer.debug} />;
@@ -103,6 +112,7 @@ export function InspirationWidget(
     );
   }
 
+  const [hero, ...thumbs] = images;
   const expanded = expandedId
     ? images.find((img) => img.id === expandedId) ?? null
     : null;
@@ -115,45 +125,41 @@ export function InspirationWidget(
       aria-label="Inspiration imagery"
       className="my-2 w-full"
     >
-      {/* Mobile: horizontal scroll strip (swipe feels natural on touch).
-          ≥sm: 2-column grid. We previously stepped up to 3 cols at md,
-          but the cards become too cramped at that density — 2-up reads
-          better at every desktop width and is the canonical grid for
-          image-only widgets across the surface. */}
-      <ul className="flex gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0">
-        {images.map((img) => (
-          <li key={img.id} className="flex-shrink-0 sm:flex-shrink">
-            <button
-              type="button"
-              onClick={() => setExpandedId(img.id)}
-              aria-label={`Expand image: ${img.altText}`}
-              className="flex w-48 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white text-left transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 sm:w-full"
-            >
-              <ImageBlock src={img.url} alt={img.altText} />
-              <div className="flex flex-col gap-1 p-2">
-                {img.caption ? (
-                  <p className="line-clamp-2 text-xs text-slate-700">{img.caption}</p>
-                ) : null}
-                {img.moodTags && img.moodTags.length > 0 ? (
-                  <div
-                    data-testid="inspiration-moods"
-                    className="flex flex-wrap gap-1"
-                  >
-                    {img.moodTags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {/* Single hero — full width on every surface (sidebar, desktop inline,
+          mobile inline all share this shape; the container sets the width).
+          No caption, no mood chips: the image and the agent's prose carry
+          the moment between them. */}
+      <button
+        type="button"
+        onClick={() => setExpandedId(hero.id)}
+        aria-label={`Expand image: ${hero.altText}`}
+        data-testid="inspiration-hero"
+        className="block w-full overflow-hidden rounded-lg transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+      >
+        <ImageBlock src={hero.url} alt={hero.altText} />
+      </button>
+      {/* Agent-explicit multi-image: the rest render as small square
+          thumbnails below the hero (D.poincare-3 — hero + thumbs, never a
+          grid of equals). */}
+      {thumbs.length > 0 ? (
+        <ul
+          data-testid="inspiration-thumbs"
+          className="mt-2 flex gap-2 overflow-x-auto pb-1"
+        >
+          {thumbs.map((img) => (
+            <li key={img.id} className="flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setExpandedId(img.id)}
+                aria-label={`Expand image: ${img.altText}`}
+                className="block w-20 overflow-hidden rounded-md transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+              >
+                <ImageBlock src={img.url} alt={img.altText} aspectRatio="1/1" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {expanded ? (
         <div
           role="dialog"
@@ -175,10 +181,9 @@ export function InspirationWidget(
             >
               Close
             </button>
+            {/* No caption line — the dialog's aria-label above carries the
+                alt text (D.poincare-2). */}
             <ImageBlock src={expanded.url} alt={expanded.altText} loading="eager" />
-            {expanded.caption ? (
-              <p className="px-4 py-3 text-sm text-slate-700">{expanded.caption}</p>
-            ) : null}
           </div>
         </div>
       ) : null}
