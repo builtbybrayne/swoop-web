@@ -23,6 +23,8 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "dev": "bash scripts/dev.sh",
+    "demo": "bash scripts/demo.sh",
+    "demo:ui-only": "bash scripts/demo.sh --ui-only",
     "mock-host": "npx --yes serve mock-host -l 4173",
     "funnel": "bash scripts/funnel.sh",
     "funnel:up": "bash scripts/funnel.sh up",

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  uk.co.swoop.puma.connector.plist
+  launchd service descriptor for @swoop/connector on the Puma demo Mac Mini.
+
+  Install / uninstall:
+    bash product/scripts/setup-demo-services.sh install
+    bash product/scripts/setup-demo-services.sh uninstall
+
+  Logs:
+    stdout → ~/Library/Logs/puma/connector.log
+    stderr → ~/Library/Logs/puma/connector.err.log
+
+  Behaviour:
+    • Restarts automatically if the process exits (KeepAlive true).
+    • NO file-watch: plain tsx run, not `tsx watch`.
+    • ThrottleInterval 5s prevents restart storms on crash loops.
+    • EnvironmentVariables picks up NODE_ENV=production; full env is in
+      connector/.env, loaded at startup via dotenv (CWD = connector/).
+
+  npm is deliberately BYPASSED: node runs the server with tsx registered via
+  node's import flag (see ProgramArguments below) — the equivalent of the
+  package's `start` script without the npm wrapper. The npm
+  shell wrapper does not propagate SIGTERM to its child (see gotchas.md "npm
+  shell wrapper doesn't propagate SIGTERM cleanly") — under npm, launchctl
+  unload would orphan the tsx child and leave :3002 occupied. With node as the
+  supervised process, SIGTERM reaches the service directly and graceful
+  shutdown (pool drain) works. Keep ProgramArguments in sync with the `start`
+  script in connector/package.json if that ever changes.
+
+  IMPORTANT: WorkingDirectory and ProgramArguments paths are absolute and
+  must match the actual checkout path on the Mini. The setup script writes
+  this plist with the correct path substituted — do not hand-edit after install.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>uk.co.swoop.puma.connector</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>--import</string>
+    <string>tsx</string>
+    <string>src/server/index.ts</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>PRODUCT_DIR_PLACEHOLDER/connector</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>LOGS_DIR_PLACEHOLDER/connector.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>LOGS_DIR_PLACEHOLDER/connector.err.log</string>
+
+  <!-- RunAtLoad: start immediately when loaded (launchctl load / login). -->
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>

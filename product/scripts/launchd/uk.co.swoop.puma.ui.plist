@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  uk.co.swoop.puma.ui.plist
+  launchd service descriptor for the Puma UI (vite preview) on the Mac Mini.
+
+  Serves the pre-built ui/dist/ artefact on :5173 with the /api/* proxy
+  forwarding to the orchestrator on :8080. Funnel.sh target stays :5173.
+
+  Install / uninstall:
+    bash product/scripts/setup-demo-services.sh install
+    bash product/scripts/setup-demo-services.sh uninstall
+
+  Logs:
+    stdout → ~/Library/Logs/puma/ui.log
+    stderr → ~/Library/Logs/puma/ui.err.log
+
+  Behaviour:
+    • Restarts automatically if the process exits (KeepAlive true).
+    • ThrottleInterval 5s prevents restart storms.
+    • NO HMR socket — vite preview serves static files only. The entire
+      "spontaneous browser refresh" failure class is eliminated.
+    • Re-deploy: run `npm run build -w @swoop/ui` + restart this service
+      (setup-demo-services.sh restart-ui) — no orchestrator restart needed.
+
+  IMPORTANT: WorkingDirectory and ProgramArguments paths are absolute and
+  must match the actual checkout path on the Mini. The setup script writes
+  this plist with the correct path substituted — do not hand-edit after install.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>uk.co.swoop.puma.ui</string>
+
+  <!--
+    WorkingDirectory MUST be ui/ — vite resolves its root (and therefore the
+    dist/ it serves) from the CWD, not from the config file location. With
+    CWD = ui/, vite finds ui/vite.config.ts automatically; no - -config flag
+    needed. Verified empirically 2026-06-10 (404 on / when run from product/).
+    node invokes vite/bin/vite.js directly — the node_modules/.bin symlink is
+    avoided because launchd does not run a shell to resolve shebangs reliably.
+  -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>PRODUCT_DIR_PLACEHOLDER/node_modules/vite/bin/vite.js</string>
+    <string>preview</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>PRODUCT_DIR_PLACEHOLDER/ui</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>LOGS_DIR_PLACEHOLDER/ui.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>LOGS_DIR_PLACEHOLDER/ui.err.log</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>

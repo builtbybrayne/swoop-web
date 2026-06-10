@@ -54,3 +54,41 @@ Shape (for the full Tier 3): implement ADK's SessionService interface over a `pu
 ## Estimate
 
 Part A ~0.5d · Part B ~0.5d · Part C ~1–2d (separate ratification).
+
+---
+
+## 2026-06-10 execution log (Part B)
+
+Executed by a swarm agent in a worktree off [64dd132 — Luke Loom feedback triage merge](reviews/2026-06-10-luke-loom-feedback.md). Commits: `9ee63de` (vite preview proxy block) · `d839678` (`npm run demo` entry point) · `38153c0` (launchd supervision + helper) · `f8db552` (runbook). Part A untouched (operator step on the Mini). Part C is [B.t13](03-exec-agent-runtime-t13.md) on a sibling branch.
+
+### Serve mechanism — `vite preview` (chosen over a static server + proxy)
+
+Zero new dependencies, idiomatic for serving Vite builds, same :5173 port — [funnel.sh](../product/scripts/funnel.sh) and the `/api/*` contract unchanged. Three findings the choice hinged on:
+
+1. **`vite preview` reads `config.preview.proxy`, NOT `config.server.proxy`** (5.4.11 source, `chunks/dep-CB_7IfJ-.js`: `const { proxy } = config.preview`). A `preview:` block mirroring `server:` was added to [ui/vite.config.ts](../product/ui/vite.config.ts) — without it, the built UI 404s every API call.
+2. **Vite's root is the CWD, not the `--config` file's directory.** `vite preview --config ui/vite.config.ts` from `product/` serves `product/dist` (absent → 404 on `/`) while still proxying `/api`. Every serve path (demo.sh, ui plist) runs with CWD = `ui/`.
+3. **5.4.11 has no `allowedHosts` enforcement anywhere in its serve path** (grep of dist: zero hits) — the Funnel's `.ts.net` Host header passes. The `preview.allowedHosts` key is forward-compat for the 5.4.12+ pin bump.
+
+`npm run demo` (+ `demo:ui-only`) added at `product/` ([scripts/demo.sh](../product/scripts/demo.sh)): `vite build` → connector + orchestrator via non-watch start semantics → `vite preview` foreground. No HMR socket, no file-watch, no `concurrently --kill-others-on-fail`. dev.sh untouched.
+
+### Supervision — launchd LaunchAgents (chosen over pm2)
+
+macOS-native, no new global dependency, user-level (`~/Library/LaunchAgents/`, no sudo), logs to `~/Library/Logs/puma/`. `KeepAlive=true` (restart on any exit), `ThrottleInterval=5s`, `RunAtLoad`, no watch. Templates under [product/scripts/launchd/](../product/scripts/launchd/); [setup-demo-services.sh](../product/scripts/setup-demo-services.sh) (`install`/`uninstall`/`status`/`restart`/`restart-ui`/`logs`) substitutes the absolute checkout path + resolved node path (nvm-safe) and loads in dependency order connector → orchestrator → ui.
+
+**npm is bypassed in `ProgramArguments`** — the [npm SIGTERM wrapper gotcha](../gotchas.md) means `launchctl unload` through npm would orphan the service child and leave its port occupied. Instead: `node --import tsx src/server/index.ts` (connector), `node dist/index.js` (orchestrator), `node …/vite/bin/vite.js preview` (ui), each with CWD = its package dir so dotenv finds the right `.env`.
+
+**Decision OPS.poincare-1: CONFIRMED as proposed** — the demo box serves a production UI build under supervised non-watch services; dev-mode serving is for development machines only.
+
+### Verified in-worktree (sibling-safe — :8080/:3002/:5173 never occupied)
+
+- `vite build` clean (1181 modules) and orchestrator `tsc` build clean (so the `node dist/index.js` precondition is achievable).
+- Serve path on alternate port :5174 with CWD=`ui/`: `/` → 200 (`<title>Swoop Discovery</title>`), JS bundle → 200, `/api/healthz` → 200 **proxied through to a sibling's live orchestrator on :8080** — stronger evidence than the planned 502-with-backend-down check, since it proves the full proxy hop. Port released cleanly afterwards.
+- `bash -n` both scripts; `plutil -lint` + strict expat well-formedness on all three plists **after** sed substitution (parsed `ProgramArguments`/`WorkingDirectory` inspected); tsx loader resolves from connector CWD (non-binding `--eval` check).
+
+### Deferred to operator (on the Mini, at merge)
+
+- `setup-demo-services.sh install` + a cold boot following [the runbook](../product/cms/ops/demo-server.md).
+- The plan's Part B scripted checks: `kill -9` orchestrator → launchd restarts it; browser reload mid-conversation resumes; 30-min idle Funnel session → no spontaneous reload.
+- Re-test of the Part A reproduction (§B.3) — Part A evidence gathering itself remains open.
+
+Note: `launchctl load`/`unload` used (not `bootstrap`/`bootout`) for operator familiarity — both work on current macOS.
