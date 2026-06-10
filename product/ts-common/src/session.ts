@@ -166,6 +166,17 @@ export const SessionStateSchema = z.object({
   // (HITL-ratified 2026-05-27). Optional + defaulted so sessions persisted
   // before the field landed (in-memory adapter) round-trip cleanly.
   seenItems: SeenItemsSchema,
+  // B.t12 — latest visitor clock from the browser. Optional + additive so
+  // sessions without the field (pre-B.t12) round-trip without error.
+  // Updated on every /chat request; the orchestrator reads it to inject a
+  // per-turn dateline into the user-message envelope (never into the cached
+  // system prefix — that would bust the Anthropic prompt cache).
+  clientTime: z
+    .object({
+      iso: z.string().datetime({ offset: true }),
+      timeZone: z.string().min(1).max(64),
+    })
+    .optional(),
 });
 export type SessionState = z.infer<typeof SessionStateSchema>;
 

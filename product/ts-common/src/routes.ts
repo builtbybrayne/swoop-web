@@ -30,10 +30,30 @@ import { z } from "zod";
  */
 export const CHAT_MESSAGE_MAX = 8_000;
 
+/**
+ * Visitor clock context forwarded from the browser on every /chat request
+ * (B.t12 — browser timestamp → agent context).
+ *
+ * `iso`      — `new Date().toISOString()` with UTC offset, e.g. "2026-06-10T17:42:01+01:00".
+ * `timeZone` — IANA zone from `Intl.DateTimeFormat().resolvedOptions().timeZone`,
+ *              e.g. "Europe/London".
+ *
+ * Optional so old clients / harness fixtures that predate B.t12 remain valid.
+ * Malformed → 400 via the route-boundary Zod parse (`.strict()` stays).
+ */
+export const ClientTimeSchema = z
+  .object({
+    iso: z.string().datetime({ offset: true }),
+    timeZone: z.string().min(1).max(64),
+  })
+  .strict();
+export type ClientTime = z.infer<typeof ClientTimeSchema>;
+
 export const ChatRequestSchema = z
   .object({
     sessionId: z.string().min(1),
     message: z.string().min(1).max(CHAT_MESSAGE_MAX),
+    clientTime: ClientTimeSchema.optional(),
   })
   .strict();
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;

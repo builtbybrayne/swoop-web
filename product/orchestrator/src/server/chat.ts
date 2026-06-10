@@ -82,7 +82,7 @@ export function createChatHandler(
       sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    const { sessionId, message } = parsed.data;
+    const { sessionId, message, clientTime } = parsed.data;
     if (message.trim().length === 0) {
       sendError(res, 400, 'message_empty', 'message cannot be empty.');
       return;
@@ -102,6 +102,26 @@ export function createChatHandler(
       );
       return;
     }
+
+    // B.t12 — store latest visitor clock. Additive update: existing sessions
+    // without clientTime round-trip cleanly; new requests overwrite with the
+    // freshest value. Store before anything else so the dateline is always
+    // available from session state if we ever need it post-turn.
+    if (clientTime) {
+      await deps.sessionStore.update(sessionId, (s) => ({
+        ...s,
+        clientTime,
+      }));
+    }
+
+    // B.t12 — build a per-turn dateline for injection into the user-message
+    // envelope. The dateline must NOT go into the system prompt — the system
+    // prompt block carries cache_control: ephemeral (Perf-1); a changing
+    // dateline there would bust the Anthropic prompt cache every turn.
+    // Placing it as a prefix line on the user message achieves the same
+    // grounding effect while leaving the cached prefix untouched.
+    // Decision B.poincare-1.
+    const dateline = buildDateline(clientTime ?? null, now());
 
     // Append the user message to history up front. If the agent turn fails
     // mid-stream, the user side is still recorded — we don't want to lose
@@ -255,6 +275,7 @@ export function createChatHandler(
         userId,
         sessionId,
         message,
+        dateline,
         abortSignal: abortController.signal,
       });
 
@@ -411,11 +432,20 @@ function runAgentTurn(params: {
   userId: string;
   sessionId: string;
   message: string;
+  /** B.t12 — per-turn dateline prepended to the user message content. */
+  dateline: string;
   abortSignal: AbortSignal;
 }): AsyncIterable<AdkEvent> {
+  // B.t12 — inject the dateline as a context prefix on the user turn.
+  // Using a separate text part keeps the visitor's raw message unmodified in
+  // session history (appendUserMessage above already recorded the raw text);
+  // only the ADK runner / Anthropic sees the combined envelope.
   const newMessage: Content = {
     role: 'user',
-    parts: [{ text: params.message }],
+    parts: [
+      { text: params.dateline },
+      { text: params.message },
+    ],
   };
   return params.runner.runAsync({
     userId: params.userId,
@@ -423,6 +453,58 @@ function runAgentTurn(params: {
     newMessage,
     abortSignal: params.abortSignal,
   });
+}
+
+// ---------------------------------------------------------------------------
+// B.t12 — Dateline builder.
+//
+// Produces a human-readable date context line injected into the user-message
+// envelope on every turn. The line deliberately avoids the system prompt
+// (which carries cache_control: ephemeral per Perf-1) so the Anthropic prompt
+// cache is never busted by a per-turn clock value. Decision B.poincare-1.
+//
+// Format: "Current date for this visitor: Wednesday 10 June 2026 (Europe/London, 17:42 local)."
+// Fallback (no clientTime): "Current date (server clock — visitor clock unavailable): Wednesday 10 June 2026 (UTC)."
+// ---------------------------------------------------------------------------
+
+/** Build the per-turn dateline string for injection into the user message. */
+export function buildDateline(
+  clientTime: { iso: string; timeZone: string } | null,
+  serverNow: Date,
+): string {
+  if (clientTime) {
+    try {
+      const date = new Date(clientTime.iso);
+      if (!Number.isNaN(date.getTime())) {
+        const formatted = formatVisitorDate(date, clientTime.timeZone);
+        return `Current date for this visitor: ${formatted}. Reason about seasons, lead times and "how far out" from this date.`;
+      }
+    } catch {
+      // Fall through to server-clock fallback on any formatting failure.
+    }
+  }
+  const formatted = formatVisitorDate(serverNow, 'UTC');
+  return `Current date (server clock — visitor clock unavailable): ${formatted}. Reason about seasons, lead times and "how far out" from this date.`;
+}
+
+/** Format a Date in a given IANA timezone as a human-readable string. */
+function formatVisitorDate(date: Date, timeZone: string): string {
+  try {
+    const dayName = date.toLocaleDateString('en-GB', { weekday: 'long', timeZone });
+    const day = date.toLocaleDateString('en-GB', { day: 'numeric', timeZone });
+    const month = date.toLocaleDateString('en-GB', { month: 'long', timeZone });
+    const year = date.toLocaleDateString('en-GB', { year: 'numeric', timeZone });
+    const time = date.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone,
+      hour12: false,
+    });
+    return `${dayName} ${day} ${month} ${year} (${timeZone}, ${time} local)`;
+  } catch {
+    // Unknown timezone — fall back to UTC ISO date only.
+    return date.toISOString().slice(0, 10) + ' (UTC)';
+  }
 }
 
 // ---------------------------------------------------------------------------

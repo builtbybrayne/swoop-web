@@ -385,4 +385,44 @@ describe('ScenarioSchema', () => {
       }
     });
   });
+
+  // -------------------------------------------------------------------------
+  // B.t12 — date-distance scenario loads cleanly.
+  // -------------------------------------------------------------------------
+
+  describe('B.t12 date-distance scenario shape', () => {
+    // Persona must be ≥50 chars (UserAgentSpecSchema.persona min).
+    const datePersona =
+      'You are a 38-year-old software engineer planning a Patagonia trip for ' +
+      'February 2027. You ask direct questions about timing and lead times.';
+    const dateGoal =
+      'Ask the assistant when February 2027 is relative to today and whether ' +
+      'that is enough time to plan a Patagonia trip.';
+
+    it('accepts a userAgent scenario with a judge_rubric assertion (date-distance shape)', () => {
+      const parsed = ScenarioSchema.parse({
+        name: 'date-distance-reasoning',
+        description:
+          'Verify the agent correctly reasons about trip timing ~8 months out.',
+        userAgent: {
+          persona: datePersona,
+          goal: dateGoal,
+          terminationCriteria: {
+            maxTurns: 4,
+            stopWhen: ['the assistant has addressed how far out February 2027 is'],
+          },
+        },
+        assertions: [
+          {
+            kind: 'judge_rubric',
+            rubric:
+              'The agent must state February 2027 is approximately 7-9 months from June 2026, not two years.',
+          },
+        ],
+      });
+      expect('userAgent' in parsed).toBe(true);
+      expect(parsed.assertions).toHaveLength(1);
+      expect(parsed.assertions[0].kind).toBe('judge_rubric');
+    });
+  });
 });
