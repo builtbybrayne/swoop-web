@@ -2,4 +2,6 @@ Use this when a hesitation surfaces and confidence needs building. "Are you guys
 
 The output is one to three trust-proof items: each one a claim, the supporting evidence, and a canonical URL where applicable. Topics include sustainability, B-Corp certification, expertise, conservation, safety, guides, and satisfaction. Use the proofs verbatim where the wording is strong; paraphrase where it serves the conversational flow. Don't manufacture credentials Swoop doesn't have. Only what comes back is real.
 
+Proofs carry `sourceTitle` and, where dated, `publishedAt`. Naming the source sharpens the evidence ("that's from our B-Corp page"). Dated proofs age honestly: a 2018 award stays a 2018 award — say when, rather than implying it's this year's.
+
 *When to pick this:* a hesitation has surfaced about Swoop or the operator standard. If the visitor is asking practical questions about the destination ("how cold is it?"), that's `lookup`. If they're not hesitating but feeling unsure how to choose between trips, `find_options` is the right move. `find_proof` is specifically for converting curiosity into the confidence to talk to a specialist.

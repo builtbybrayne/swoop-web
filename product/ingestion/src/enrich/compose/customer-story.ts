@@ -51,6 +51,7 @@ interface BlogPostRow {
   content: string | null;
   canonical_url: string;
   featured_image_url: string | null;
+  published_at: Date | null;
 }
 
 export interface ComposeCustomerStoryOptions {
@@ -116,6 +117,10 @@ export async function composeCustomerStory(
           region,
           personaSummary,
           imageId: row.image_id ?? null,
+          // Reviews have no titled source; the review date is the
+          // provenance date (per migration 017).
+          sourceTitle: null,
+          sourcePublishedAt: toDateOrNull(row.date),
         });
         anonymousReviews += 1;
       }
@@ -142,6 +147,8 @@ export async function composeCustomerStory(
         personaSummary:
           region != null ? `Traveller from ${region}` : `Traveller`,
         imageId: bucket.rows[0]!.image_id ?? null,
+        sourceTitle: null,
+        sourcePublishedAt: latestDateFromBucket(bucket),
       });
       namedPersonas += 1;
       continue;
@@ -159,6 +166,10 @@ export async function composeCustomerStory(
       region,
       personaSummary: output.persona_summary,
       imageId: bucket.rows[0]!.image_id ?? null,
+      // Aggregated bucket spans multiple reviews — the most recent review
+      // date is the honest "this voice is from around then" signal.
+      sourceTitle: null,
+      sourcePublishedAt: latestDateFromBucket(bucket),
     });
     namedPersonas += 1;
   }
@@ -166,7 +177,7 @@ export async function composeCustomerStory(
   // ---------- 2. First-person blog rows -----------------------------------
   const mirrorBlogs = (
     await opts.client.query<BlogPostRow>(
-      `SELECT id, title, excerpt, content, canonical_url, featured_image_url
+      `SELECT id, title, excerpt, content, canonical_url, featured_image_url, published_at
        FROM blog_post
        WHERE primary_job = 'mirror'`,
     )
@@ -188,6 +199,8 @@ export async function composeCustomerStory(
       region: null,
       personaSummary: persona,
       imageId: null,
+      sourceTitle: bp.title ?? null,
+      sourcePublishedAt: bp.published_at ?? null,
     });
     firstPersonBlogs += 1;
   }
@@ -208,6 +221,13 @@ interface InsertArgs {
   region: string | null;
   personaSummary: string;
   imageId: number | null;
+  /** Blog post title for blog_first_person; NULL for customerreview rows. */
+  sourceTitle: string | null;
+  /**
+   * blog_post.published_at for blog_first_person; customerreview.date for
+   * review rows (most recent across an aggregated bucket). Per migration 017.
+   */
+  sourcePublishedAt: Date | null;
 }
 
 async function insertCustomerStoryRow(client: pg.PoolClient, row: InsertArgs): Promise<void> {
@@ -218,6 +238,8 @@ async function insertCustomerStoryRow(client: pg.PoolClient, row: InsertArgs): P
   // value-agnostic — same content_hash returns the right vector regardless
   // of what the target column is called. Per
   // planning/03-exec-crosscut-embedding-cache.md §2.2.
+  // IMPORTANT: source_title / source_published_at are metadata — they are
+  // intentionally NOT part of the content_hash input (migration 017 comment).
   const cached = await client.query<{ embedding: string }>(
     `SELECT embedding::text AS embedding FROM embedding_cache
      WHERE content_hash = $1 AND model_version = $2`,
@@ -227,10 +249,40 @@ async function insertCustomerStoryRow(client: pg.PoolClient, row: InsertArgs): P
   await client.query(
     `INSERT INTO customer_story
        (source_provenance, source_id, text, canonical_url, region, persona_summary,
-        image_id, content_hash, persona_embedding, tsv)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::halfvec(3072), to_tsvector('english', $3))`,
-    [row.provenance, row.sourceId, row.text, row.canonicalUrl, row.region, row.personaSummary, row.imageId, hash, cachedEmbedding],
+        image_id, content_hash, persona_embedding, tsv, source_title, source_published_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::halfvec(3072), to_tsvector('english', $3), $10, $11)`,
+    [
+      row.provenance, row.sourceId, row.text, row.canonicalUrl, row.region,
+      row.personaSummary, row.imageId, hash, cachedEmbedding,
+      row.sourceTitle, row.sourcePublishedAt,
+    ],
   );
+}
+
+/**
+ * Normalise a pg-returned date value (Date object or ISO string, depending
+ * on column type + driver parser) to a Date, or null when absent/invalid.
+ */
+function toDateOrNull(d: Date | string | null | undefined): Date | null {
+  if (d == null) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Most recent review date across a bucket's rows, or null when no row
+ * carries a date. Aggregated personas span years of reviews; the latest
+ * date is the honest "this voice is from around then" provenance signal.
+ */
+function latestDateFromBucket(bucket: {
+  rows: ReadonlyArray<{ date: Date | string | null }>;
+}): Date | null {
+  let latest: Date | null = null;
+  for (const r of bucket.rows) {
+    const d = toDateOrNull(r.date);
+    if (d && (!latest || d > latest)) latest = d;
+  }
+  return latest;
 }
 
 /**

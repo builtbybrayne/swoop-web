@@ -10,6 +10,7 @@
 import type pg from 'pg';
 import { CustomerStoryPublicSchema, type CustomerStoryPublic } from '@swoop/common';
 
+import { provenanceFields } from './provenance.js';
 import { resolveImagesByIds } from './resolve-image.js';
 
 export interface FindCustomerStoriesOptions {
@@ -47,7 +48,8 @@ export async function findCustomerStoriesByPersonaSignal(
   }
 
   const sql = `
-    SELECT id, text, canonical_url, region, persona_summary, image_id
+    SELECT id, text, canonical_url, region, persona_summary, image_id,
+           source_title, source_published_at
     FROM customer_story
     WHERE ${filterClauses.join(' AND ')}
     ORDER BY persona_embedding <=> $1::vector
@@ -77,6 +79,7 @@ export async function findCustomerStoriesByPersonaSignal(
       canonicalUrl: r.canonical_url as string | null,
       region: r.region as string | null,
       image: imageToProject,
+      ...provenanceFields(r),
     });
   });
 }
