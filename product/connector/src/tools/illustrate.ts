@@ -21,7 +21,12 @@ import {
 import { findImagesByKeywords } from '../data/find-images-by-keywords.js';
 import type { ToolHandlerDeps } from './deps.js';
 
-const DEFAULT_COUNT = 4;
+// One hero image per conversational moment is the default (decision
+// D.poincare-3, planning/03-exec-crosscut-magical-poincare-visual-channel.md):
+// multi-image is agent-explicit via `count`, never the fallback. The tool
+// description (cms/prompts/tools/illustrate/description.md) teaches the same
+// default; this constant enforces it when the agent omits `count`.
+const DEFAULT_COUNT = 1;
 
 export async function illustrateBody(
   input: IllustrateInput,
