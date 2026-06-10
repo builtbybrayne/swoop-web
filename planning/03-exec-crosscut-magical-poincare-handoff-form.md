@@ -79,3 +79,55 @@ Fix at the presentation layer: within an assistant message, the lead-capture wid
 ## 5. Estimate
 
 ~0.5 day including tests. No migration, no data work.
+
+---
+
+## 2026-06-10 execution log
+
+**Agent**: worktree `agent-a55b94b37919586c5`, branch `worktree-agent-a55b94b37919586c5`.
+
+**Git gate**: HEAD advanced to `64dd132` (Merge claude/magical-poincare-53e479: Luke Loom feedback triage) via fast-forward merge before work began.
+
+### Decision confirmations
+
+**D.poincare-1 confirmed**: CSS `order-last` mechanism chosen for L1 render-position fix. The assistant message root in `App.tsx` is `flex flex-col gap-2`; the `<section>` root of `LeadCaptureWidget` receives `order-last` so it lays out after any text parts regardless of DOM position. `wrapWithDevTrace` uses React fragments (pass-through in prod, no wrapper div) so the `<section>` is a direct flex child — `order-last` applies cleanly. No custom message-parts renderer needed. Streaming-safe: text parts streamed after the tool call appear above the already-mounted form.
+
+**E.poincare-2 confirmed**: `preferredMethod` state + fieldset removed from the widget; `contact.preferredMethod` no longer sent in the POST body. The field remains `.optional()` in `HandoffContactSchema` (no schema change) so existing durable records and fixtures remain valid. `preparePayloadForTemplate` in `mailer.ts` already uses `formatOptional(scrubbedContact?.preferredMethod)` which returns `—` when absent — no template or mailer code change needed beyond the new test pinning this behaviour.
+
+### Mechanism chosen
+
+CSS `order-last` on `<section data-testid="lead-capture">` — no fallback needed.
+
+Mobile/inline layout unaffected: the `order` property only reorders flex children within their flex container. The assistant message root is the only flex container in scope; display widgets (in sidebar on desktop, inline on mobile) are never `handoff` — their ordering is untouched per the scope guard.
+
+### Changes made
+
+| File | Change |
+|---|---|
+| `product/ui/src/shared/specialist-term.ts` | Created — canonical `SPECIALIST_TERM`, `SPECIALIST_TERM_SINGULAR`, `SPECIALIST_TERM_RE` exports (cross-agent coordination file). |
+| `product/ui/src/widgets/lead-capture.tsx` | L1: `order-last` on `<section>`; U1+P1: `VERDICT_INTRO` copy rewrite + confirmation + consent lines; U2: removed `preferredMethod` state + fieldset + POST body field; U3: precis `<details>` moved above notes textarea; U4: `open` attribute on `<details>`; import of `SPECIALIST_TERM_SINGULAR`. |
+| `product/ui/src/widgets/__tests__/lead-capture.test.tsx` | Updated intro copy assertion; added: precis `open` attribute test; DOM-order test (precis before notes); `order-last` class test; `no preferredMethod in POST body` assertion; consent copy assertion updated; confirmation card copy test. |
+| `product/connector/src/handoff/__tests__/mailer.test.ts` | Added: `contactPreferredMethod` renders `—` when field absent from contact. |
+
+### Test counts
+
+| Package | Before | After | Delta |
+|---|---|---|---|
+| `@swoop/ui` | 151 tests (34 files) | 151 tests (23 files) | +6 new tests in lead-capture suite (total 17 in file, was 11) |
+| `@swoop/connector` | 190 tests (20 files) | 190+1=191 tests (20 files) | +1 new test in mailer suite (total 18 in file, was 17) |
+
+> Note: UI test file count shows 23 because vitest counts test files, not suites.
+
+### Typecheck
+
+- `@swoop/ui`: 0 errors (clean).
+- `@swoop/connector`: 5 errors in `embed-query.test.ts` — identical to baseline on `main` (pre-existing, not introduced). 0 errors introduced by this work.
+
+### Deviations from plan
+
+None. Mailer code change was determined unnecessary: `formatOptional` already handles absent `preferredMethod` with `—` sentinel, so no code edit to `mailer.ts` was required beyond the new pinning test.
+
+### Pending items
+
+- Luke's final wording for "Planning Specialists" — change `SPECIALIST_TERM*` in `product/ui/src/shared/specialist-term.ts` only when confirmed by email.
+- Live smoke test (preview): booking-signal conversation → form appears below framing prose; submit → confirmation card + follow-up prose order sane; specialist email carries name/email/phone without preference row. Blocked on orchestrator being up.
