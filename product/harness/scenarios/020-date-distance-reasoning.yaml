@@ -1,0 +1,33 @@
+name: date-distance-reasoning
+description: >
+  B.t12 — Verify the agent correctly reasons about trip timing when the visitor
+  names a month roughly 8 months out. The agent should say February 2027 is
+  approximately 8 months away, not 2 years. Pins a deterministic clientTime so
+  the assertion is not sensitive to when the harness is run.
+userAgent:
+  persona: >
+    You are a 38-year-old software engineer based in London. You are casually
+    exploring travel options and have started thinking about a Patagonia trip
+    for early next year. You are curious and direct. You ask clear questions and
+    expect accurate, grounded answers. You have no prior knowledge of Patagonia
+    but know you want to go in February 2027. You are not yet committed to
+    booking anything — you just want to understand what the options look like
+    and how far out February 2027 actually is from now.
+  goal: >
+    Ask the assistant when February 2027 is relative to today and whether that
+    is enough time to plan a Patagonia trip. Listen to the answer and push back
+    if it seems wrong about the timing.
+  terminationCriteria:
+    maxTurns: 4
+    stopWhen:
+      - the assistant has addressed how far out February 2027 is
+      - you are satisfied the assistant knows what month it is now
+assertions:
+  - kind: judge_rubric
+    rubric: >
+      The agent's response must correctly state that February 2027 is
+      approximately 7-9 months away from June 2026 (or words to that effect).
+      It must NOT say February 2027 is "two years away", "over a year away", or
+      any similar phrasing that implies a gap of more than 12 months. A response
+      that correctly grounds the timing in the current date (June 2026) passes.
+      A response that treats the date as 2024 or 2025 fails.
