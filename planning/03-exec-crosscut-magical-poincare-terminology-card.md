@@ -50,3 +50,30 @@ A quiet, brand-respecting card (`data-swoop-widget="terminology-card"`): title, 
 ## 5. Estimate
 
 ~0.5 day + copy review round-trip with Swoop (non-blocking: ship behind the draft copy, swap on sign-off).
+
+---
+
+## 2026-06-10 execution log
+
+Executed in worktree `agent-add4f6fb97099a5ed` from `64dd132` (Luke Loom feedback triage merge). All four components landed; `@swoop/ui` suite green.
+
+**Decision D.poincare-4 — CONFIRMED as proposed.** Terminology cards are client-side keyword-triggered static sidebar entries, once per conversation, content from `cms/`; mechanism generalises (the store API is `publishStaticCard(id, payload)` / `dismissStaticCard(id)`, not specialists-specific) but only this card ships.
+
+**What landed** (files):
+
+- `product/ui/src/shared/specialist-term.ts` — canonical `SPECIALIST_TERM` / `SPECIALIST_TERM_RE` consts (cross-agent coordination file, byte-identical with the handoff-form agent's copy; merges cleanly).
+- `product/cms/content/terminology/swoop-planning-specialists.json` — title + 3 lines, no CTA. **DRAFT copy awaiting Luke/Julie sign-off** — drafted from `00_why.md` §9's team-depth framing (design trips for a living; 400,000 hours on-the-ground; same-cost-as-direct; no invented individual CVs). Loaded via Vite JSON import, the same mechanism `error-banner.tsx` uses for `cms/errors/en.json`. Swap-on-sign-off is a JSON edit only.
+- `product/ui/src/parts/sidebar-channel.ts` — `SidebarEntry = SidebarToolPartEntry | SidebarStaticCardEntry`; two insertion-ordered maps so "static cards above tool-parts" is concatenation, not sorting, and id namespaces can't collide. Once-guard = id-keying. `dismissStaticCard` blocks re-publication for the conversation; `resetSidebar()` clears entries + dismissals.
+- `product/ui/src/parts/terminology-trigger.ts` — `useSpecialistTermTrigger(text, enabled)` called from `FyiSignalingText` (the assistant text render path), role-gated via `useMessage`. **Settled-text semantics**: the effect re-arms a 500 ms timer on every text change, so streaming chunks keep cancelling the publish and a mid-stream partial word can never fire; replayed history arrives fully formed and settles immediately. Typographic apostrophes (U+2018/U+2019) normalised to ASCII before matching so "Swoop's" with a curly quote still triggers — the shared regex itself untouched.
+- `product/ui/src/parts/terminology-card.tsx` — quiet card (`data-swoop-widget="terminology-card"`), title + lines from the store payload, dismiss ×, no CTA, no aria region of its own (inherits the sidebar's labelled complementary region).
+- `product/ui/src/parts/visual-sidebar.tsx` — branches on entry kind; static cards render first.
+
+**Mobile call (plan §1.4): deferred mobile-side.** Evidence, from the substrate rather than a screenshot: (a) unlike tool widgets — which assistant-ui already mounts inline, so mobile-inline was the *zero-cost* posture for the sidebar plan — the static card has **no pre-existing inline mount path**; inline-at-first-match would need a new transcript surface plus first-match arbitration (on rehydrate several replayed text parts match simultaneously — which one renders the card?) plus cross-surface dismissal sync. (b) Luke's underlying feedback is that visual material crowds the conversation; injecting an explainer card into the mobile transcript — where space is scarcest — works against that. (c) The sidebar pane is `hidden` below `lg`, so deferral is the natural consequence of the card being a pure sidebar concern: zero extra code, reversible later by giving static cards an inline surface if mobile evidence demands one. A live mobile screenshot would only show the card's absence; the structural evidence above is what the call rests on.
+
+**Rehydrate (plan §1.3)**: correct by construction — replay renders through the same `FyiSignalingText` path, the trigger re-fires, id-keying collapses to one card. Covered by the two-matching-parts replay test. Note the deliberate corollary, matching the store's "projection, not persistence" posture: a card dismissed *before* a reload legitimately reappears after it (the dismissed set is in-memory; §1.3's "the card reappears without special-casing" is the documented intent).
+
+**Verification**: `@swoop/ui` 24 files / 164 tests, all passing (was 23 / 148 → **16 new tests**: 5 store static-card, 7 trigger, 2 card component, 2 sidebar integration). Typecheck: `@swoop/ui` clean; the 5 pre-existing `@swoop/connector` errors in `src/data/__tests__/embed-query.test.ts` remain untouched (not worsened). Live smoke + screenshot for Luke (§4.3) left for the HITL review pass at the merge tip — it needs a real conversation reaching a Specialists mention.
+
+**Deviations from plan**: none material. §2.1's sketch regex `/planning specialists?/` was superseded by the stricter canonical `SPECIALIST_TERM_RE` (requires the Swoop prefix) per the shared-term coordination — bare "planning specialists" without "Swoop('s)" deliberately does not fire (tested).
+
+**Open**: copy sign-off (Luke/Julie — tracked in [questions.md](../questions.md) per plan outcome 2); live smoke screenshot for Luke at the merge tip.

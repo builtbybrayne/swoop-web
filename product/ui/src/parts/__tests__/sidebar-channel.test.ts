@@ -2,15 +2,22 @@
 //
 // Unit coverage for the sidebar projection store: append-by-id, update-in-
 // place (keeps arrival position), snapshot referential stability, subscriber
-// notification (and idempotent no-op skip), and reset.
+// notification (and idempotent no-op skip), reset — plus the static-card
+// entry kind (D.poincare-4): once-per-conversation via id-keying, pinned
+// above tool-parts, dismissal, and reset clearing the dismissal.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   publishSidebarWidget,
+  publishStaticCard,
+  dismissStaticCard,
   resetSidebar,
   subscribeSidebar,
   getSidebarSnapshot,
+  type SidebarEntry,
+  type SidebarToolPartEntry,
   type SidebarWidgetEntry,
+  type StaticCardPayload,
 } from "../sidebar-channel";
 
 function entry(
@@ -28,6 +35,17 @@ function entry(
   };
 }
 
+const CARD_PAYLOAD: StaticCardPayload = {
+  title: "About Swoop Planning Specialists",
+  lines: ["Line one.", "Line two."],
+};
+
+/** Narrow a snapshot entry to a tool-part, failing loudly on a static card. */
+function asToolPart(e: SidebarEntry): SidebarToolPartEntry {
+  if (e.kind !== "tool-part") throw new Error("expected a tool-part entry");
+  return e;
+}
+
 beforeEach(() => {
   resetSidebar();
 });
@@ -36,7 +54,10 @@ describe("sidebar-channel store", () => {
   it("appends a first publish in arrival order", () => {
     publishSidebarWidget(entry("a"));
     publishSidebarWidget(entry("b"));
-    expect(getSidebarSnapshot().map((e) => e.toolCallId)).toEqual(["a", "b"]);
+    expect(getSidebarSnapshot().map((e) => asToolPart(e).toolCallId)).toEqual([
+      "a",
+      "b",
+    ]);
   });
 
   it("updates in place on re-publish of the same toolCallId, keeping position", () => {
@@ -47,8 +68,8 @@ describe("sidebar-channel store", () => {
     publishSidebarWidget(entry("a", { result: newResult }));
 
     const snap = getSidebarSnapshot();
-    expect(snap.map((e) => e.toolCallId)).toEqual(["a", "b"]);
-    expect(snap[0].result).toBe(newResult);
+    expect(snap.map((e) => asToolPart(e).toolCallId)).toEqual(["a", "b"]);
+    expect(asToolPart(snap[0]).result).toBe(newResult);
   });
 
   it("returns a referentially stable snapshot between mutations", () => {
@@ -97,5 +118,81 @@ describe("sidebar-channel store", () => {
     // Already empty → no further notification.
     resetSidebar();
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("sidebar-channel static cards (D.poincare-4)", () => {
+  it("appends a static card once — repeat publishes for the same id are no-ops", () => {
+    const listener = vi.fn();
+    subscribeSidebar(listener);
+
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Multi-mention conversations / rehydrate replay / StrictMode all re-fire
+    // the trigger; id-keying collapses them to the one entry, no re-emit.
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    publishStaticCard("terminology:specialists", {
+      title: "different",
+      lines: ["payload ignored — first publish wins"],
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    const snap = getSidebarSnapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0]).toMatchObject({
+      kind: "static-card",
+      id: "terminology:specialists",
+      payload: CARD_PAYLOAD,
+    });
+  });
+
+  it("sorts static cards above tool-part entries regardless of arrival order", () => {
+    publishSidebarWidget(entry("a"));
+    publishSidebarWidget(entry("b"));
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+
+    expect(
+      getSidebarSnapshot().map((e) =>
+        e.kind === "static-card" ? e.id : e.toolCallId,
+      ),
+    ).toEqual(["terminology:specialists", "a", "b"]);
+  });
+
+  it("dismiss removes the card, notifies, and blocks re-publication", () => {
+    const listener = vi.fn();
+    subscribeSidebar(listener);
+
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    listener.mockClear();
+
+    dismissStaticCard("terminology:specialists");
+    expect(getSidebarSnapshot()).toEqual([]);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Later trigger fires in the same conversation must not resurrect it.
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    expect(getSidebarSnapshot()).toEqual([]);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Dismissing an absent id is silent.
+    dismissStaticCard("terminology:specialists");
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("reset clears the dismissal — a fresh conversation can re-earn the card", () => {
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    dismissStaticCard("terminology:specialists");
+    resetSidebar();
+
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    expect(getSidebarSnapshot()).toHaveLength(1);
+  });
+
+  it("reset clears static cards together with tool-parts", () => {
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    publishSidebarWidget(entry("a"));
+    resetSidebar();
+    expect(getSidebarSnapshot()).toEqual([]);
   });
 });

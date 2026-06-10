@@ -14,6 +14,10 @@
 // failure modes of its own beyond rendering whatever the store holds, and reads
 // the *raw* widget map (no dev-trace, no re-publish) so there's no feedback
 // loop back into the store.
+//
+// Static-card entries (the terminology card, decision D.poincare-4) render
+// through `TerminologyCard` and arrive first in the snapshot — the store pins
+// them above the tool-part chronology.
 
 import { useSyncExternalStore } from "react";
 import type { ToolCallMessagePartProps } from "@assistant-ui/react";
@@ -21,8 +25,9 @@ import { toolWidgetComponents } from "../widgets";
 import {
   getSidebarSnapshot,
   subscribeSidebar,
-  type SidebarWidgetEntry,
+  type SidebarToolPartEntry,
 } from "./sidebar-channel";
+import { TerminologyCard } from "./terminology-card";
 
 /**
  * Re-render a single published widget from its stored tool-part. Builds the
@@ -31,7 +36,7 @@ import {
  * contract — assistant-ui's transport-only fields (`addResult`, `resume`,
  * `argsText`) are inert here, exactly as they are for the inline fallback.
  */
-function SidebarWidget({ entry }: { entry: SidebarWidgetEntry }) {
+function SidebarWidget({ entry }: { entry: SidebarToolPartEntry }) {
   const Widget = toolWidgetComponents[entry.toolName];
   if (!Widget) return null;
 
@@ -99,9 +104,13 @@ export function VisualSidebar({ className }: { className?: string }) {
           <SidebarEmptyState />
         ) : (
           <div className="flex flex-col gap-4">
-            {entries.map((entry) => (
-              <SidebarWidget key={entry.toolCallId} entry={entry} />
-            ))}
+            {entries.map((entry) =>
+              entry.kind === "static-card" ? (
+                <TerminologyCard key={entry.id} entry={entry} />
+              ) : (
+                <SidebarWidget key={entry.toolCallId} entry={entry} />
+              ),
+            )}
           </div>
         )}
       </div>

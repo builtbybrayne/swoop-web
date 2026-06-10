@@ -9,19 +9,30 @@
 //     marker AND publishes its tool-part into the store.
 //   - <VisualSidebar/> projects the store: empty state when empty, one
 //     sidebar-widget per entry when populated, and tracks reset.
+//   - Static-card entries (D.poincare-4) render via TerminologyCard, pinned
+//     above the tool-part widgets, dismissable in place.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act } from "react";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { SampleFindProofOutput } from "@swoop/common/fixtures";
 import { messagePartComponents } from "../index";
 import { VisualSidebar } from "../visual-sidebar";
 import {
   publishSidebarWidget,
+  publishStaticCard,
   resetSidebar,
   getSidebarSnapshot,
+  type SidebarEntry,
+  type SidebarToolPartEntry,
   type SidebarWidgetEntry,
 } from "../sidebar-channel";
+
+/** Narrow a snapshot entry to a tool-part, failing loudly on a static card. */
+function asToolPart(e: SidebarEntry): SidebarToolPartEntry {
+  if (e.kind !== "tool-part") throw new Error("expected a tool-part entry");
+  return e;
+}
 
 const byName = messagePartComponents.tools.by_name as Record<
   string,
@@ -101,9 +112,9 @@ describe("display-widget inline copy + publish", () => {
     // Published into the store, keyed by toolCallId.
     const snap = getSidebarSnapshot();
     expect(snap).toHaveLength(1);
-    expect(snap[0].toolCallId).toBe("call_proof_sidebar");
-    expect(snap[0].toolName).toBe("find_proof");
-    expect(snap[0].result).toBe(SampleFindProofOutput);
+    expect(asToolPart(snap[0]).toolCallId).toBe("call_proof_sidebar");
+    expect(asToolPart(snap[0]).toolName).toBe("find_proof");
+    expect(asToolPart(snap[0]).result).toBe(SampleFindProofOutput);
   });
 });
 
@@ -147,5 +158,61 @@ describe("VisualSidebar", () => {
     expect(
       document.querySelector('[data-swoop-part="visual-sidebar-empty"]'),
     ).not.toBeNull();
+  });
+});
+
+describe("VisualSidebar static cards (D.poincare-4)", () => {
+  const CARD_PAYLOAD = {
+    title: "About Swoop Planning Specialists",
+    lines: ["They design trips for a living.", "First-hand knowledge."],
+  };
+
+  it("renders the terminology card above tool-part widgets, inside the labelled region", () => {
+    // Tool-part arrives FIRST; the static card still renders above it.
+    publishSidebarWidget(storeEntry("a"));
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    render(<VisualSidebar />);
+
+    const list = document.querySelector(
+      '[data-swoop-part="visual-sidebar-scroll"] > div',
+    );
+    expect(list).not.toBeNull();
+    const children = Array.from(list!.children);
+    expect(children[0].getAttribute("data-swoop-widget")).toBe(
+      "terminology-card",
+    );
+    expect(children[1].getAttribute("data-swoop-part")).toBe("sidebar-widget");
+
+    // Part of the existing aria-labelled complementary region (a11y per plan
+    // §4.4) — no aria region of its own.
+    const aside = document.querySelector('[data-swoop-part="visual-sidebar"]');
+    expect(aside?.contains(children[0])).toBe(true);
+
+    // Copy comes through from the payload.
+    expect(screen.getByText("About Swoop Planning Specialists")).toBeInTheDocument();
+    expect(screen.getByText("They design trips for a living.")).toBeInTheDocument();
+  });
+
+  it("dismisses in place — card gone, widgets stay, re-publish blocked", () => {
+    publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    publishSidebarWidget(storeEntry("a"));
+    render(<VisualSidebar />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(
+      document.querySelector('[data-swoop-widget="terminology-card"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-swoop-part="sidebar-widget"]'),
+    ).not.toBeNull();
+
+    // A later trigger fire in the same conversation must not bring it back.
+    act(() => {
+      publishStaticCard("terminology:specialists", CARD_PAYLOAD);
+    });
+    expect(
+      document.querySelector('[data-swoop-widget="terminology-card"]'),
+    ).toBeNull();
   });
 });
