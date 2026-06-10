@@ -6,6 +6,10 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-06-10 — Luke feedback round 2: commercial-fence items (for commercials triage)
+
+The 10 Jun Loom triage ([ledger](planning/reviews/2026-06-10-luke-loom-feedback.md)) surfaced three items that sit outside the 30 Mar quote fence: (1) **Product Library ingestion** (pricing accuracy; exploration + ingest — questions.md ask raised); (2) **trip-card relevance deep work** (agentic data pipelines + richer search — Al's stance: a data-engineer engagement, recommendation available, not a cost-effective blocker to production trial); (3) **durable Postgres session backend** (B.t13 stub in the [demo-stability plan](planning/03-exec-crosscut-magical-poincare-demo-stability.md) — smallest of the three, arguably platform hygiene). Worth deciding which get quoted as a follow-on line item vs absorbed. The build already materially exceeds the quoted 16 days (per the [2026-05-27 state-of-play](planning/reviews/2026-05-27-ingest-and-state-of-play.md) §5.1) — this feedback round is a natural moment for that commercial conversation with Luke.
+
 ## 2026-05-21 — M4 milestone wording still assumes Cloud Run + Cloud SQL; needs rewrite
 
 [planning/01-top-level.md §4 Milestones](planning/01-top-level.md) M4 reads "*Deployed to Swoop GCP ("AI Pat Chat"). Cloud Run services live; session state persisted; Cloud SQL Postgres (with `pgvector` + `tsvector` + `pg_trgm`) populated; logging.*" That language predates the 2026-05-21 deployment-shape deferral that just landed in §9 ("Deferred at top level — deployment shape") and in [planning/02-impl-retrieval-and-data.md §1](planning/02-impl-retrieval-and-data.md) outcomes. M4 should be rewritten to describe the outcome (Puma stack reachable in Swoop's GCP project, durable state persisted, logging on) without prescribing Cloud Run + Cloud SQL as the shape — single-VM-all-on-one is now the leading candidate and only loses to Cloud SQL if scale demands it. Bigger than a 1-line edit because M4 is referenced from chunk B + chunk E plans + next-steps.md §8; sweep needs to be coherent.

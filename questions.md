@@ -172,6 +172,36 @@ Why it matters: M5 ships only after legal sign-off. SLA uncertainty is the bigge
 
 Where it lands: Tier 2 chunk E.
 
+### "Swoop Planning Specialists" canonical wording + terminology-card copy — Luke (raised 2026-06-10)
+
+Two asks from the 10 Jun Loom feedback round ([triage ledger](planning/reviews/2026-06-10-luke-loom-feedback.md) item P1):
+
+1. **The exact canonical term.** Luke wants the sales team treated "almost as sacredly as a trademark" with consistent, always-bold naming — transcript says *"swoops, uh, planning specialists or something like that"* and that he'd *"put this in an email somewhere"*. We're proceeding with **"Swoop Planning Specialists"** as the working term (centralised — a rename is one edit). Need his email with the final wording.
+2. **Card copy sign-off.** A small "About Swoop Planning Specialists" card will appear in the sidebar on first mention ([terminology-card plan](planning/03-exec-crosscut-magical-poincare-terminology-card.md)) — 2–3 lines pitching their experience and what they do. We'll draft from existing brand material; Luke/Julie to review the wording.
+
+Why it matters: the term lands across the system prompt, skills, handoff form, emails, and the new card — getting the string wrong means a sweep twice.
+
+### Swoop Group Tours — which 4, and the page URL — Luke, then Thomas / Richard (raised 2026-06-10)
+
+Luke (10 Jun Loom): there are **4 Swoop Group Tours**, listed on the Swoop Group Tours page, which he can point us to; they're a business priority and price-conscious visitors should be steered toward them. Our `tour_card` table holds **11** CMS-derived tours (see "Tour content population" above). Need:
+
+1. The Swoop Group Tours page URL (Luke offered).
+2. Which 4 of our 11 tours are the current Swoop Group Tours — or whether some of the 4 aren't in the dump at all. Ideally a CMS-side discriminator (flag / page placement) so the mapping survives content changes; route the mechanics to Thomas / Richard.
+3. Whether the other 7 tours should surface at all, or only the 4.
+
+Why it matters: the [content plan](planning/03-exec-content-t6-luke-loom.md) adds price-consciousness as a tour-surfacing signal now, but the agent can't privilege "the 4" until we can identify them in data.
+
+### Product Library ingestion — access + sign-off — Luke / Julie, mechanics via Thomas / Richard (raised 2026-06-10)
+
+Luke's pricing concern (10 Jun: stale blog prices, sticker-shock risk — [ledger items D1/D2](planning/reviews/2026-06-10-luke-loom-feedback.md)) points at the **Product Library** as the authoritative pricing source. It is not in the current ingest (the SQL dump covers the website CMS). Proposed work item, needing Swoop sign-off as a scope addition:
+
+1. **Access**: where does the Product Library live and what's the export/access path? (Phase-1 PoC did partial exploration of Swoop product data — not from scratch.)
+2. **Scope sign-off**: a short exploration pass (understand the data) → ingest + mapping → pricing surfaces the agent can trust. Likely also improves trip-card relevance de facto (richer attributes than the website data).
+
+Why it matters: contemporaneous pricing can't be guaranteed from website/blog content alone; the interim policy (broad bands, dated-source rule) is a stopgap. Also feeds the trip-card relevance conversation (ledger D5).
+
+Where it lands: Tier 2 chunk C extension; commercial fence note in [inbox.md](inbox.md) 2026-06-10.
+
 ---
 
 ## Closed
