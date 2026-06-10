@@ -264,6 +264,21 @@ describe('preparePayloadForTemplate', () => {
     expect(data.contactPhoneOrDash).toBe('—');
   });
 
+  it('renders contactPreferredMethod as em-dash when absent from contact (U2 — widget no longer sends it)', () => {
+    // The lead-capture widget no longer sends `preferredMethod` in the POST body
+    // (2026-06-10 magical-poincare handoff-form round 2). `formatOptional` must
+    // render `—` so the template row stays legible rather than showing blank.
+    const payloadWithoutPreference = {
+      ...SampleHandoffQualified,
+      contact: {
+        ...SampleHandoffQualified.contact,
+        preferredMethod: undefined,
+      },
+    };
+    const data = preparePayloadForTemplate(payloadWithoutPreference);
+    expect(data.contactPreferredMethod).toBe('—');
+  });
+
   it('labels marketing consent based on the granted flag', () => {
     // Both fixtures have marketingGranted: false → "declined".
     const declined = preparePayloadForTemplate(SampleHandoffQualified);

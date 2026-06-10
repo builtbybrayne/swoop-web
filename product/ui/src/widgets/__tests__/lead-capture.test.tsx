@@ -86,26 +86,46 @@ describe("LeadCaptureWidget", () => {
     const root = screen.getByTestId("lead-capture");
     expect(root).toHaveAttribute("data-verdict", SampleHandoff.verdict);
     expect(root).toHaveAttribute("data-swoop-widget-state", "form");
-    // Verdict-aware intro line stays as a signpost at the top of the form.
-    expect(screen.getByText(/Swoop specialist is the right next step/i)).toBeInTheDocument();
+    // Verdict-aware intro line — Luke's requested wording (2026-06-10).
+    expect(screen.getByText(/Planning Specialists will answer your questions/i)).toBeInTheDocument();
     // Form controls are present from the first paint.
     expect(screen.getByLabelText("Name")).toBeInTheDocument();
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
     // No legacy Continue button — single-step.
     expect(screen.queryByRole("button", { name: /Continue/i })).not.toBeInTheDocument();
+    // No preferred contact method fieldset (U2 — removed).
+    expect(screen.queryByText(/Preferred contact method/i)).not.toBeInTheDocument();
     // Specialist summary MUST NOT appear on the visitor surface anywhere.
     expect(screen.queryByText(SampleHandoff.reason.text)).not.toBeInTheDocument();
     // Motivation anchor likewise stays out of the visitor surface.
     expect(screen.queryByText(SampleHandoff.motivationAnchor)).not.toBeInTheDocument();
   });
 
-  it("renders the visitor precis inside a collapsible disclosure", () => {
+  it("renders the visitor precis inside a collapsible disclosure that is open by default (U4)", () => {
     render(<LeadCaptureWidget {...mockProps()} />);
     const disclosure = screen.getByTestId("lead-capture-precis-disclosure");
     expect(disclosure).toBeInTheDocument();
+    // open attribute must be present so the disclosure is visible by default (U4).
+    expect(disclosure).toHaveAttribute("open");
     expect(screen.getByTestId("lead-capture-precis-body").textContent).toBe(
       VISITOR_PRECIS_SAMPLE,
     );
+  });
+
+  it("precis disclosure appears before the notes textarea in DOM order (U3)", () => {
+    render(<LeadCaptureWidget {...mockProps()} />);
+    const disclosure = screen.getByTestId("lead-capture-precis-disclosure");
+    const notes = screen.getByTestId("lead-capture-additional-notes");
+    // compareDocumentPosition returns a bitmask; bit 4 (0x04 = DOCUMENT_POSITION_FOLLOWING)
+    // is set when `notes` follows `disclosure` in the DOM.
+    const position = disclosure.compareDocumentPosition(notes);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("section root has order-last class so it renders after text parts in flex column (L1)", () => {
+    render(<LeadCaptureWidget {...mockProps()} />);
+    const root = screen.getByTestId("lead-capture");
+    expect(root.className).toMatch(/order-last/);
   });
 
   it("falls back to a generic precis line when the agent omitted visitorPrecis", () => {
@@ -123,11 +143,12 @@ describe("LeadCaptureWidget", () => {
     );
   });
 
-  it("uses the updated consent copy ('I agree my conversation summary can be shared...')", () => {
+  it("consent copy references Planning Specialist (U1/P1)", () => {
     render(<LeadCaptureWidget {...mockProps()} />);
+    // Consent line uses the centralised SPECIALIST_TERM_SINGULAR.
     expect(
       screen.getByText(
-        /I agree my conversation summary can be shared with a Swoop specialist/i,
+        /I agree my conversation summary can be shared with a Swoop Planning Specialist/i,
       ),
     ).toBeInTheDocument();
   });
@@ -199,7 +220,8 @@ describe("LeadCaptureWidget", () => {
     }
     expect(body.contact.name).toBe("Ada Ríos");
     expect(body.contact.email).toBe("ada@example.com");
-    expect(body.contact.preferredMethod).toBe("email");
+    // preferredMethod removed from POST body (U2 — no preferred contact control).
+    expect("preferredMethod" in body.contact).toBe(false);
     expect(body.consent.handoffGranted).toBe(true);
     expect(body.consent.marketingGranted).toBe(false);
     expect(body.consent.consentCopyVersion).toBe("consent-handoff/v1");
@@ -327,6 +349,40 @@ describe("LeadCaptureWidget", () => {
     fireEvent.click(screen.getByTestId("lead-capture-consent"));
     const submit = screen.getByRole("button", { name: /Submit handoff details/i });
     expect(submit).not.toBeDisabled();
+  });
+
+  it("confirmation card uses Planning Specialist term (U1/P1)", async () => {
+    postHandoffSubmitMock.mockResolvedValueOnce({
+      ok: true,
+      handoffId: "handoff_confirm_term",
+      emailStatus: "sent",
+    });
+    const addResult = vi.fn().mockImplementation(() => {
+      // Immediately supply the result that the confirmation branch reads.
+    });
+
+    const { rerender } = render(<LeadCaptureWidget {...mockProps({ addResult })} />);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
+    fireEvent.click(screen.getByTestId("lead-capture-consent"));
+    fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
+
+    await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(addResult).toHaveBeenCalledTimes(1));
+
+    // Re-render with result populated to trigger confirmation branch.
+    rerender(
+      <LeadCaptureWidget
+        {...mockProps({
+          addResult,
+          result: { status: "accepted", handoffId: "handoff_confirm_term" },
+        })}
+      />,
+    );
+
+    const card = await screen.findByTestId("lead-capture-confirmation");
+    expect(card).toBeInTheDocument();
+    expect(card.textContent).toMatch(/Swoop Planning Specialist will be in touch/i);
   });
 
   it("renders malformed placeholder when args don't match HandoffInputSchema", () => {

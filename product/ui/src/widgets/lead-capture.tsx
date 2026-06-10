@@ -44,26 +44,27 @@ import {
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { CtaButton } from "../shared";
+import { SPECIALIST_TERM_SINGULAR } from "../shared/specialist-term";
 import {
   safeParse,
   WidgetMalformedPlaceholder,
 } from "./widget-shell";
 import { postHandoffSubmit } from "../runtime/handoff-client";
 
+// VERDICT_INTRO — visitor-facing intro line at the top of the form.
+// qualified copy is Luke's requested wording (2026-06-10); the other
+// verdicts are re-voiced to the same register but preserve distinct semantics.
+// Specialist term centralised via SPECIALIST_TERM_SINGULAR.
 const VERDICT_INTRO: Record<HandoffInput["verdict"], string> = {
-  qualified:
-    "A Swoop specialist is the right next step. Share a contact detail and they'll pick up where we left off.",
-  referred_out:
-    "Your plans are a better fit for a partner we know well. Share a contact detail and we'll introduce you.",
-  disqualified:
-    "This particular trip isn't the right match today, but we'd still love to hear from you if anything changes.",
+  qualified: `One of ${SPECIALIST_TERM_SINGULAR}s will answer your questions and pick up where we left off. Please share your details.`,
+  referred_out: `We know just the right people for this. One of ${SPECIALIST_TERM_SINGULAR}s will make an introduction — please share your details.`,
+  disqualified: `This particular trip isn't the right match today, but a ${SPECIALIST_TERM_SINGULAR} would still love to hear from you if anything changes.`,
   // Inconclusive: agent never reached confidence; no contact requested.
   // Same operational pattern as disqualified per HITL Q5 — the widget is not
   // expected to render this branch (the agent typically doesn't surface the
   // lead-capture widget on inconclusive outcomes), but the type-checker
   // requires the entry.
-  inconclusive:
-    "We weren't quite able to find the right match in this conversation, but the door's open whenever you'd like to come back.",
+  inconclusive: `We weren't quite able to find the right match this time, but a ${SPECIALIST_TERM_SINGULAR} is here whenever you'd like to come back.`,
 };
 
 /** Pattern matches HTML5 `type=email` — keep the regex minimal / permissive. */
@@ -97,8 +98,6 @@ export function LeadCaptureWidget(
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [preferredMethod, setPreferredMethod] =
-    useState<"email" | "phone" | "either">("email");
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [handoffConsent, setHandoffConsent] = useState(false);
   const [marketingConsent, setMarketingConsent] = useState(false);
@@ -145,7 +144,7 @@ export function LeadCaptureWidget(
         >
           <p className="font-medium text-slate-900">Thanks — we&apos;ve got your details.</p>
           <p className="mt-1 text-slate-600">
-            A Swoop specialist will be in touch.
+            A {SPECIALIST_TERM_SINGULAR} will be in touch.
           </p>
         </div>
       );
@@ -208,7 +207,6 @@ export function LeadCaptureWidget(
       contact: {
         name: name.trim(),
         email: email.trim(),
-        preferredMethod,
         ...(phone.trim() ? { phone: phone.trim() } : {}),
       },
       consent: {
@@ -265,6 +263,13 @@ export function LeadCaptureWidget(
 
   const canSubmit = handoffConsent && !submitting;
 
+  // L1 render-position fix: the agent fires `handoff` before writing its
+  // framing prose (per 00_why.md §9 booking-limit rule), so the tool-call
+  // part arrives before text parts in the DOM. The assistant message root is
+  // a flex column (`flex flex-col gap-2` in App.tsx); CSS `order-last` pushes
+  // this widget to the visual tail of that column regardless of DOM position,
+  // so text streamed after the tool call appears above the form.
+  // Decision D.poincare-1: CSS order mechanism chosen over custom parts renderer.
   return (
     <section
       data-testid="lead-capture"
@@ -273,7 +278,7 @@ export function LeadCaptureWidget(
       data-swoop-widget="lead-capture"
       data-swoop-widget-state="form"
       aria-label="Contact form"
-      className="my-2 w-full rounded-lg border border-slate-200 bg-white p-4"
+      className="order-last my-2 w-full rounded-lg border border-slate-200 bg-white p-4"
     >
       <p
         data-testid="lead-capture-verdict-intro"
@@ -331,50 +336,16 @@ export function LeadCaptureWidget(
           />
         </div>
 
-        <fieldset className="flex flex-col gap-2">
-          <legend className="text-xs font-medium text-slate-700">Preferred contact method</legend>
-          <div className="flex flex-wrap gap-3 text-sm">
-            {(["email", "phone", "either"] as const).map((method) => (
-              <label key={method} className="inline-flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  name="lc-preferred"
-                  value={method}
-                  checked={preferredMethod === method}
-                  onChange={() => setPreferredMethod(method)}
-                />
-                <span className="capitalize">{method}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <div className="flex flex-col gap-1">
-          <label
-            htmlFor="lc-additional-notes"
-            className="text-xs font-medium text-slate-700"
-          >
-            Anything else the specialist should know?{" "}
-            <span className="text-slate-400">(optional)</span>
-          </label>
-          <textarea
-            id="lc-additional-notes"
-            data-testid="lead-capture-additional-notes"
-            value={additionalNotes}
-            onChange={(ev) => setAdditionalNotes(ev.target.value)}
-            rows={3}
-            maxLength={2000}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
-          />
-        </div>
-
         {/*
-          Visitor-facing precis. Default-collapsed; surfaces the agent's
-          `visitorPrecis` (logistical-only, never the rich specialist
-          summary). If the agent omitted it, a generic reassurance line
-          stands in so the disclosure still has substance.
+          U3 + U4: precis disclosure sits above the notes textarea so
+          the visitor reviews what they've shared before adding anything.
+          U4: `open` by default — visible immediately, still collapsible.
+          Surfaces the agent's `visitorPrecis` (logistical-only, never
+          the rich specialist summary). If the agent omitted it, a generic
+          reassurance line stands in so the disclosure still has substance.
         */}
         <details
+          open
           data-testid="lead-capture-precis-disclosure"
           className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
         >
@@ -389,6 +360,25 @@ export function LeadCaptureWidget(
           </p>
         </details>
 
+        <div className="flex flex-col gap-1">
+          <label
+            htmlFor="lc-additional-notes"
+            className="text-xs font-medium text-slate-700"
+          >
+            Anything else the Specialist should know?{" "}
+            <span className="text-slate-400">(optional)</span>
+          </label>
+          <textarea
+            id="lc-additional-notes"
+            data-testid="lead-capture-additional-notes"
+            value={additionalNotes}
+            onChange={(ev) => setAdditionalNotes(ev.target.value)}
+            rows={3}
+            maxLength={2000}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+          />
+        </div>
+
         <label className="mt-1 flex gap-2 text-sm text-slate-700">
           <input
             type="checkbox"
@@ -399,8 +389,8 @@ export function LeadCaptureWidget(
             required
           />
           <span>
-            I agree my conversation summary can be shared with a Swoop specialist so they
-            can follow up.
+            I agree my conversation summary can be shared with a {SPECIALIST_TERM_SINGULAR} so
+            they can follow up.
           </span>
         </label>
 
