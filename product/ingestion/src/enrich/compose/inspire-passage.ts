@@ -79,6 +79,7 @@ interface PageRow {
   ntag_ids: number[];
   image_id: number | null;
   pagetype_title: string | null;
+  title: string | null;
 }
 
 interface ContentblockRow {
@@ -87,6 +88,7 @@ interface ContentblockRow {
   page_canonical_url: string;
   page_ntag_ids: number[];
   page_image_id: number | null;
+  page_title: string | null;
   subtype: string;
   title: string | null;
   text: string | null;
@@ -98,6 +100,8 @@ interface BlogChunkRow {
   blog_post_id: number;
   blog_canonical_url: string;
   blog_ntag_ids: number[];
+  blog_title: string | null;
+  blog_published_at: Date | null;
   text: string;
   content_hash: string;
 }
@@ -135,7 +139,7 @@ export async function composeInspirePassage(
   // ---------- 1. Pages of Inspire-friendly pagetypes ----------------------
   const pages = (
     await opts.client.query<PageRow>(
-      `SELECT id, canonical_url, intro_text, summary, ntag_ids, image_id, pagetype_title
+      `SELECT id, canonical_url, intro_text, summary, ntag_ids, image_id, pagetype_title, title
        FROM page
        WHERE pagetype_title = ANY($1::text[])`,
       [[...INSPIRE_PAGETYPE_TITLES]],
@@ -152,6 +156,10 @@ export async function composeInspirePassage(
         canonicalUrl: p.canonical_url,
         ntagIds: p.ntag_ids ?? [],
         imageId: p.image_id ?? null,
+        // Step 0 (2026-06-10): page.created_at is an ETL timestamp, not a
+        // real editorial date — ships NULL so the agent doesn't surface stale dates.
+        sourceTitle: p.title ?? null,
+        sourcePublishedAt: null,
       });
       pageIntroChunks += 1;
     }
@@ -164,6 +172,8 @@ export async function composeInspirePassage(
         canonicalUrl: p.canonical_url,
         ntagIds: p.ntag_ids ?? [],
         imageId: p.image_id ?? null,
+        sourceTitle: p.title ?? null,
+        sourcePublishedAt: null,
       });
       pageSummaryChunks += 1;
     }
@@ -177,7 +187,8 @@ export async function composeInspirePassage(
         `SELECT cb.id, cb.page_id, cb.subtype, cb.title, cb.text, cb.image_id,
                 p.canonical_url AS page_canonical_url,
                 p.ntag_ids     AS page_ntag_ids,
-                p.image_id     AS page_image_id
+                p.image_id     AS page_image_id,
+                p.title        AS page_title
          FROM contentblock cb
          JOIN page p ON p.id = cb.page_id
          WHERE cb.page_id = ANY($1::int[])
@@ -199,6 +210,8 @@ export async function composeInspirePassage(
           canonicalUrl: cb.page_canonical_url,
           ntagIds: cb.page_ntag_ids ?? [],
           imageId: cb.image_id ?? cb.page_image_id ?? null,
+          sourceTitle: cb.page_title ?? null,
+          sourcePublishedAt: null,
         });
         pageContentblockChunks += 1;
       }
@@ -210,7 +223,9 @@ export async function composeInspirePassage(
     await opts.client.query<BlogChunkRow>(
       `SELECT bc.id, bc.blog_post_id, bc.text, bc.content_hash,
               bp.canonical_url AS blog_canonical_url,
-              bp.ntag_ids     AS blog_ntag_ids
+              bp.ntag_ids     AS blog_ntag_ids,
+              bp.title        AS blog_title,
+              bp.published_at  AS blog_published_at
        FROM blog_chunk bc
        JOIN blog_post bp ON bp.id = bc.blog_post_id
        WHERE bp.primary_job = 'inspire'
@@ -226,6 +241,8 @@ export async function composeInspirePassage(
       canonicalUrl: bc.blog_canonical_url,
       ntagIds: bc.blog_ntag_ids ?? [],
       imageId: null,
+      sourceTitle: bc.blog_title ?? null,
+      sourcePublishedAt: bc.blog_published_at ?? null,
     });
     blogChunks += 1;
   }
@@ -246,6 +263,8 @@ export async function composeInspirePassage(
       canonicalUrl: 'https://www.swoop-patagonia.com/',
       ntagIds: [],
       imageId: null,
+      sourceTitle: null,
+      sourcePublishedAt: null,
     });
     cmsChunks += 1;
   }
@@ -262,12 +281,22 @@ interface InsertInspireRowArgs {
   canonicalUrl: string;
   ntagIds: number[];
   imageId: number | null;
+  /** Human-readable title of the source page or blog post. NULL for FAQ/chunk. */
+  sourceTitle: string | null;
+  /**
+   * Publication date. Non-null only for blog_chunk provenance
+   * (blog_post.published_at). Page-derived rows ship NULL — page.created_at
+   * is an ETL timestamp, not an editorial date (Step 0 verdict 2026-06-10).
+   */
+  sourcePublishedAt: Date | null;
 }
 
 async function insertInspireRow(client: pg.PoolClient, row: InsertInspireRowArgs): Promise<void> {
   const hash = contentHash(row.text, SOURCE_TYPE);
   // Cache lookup: same content_hash + model → reuse the cached embedding,
   // no Gemini call. Per planning/03-exec-crosscut-embedding-cache.md §2.2.
+  // IMPORTANT: source_title and source_published_at are metadata — they are
+  // intentionally NOT part of the content_hash input (migration 017 comment).
   const cached = await client.query<{ embedding: string }>(
     `SELECT embedding::text AS embedding FROM embedding_cache
      WHERE content_hash = $1 AND model_version = $2`,
@@ -276,8 +305,13 @@ async function insertInspireRow(client: pg.PoolClient, row: InsertInspireRowArgs
   const cachedEmbedding = cached.rows[0]?.embedding ?? null;
   await client.query(
     `INSERT INTO inspire_passage
-       (source_provenance, source_id, text, canonical_url, ntag_ids, image_id, content_hash, embedding, tsv)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::halfvec(3072), to_tsvector('english', $3))`,
-    [row.provenance, row.sourceId, row.text, row.canonicalUrl, row.ntagIds, row.imageId, hash, cachedEmbedding],
+       (source_provenance, source_id, text, canonical_url, ntag_ids, image_id,
+        content_hash, embedding, tsv, source_title, source_published_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::halfvec(3072), to_tsvector('english', $3), $9, $10)`,
+    [
+      row.provenance, row.sourceId, row.text, row.canonicalUrl,
+      row.ntagIds, row.imageId, hash, cachedEmbedding,
+      row.sourceTitle, row.sourcePublishedAt,
+    ],
   );
 }

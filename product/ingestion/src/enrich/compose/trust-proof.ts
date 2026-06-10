@@ -89,6 +89,7 @@ interface BlogChunkRow {
   blog_post_id: number;
   blog_canonical_url: string;
   blog_title: string;
+  blog_published_at: Date | null;
   text: string;
 }
 
@@ -137,6 +138,10 @@ export async function composeTrustProof(
         claim: p.title,
         evidence: text,
         canonicalUrl: p.canonical_url,
+        // Step 0 (2026-06-10): page.created_at is an ETL timestamp, not a
+        // real editorial date — date ships NULL for page-derived rows.
+        sourceTitle: p.title ?? null,
+        sourcePublishedAt: null,
       });
       pageRows += 1;
     }
@@ -149,6 +154,8 @@ export async function composeTrustProof(
         claim: p.title,
         evidence: text,
         canonicalUrl: p.canonical_url,
+        sourceTitle: p.title ?? null,
+        sourcePublishedAt: null,
       });
       pageRows += 1;
     }
@@ -182,6 +189,8 @@ export async function composeTrustProof(
           claim: cb.title ?? cb.page_title,
           evidence: c.text,
           canonicalUrl: cb.page_canonical_url,
+          sourceTitle: cb.page_title ?? null,
+          sourcePublishedAt: null,
         });
         pageRows += 1;
       }
@@ -193,7 +202,8 @@ export async function composeTrustProof(
     await opts.client.query<BlogChunkRow>(
       `SELECT bc.id, bc.blog_post_id, bc.text,
               bp.canonical_url AS blog_canonical_url,
-              bp.title AS blog_title
+              bp.title AS blog_title,
+              bp.published_at AS blog_published_at
        FROM blog_chunk bc
        JOIN blog_post bp ON bp.id = bc.blog_post_id
        WHERE bp.primary_job = 'reassure'
@@ -208,6 +218,8 @@ export async function composeTrustProof(
       claim: bc.blog_title,
       evidence: bc.text,
       canonicalUrl: bc.blog_canonical_url,
+      sourceTitle: bc.blog_title ?? null,
+      sourcePublishedAt: bc.blog_published_at ?? null,
     });
     blogRows += 1;
   }
@@ -222,12 +234,22 @@ interface InsertArgs {
   claim: string;
   evidence: string;
   canonicalUrl: string | null;
+  /** Human-readable title of the source page or blog post. */
+  sourceTitle: string | null;
+  /**
+   * Publication date. Non-null only for blog_b_corp provenance
+   * (blog_post.published_at). Page rows ship NULL — page.created_at is an
+   * ETL timestamp (Step 0 verdict 2026-06-10).
+   */
+  sourcePublishedAt: Date | null;
 }
 
 async function insertTrustRow(client: pg.PoolClient, row: InsertArgs): Promise<void> {
   const hash = contentHash(`${row.claim}\n${row.evidence}`, SOURCE_TYPE);
   // Cache lookup: same content_hash + model → reuse the cached embedding.
   // Per planning/03-exec-crosscut-embedding-cache.md §2.2.
+  // IMPORTANT: source_title / source_published_at are metadata — they are
+  // intentionally NOT part of the content_hash input (migration 017 comment).
   const cached = await client.query<{ embedding: string }>(
     `SELECT embedding::text AS embedding FROM embedding_cache
      WHERE content_hash = $1 AND model_version = $2`,
@@ -236,8 +258,12 @@ async function insertTrustRow(client: pg.PoolClient, row: InsertArgs): Promise<v
   const cachedEmbedding = cached.rows[0]?.embedding ?? null;
   await client.query(
     `INSERT INTO trust_proof
-       (source_provenance, source_id, topic, claim, evidence, canonical_url, content_hash, embedding, tsv)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::halfvec(3072), to_tsvector('english', $4 || ' ' || $5))`,
-    [row.provenance, row.sourceId, row.topic, row.claim, row.evidence, row.canonicalUrl, hash, cachedEmbedding],
+       (source_provenance, source_id, topic, claim, evidence, canonical_url, content_hash,
+        embedding, tsv, source_title, source_published_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::halfvec(3072), to_tsvector('english', $4 || ' ' || $5), $9, $10)`,
+    [
+      row.provenance, row.sourceId, row.topic, row.claim, row.evidence, row.canonicalUrl,
+      hash, cachedEmbedding, row.sourceTitle, row.sourcePublishedAt,
+    ],
   );
 }
