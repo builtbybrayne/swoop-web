@@ -208,42 +208,47 @@ async function blendBrowse(
   const hotelExcludes = excludeIdsForType(exclude, 'hotel');
   const regionBaseExcludes = excludeIdsForType(exclude, 'region_base');
 
-  const [trips, tours, hotels, regionBases] = await Promise.all([
+  // Sequential awaits — a single pg client cannot execute queries in
+  // parallel (pg internally serialises and the pattern warns as deprecated,
+  // removed in pg@9). Same discipline as showOptionsBody.
+  const trips =
     tripQuota > 0
-      ? queryTripCardsByFilter(client, {
+      ? await queryTripCardsByFilter(client, {
           ...filters,
           excludeIds: tripExcludes,
           limit: tripQuota,
           queryEmbedding,
           queryText,
         })
-      : Promise.resolve([]),
+      : [];
+  const tours =
     tourQuota > 0
-      ? queryTourCardsByFilter(client, {
+      ? await queryTourCardsByFilter(client, {
           ...filters,
           excludeIds: tourExcludes,
           limit: tourQuota,
           queryEmbedding,
           queryText,
         })
-      : Promise.resolve([]),
+      : [];
+  const hotels =
     hotelQuota > 0
-      ? queryHotelCardsByFilter(client, {
+      ? await queryHotelCardsByFilter(client, {
           region: filters.region,
           budgetBand: filters.budgetBand,
           accommodationStyle: filters.accommodationStyle,
           excludeIds: hotelExcludes,
           limit: hotelQuota,
         })
-      : Promise.resolve([]),
+      : [];
+  const regionBases =
     regionBaseQuota > 0
-      ? queryRegionBaseCardsByFilter(client, {
+      ? await queryRegionBaseCardsByFilter(client, {
           region: filters.region,
           excludeIds: regionBaseExcludes,
           limit: regionBaseQuota,
         })
-      : Promise.resolve([]),
-  ]);
+      : [];
 
   const out: BrowseOption[] = [
     ...trips.map(cardToBrowseOption),

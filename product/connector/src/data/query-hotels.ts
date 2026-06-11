@@ -120,6 +120,25 @@ export async function queryHotelCardsByFilter(
     havingClauses.length > 0 ? `HAVING ${havingClauses.join(' AND ')}` : '';
 
   const sql = `
+    ${HOTEL_SELECT}
+    ${where}
+    ${HOTEL_GROUP_BY}
+    ${having}
+    ORDER BY RANDOM(), h.id
+    LIMIT ${limitBind}
+  `;
+
+  const res = await client.query(sql, binds);
+  return mapHotelRows(client, res.rows);
+}
+
+/**
+ * Shared hotel SELECT/JOIN/GROUP BY block. ONE definition for both the
+ * filter and by-id paths so the projection can never drift between them
+ * (the drift class that bit the first show_options cut, live-verify
+ * 2026-06-12).
+ */
+const HOTEL_SELECT = `
     SELECT
       h.id,
       h.slug,
@@ -143,17 +162,40 @@ export async function queryHotelCardsByFilter(
     LEFT JOIN country            ON country.id = area.country_id
     LEFT JOIN page p             ON p.id = h.page_id
     LEFT JOIN hotel_pricing hp   ON hp.hotel_id = h.id
-    ${where}
-    GROUP BY h.id, loc.name, area.name, country.name, p.image_id
-    ${having}
-    ORDER BY RANDOM(), h.id
-    LIMIT ${limitBind}
+`;
+
+const HOTEL_GROUP_BY = `GROUP BY h.id, loc.name, area.name, country.name, p.image_id`;
+
+/**
+ * Hydrate full hotel cards for an explicit id list — the `show_options`
+ * by-id path (goofy-goldstine find/show split, C.goofy-goldstine-12).
+ * Returns rows in DB order; the caller re-sorts to its input order.
+ */
+export async function queryHotelCardsByIds(
+  client: pg.PoolClient,
+  ids: number[],
+): Promise<HotelProposalCard[]> {
+  if (ids.length === 0) return [];
+  const sql = `
+    ${HOTEL_SELECT}
+    WHERE h.id = ANY($1::int[])
+    ${HOTEL_GROUP_BY}
   `;
+  const res = await client.query(sql, [ids]);
+  return mapHotelRows(client, res.rows);
+}
 
-  const res = await client.query(sql, binds);
-
+/**
+ * Shared row → HotelProposalCard projection (filter + by-id paths).
+ * Drops rows with no deep-link affordance, resolves page-hub images,
+ * parses through the schema.
+ */
+async function mapHotelRows(
+  client: pg.PoolClient,
+  rows: Array<Record<string, unknown>>,
+): Promise<HotelProposalCard[]> {
   // Filter out rows we can't surface (no deep-link CTA possible).
-  const usableRows = res.rows.filter((r) => {
+  const usableRows = rows.filter((r) => {
     return Boolean(r.canonical_url) || Boolean(r.slug);
   });
 

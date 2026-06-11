@@ -607,14 +607,34 @@ export const ShowOptionsInputSchema = z
   .strict();
 export type ShowOptionsInput = z.infer<typeof ShowOptionsInputSchema>;
 
+/**
+ * Grouping field shared by every shown card. Defined once so the four
+ * extended variants below stay in lockstep.
+ */
+const ShownCardGroupField = {
+  group: z.enum(["primary", "also_interesting"]),
+} as const;
+
+/**
+ * A full proposal card + the curation `group` it was shown under.
+ *
+ * Built as a discriminated union of `.extend()`ed variants — NOT
+ * `z.intersection(ProposalCardPublicSchema, {group})` — because the card
+ * variants are `.strict()`: a strict schema rejects the `group` key as
+ * unrecognised, so the intersection could never pass for any real card
+ * (caught by the orchestrator bracketing test, 2026-06-12).
+ */
+export const ShownProposalCardSchema = z.discriminatedUnion("type", [
+  TripProposalCardSchema.extend(ShownCardGroupField).strict(),
+  TourProposalCardSchema.extend(ShownCardGroupField).strict(),
+  HotelProposalCardSchema.extend(ShownCardGroupField).strict(),
+  RegionBaseProposalCardSchema.extend(ShownCardGroupField).strict(),
+]);
+export type ShownProposalCard = z.infer<typeof ShownProposalCardSchema>;
+
 export const ShowOptionsOutputSchema = z
   .object({
-    cards: z.array(
-      z.intersection(
-        ProposalCardPublicSchema,
-        z.object({ group: z.enum(["primary", "also_interesting"]) }),
-      ),
-    ),
+    cards: z.array(ShownProposalCardSchema),
   })
   .strict();
 export type ShowOptionsOutput = z.infer<typeof ShowOptionsOutputSchema>;

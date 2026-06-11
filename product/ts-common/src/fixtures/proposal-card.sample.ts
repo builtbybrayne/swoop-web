@@ -14,6 +14,7 @@
 import type {
   HotelProposalCard,
   RegionBaseProposalCard,
+  ShowOptionsOutput,
   TourProposalCard,
   TripProposalCard,
 } from "../tools.js";
@@ -148,4 +149,18 @@ export const SampleRegionBaseProposalCard: RegionBaseProposalCard = {
     moodTags: ["expansive"],
     regionTags: ["el-calafate"],
   },
+};
+
+/**
+ * `show_options` output — the visitor-facing curation surface from the
+ * goofy-goldstine find/show split. Three primary cards + one
+ * also_interesting near-fit, exercising every variant and both groups.
+ */
+export const SampleShowOptionsOutput: ShowOptionsOutput = {
+  cards: [
+    { ...SampleTripProposalCard, group: "primary" },
+    { ...SampleTourProposalCard, group: "primary" },
+    { ...SampleHotelProposalCard, group: "primary" },
+    { ...SampleRegionBaseProposalCard, group: "also_interesting" },
+  ],
 };

@@ -1,20 +1,15 @@
 // product/ui/src/widgets/__tests__/find-options.test.tsx
 //
-// Covers the polymorphic Proposal-card set: trips-only (v1 live reality),
-// mixed (one of each variant — D.t9 ships all four renderers day-one), the
-// tour-card group-size affordance (Luke priority), the hotel-card per-night
-// pricing branch, the region-base framing line, the empty-state branch, and
-// the malformed fallback.
+// Post-goofy-goldstine find/show split (2026-06-11): `find_options` is the
+// agent-private BROWSE tool. It renders NOTHING for the visitor — a silent
+// placeholder in dev, null in prod. Card rendering moved to ShowOptionsWidget
+// (see show-options.test.tsx). These tests pin the silence.
 
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import {
   SampleFindOptionsOutput,
   SampleFindOptionsOutputMixed,
-  SampleHotelProposalCard,
-  SampleRegionBaseProposalCard,
-  SampleTourProposalCard,
-  SampleTripProposalCard,
 } from "@swoop/common/fixtures";
 import { FindOptionsWidget } from "../find-options";
 
@@ -23,7 +18,7 @@ function mockProps(overrides: Partial<Record<string, unknown>>) {
     type: "tool-call" as const,
     toolCallId: "call_options_1",
     toolName: "find_options",
-    args: { region: "torres-del-paine" },
+    args: { query: "kayaking near glaciers" },
     argsText: "{}",
     addResult: () => {},
     resume: () => {},
@@ -34,116 +29,57 @@ function mockProps(overrides: Partial<Record<string, unknown>>) {
 
 afterEach(() => cleanup());
 
-describe("FindOptionsWidget", () => {
-  it("renders an all-trips set against the v1 fixture", () => {
+describe("FindOptionsWidget (browse-only — renders nothing)", () => {
+  it("renders the dev silent placeholder for a populated browse result", () => {
     render(
       <FindOptionsWidget {...mockProps({ result: SampleFindOptionsOutput })} />,
     );
-
-    const root = screen.getByTestId("find-options");
-    expect(root).toBeInTheDocument();
-    expect(root).toHaveAttribute("data-swoop-widget", "find-options");
-
-    const tripCards = screen.getAllByTestId("find-options-trip-card");
-    expect(tripCards).toHaveLength(1);
-    expect(tripCards[0]).toHaveAttribute("data-swoop-card-type", "trip");
-
-    // From-price rendered with "from £" prefix per per-type pricing rule
-    // (trip = total).
-    expect(screen.getByText(/from £2,150/i)).toBeInTheDocument();
+    // No visitor-facing card surface — browse output never renders.
+    expect(screen.queryByTestId("find-options")).toBeNull();
+    expect(screen.queryByTestId("find-options-trip-card")).toBeNull();
+    const silent = screen.getByTestId("widget-silent");
+    expect(silent).toHaveAttribute("data-swoop-widget", "find-options");
   });
 
-  it("renders one of each variant against the mixed fixture (polymorphic dispatch)", () => {
+  it("stays silent for a mixed-type browse result too", () => {
     render(
       <FindOptionsWidget
         {...mockProps({ result: SampleFindOptionsOutputMixed })}
       />,
     );
-
-    expect(screen.getByTestId("find-options-trip-card")).toBeInTheDocument();
-    expect(screen.getByTestId("find-options-tour-card")).toBeInTheDocument();
-    expect(screen.getByTestId("find-options-hotel-card")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("find-options-region-base-card"),
-    ).toBeInTheDocument();
+    expect(screen.queryByTestId("find-options")).toBeNull();
+    expect(screen.getByTestId("widget-silent")).toBeInTheDocument();
   });
 
-  it("surfaces the group-size badge on a tour card (Luke salience hook)", () => {
-    const result = {
-      cards: [SampleTourProposalCard],
-      count: 1,
-    };
-    render(<FindOptionsWidget {...mockProps({ result })} />);
-
-    const badge = screen.getByTestId("find-options-tour-group-size");
-    expect(badge).toBeInTheDocument();
-    expect(badge).toHaveTextContent(`max ${SampleTourProposalCard.groupSizeMax} guests`);
-    // Brand-extension hook present so styling can target the badge.
-    expect(badge).toHaveAttribute(
-      "data-swoop-part",
-      "find-options-tour-group-size",
-    );
-  });
-
-  it("renders /night pricing for hotel cards (the per_night discriminator)", () => {
-    const result = {
-      cards: [SampleHotelProposalCard],
-      count: 1,
-    };
-    render(<FindOptionsWidget {...mockProps({ result })} />);
-
-    // Per-night framing, not total.
-    expect(screen.getByText(/from £920 \/ night/i)).toBeInTheDocument();
-    // Star rating row visible.
-    expect(
-      screen.getByTestId("find-options-hotel-star-rating"),
-    ).toBeInTheDocument();
-  });
-
-  it("renders the use-as-a-base framing on region_base cards", () => {
-    const result = {
-      cards: [SampleRegionBaseProposalCard],
-      count: 1,
-    };
-    render(<FindOptionsWidget {...mockProps({ result })} />);
-
-    const framing = screen.getByTestId("find-options-region-base-framing");
-    expect(framing).toBeInTheDocument();
-    expect(framing.textContent).toContain("Use El Calafate as a base");
-  });
-
-  it("renders trip-card CTAs as new-tab anchors", () => {
-    render(
-      <FindOptionsWidget {...mockProps({ result: SampleFindOptionsOutput })} />,
-    );
-    const link = screen.getByRole("link", {
-      name: new RegExp(`Read more about ${SampleTripProposalCard.headline}`, "i"),
-    });
-    expect(link).toHaveAttribute("href", SampleTripProposalCard.canonicalUrl);
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-  });
-
-  it("renders the dev silent indicator when cards are empty (prod stays silent)", () => {
-    // Visitor-facing chrome is gone (agent prose carries the moment); the
-    // dev silent placeholder surfaces what fired and why under Vitest's
-    // DEV-true env.
+  it("renders the dev silent indicator when options are empty", () => {
     render(
       <FindOptionsWidget
-        {...mockProps({ result: { cards: [], count: 0 } })}
+        {...mockProps({ result: { options: [], count: 0 } })}
       />,
     );
     expect(screen.queryByTestId("find-options")).toBeNull();
     const silent = screen.getByTestId("widget-silent");
     expect(silent).toHaveAttribute("data-swoop-widget", "find-options");
     expect(silent.textContent).toContain("find_options");
-    expect(silent.textContent).toContain("empty result");
   });
 
-  it("falls back to the placeholder on a malformed result", () => {
+  it("falls back to the malformed placeholder on a malformed result", () => {
     render(
       <FindOptionsWidget
-        {...mockProps({ result: { cards: "not-an-array", count: 0 } })}
+        {...mockProps({ result: { options: "not-an-array", count: 0 } })}
+      />,
+    );
+    expect(screen.getByTestId("widget-malformed")).toBeInTheDocument();
+  });
+
+  it("rejects the legacy full-card shape (cards: [...]) as malformed", () => {
+    // The pre-split shape must not silently pass — schema narrowed to
+    // BrowseOption[].
+    render(
+      <FindOptionsWidget
+        {...mockProps({
+          result: { cards: [{ type: "trip", id: "1", headline: "x" }], count: 1 },
+        })}
       />,
     );
     expect(screen.getByTestId("widget-malformed")).toBeInTheDocument();

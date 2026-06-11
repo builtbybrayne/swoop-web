@@ -215,11 +215,44 @@ export async function queryTripCardsByFilter(
   }
 
   const res = await client.query(sql, queryBinds);
+  return mapTripRows(client, res.rows);
+}
 
-  const imageIds = res.rows.map((r) => r.image_id as number | null);
+/**
+ * Hydrate full trip cards for an explicit id list — the `show_options`
+ * by-id path (goofy-goldstine find/show split, C.goofy-goldstine-12).
+ * Same projection + mapper as the filter path so the two can never drift.
+ * Returns rows in DB order; the caller re-sorts to its input order.
+ */
+export async function queryTripCardsByIds(
+  client: pg.PoolClient,
+  ids: number[],
+): Promise<TripProposalCard[]> {
+  if (ids.length === 0) return [];
+  const sql = `
+    SELECT id, slug, headline, vibe_line, region, duration_days,
+           from_price, currency_code, accommodation_style,
+           COALESCE(activity_tags, '{}') AS activity_tags,
+           canonical_url, image_id
+    FROM trip_card
+    WHERE id = ANY($1::int[])
+  `;
+  const res = await client.query(sql, [ids]);
+  return mapTripRows(client, res.rows);
+}
+
+/**
+ * Shared row → TripProposalCard projection (filter + by-id paths).
+ * Resolves hero images on the same client, then parses through the schema.
+ */
+async function mapTripRows(
+  client: pg.PoolClient,
+  rows: Array<Record<string, unknown>>,
+): Promise<TripProposalCard[]> {
+  const imageIds = rows.map((r) => r.image_id as number | null);
   const images = await resolveImagesByIds(client, imageIds);
 
-  return res.rows.map((r) => {
+  return rows.map((r) => {
     const image = r.image_id
       ? (images.get(r.image_id as number) ?? undefined)
       : undefined;
