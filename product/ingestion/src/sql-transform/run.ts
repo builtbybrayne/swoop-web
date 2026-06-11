@@ -136,7 +136,7 @@ const COLS = {
   ] as const,
   contentblock: [
     'id', 'page_id', 'position', 'subtype', 'title', 'subheading', 'text',
-    'image_id', 'cta_text', 'cta_url',
+    'image_id', 'cta_text', 'cta_url', 'faqset_id',
   ] as const,
   chunk: ['id', 'type_name', 'title', 'text'] as const,
   faqitem: ['id', 'title', 'content', 'faqset_id', 'position'] as const,

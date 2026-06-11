@@ -31,6 +31,10 @@ interface FaqRow {
   id: number;
   title: string;
   content: string;
+  /** Resolved via faqset_id → contentblock → page (migration 018). NULL when
+   *  the faqset places no block on any loaded page (~36/928 at source). */
+  page_canonical_url: string | null;
+  page_title: string | null;
 }
 
 interface PageRow {
@@ -86,7 +90,27 @@ export async function composeInformChunk(
   let blogRows = 0;
 
   // ---------- 1. FAQ items ------------------------------------------------
-  const faqs = (await opts.client.query<FaqRow>(`SELECT id, title, content FROM faqitem`)).rows;
+  // Each FAQ's owning page resolves via faqset_id ↔ contentblock.faqset_id →
+  // page (migration 018). 24 of 147 faqsets place blocks on 2–8 pages —
+  // ORDER BY p.id LIMIT 1 is the deterministic lowest-page-id tie-break.
+  // Per planning/03-exec-crosscut-goofy-noether-lookup-url-fix.md (the lookup
+  // widget URL-gates its render; canonical_url was NULL on all FAQ rows).
+  const faqs = (
+    await opts.client.query<FaqRow>(
+      `SELECT f.id, f.title, f.content,
+              owner.canonical_url AS page_canonical_url,
+              owner.title         AS page_title
+       FROM faqitem f
+       LEFT JOIN LATERAL (
+         SELECT p.canonical_url, p.title
+         FROM contentblock cb
+         JOIN page p ON p.id = cb.page_id
+         WHERE cb.faqset_id = f.faqset_id
+         ORDER BY p.id
+         LIMIT 1
+       ) owner ON TRUE`,
+    )
+  ).rows;
   for (const f of faqs) {
     const c = chunkFaqItem(f.title, f.content ?? '');
     if (c.text.trim().length === 0) continue;
@@ -95,9 +119,11 @@ export async function composeInformChunk(
       sourceId: String(f.id),
       question: f.title,
       text: c.text,
-      canonicalUrl: null,
-      // FAQ items have no user-facing page title or editorial date.
-      sourceTitle: null,
+      canonicalUrl: f.page_canonical_url ?? null,
+      // Page title doubles as the lookup widget's anchor copy ("Find out
+      // more about {title} →"). No editorial date exists for FAQ content —
+      // page.created_at is an ETL timestamp (Step 0 verdict 2026-06-10).
+      sourceTitle: f.page_title ?? null,
       sourcePublishedAt: null,
     });
     faqRows += 1;

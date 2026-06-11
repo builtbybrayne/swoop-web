@@ -283,6 +283,10 @@ export function transformContentblock(
     image_id: null, // Source contentblock doesn't carry a hero image_id directly.
     cta_text: strOrNull(row.values.cta_text),
     cta_url: strOrNull(row.values.cta_url) ?? strOrNull(row.values.cta_link),
+    // Join key to faqitem.faqset_id — lets inform_chunk compose resolve each
+    // FAQ's owning page for canonical_url + source_title (migration 018; no
+    // FK — the source faqset table is absent from the dump and not needed).
+    faqset_id: numOrNull(row.values.faqset_id),
     ntag_ids: tagIds,
   };
 }
