@@ -34,7 +34,7 @@ These live at the project root. Keep them current — add entries as new discove
 
 ## Inbox & questions
 
-Two append-only capture files live at the repo root. Both get periodically triaged.
+Three append-only capture files live at the repo root. All get periodically triaged.
 
 ### `inbox.md` — ad-hoc captures for us
 
@@ -52,6 +52,10 @@ One- to several-line body. Note where this might eventually land ("Handle in Tie
 Things Al needs Swoop-side input on before they can be closed. Organised by topic, each entry names who to ask (Luke / Julie / Thomas / Richard / Martin / Lane / legal) and why it matters. Answered questions move to the "Closed" section at the bottom during triage.
 
 **When Al surfaces a question that needs Swoop input** (not a decision he can close alone), add it to `questions.md` under "Open" rather than just noting it inline in a planning doc. Keeps the ask-list coherent and prevents questions dying in Tier 2/3 footnotes.
+
+### `luke-briefing.md` — business implications for Luke
+
+Things Luke (or Julie, where marked) needs to be *aware of* — business implications surfaced by build/research work, written in business language with **no technical detail**. Distinct from `questions.md` (those are asks); these are awareness items that graduate into Al's emails/calls. **When research or implementation surfaces a business-level implication** (a data gap that limits a business priority, a source-of-truth contradiction, an operational dependency on Swoop), append a dated entry here rather than burying it in a Tier-3 plan. Entries carry a status: NEW → RAISED → CLOSED. Convention started 2026-06-11; seed example: tours carry no prices anywhere in the website data, despite tours being the business priority.
 
 ---
 
