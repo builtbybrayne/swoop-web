@@ -8,6 +8,42 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## D.goofy-goldstine-1 — `also_interesting` ships in the v1 schema; its widget treatment is a separate isolated UI-only commit (Phase 3) for the parallel styling agent
+
+**Decided**: 2026-06-11
+**Owner**: Alastair (HITL)
+**Rationale**: Alastair explicitly wanted no long scrollable rows in the primary grid, but the `also_interesting` compact strip was the right vehicle for near-fits. Shipping the group field in v1 avoids a later schema bump. Isolating the strip to a single `product/ui/`-only commit (message: `feat(ui): also_interesting compact strip on show_options — styling pass welcome`) makes it trivially findable for the styling agent working in parallel.
+**Swap cost**: Low. Schema already carries the field; the UI commit is self-contained.
+
+## C.goofy-goldstine-13 — Seen-tracking: exclude-on-entry stays at find_options (browse); mark-as-shown moves to show_options (display)
+
+**Decided**: 2026-06-11
+**Owner**: Alastair (HITL); back-linked from [AntiRepetition crosscut plan](03-exec-crosscut-anti-repetition.md)
+**Rationale**: The correct semantic is that something is "seen" when the visitor sees it — i.e. when `show_options` renders it — not when the agent considered it privately. Hotels and region_bases shown via `show_options` now enter the seen-set. The browse-time exclude-on-entry (inject `seenItems.hotel` + `seenItems.region_base` into `find_options.exclude`) is unchanged — it prevents the agent re-offering options the visitor has already seen. Trip/tour carve-out preserved in both tools.
+**Swap cost**: Low. One switch case in `anti-repetition.ts`; well-tested.
+
+## C.goofy-goldstine-12 — find/show split: find_options = agent-private browse (compact BrowseOption[], limit 12, renders nothing); show_options = visitor-facing curation (full ProposalCards, ≤8 items, grouped primary/also_interesting)
+
+**Decided**: 2026-06-11
+**Owner**: Alastair (named the split and both tools in HITL session)
+**Rationale**: The agent needs to browse and judge options privately before committing to showing the visitor anything. `find_options` now returns compact rows (title, region, duration, price — no image hydration) for agent-internal comparison. `show_options` receives the curated ids, hydrates full cards, and is what the visitor sees. Correct locus separation: the browse step is cheap and private; the show step is the commitment.
+**Swap cost**: Medium. Reversing the split would re-merge two tools; the schema and handler separation makes it straightforward but not trivial.
+
+## C.goofy-goldstine-11 — Coverage-probed filters (region/duration/activity/budget) stay as optional constraints; only zero-population traps removed
+
+**Decided**: 2026-06-11
+**Owner**: Alastair (HITL)
+**Rationale**: Alastair was explicit: *"if we lose the filters, it'll possibly be a bit of a ballache to wire them back in."* Filters constrain; embeddings order. The two zero-population tour traps (source/target filter and a secondary activity check) were already killed in a prior hot patch — Phase 1 confirmed this was correct.
+**Swap cost**: n/a (additive; filters are optional params).
+
+## C.goofy-goldstine-10 — find_options ranks trips/tours by hybrid RRF score from optional free-prose `query`; RANDOM() demoted to tiebreak/fallback
+
+**Decided**: 2026-06-11
+**Owner**: Alastair (HITL ratification); executed by agent `a1c4f2bbd5ab63767`
+**Rationale**: Trips and tours were being filtered but never ranked semantically — the source of Luke's D5 relevance feedback. Hybrid RRF over cosine ANN (`embedding <=> $1::vector`) + ts_rank (`tsv @@ websearch_to_tsquery`) gives relevance ordering without discarding the safety-net filters. `query` is optional so callers with no signal get the existing RANDOM() tiebreak. Supersedes C.t4's "pure SQL filter — no vector retrieval" for `find_options`.
+**Swap cost**: Low. The `query` param is optional; removing hybrid ranking is a one-line SQL swap back to `ORDER BY RANDOM()`.
+
+
 > **Numbering note (2026-05-13)** — entries below use non-numeric suffixes (`C.bf-*` for the BF-FO-v3 backfill landing, `C.batch-*` for the BATCH-C.t6 batches-submission landing, `E.verdict-*` for the VERDICT-E.t1 wire-tightening, **`{C,D}.brave-pare-*` for the brave-pare live-smoke wave**) rather than continuing the numeric `C.43+` / `E.16+` / `D.31+` sequences. The rationale is collision avoidance: parallel Tier-3 plan authors were running concurrently the day these landed, and several were independently allocating numeric ids. The semantic-suffix prefixes keep task provenance discoverable and side-step the allocation race entirely. Future renumbering to standard `C.N` / `D.N` / `E.N` form is a doc-only refactor with zero swap cost.
 
 ## D.goofy-goldstine-10 — Activity status is derived client-side from streamed `tool-call` parts; one display slot shared with the D.10 `<fyi>` line, latest signal wins, text-arrival clears

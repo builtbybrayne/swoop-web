@@ -1,6 +1,8 @@
 # 03 — Execution: Crosscut — find_options reshape (hybrid ranking + find/show split)
 
-> **Status**: DRAFT — pending HITL ratification of this document. Load-bearing design calls made by Alastair in the 2026-06-11 HITL session (worktree `goofy-goldstine-2ed1c1`); ratification appendix at bottom. Decision IDs proposed `C.goofy-goldstine-{10..}` / `D.goofy-goldstine-{1..}` (wave-named; offset from the pricing plan's range to avoid sibling collisions).
+> **Status**: EXECUTED — 2026-06-11. Worktree `agent-a1c4f2bbd5ab63767`, branch `worktree-agent-a1c4f2bbd5ab63767`. Commits: `6b810ac` (Phase 1+2), `3093fdd` (Phase 3 UI strip, isolated to `product/ui/`). 500 tests passing, typecheck clean.
+>
+> **Status (original)**: DRAFT — pending HITL ratification of this document. Load-bearing design calls made by Alastair in the 2026-06-11 HITL session (worktree `goofy-goldstine-2ed1c1`); ratification appendix at bottom. Decision IDs proposed `C.goofy-goldstine-{10..}` / `D.goofy-goldstine-{1..}` (wave-named; offset from the pricing plan's range to avoid sibling collisions).
 >
 > **Back-links**: [2026-06-10 Luke Loom ledger item D5](reviews/2026-06-10-luke-loom-feedback.md) (trip-card relevance), [2026-06-11 widget-emptiness diagnosis M1](reviews/2026-06-11-widget-emptiness-diagnosis.md) (zero-trap filters silently deleting trips/tours from blends), [AntiRepetition crosscut](03-exec-crosscut-anti-repetition.md) (trip/tour carve-out + seen-set mechanics), [find_options polymorphism crosscut](03-exec-crosscut-find-options-polymorphism.md) (the contract this evolves), [C.t4 plan](03-exec-c-t4.md) (origin of "pure SQL filter — no vector retrieval", superseded here).
 >
