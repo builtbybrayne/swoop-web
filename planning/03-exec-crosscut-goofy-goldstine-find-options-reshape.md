@@ -1,6 +1,6 @@
 # 03 — Execution: Crosscut — find_options reshape (hybrid ranking + find/show split)
 
-> **Status**: EXECUTED — 2026-06-11. Worktree `agent-a1c4f2bbd5ab63767`, branch `worktree-agent-a1c4f2bbd5ab63767`. Commits: `6b810ac` (Phase 1+2), `3093fdd` (Phase 3 UI strip, isolated to `product/ui/`). 500 tests passing, typecheck clean.
+> **Status**: EXECUTED + LIVE-VERIFIED — 2026-06-12. Worktree `agent-a1c4f2bbd5ab63767`, branch `worktree-agent-a1c4f2bbd5ab63767`. Commits: `6b810ac` (Phase 1+2), `3093fdd` (Phase 3 UI strip), `b86c147` (live-verify fix wave), `06b4b61` (AntiRepetition addendum). Full execution log at the bottom of this file.
 >
 > **Status (original)**: DRAFT — pending HITL ratification of this document. Load-bearing design calls made by Alastair in the 2026-06-11 HITL session (worktree `goofy-goldstine-2ed1c1`); ratification appendix at bottom. Decision IDs proposed `C.goofy-goldstine-{10..}` / `D.goofy-goldstine-{1..}` (wave-named; offset from the pricing plan's range to avoid sibling collisions).
 >
@@ -154,3 +154,48 @@ Phase 1: ~½ day. Phase 2: ~½–1 day. Phase 3: small (hours). Total ~1–1.5 d
 2. Embeddings for **ordering**; filters retained — Alastair: *"I'm not sure how good the embeddings search will be! And if we lose the filters, it'll possibly be a bit of a ballache to wire them back in"* → resolved as keep-both (§2.2), `query` optional as the safety valve.
 3. Split ratified — Alastair named it **`show_options`**: *"One literally just finds options, and has no render attached. And then there's a [show]_options that the agent passes chosen ids to that triggers the widgets."* Fatter browse payload before curation; no long scrollable rows; `also_interesting` strip as the exception, built as an isolated UI-only commit for the parallel styling agent.
 4. Discovery that motivated the wave: `find_options` never used embeddings — Alastair: *"No wonder they're not landing well."* Luke's D5 relevance feedback is the client-side echo of the same gap.
+
+---
+
+## 2026-06-12 execution log (agent worktree `agent-a1c4f2bbd5ab63767`)
+
+Four commits on `worktree-agent-a1c4f2bbd5ab63767` (not pushed, not merged — orchestrator merges):
+
+| Commit | What |
+|---|---|
+| `6b810ac` | Phase 1+2 — hybrid RRF ranking + `query` param, compact `BrowseOption[]` browse output, `show_options` 10th tool, seen-marking moved to show, `find_options` widget silenced, system-prompt touch-ups, harness scenario `agent-212-kayaking-relevance.yaml` |
+| `3093fdd` | Phase 3 — `also_interesting` compact strip, isolated to `product/ui/` for the styling agent |
+| `b86c147` | Live-verify fix wave (see below) |
+| `06b4b61` | AntiRepetition plan addendum — find_options row superseded per §3.2 |
+
+### Defects caught after the first landing (the case for live verification)
+
+1. **`ShowOptionsOutputSchema` could never pass** — `z.intersection(ProposalCardPublicSchema, {group})` over `.strict()` union members rejects `group` as an unrecognised key. Every successful hydration would have thrown at the handler's final parse. Rebuilt as `ShownProposalCardSchema`: discriminated union of `.extend({group})` variants. Caught by the orchestrator bracketing test.
+2. **By-id query drift** — the first `show_options` cut kept private SQL copies; `queryHotelsById` referenced a non-existent `h.accommodation_style` and wrong joins. Live verify failed on the first hotel hydration. Fix per plan §3.2 as written: by-id variants (`query{Trip,Tour,Hotel,RegionBase}CardsByIds`) now live in `data/query-*.ts`, sharing ONE SELECT block + row-mapper with the filter paths.
+3. **Parallel queries on a single pg client** — `Promise.all` in both `showOptionsBody` and the pre-existing `blendBrowse` triggers pg's deprecation (hard break in pg@9). Both now await sequentially.
+4. **Stale pins/tests** — connector `mcp.test.ts` 9→10 pin; `FindOptionsWidget` card tests rewritten for browse-silence; card coverage moved to new `show-options.test.tsx` (+ strip + group-contract tests); `SampleShowOptionsOutput` fixture; `show_options` handler unit tests.
+
+> Correction: the 2026-06-11 log line claimed "500 tests passing" — that figure read only the last two workspaces of a truncated run. True per-workspace total after the fix wave: **1,325 passed / 26 skipped across 6 workspaces**, typecheck clean.
+
+### Live verification (puma_dev + real Gemini)
+
+- **Hybrid browse**: `query: "sea kayaking among glaciers and fjords"` → 12 options; top ranks are *Kayak Pumalin Fjords*, *Kayaking in Glacier Alley*, *W Trek & Backcountry Kayaking* — the D5 relevance gap visibly closed.
+- **Fallback browse** (no query): 12 options via RANDOM() path.
+- **show_options hydration**: 8/8 mixed-type ids hydrated with images + canonical URLs, groups preserved, curation order kept.
+
+### Real-Anthropic smoke (plan §3.6 STOP-condition check)
+
+`claude-sonnet-4-5-20250929`, real cms tool descriptions, real browse rows, 3 trials: **3/3 unprompted two-steps** — `find_options` always carried a `query`, `show_options` always fired the next round with only valid browsed ids, and the model used the `primary`/`also_interesting` grouping (3+1) unprompted. **STOP condition NOT met**; no forced chaining needed.
+
+### Operator-pending (needs the full live stack, not reachable from this worktree)
+
+- End-to-end widget smoke through orchestrator + UI (browse renders nothing in the sidebar, show renders cards, `puma_session_event` transcript shows browse iterations).
+- Seen-set probe across a real conversation (hotel shown via show_options not re-browsed; trip repeats fine).
+- Harness run of `agent-212-kayaking-relevance.yaml` (asserts the `tool_call_order` browse→show; needs a harness `tool_call_order` assertion kind if not yet implemented — check before first run).
+- Fresh-install verification at the merge tip (per merge-time convention).
+
+### Merge notes for the orchestrator
+
+- Tool count: this branch lands 10 (`show_options`); pricing sibling lands 10 (`get_pricing`); union = 11. Count pins to sweep at merge: connector `mcp.test.ts` (10 here), orchestrator `tools.test.ts` (10 total / 9 exposed here).
+- Expected conflict: `product/connector/src/data/query-hotels.ts` — pricing sibling's `a8e80ad` (per-night derivation) vs this branch's mapper extraction. Both mechanical; re-apply the sibling's derivation inside `mapHotelRows`.
+- `ts-common/src/tools.ts` and `connector/src/tools/index.ts` will also collide on the tool-surface additions (both branches append). Trivial union.
