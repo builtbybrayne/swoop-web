@@ -32,7 +32,7 @@ function makeThrowingPool(): pg.Pool {
 /** Fixed-vector embedQuery for tests — never calls Gemini. */
 const stubEmbedQuery: EmbedQueryFn = async () => new Array(3072).fill(0);
 
-/** Synthetic descriptions covering all ten tools. */
+/** Synthetic descriptions covering all eleven tools. */
 function makeStubDescriptions(): ToolDescriptions {
   const out: Record<string, string> = {};
   for (const name of ALL_TOOL_NAMES) {
@@ -84,12 +84,15 @@ async function withMcpClient<T>(fn: (client: McpClient) => Promise<T>): Promise<
 }
 
 describe('MCP /mcp endpoint', () => {
-  it('lists exactly the ten intent-named tools (no ping)', async () => {
+  it('lists exactly the eleven intent-named tools (no ping)', async () => {
     const tools = await withMcpClient(async (client) => client.listTools());
     const names = tools.tools.map((t) => t.name).sort();
     expect(names).toEqual([...ALL_TOOL_NAMES].sort());
     expect(names).not.toContain('ping');
-    expect(tools.tools).toHaveLength(10);
+    // 11 = union of the two parallel 2026-06-11 waves: get_pricing (pricing)
+    // + show_options (find/show split), each of which landed as "the tenth"
+    // in its own branch. This connector-side pin tracks ALL_TOOL_NAMES.
+    expect(tools.tools).toHaveLength(11);
   });
 
   it('each tool advertises its loaded description', async () => {

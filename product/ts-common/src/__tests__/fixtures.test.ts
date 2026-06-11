@@ -532,15 +532,15 @@ describe("fixtures round-trip through their Zod schemas", () => {
     expect(LookupOutputSchema.parse(SampleLookupOutput)).toEqual(SampleLookupOutput);
   });
 
-  it("find_options I/O round-trips clean (v1 — trips only)", () => {
+  it("find_options I/O round-trips clean (browse — compact options list)", () => {
     expect(FindOptionsInputSchema.parse(SampleFindOptionsInput)).toEqual(
       SampleFindOptionsInput,
     );
     expect(FindOptionsOutputSchema.parse(SampleFindOptionsOutput)).toEqual(
       SampleFindOptionsOutput,
     );
-    for (const card of SampleFindOptionsOutput.cards) {
-      expect(card.type).toBe("trip");
+    for (const option of SampleFindOptionsOutput.options) {
+      expect(option.type).toBe("trip");
     }
   });
 
@@ -548,7 +548,7 @@ describe("fixtures round-trip through their Zod schemas", () => {
     expect(FindOptionsOutputSchema.parse(SampleFindOptionsOutputMixed)).toEqual(
       SampleFindOptionsOutputMixed,
     );
-    const types = SampleFindOptionsOutputMixed.cards.map((c) => c.type).sort();
+    const types = SampleFindOptionsOutputMixed.options.map((c) => c.type).sort();
     expect(types).toEqual(["hotel", "region_base", "tour", "trip"]);
   });
 

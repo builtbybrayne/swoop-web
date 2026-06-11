@@ -228,15 +228,27 @@ describe('extractSeenDelta', () => {
     ]);
   });
 
-  it('find_options carve-out: marks hotel + region_base ids but NOT trip / tour ids', () => {
+  it('find_options (browse-only): produces empty delta — no marking (C.goofy-goldstine-13)', () => {
+    // Since goofy-goldstine, find_options is the agent-private browse tool.
+    // It returns compact BrowseOption rows (no images). Marking moved to show_options.
     const delta = extractSeenDelta('find_options', {
+      options: [
+        { type: 'trip', id: 1, title: 'a' },
+        { type: 'hotel', id: 12, title: 'c' },
+      ],
+      count: 2,
+    });
+    expect(delta).toEqual({});
+  });
+
+  it('show_options carve-out: marks hotel + region_base ids but NOT trip / tour ids', () => {
+    const delta = extractSeenDelta('show_options', {
       cards: [
         { type: 'trip', id: '1', headline: 'a' },
         { type: 'tour', id: '9', headline: 'b' },
         { type: 'hotel', id: '12', headline: 'c' },
         { type: 'region_base', id: '7', headline: 'd' },
       ],
-      count: 4,
     });
     expect(delta.hotel).toEqual(['12']);
     expect(delta.region_base).toEqual(['7']);
@@ -245,10 +257,10 @@ describe('extractSeenDelta', () => {
     expect((delta as Record<string, unknown>).tour).toBeUndefined();
   });
 
-  it('find_options still marks embedded images on ANY card type (incl. trip / tour)', () => {
+  it('show_options still marks embedded images on ANY card type (incl. trip / tour)', () => {
     // A trip card with a hero image: the IMAGE was on screen, so it should
     // be marked shown, even though the trip itself is in the carve-out.
-    const delta = extractSeenDelta('find_options', {
+    const delta = extractSeenDelta('show_options', {
       cards: [
         {
           type: 'trip',
@@ -262,19 +274,30 @@ describe('extractSeenDelta', () => {
           headline: 'b',
           image: { canonicalUrl: 'https://cdn.example.com/tour-hero.jpg' },
         },
+        {
+          type: 'hotel',
+          id: '12',
+          headline: 'c',
+          image: { canonicalUrl: 'https://cdn.example.com/hotel-hero.jpg' },
+        },
       ],
-      count: 2,
     });
+    expect(delta.hotel).toEqual(['12']);
     expect(delta.image).toEqual([
       'https://cdn.example.com/trip-hero.jpg',
       'https://cdn.example.com/tour-hero.jpg',
+      'https://cdn.example.com/hotel-hero.jpg',
     ]);
+  });
+
+  it('show_options empty cards array produces empty delta', () => {
+    expect(extractSeenDelta('show_options', { cards: [] })).toEqual({});
   });
 
   it('empty result arrays produce an empty delta', () => {
     expect(extractSeenDelta('find_inspiring', { passages: [], count: 0 })).toEqual({});
     expect(extractSeenDelta('illustrate', { images: [] })).toEqual({});
-    expect(extractSeenDelta('find_options', { cards: [], count: 0 })).toEqual({});
+    expect(extractSeenDelta('find_options', { options: [], count: 0 })).toEqual({});
   });
 
   it('handoff / handoff_submit / unknown tool produces empty delta', () => {
@@ -371,7 +394,36 @@ describe('invokeTool with anti-repetition bracketing', () => {
     expect(args.excludeIds).toEqual(['11111111-1111-4111-8111-111111111111']);
   });
 
-  it('trip / tour carve-out: cards returned do NOT enter seenItems', async () => {
+  it('find_options (browse-only): seenItems unchanged — marking moved to show_options (C.goofy-goldstine-13)', async () => {
+    // find_options is now the agent-private browse tool. It returns compact
+    // BrowseOption rows. No seen-set marking happens here.
+    const options = [
+      { type: 'trip', id: 1, title: 'A' },
+      { type: 'hotel', id: 12, title: 'C' },
+      { type: 'region_base', id: 7, title: 'D' },
+    ];
+    const callTool = vi.fn().mockResolvedValue(
+      envelope({ options, count: options.length }),
+    );
+    const client = stubClient({ callTool });
+
+    const result = await invokeTool(
+      client,
+      specFor('find_options'),
+      { limit: 12 },
+      { sessionStore: store, sessionId },
+    );
+    expect(result.ok).toBe(true);
+
+    const after = await store.get(sessionId);
+    // Nothing recorded — find_options browse does not mark the seen-set.
+    expect(after?.seenItems.hotel).toEqual([]);
+    expect(after?.seenItems.region_base).toEqual([]);
+    expect((after?.seenItems as Record<string, unknown>).trip).toBeUndefined();
+    expect((after?.seenItems as Record<string, unknown>).tour).toBeUndefined();
+  });
+
+  it('show_options: hotel + region_base cards enter seenItems; trip / tour do not', async () => {
     const cards = [
       {
         type: 'trip',
@@ -379,13 +431,7 @@ describe('invokeTool with anti-repetition bracketing', () => {
         headline: 'A',
         canonicalUrl: 'https://www.swoop-patagonia.com/trips/1',
         activityTags: [],
-      },
-      {
-        type: 'tour',
-        id: '9',
-        headline: 'B',
-        canonicalUrl: 'https://www.swoop-patagonia.com/tours/9',
-        activityTags: [],
+        group: 'primary',
       },
       {
         type: 'hotel',
@@ -393,6 +439,7 @@ describe('invokeTool with anti-repetition bracketing', () => {
         headline: 'C',
         canonicalUrl: 'https://www.swoop-patagonia.com/hotels/12',
         pricingUnit: 'per_night',
+        group: 'primary',
       },
       {
         type: 'region_base',
@@ -401,17 +448,22 @@ describe('invokeTool with anti-repetition bracketing', () => {
         canonicalUrl: 'https://www.swoop-patagonia.com/regions/el-calafate',
         fromPrice: null,
         nearbyTripsCount: 5,
+        group: 'also_interesting',
       },
     ];
     const callTool = vi.fn().mockResolvedValue(
-      envelope({ cards, count: cards.length }),
+      envelope({ cards }),
     );
     const client = stubClient({ callTool });
 
     const result = await invokeTool(
       client,
-      specFor('find_options'),
-      { limit: 4 },
+      specFor('show_options'),
+      { items: [
+        { type: 'trip', id: 1, group: 'primary' },
+        { type: 'hotel', id: 12, group: 'primary' },
+        { type: 'region_base', id: 7, group: 'also_interesting' },
+      ]},
       { sessionStore: store, sessionId },
     );
     expect(result.ok).toBe(true);
@@ -420,9 +472,7 @@ describe('invokeTool with anti-repetition bracketing', () => {
     // Hotel + region_base recorded.
     expect(after?.seenItems.hotel).toEqual(['12']);
     expect(after?.seenItems.region_base).toEqual(['7']);
-    // Trip / tour absent — the SeenItems schema has no such keys, and
-    // extractSeenDelta does not emit them. (Sanity: spot-check the typed
-    // surface doesn't expose those keys at all.)
+    // Trip / tour absent — carve-out preserved.
     expect((after?.seenItems as Record<string, unknown>).trip).toBeUndefined();
     expect((after?.seenItems as Record<string, unknown>).tour).toBeUndefined();
   });
@@ -530,7 +580,7 @@ describe('invokeTool with anti-repetition bracketing', () => {
       seenItems: mergeSeen(s.seenItems, { hotel: ['12'] }),
     }));
     const callTool = vi.fn().mockResolvedValue(envelope({
-      cards: [],
+      options: [],
       count: 0,
     }));
     const client = stubClient({ callTool });

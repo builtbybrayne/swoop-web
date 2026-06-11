@@ -45,8 +45,8 @@ function stubClient(overrides: Partial<ConnectorClient> = {}): ConnectorClient {
   };
 }
 
-describe('TOOL_SPECS — nine intent-named tools', () => {
-  it('registers exactly the nine intent-named tools (no deprecated search / get_detail)', () => {
+describe('TOOL_SPECS — eleven intent-named tools (goofy-goldstine wave union: show_options + get_pricing)', () => {
+  it('registers exactly the eleven intent-named tools (no deprecated search / get_detail)', () => {
     const names = TOOL_SPECS.map((s) => s.name).sort();
     expect(names).toEqual(
       [
@@ -55,15 +55,17 @@ describe('TOOL_SPECS — nine intent-named tools', () => {
         'find_proof',
         'find_someone_who',
         'find_tips',
+        'get_pricing',
         'handoff',
         'handoff_submit',
         'illustrate',
         'lookup',
+        'show_options',
       ].sort(),
     );
   });
 
-  it('exposes eight tools to the model — handoff_submit stays internal', () => {
+  it('exposes ten tools to the model — handoff_submit stays internal', () => {
     const exposed = TOOL_SPECS.filter((s) => s.exposedToModel).map((s) => s.name);
     expect(exposed).toContain('find_inspiring');
     expect(exposed).toContain('find_someone_who');
@@ -76,8 +78,13 @@ describe('TOOL_SPECS — nine intent-named tools', () => {
     expect(exposed).toContain('find_tips');
     expect(exposed).toContain('illustrate');
     expect(exposed).toContain('handoff');
+    // goofy-goldstine: show_options is visitor-facing (exposed to model)
+    expect(exposed).toContain('show_options');
+    // goofy-goldstine wave union: get_pricing was connector-registered by the
+    // pricing branch but absent from TOOL_SPECS until the merge-time fix.
+    expect(exposed).toContain('get_pricing');
     expect(exposed).not.toContain('handoff_submit');
-    expect(exposed).toHaveLength(8);
+    expect(exposed).toHaveLength(10);
   });
 });
 

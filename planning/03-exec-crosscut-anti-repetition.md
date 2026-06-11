@@ -568,3 +568,16 @@ The architectural elaboration in §2.2 (Option A / Option B / payload-vs-callbac
 ### Plan is READY FOR EXECUTION
 
 Schema updates (§2.1), data-primitive extensions (§2.4), per-tool handler edits (§2.3), orchestrator-side `invokeTool` plumbing (§2.7), helpers in `@swoop/common` (§2.8), tests (§2.9), and decision-log entries (§2.10) all stand — read each through the lens of the addendum's simplified wire shape. Where §2.2 describes the `__seenItems` envelope convention, the executing agent skips that machinery entirely and uses the existing `excludeIds` argument shape generalised across every dedup-eligible primitive.
+
+---
+
+## 2026-06-11 goofy-goldstine find/show split addendum — `find_options` row superseded
+
+The find/show split executed in [03-exec-crosscut-goofy-goldstine-find-options-reshape.md — hybrid ranking + find/show split](03-exec-crosscut-goofy-goldstine-find-options-reshape.md) (decision **C.goofy-goldstine-13**) changes the `find_options` row in the §2.3 per-tool touchpoints table. The seen-tracking locus split in two:
+
+| Tool | Auto-exclude on entry | Auto-mark on return | Trip/tour carve-out applies? |
+|---|---|---|---|
+| `find_options` (browse — agent-private, renders nothing) | **Yes** — hotel + region_base ids inject into `exclude` as before | **No** — browse results are never marked (the visitor never saw them) | Yes — trips/tours pass through unchanged |
+| `show_options` (curation — visitor-facing card render) | n/a — takes explicit ids, no exclude params | **Yes** — hotel + region_base ids in the returned `cards` are marked shown; embedded image canonical URLs marked on ALL card types | **Yes** — trip/tour ids are NOT marked |
+
+Rationale: "seen" means *the visitor saw it* — which only happens at `show_options` render time, not when the agent browsed privately. Exclude-on-entry stays at browse so the agent is never re-offered what the visitor already saw. All other rows in the §2.3 table are unchanged. Implementation: `product/orchestrator/src/connector/anti-repetition.ts` (`extractSeenDelta` — `find_options` case returns empty delta; new `show_options` case carries the old marking logic), tests in `product/orchestrator/src/connector/__tests__/anti-repetition.test.ts`.

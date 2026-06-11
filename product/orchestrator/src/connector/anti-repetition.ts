@@ -147,6 +147,10 @@ export function computeExcludes(
       }
       return { exclude: excludes };
     }
+    case 'show_options':
+      // show_options doesn't accept exclude params — it receives explicit ids
+      // from the agent. No auto-injection needed.
+      return undefined;
     default:
       // handoff / handoff_submit / anything new — no auto-injection.
       return undefined;
@@ -296,8 +300,17 @@ export function extractSeenDelta(
       return delta;
     }
     case 'find_options': {
-      // Per HITL Q4: trip + tour rows DO NOT enter the seen-set. Hotels +
-      // region_bases DO. The cards array is discriminated on `type`.
+      // C.goofy-goldstine-13 (2026-06-11): marking moved to show_options.
+      // find_options is now the agent-private browse tool — it returns compact
+      // BrowseOption rows (no images, no hotel/region_base marking here).
+      // exclude-on-entry still fires via computeExcludes above.
+      return delta;
+    }
+    case 'show_options': {
+      // Per HITL Q4 + C.goofy-goldstine-13: show_options is the visitor-facing
+      // curation step. Hotels + region_bases shown here enter the seen-set.
+      // Trip + tour cards: carve-out preserved (Swoop is selling them; repeats fine).
+      // Embedded image canonical URLs are also marked — the image was on screen.
       const cards = (r.cards ?? []) as Array<{
         type: string;
         id: string;
@@ -309,7 +322,7 @@ export function extractSeenDelta(
       for (const card of cards) {
         if (card.type === 'hotel') hotelIds.push(card.id);
         else if (card.type === 'region_base') regionBaseIds.push(card.id);
-        // trip / tour: deliberately skipped (carve-out)
+        // trip / tour: deliberately skipped (carve-out).
         // Embedded image canonical URL — applies to ALL card types, including
         // trip/tour. The image was on screen; future illustrate calls
         // shouldn't repeat it. Per HITL Q5+Q6.

@@ -84,6 +84,7 @@ export {
   SampleTourProposalCard,
   SampleHotelProposalCard,
   SampleRegionBaseProposalCard,
+  SampleShowOptionsOutput,
 } from "./proposal-card.sample.js";
 
 // -----------------------------------------------------------------------------

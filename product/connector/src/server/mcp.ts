@@ -49,7 +49,7 @@ export interface CreateMcpServerDeps {
 }
 
 /**
- * Build a fresh MCP server with all ten tools registered.
+ * Build a fresh MCP server with all eleven tools registered.
  */
 export function createConnectorMcpServer(deps: CreateMcpServerDeps): McpServer {
   const server = new McpServer({

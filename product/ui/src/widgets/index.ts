@@ -22,9 +22,14 @@
 //   find_someone_who → FindSomeoneWhoWidget  (Mirror vignette + persona)
 //   find_proof       → FindProofWidget       (quiet pulled-quote)
 //   lookup           → LookupWidget          (quiet source-page link)
-//   find_options     → FindOptionsWidget     (polymorphic ProposalCards)
+//   find_options     → FindOptionsWidget     (browse-only, renders nothing)
+//   show_options     → ShowOptionsWidget     (visitor-facing polymorphic ProposalCards)
 //   illustrate       → InspirationWidget     (image strip, unchanged)
 //   handoff          → LeadCaptureWidget     (lead-capture form, unchanged)
+//
+// Post-goofy-goldstine (2026-06-11): find/show split.
+//   find_options renders silently (agent-private browse; WidgetSilentPlaceholder).
+//   show_options renders full cards grouped by primary / also_interesting.
 
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { FindInspiringWidget } from "./find-inspiring";
@@ -34,6 +39,7 @@ import { FindSomeoneWhoWidget } from "./find-someone-who";
 import { InspirationWidget } from "./inspiration";
 import { LeadCaptureWidget } from "./lead-capture";
 import { LookupWidget } from "./lookup";
+import { ShowOptionsWidget } from "./show-options";
 
 /**
  * Tool name → widget component map. Cast to `ToolCallMessagePartComponent`
@@ -45,7 +51,10 @@ export const toolWidgetComponents: Record<string, ToolCallMessagePartComponent> 
   find_someone_who: FindSomeoneWhoWidget as unknown as ToolCallMessagePartComponent,
   find_proof: FindProofWidget as unknown as ToolCallMessagePartComponent,
   lookup: LookupWidget as unknown as ToolCallMessagePartComponent,
+  // find_options renders silently (browse-only — nothing for visitor to see)
   find_options: FindOptionsWidget as unknown as ToolCallMessagePartComponent,
+  // show_options renders full proposal cards grouped by primary / also_interesting
+  show_options: ShowOptionsWidget as unknown as ToolCallMessagePartComponent,
   illustrate: InspirationWidget as unknown as ToolCallMessagePartComponent,
   handoff: LeadCaptureWidget as unknown as ToolCallMessagePartComponent,
 };
@@ -57,3 +66,4 @@ export { FindSomeoneWhoWidget } from "./find-someone-who";
 export { InspirationWidget } from "./inspiration";
 export { LeadCaptureWidget } from "./lead-capture";
 export { LookupWidget } from "./lookup";
+export { ShowOptionsWidget } from "./show-options";

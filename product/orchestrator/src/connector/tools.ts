@@ -49,6 +49,8 @@ import {
   FindSomeoneWhoOutputSchema,
   FindTipsInputSchema,
   FindTipsOutputSchema,
+  GetPricingInputSchema,
+  GetPricingOutputSchema,
   HandoffInputSchema,
   HandoffOutputSchema,
   HandoffSubmitInputSchema,
@@ -57,6 +59,8 @@ import {
   IllustrateOutputSchema,
   LookupInputSchema,
   LookupOutputSchema,
+  ShowOptionsInputSchema,
+  ShowOptionsOutputSchema,
   TOOL_NAMES,
   defaultEmptySeenItems,
   mergeSeen,
@@ -161,6 +165,15 @@ const TOOL_SPECS: ReadonlyArray<ToolSpec> = [
     exposedToModel: true,
   },
   {
+    // Merge-time fix (2026-06-11 wave union): the pricing branch registered
+    // get_pricing connector-side only — without this spec the model can't
+    // call it (the find_tips regression class this file's tests memorialise).
+    name: TOOL_NAMES.GetPricing,
+    inputSchema: GetPricingInputSchema,
+    outputSchema: GetPricingOutputSchema,
+    exposedToModel: true,
+  },
+  {
     name: TOOL_NAMES.Illustrate,
     inputSchema: IllustrateInputSchema,
     outputSchema: IllustrateOutputSchema,
@@ -177,6 +190,14 @@ const TOOL_SPECS: ReadonlyArray<ToolSpec> = [
     inputSchema: HandoffSubmitInputSchema,
     outputSchema: HandoffSubmitOutputSchema,
     exposedToModel: false,
+  },
+  // Tenth tool — find/show split (C.goofy-goldstine-12, 2026-06-11).
+  // Visitor-facing curation: full cards, grouped primary/also_interesting.
+  {
+    name: TOOL_NAMES.ShowOptions,
+    inputSchema: ShowOptionsInputSchema,
+    outputSchema: ShowOptionsOutputSchema,
+    exposedToModel: true,
   },
 ];
 

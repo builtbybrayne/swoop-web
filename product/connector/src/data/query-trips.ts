@@ -1,5 +1,6 @@
 /**
- * Structured trip filter — pure SQL, no vector retrieval. Powers `find_options`.
+ * Structured trip filter — SQL filters + optional hybrid ranking. Powers
+ * `find_options` (browse leg).
  *
  * Per the C.t4 plan §"Out of scope" + decision C.30: trip-side internals are
  * still settling. This handler reads whatever `trip_card` rows C.t3a populates;
@@ -11,6 +12,12 @@
  * `TripProposalCard[]` — the `trip` variant of `ProposalCardPublicSchema`'s
  * discriminated union. Every card carries `type: 'trip'`. Tour / hotel /
  * region_base data primitives land in v2 / v3 tranches.
+ *
+ * goofy-goldstine reshape (2026-06-11, C.goofy-goldstine-10): when
+ * `queryEmbedding` + `queryText` are supplied, ORDER BY shifts from RANDOM()
+ * to RRF hybrid (cosine ANN on `trip_card.embedding` + ts_rank on
+ * `trip_card.tsv`). RANDOM() demoted to tiebreak among equal RRF scores.
+ * Filters still apply before ranking — they constrain, embeddings order.
  */
 
 import type pg from 'pg';
@@ -20,6 +27,7 @@ import {
   type TripProposalCard,
 } from '@swoop/common';
 
+import { buildHybridSearchSql } from './hybrid-search.js';
 import { resolveImagesByIds } from './resolve-image.js';
 
 export interface QueryTripCardsOptions {
@@ -42,6 +50,14 @@ export interface QueryTripCardsOptions {
    * means no exclusion. Per C.focused-shamir-5.
    */
   excludeIds?: number[];
+  /**
+   * When present, activates hybrid ranking (RRF over cosine ANN on
+   * `trip_card.embedding` + ts_rank on `trip_card.tsv`). Both must be
+   * supplied together. RANDOM() demoted to tiebreak/fallback.
+   * Per C.goofy-goldstine-10 (2026-06-11).
+   */
+  queryEmbedding?: number[] | null;
+  queryText?: string | null;
   limit: number;
 }
 
@@ -97,31 +113,146 @@ export async function queryTripCardsByFilter(
     clauses.push(`id <> ALL($${binds.length}::int[])`);
   }
 
-  binds.push(opts.limit);
-  const limitBind = `$${binds.length}`;
-
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
-  // ORDER BY RANDOM() — imagination-stoking variety by default (decision
-  // C.focused-shamir-4). Supersedes the previous cheapest-first / shortest-
-  // first implicit ranking. id tiebreaker stabilises the rare collision case.
+  const useHybrid =
+    opts.queryEmbedding != null &&
+    opts.queryEmbedding.length > 0 &&
+    opts.queryText != null &&
+    opts.queryText.length > 0;
+
+  let sql: string;
+  let queryBinds: unknown[];
+
+  if (useHybrid) {
+    // Hybrid path: RRF over cosine ANN (trip_card.embedding) + ts_rank
+    // (trip_card.tsv). Filter clauses apply inside BOTH hybrid CTE legs so
+    // the WHERE constraint reduces the candidate pool before ranking.
+    // RANDOM() demoted to tiebreak among equal RRF scores.
+    // Per C.goofy-goldstine-10 (2026-06-11).
+    const embedding = opts.queryEmbedding!;
+    const queryText = opts.queryText!;
+    const limit = opts.limit;
+    // Hybrid binds: $1 = embedding, $2 = query text, $3 = limit
+    // Filter binds begin at $4+ (offset by 3).
+    const filterClauses: string[] = [];
+    const filterBinds: unknown[] = [];
+    if (opts.region) {
+      filterBinds.push(`%${opts.region}%`);
+      filterClauses.push(`region ILIKE $${filterBinds.length + 3}`);
+    }
+    if (opts.durationMin !== null && opts.durationMin !== undefined) {
+      filterBinds.push(opts.durationMin);
+      filterClauses.push(`duration_days >= $${filterBinds.length + 3}`);
+    }
+    if (opts.durationMax !== null && opts.durationMax !== undefined) {
+      filterBinds.push(opts.durationMax);
+      filterClauses.push(`duration_days <= $${filterBinds.length + 3}`);
+    }
+    if (opts.budgetBand) {
+      const ceiling = BUDGET_CEILING[opts.budgetBand];
+      if (Number.isFinite(ceiling)) {
+        filterBinds.push(ceiling);
+        filterClauses.push(`(from_price IS NULL OR from_price <= $${filterBinds.length + 3})`);
+      }
+    }
+    if (opts.activity) {
+      filterBinds.push(opts.activity);
+      filterClauses.push(`$${filterBinds.length + 3} = ANY(activity_tags)`);
+    }
+    // accommodation_style: accepted-but-ignored (0/649 populated)
+    void opts.accommodationStyle;
+    if (opts.excludeIds && opts.excludeIds.length > 0) {
+      filterBinds.push(opts.excludeIds);
+      filterClauses.push(`id <> ALL($${filterBinds.length + 3}::int[])`);
+    }
+    const hybridWhere =
+      filterClauses.length > 0 ? `AND ${filterClauses.join(' AND ')}` : '';
+
+    sql = buildHybridSearchSql({
+      vectorCte: `
+        SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS rank
+        FROM trip_card
+        WHERE embedding IS NOT NULL ${hybridWhere}
+        ORDER BY embedding <=> $1::vector
+        LIMIT 50
+      `,
+      textCte: `
+        SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank(tsv, websearch_to_tsquery('english', $2)) DESC) AS rank
+        FROM trip_card
+        WHERE tsv @@ websearch_to_tsquery('english', $2) ${hybridWhere}
+        ORDER BY ts_rank(tsv, websearch_to_tsquery('english', $2)) DESC
+        LIMIT 50
+      `,
+      outerSelect: `
+        SELECT tc.id, tc.slug, tc.headline, tc.vibe_line, tc.region,
+               tc.duration_days, tc.from_price, tc.currency_code,
+               tc.accommodation_style,
+               COALESCE(tc.activity_tags, '{}') AS activity_tags,
+               tc.canonical_url, tc.image_id, fused.rrf_score
+        FROM fused
+        JOIN trip_card tc ON tc.id = fused.id
+      `,
+      tail: `ORDER BY rrf_score DESC, RANDOM(), id LIMIT $3`,
+    });
+    queryBinds = [`[${embedding.join(',')}]`, queryText, limit, ...filterBinds];
+  } else {
+    // Random-variety path (decision C.focused-shamir-4). RANDOM() tiebreak,
+    // id for stability. Falls back here when no query supplied.
+    binds.push(opts.limit);
+    const limitBind = `$${binds.length}`;
+    sql = `
+      SELECT id, slug, headline, vibe_line, region, duration_days,
+             from_price, currency_code, accommodation_style,
+             COALESCE(activity_tags, '{}') AS activity_tags,
+             canonical_url, image_id
+      FROM trip_card
+      ${where}
+      ORDER BY RANDOM(), id
+      LIMIT ${limitBind}
+    `;
+    queryBinds = binds;
+  }
+
+  const res = await client.query(sql, queryBinds);
+  return mapTripRows(client, res.rows);
+}
+
+/**
+ * Hydrate full trip cards for an explicit id list — the `show_options`
+ * by-id path (goofy-goldstine find/show split, C.goofy-goldstine-12).
+ * Same projection + mapper as the filter path so the two can never drift.
+ * Returns rows in DB order; the caller re-sorts to its input order.
+ */
+export async function queryTripCardsByIds(
+  client: pg.PoolClient,
+  ids: number[],
+): Promise<TripProposalCard[]> {
+  if (ids.length === 0) return [];
   const sql = `
     SELECT id, slug, headline, vibe_line, region, duration_days,
            from_price, currency_code, accommodation_style,
            COALESCE(activity_tags, '{}') AS activity_tags,
            canonical_url, image_id
     FROM trip_card
-    ${where}
-    ORDER BY RANDOM(), id
-    LIMIT ${limitBind}
+    WHERE id = ANY($1::int[])
   `;
+  const res = await client.query(sql, [ids]);
+  return mapTripRows(client, res.rows);
+}
 
-  const res = await client.query(sql, binds);
-
-  const imageIds = res.rows.map((r) => r.image_id as number | null);
+/**
+ * Shared row → TripProposalCard projection (filter + by-id paths).
+ * Resolves hero images on the same client, then parses through the schema.
+ */
+async function mapTripRows(
+  client: pg.PoolClient,
+  rows: Array<Record<string, unknown>>,
+): Promise<TripProposalCard[]> {
+  const imageIds = rows.map((r) => r.image_id as number | null);
   const images = await resolveImagesByIds(client, imageIds);
 
-  return res.rows.map((r) => {
+  return rows.map((r) => {
     const image = r.image_id
       ? (images.get(r.image_id as number) ?? undefined)
       : undefined;
