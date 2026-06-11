@@ -8,7 +8,11 @@
 //     assistant message and fades out on:
 //       1. any subsequent `text` part arriving in the same message, OR
 //       2. a FYI_TIMEOUT_MS timer expiring (default ~3s), OR
-//       3. a later `<fyi>` message replacing it (latest wins — don't stack).
+//       3. a later `<fyi>` message replacing it (latest wins — don't stack), OR
+//       4. a `tool-status` signal — the activity indicator
+//          (text-thinking-indicator.tsx) derived a NEWER tool-call status line
+//          (D.goofy-goldstine-10). One status slot, latest signal wins: the
+//          fyi steps aside exactly as it does for a newer fyi.
 //   - Accessibility: `role="status"` + `aria-live="polite"` so screen readers
 //     announce it without barging the assistant reply.
 //
@@ -68,9 +72,14 @@ export function FyiRenderer({ data }: FyiRendererProps) {
       setVisible(false);
     }, FYI_TIMEOUT_MS);
 
-    // A newer fyi or an arriving text part means we step aside.
+    // A newer fyi, a newer tool-derived status, or an arriving text part
+    // means we step aside (single status slot, latest signal wins).
     const unsubscribe = subscribeFyiChannel((event: FyiChannelEvent) => {
-      if (event === "text-arrived" || event === "fyi-appeared") {
+      if (
+        event === "text-arrived" ||
+        event === "fyi-appeared" ||
+        event === "tool-status"
+      ) {
         // Check if the event is from *ourselves*: the self-emit above runs
         // synchronously before any other subscription exists for this
         // instance, so we'll never receive our own "fyi-appeared". Safe.

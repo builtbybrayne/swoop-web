@@ -20,13 +20,23 @@
 //   - `fyi-appeared`  — emitted when a new fyi mounts. Older fyi instances
 //                       listen and fade out immediately so the channel only
 //                       ever shows the latest message (decision: latest wins).
+//   - `tool-status`   — emitted by the activity indicator
+//                       (text-thinking-indicator.tsx) when the in-flight
+//                       tool-call it derives its status line from CHANGES
+//                       (D.goofy-goldstine-10). A newer deterministic signal
+//                       has taken the single status slot: FyiRenderer listens
+//                       and fades, exactly as it does for a newer fyi. The
+//                       complementary direction — `fyi-appeared` suppressing
+//                       the indicator's tool-derived text — is handled inside
+//                       the indicator. Together the two rules guarantee only
+//                       ONE status line is ever visible beside the dots.
 //
 // Scope note: this is a UI-side coordination signal only. It is NOT wired to
 // the assistant-ui runtime or the SSE stream. The orchestrator's stream shape
 // is still the source of truth.
 
 /** Events the channel publishes. */
-export type FyiChannelEvent = "text-arrived" | "fyi-appeared";
+export type FyiChannelEvent = "text-arrived" | "fyi-appeared" | "tool-status";
 
 /** Subscriber callback signature. */
 export type FyiChannelListener = (event: FyiChannelEvent) => void;

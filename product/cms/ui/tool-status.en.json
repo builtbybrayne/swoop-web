@@ -1,0 +1,15 @@
+{
+  "$schema-notes": "Activity-status copy for the chat UI (planning/03-exec-crosscut-goofy-goldstine-activity-status.md). One friendly present-progressive line per MCP tool, shown beside the thinking dots while that tool call is in flight. Keys are tool names as they appear on the wire (assistant-ui tool-call parts' toolName); unknown names fall back to '_default', so this file is forward-safe for tools that don't exist yet. Loaded by ui/src/parts/text-thinking-indicator.tsx via Vite JSON import — same mechanism as errors/en.json. Swoop voice: warm, plain, no jargon. DRAFT COPY — editorial pass is Alastair's, post-merge.",
+  "find_inspiring": "Gathering some inspiration…",
+  "find_someone_who": "Finding stories from travellers like you…",
+  "find_proof": "Pulling together traveller reviews…",
+  "find_tips": "Digging out tips from past travellers…",
+  "find_options": "Browsing trip ideas…",
+  "show_options": "Putting together a shortlist…",
+  "lookup": "Checking Swoop's guides…",
+  "illustrate": "Finding a picture worth showing you…",
+  "get_pricing": "Checking prices…",
+  "handoff": "Getting your specialist introduction ready…",
+  "handoff_submit": "Getting your specialist introduction ready…",
+  "_default": "Looking that up…"
+}

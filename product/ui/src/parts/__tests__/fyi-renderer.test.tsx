@@ -8,6 +8,12 @@
 //   3. It fades immediately when a `text-arrived` event is emitted
 //      (simulating the text renderer starting to stream).
 //   4. Rapid `<fyi>` updates don't stack: the newest replaces the previous.
+//
+// Plus the single-status-slot rule from
+// planning/03-exec-crosscut-goofy-goldstine-activity-status.md:
+//
+//   5. It fades immediately on a `tool-status` event — the activity
+//      indicator derived a newer tool-call status line, which takes the slot.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, act, cleanup } from "@testing-library/react";
@@ -77,6 +83,22 @@ describe("FyiRenderer", () => {
     act(() => {
       vi.advanceTimersByTime(200);
       emitFyiChannel("text-arrived");
+    });
+
+    expect(screen.getByTestId("fyi-status")).toHaveAttribute(
+      "data-fyi-visible",
+      "false",
+    );
+  });
+
+  it("fades immediately when a newer tool-derived status takes the slot (tool-status event)", () => {
+    render(<FyiRenderer data={makeFyi("Looking at the route…")} />);
+
+    // Well before the natural timeout, the activity indicator signals that a
+    // NEW tool call started narrating — one slot, latest signal wins.
+    act(() => {
+      vi.advanceTimersByTime(200);
+      emitFyiChannel("tool-status");
     });
 
     expect(screen.getByTestId("fyi-status")).toHaveAttribute(
