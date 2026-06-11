@@ -322,18 +322,18 @@ describe("R4 length caps on contact fields, motivationAnchor, reason.text", () =
     expect(HandoffContactSchema.safeParse(bad).success).toBe(false);
   });
 
-  it("rejects a payload whose motivationAnchor is over 2_000 chars", () => {
+  it("rejects a payload whose motivationAnchor is over the narrative budget", () => {
     const bad = {
       ...SampleHandoffQualified,
-      motivationAnchor: "m".repeat(2_001),
+      motivationAnchor: "m".repeat(HANDOFF_NARRATIVE_TEXT_MAX + 1),
     };
     expect(HandoffPayloadSchema.safeParse(bad).success).toBe(false);
   });
 
-  it("accepts a payload whose motivationAnchor is exactly 2_000 chars", () => {
+  it("accepts a payload whose motivationAnchor is exactly the narrative budget", () => {
     const ok = {
       ...SampleHandoffQualified,
-      motivationAnchor: "m".repeat(2_000),
+      motivationAnchor: "m".repeat(HANDOFF_NARRATIVE_TEXT_MAX),
     };
     expect(HandoffPayloadSchema.safeParse(ok).success).toBe(true);
   });

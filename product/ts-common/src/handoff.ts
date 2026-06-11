@@ -36,24 +36,27 @@ import { z } from "zod";
 // sha256 inputs, and the specialist email. The caps are abuse bounds, not
 // editorial guidance.
 //
-// WHY 2_000 (recalibrated 2026-06-11): the original 500-char reason.text cap
+// WHY 10_000 (recalibrated 2026-06-11): the original 500-char reason.text cap
 // predated the frosty-leavitt form polish that routed the agent's RICH
 // `specialistSummary` ("favour richness" — tools/handoff/description.md)
-// through `reasonText`. Sonnet's organic summaries routinely exceeded 500,
-// and the reject fired at the visitor's submit — losing the handoff at the
-// product's core conversion moment. 2_000 matches the established narrative
-// budget (`motivationAnchor`, `additionalNotes`) and is enforced FIRST at the
-// agent tool boundary (tools.ts HandoffInputSchema), where an over-budget
-// summary fails the tool call and the agent simply rewrites — recoverable —
-// instead of failing the visitor's submission — not.
+// through `reasonText`. Sonnet's organic summaries routinely exceeded 500
+// (1,934 chars observed live), and the reject fired at the visitor's submit —
+// losing the handoff at the product's core conversion moment. Per Alastair's
+// call (2026-06-11): submission volume is low, so storage size is a
+// non-constraint — the cap is sized to be organically unreachable (~5× the
+// largest observed summary) while still bounding deliberate abuse. It is
+// enforced FIRST at the agent tool boundary (tools.ts HandoffInputSchema),
+// where an over-budget summary fails the tool call and the agent simply
+// rewrites — recoverable — instead of failing the visitor's submission — not.
 //
 // Every layer (tool input, wire request, durable payload) derives from these
 // constants so the caps cannot drift apart again.
 // -----------------------------------------------------------------------------
 
 /** Narrative free-text budget: specialistSummary → reason.text,
- *  motivationAnchor, additionalNotes. */
-export const HANDOFF_NARRATIVE_TEXT_MAX = 2_000;
+ *  motivationAnchor, additionalNotes. Abuse bound, not editorial guidance —
+ *  organic agent output should never get near it. */
+export const HANDOFF_NARRATIVE_TEXT_MAX = 10_000;
 
 /** Visitor-facing precis budget. Behavioural target is ~300 chars (tool
  *  description); the cap is defence headroom, not the target. */
