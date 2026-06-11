@@ -42,6 +42,8 @@ import {
 } from "./derived.js";
 import {
   DisqualifiedReasonCodeSchema,
+  HANDOFF_NARRATIVE_TEXT_MAX,
+  HANDOFF_VISITOR_PRECIS_MAX,
   InconclusiveReasonCodeSchema,
   QualifiedReasonCodeSchema,
   ReferredOutReasonCodeSchema,
@@ -99,15 +101,23 @@ const HandoffInputCommonFields = {
   // motivation reads, signal-pattern observations, direct quotes — texture
   // the specialist uses to pick up the conversation warm. Visitor never
   // sees this. Wired through to `reason.text` on the durable record + email.
-  specialistSummary: z.string(),
+  //
+  // Capped at the SAME constant as the wire + durable schemas — enforcing it
+  // HERE means an over-budget summary fails the tool call (the agent reads
+  // the error and rewrites shorter, mid-conversation, recoverably) instead
+  // of failing the visitor's `/handoff/submit` and losing the lead. That
+  // exact failure was observed live 2026-06-11 when this field was uncapped
+  // and the downstream wire cap was 500.
+  specialistSummary: z.string().min(1).max(HANDOFF_NARRATIVE_TEXT_MAX),
   // Short, logistical-only summary shown to the visitor inside the
   // lead-capture form as reassurance their choices have been captured.
   // MUST NOT carry archetype reads, relational-mode reads, or motivation
   // interpretations — see cms/prompts/tools/handoff/description.md for the
   // rule. Optional on the schema because disqualified / inconclusive
   // verdicts don't render the widget; the tool description steers it to
-  // be present on qualified / referred_out.
-  visitorPrecis: z.string().optional(),
+  // be present on qualified / referred_out. Cap mirrors the wire schema;
+  // behavioural target (~300 chars) lives in the tool description.
+  visitorPrecis: z.string().max(HANDOFF_VISITOR_PRECIS_MAX).optional(),
   // The visitor's "why this trip, why now" in their own words where
   // possible. Optional because the agent honestly can't always read
   // motivation — early-turn handoffs (a Skeptic pushing back on a
@@ -115,8 +125,8 @@ const HandoffInputCommonFields = {
   // have no clear motivation surfaced yet. Forcing the agent to invent
   // one is worse than letting the specialist establish it on the call.
   // Wire + payload schemas already treat this as optional; this aligns
-  // the agent-facing tool schema with that posture.
-  motivationAnchor: z.string().optional(),
+  // the agent-facing tool schema with that posture. Cap mirrors both.
+  motivationAnchor: z.string().max(HANDOFF_NARRATIVE_TEXT_MAX).optional(),
 } as const;
 
 export const HandoffInputQualifiedSchema = z

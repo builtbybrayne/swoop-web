@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DisqualifiedReasonCodeSchema,
+  HANDOFF_NARRATIVE_TEXT_MAX,
   HandoffContactSchema,
   HandoffPayloadDisqualifiedSchema,
   HandoffPayloadInconclusiveSchema,
@@ -20,9 +21,11 @@ import {
   HandoffVerdictSchema,
   InconclusiveReasonCodeSchema,
   QualifiedReasonCodeSchema,
+  HandoffSubmitRequestSchema,
   ReferredOutReasonCodeSchema,
   type HandoffSubmitConsentGate,
 } from "../handoff.js";
+import { HandoffInputSchema } from "../tools.js";
 import {
   SampleHandoffDisqualified,
   SampleHandoffInconclusive,
@@ -335,18 +338,42 @@ describe("R4 length caps on contact fields, motivationAnchor, reason.text", () =
     expect(HandoffPayloadSchema.safeParse(ok).success).toBe(true);
   });
 
-  it("rejects a payload whose reason.text is over 500 chars", () => {
+  // reason.text carries the agent's rich specialistSummary verbatim, so its
+  // budget is the shared narrative constant — pinned via the constant (not a
+  // literal) so schema and test can't drift apart again. The original
+  // 500-char literal predated the specialistSummary routing and rejected
+  // organic agent summaries at the visitor's submit (observed live
+  // 2026-06-11).
+  it("rejects a payload whose reason.text is over the narrative budget", () => {
     const bad = {
       ...SampleHandoffQualified,
-      reason: { code: "ready_booking_named_trip", text: "r".repeat(501) },
+      reason: {
+        code: "ready_booking_named_trip",
+        text: "r".repeat(HANDOFF_NARRATIVE_TEXT_MAX + 1),
+      },
     };
     expect(HandoffPayloadSchema.safeParse(bad).success).toBe(false);
   });
 
-  it("accepts a payload whose reason.text is exactly 500 chars", () => {
+  it("accepts a payload whose reason.text is exactly the narrative budget", () => {
     const ok = {
       ...SampleHandoffQualified,
-      reason: { code: "ready_booking_named_trip", text: "r".repeat(500) },
+      reason: {
+        code: "ready_booking_named_trip",
+        text: "r".repeat(HANDOFF_NARRATIVE_TEXT_MAX),
+      },
+    };
+    expect(HandoffPayloadSchema.safeParse(ok).success).toBe(true);
+  });
+
+  it("narrative budget comfortably fits a rich multi-section specialistSummary (>500 chars)", () => {
+    // Regression pin for the 2026-06-11 live failure: a ~700-char organic
+    // summary must parse. If someone lowers the budget back under realistic
+    // Sonnet output, this fails before a visitor loses a handoff.
+    const organicLengthSummary = "s".repeat(700);
+    const ok = {
+      ...SampleHandoffQualified,
+      reason: { code: "ready_booking_named_trip", text: organicLengthSummary },
     };
     expect(HandoffPayloadSchema.safeParse(ok).success).toBe(true);
   });
@@ -356,5 +383,60 @@ describe("R4 length caps on contact fields, motivationAnchor, reason.text", () =
     expect(HandoffPayloadSchema.safeParse(SampleHandoffReferredOut).success).toBe(true);
     expect(HandoffPayloadSchema.safeParse(SampleHandoffDisqualified).success).toBe(true);
     expect(HandoffPayloadSchema.safeParse(SampleHandoffInconclusive).success).toBe(true);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Tool-boundary length enforcement (tools.ts HandoffInputSchema).
+//
+// The narrative budget must reject at the AGENT'S tool call — where Sonnet
+// reads the error and rewrites shorter — never first at the visitor's
+// `/handoff/submit`. These pin that the tool input and the wire/payload
+// schemas share the same constants, closing the 2026-06-11 drift where the
+// tool input was uncapped and the wire cap was 500.
+// -----------------------------------------------------------------------------
+
+describe("HandoffInputSchema length budgets (agent tool boundary)", () => {
+  const baseArgs = {
+    verdict: "qualified",
+    reasonCode: "ready_booking_named_trip",
+  } as const;
+
+  it("rejects specialistSummary over the narrative budget at the tool boundary", () => {
+    const bad = {
+      ...baseArgs,
+      specialistSummary: "s".repeat(HANDOFF_NARRATIVE_TEXT_MAX + 1),
+    };
+    expect(HandoffInputSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it("accepts specialistSummary at exactly the narrative budget", () => {
+    const ok = {
+      ...baseArgs,
+      specialistSummary: "s".repeat(HANDOFF_NARRATIVE_TEXT_MAX),
+    };
+    expect(HandoffInputSchema.safeParse(ok).success).toBe(true);
+  });
+
+  it("tool-boundary budget equals the wire budget — over-budget can never first surface at submit", () => {
+    // The guarantee is shared-constant identity: a summary the tool accepts,
+    // the wire accepts. Pin the submit request at the same boundary value.
+    const submitOk = {
+      sessionId: "sess_1",
+      verdict: "qualified",
+      reasonCode: "ready_booking_named_trip",
+      reasonText: "s".repeat(HANDOFF_NARRATIVE_TEXT_MAX),
+      contact: { name: "A", email: "a@example.com" },
+      consent: {
+        handoffGranted: true,
+        handoffTimestamp: "2026-06-11T12:00:00.000Z",
+      },
+    };
+    expect(HandoffSubmitRequestSchema.safeParse(submitOk).success).toBe(true);
+    const submitBad = {
+      ...submitOk,
+      reasonText: "s".repeat(HANDOFF_NARRATIVE_TEXT_MAX + 1),
+    };
+    expect(HandoffSubmitRequestSchema.safeParse(submitBad).success).toBe(false);
   });
 });

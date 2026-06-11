@@ -28,6 +28,38 @@
 import { z } from "zod";
 
 // -----------------------------------------------------------------------------
+// Free-text length budgets.
+//
+// WHY CAPS EXIST AT ALL (R4, 2026-04-30 review): `POST /handoff/submit` is
+// publicly reachable from the iframe, so every visitor-suppliable string is
+// length-capped to stop unbounded payloads landing in the durable store,
+// sha256 inputs, and the specialist email. The caps are abuse bounds, not
+// editorial guidance.
+//
+// WHY 2_000 (recalibrated 2026-06-11): the original 500-char reason.text cap
+// predated the frosty-leavitt form polish that routed the agent's RICH
+// `specialistSummary` ("favour richness" — tools/handoff/description.md)
+// through `reasonText`. Sonnet's organic summaries routinely exceeded 500,
+// and the reject fired at the visitor's submit — losing the handoff at the
+// product's core conversion moment. 2_000 matches the established narrative
+// budget (`motivationAnchor`, `additionalNotes`) and is enforced FIRST at the
+// agent tool boundary (tools.ts HandoffInputSchema), where an over-budget
+// summary fails the tool call and the agent simply rewrites — recoverable —
+// instead of failing the visitor's submission — not.
+//
+// Every layer (tool input, wire request, durable payload) derives from these
+// constants so the caps cannot drift apart again.
+// -----------------------------------------------------------------------------
+
+/** Narrative free-text budget: specialistSummary → reason.text,
+ *  motivationAnchor, additionalNotes. */
+export const HANDOFF_NARRATIVE_TEXT_MAX = 2_000;
+
+/** Visitor-facing precis budget. Behavioural target is ~300 chars (tool
+ *  description); the cap is defence headroom, not the target. */
+export const HANDOFF_VISITOR_PRECIS_MAX = 500;
+
+// -----------------------------------------------------------------------------
 // Verdict — the top-level discriminator.
 //
 // `inconclusive` was added per HITL Q5 (planning/00-discovery-design-thinking.md
@@ -102,32 +134,33 @@ export type InconclusiveReasonCode = z.infer<typeof InconclusiveReasonCodeSchema
 // summary of the qualifying signals. `min(1)` enforces non-empty.
 // -----------------------------------------------------------------------------
 
-// `text` is the freeform sales-specialist context. R4 caps at 500 chars —
-// covers the longest plausible "narrative summary of qualifying signals"
-// while preventing a 60kb visitor-supplied string from landing in
+// `text` is the freeform sales-specialist context — since the frosty-leavitt
+// form polish it carries the agent's rich `specialistSummary` verbatim. The
+// R4 abuse bound is HANDOFF_NARRATIVE_TEXT_MAX (see budget block above);
+// still prevents a 60kb visitor-supplied string from landing in
 // `var/handoffs/<id>.json` + email body + sha256 inputs.
 
 export const QualifiedReasonSchema = z.object({
   code: QualifiedReasonCodeSchema,
-  text: z.string().min(1).max(500),
+  text: z.string().min(1).max(HANDOFF_NARRATIVE_TEXT_MAX),
 });
 export type QualifiedReason = z.infer<typeof QualifiedReasonSchema>;
 
 export const ReferredOutReasonSchema = z.object({
   code: ReferredOutReasonCodeSchema,
-  text: z.string().min(1).max(500),
+  text: z.string().min(1).max(HANDOFF_NARRATIVE_TEXT_MAX),
 });
 export type ReferredOutReason = z.infer<typeof ReferredOutReasonSchema>;
 
 export const DisqualifiedReasonSchema = z.object({
   code: DisqualifiedReasonCodeSchema,
-  text: z.string().min(1).max(500),
+  text: z.string().min(1).max(HANDOFF_NARRATIVE_TEXT_MAX),
 });
 export type DisqualifiedReason = z.infer<typeof DisqualifiedReasonSchema>;
 
 export const InconclusiveReasonSchema = z.object({
   code: InconclusiveReasonCodeSchema,
-  text: z.string().min(1).max(500),
+  text: z.string().min(1).max(HANDOFF_NARRATIVE_TEXT_MAX),
 });
 export type InconclusiveReason = z.infer<typeof InconclusiveReasonSchema>;
 
@@ -234,18 +267,18 @@ const HandoffPayloadCommon = {
   handoffId: z.string(),
   visitorProfile: VisitorProfileSchema,
   wishlist: z.array(HandoffWishlistEntrySchema),
-  // R4 cap: visitor-influenced free text. 2_000 chars covers a multi-sentence
-  // motivation summary; prevents unbounded payloads landing in durable store +
-  // sha256 inputs + email body.
-  motivationAnchor: z.string().max(2_000),
+  // R4 cap: visitor-influenced free text. The narrative budget covers a
+  // multi-sentence motivation summary; prevents unbounded payloads landing in
+  // durable store + sha256 inputs + email body.
+  motivationAnchor: z.string().max(HANDOFF_NARRATIVE_TEXT_MAX),
   // Short, logistical-only summary the visitor saw inside the lead-capture
   // form. Persisted to the durable record for audit. NEVER appears in the
   // specialist email — the visitor and the specialist see different
   // summaries by design. See cms/prompts/tools/handoff/description.md.
-  visitorPrecis: z.string().max(500).optional(),
+  visitorPrecis: z.string().max(HANDOFF_VISITOR_PRECIS_MAX).optional(),
   // Free text from the visitor's "Anything else the specialist should know?"
   // textarea. Optional. Rendered into the email under its own section.
-  additionalNotes: z.string().max(2_000).optional(),
+  additionalNotes: z.string().max(HANDOFF_NARRATIVE_TEXT_MAX).optional(),
   consent: HandoffConsentSchema,
   session: HandoffSessionMetadataSchema,
 };
@@ -341,8 +374,11 @@ export type HandoffSubmitConsentGate = Pick<
  * a discriminated union over `verdict`. Each variant carries the per-verdict
  * `reasonCode` enum from above, mirroring `HandoffPayloadSchema`'s shape.
  * `contact` is required on qualified / referred_out and absent (rejected by
- * `.strict()`) on disqualified / inconclusive. `reasonText` is capped at 500
- * chars to mirror the durable record's cap.
+ * `.strict()`) on disqualified / inconclusive. `reasonText` carries the
+ * agent's `specialistSummary` verbatim and is capped at
+ * HANDOFF_NARRATIVE_TEXT_MAX to mirror the durable record's cap — the same
+ * constant also caps the tool input (tools.ts), so an over-budget summary
+ * fails at the agent boundary, never here.
  */
 const HandoffSubmitRequestConsentSchema = z.object({
   handoffGranted: z.boolean(),
@@ -354,16 +390,19 @@ const HandoffSubmitRequestConsentSchema = z.object({
 
 const HandoffSubmitRequestCommonFields = {
   sessionId: z.string().min(1),
-  reasonText: z.string().min(1).max(500),
-  motivationAnchor: z.string().optional(),
+  reasonText: z.string().min(1).max(HANDOFF_NARRATIVE_TEXT_MAX),
+  // Capped on the wire too — without it, an over-budget anchor would sail
+  // through here and die at the server-side HandoffPayloadSchema parse,
+  // which is the same lost-handoff failure mode reasonText had.
+  motivationAnchor: z.string().max(HANDOFF_NARRATIVE_TEXT_MAX).optional(),
   // Visitor-facing summary captured for audit. Persists into the durable
   // record; NEVER reaches the email. Carries the agent's `visitorPrecis`
   // tool arg verbatim. See cms/prompts/tools/handoff/description.md.
-  visitorPrecis: z.string().max(500).optional(),
+  visitorPrecis: z.string().max(HANDOFF_VISITOR_PRECIS_MAX).optional(),
   // Free text from the visitor's "Anything else the specialist should know?"
   // textarea. Trimmed on the widget side; absent if the visitor left it
   // empty. Renders into the specialist email.
-  additionalNotes: z.string().max(2_000).optional(),
+  additionalNotes: z.string().max(HANDOFF_NARRATIVE_TEXT_MAX).optional(),
   consent: HandoffSubmitRequestConsentSchema,
 } as const;
 

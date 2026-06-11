@@ -52,6 +52,7 @@ product/harness/runs/*
 # team-wide rebuild speedup — leave excluded for now, revisit if rebuilds
 # become a bottleneck.
 product/graphify-out/
+graphify-out/
 
 # Local-only file-backed durable stores (E.t3 interim — FsHandoffStore writes
 # handoff records here pending the Firestore swap targeted in E.t2). Never

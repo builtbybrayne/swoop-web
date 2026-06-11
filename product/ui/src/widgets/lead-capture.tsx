@@ -34,6 +34,8 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
+  HANDOFF_NARRATIVE_TEXT_MAX,
+  HANDOFF_VISITOR_PRECIS_MAX,
   HandoffInputSchema,
   HandoffSubmitOutputSchema,
   type HandoffInput,
@@ -203,13 +205,24 @@ export function LeadCaptureWidget(
 
     const trimmedNotes = additionalNotes.trim();
 
+    // Belt-and-braces truncation to the shared schema budgets. The tool-input
+    // schema already caps these at the same constants, so the slices are
+    // no-ops on organic flow — they exist so a future schema drift can only
+    // cost a summary tail, never the visitor's handoff (a length-reject at
+    // submit loses the lead; observed live 2026-06-11).
     const reqBody = {
       verdict: args.verdict,
       reasonCode: args.reasonCode,
-      reasonText: args.specialistSummary,
-      motivationAnchor: args.motivationAnchor || undefined,
-      ...(args.visitorPrecis ? { visitorPrecis: args.visitorPrecis } : {}),
-      ...(trimmedNotes ? { additionalNotes: trimmedNotes } : {}),
+      reasonText: args.specialistSummary.slice(0, HANDOFF_NARRATIVE_TEXT_MAX),
+      motivationAnchor: args.motivationAnchor
+        ? args.motivationAnchor.slice(0, HANDOFF_NARRATIVE_TEXT_MAX)
+        : undefined,
+      ...(args.visitorPrecis
+        ? { visitorPrecis: args.visitorPrecis.slice(0, HANDOFF_VISITOR_PRECIS_MAX) }
+        : {}),
+      ...(trimmedNotes
+        ? { additionalNotes: trimmedNotes.slice(0, HANDOFF_NARRATIVE_TEXT_MAX) }
+        : {}),
       contact: {
         name: name.trim(),
         email: email.trim(),
@@ -380,7 +393,7 @@ export function LeadCaptureWidget(
             value={additionalNotes}
             onChange={(ev) => setAdditionalNotes(ev.target.value)}
             rows={3}
-            maxLength={2000}
+            maxLength={HANDOFF_NARRATIVE_TEXT_MAX}
             className="w-full rounded-swoop border border-swoop-border bg-white px-3 py-2 text-sm shadow-sm outline-none transition-colors focus:border-swoop-accent focus:ring-1 focus:ring-swoop-accent"
           />
         </div>
