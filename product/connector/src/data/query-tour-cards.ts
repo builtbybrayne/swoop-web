@@ -23,11 +23,15 @@
  *     surfaces every tour and lets the conversational agent decide which
  *     fits the visitor's region focus. Region appears on each card so the
  *     agent has the label to reason about + frame in prose.
- *   - `from_price`, `currency_code`, `group_size_max`, `accommodation_style`
- *     are NULL today (no source columns). Filters on them effectively skip
- *     all tours; same accept-and-document.
- *   - `activity_tags` is `{}` today (page ntag_ids empty); activity filter
- *     same.
+ *   - `from_price` / `group_size_max` are NULL today (no source columns) but
+ *     their clauses are NULL-tolerant (`IS NULL OR …`) — harmless soft
+ *     filters that light up if Swoop ever populates pricing / group size.
+ *   - `accommodation_style` (NULL on all 11 rows) and `activity_tags` (`{}`
+ *     on all 11 — page ntag_ids empty) had HARD clauses that guaranteed zero
+ *     results whenever the agent supplied either filter. Removed 2026-06-11
+ *     (filter-sparsity hot-patch sibling extension; see
+ *     planning/reviews/2026-06-11-widget-emptiness-diagnosis.md §3 M1).
+ *     Both fields are accepted-but-ignored until the columns populate.
  *
  * Plan: planning/03-exec-crosscut-find-options-v2-backfill.md §2.3.
  */
@@ -51,10 +55,13 @@ export interface QueryTourCardsOptions {
   region?: string | null;
   durationMin?: number | null;
   durationMax?: number | null;
-  // The next three are accepted-but-no-op for v2: every row is NULL on these
-  // columns today. Shape kept for symmetry with QueryTripCardsOptions and so
-  // the dispatch in find_options.ts can forward `SharedFilters` uniformly.
+  // budgetBand + groupSizeMax compose NULL-tolerant clauses (soft — every
+  // NULL row passes), kept wired for the day Swoop populates the columns.
   budgetBand?: BudgetBand | null;
+  // accommodationStyle + activity are accepted-but-IGNORED: their columns are
+  // empty on all 11 rows and the former hard clauses guaranteed zero results
+  // (2026-06-11 filter-sparsity hot-patch sibling extension). Shape kept for
+  // dispatch symmetry via `SharedFilters` in find_options.ts.
   accommodationStyle?: string | null;
   groupSizeMax?: number | null;
   activity?: string | null;
@@ -103,14 +110,14 @@ export async function queryTourCardsByFilter(
       clauses.push(`(from_price IS NULL OR from_price <= $${binds.length})`);
     }
   }
-  if (opts.activity) {
-    binds.push(opts.activity);
-    clauses.push(`$${binds.length} = ANY(activity_tags)`);
-  }
-  if (opts.accommodationStyle) {
-    binds.push(`%${opts.accommodationStyle}%`);
-    clauses.push(`accommodation_style ILIKE $${binds.length}`);
-  }
+  // activity_tags is {} and accommodation_style NULL on all 11 tour rows —
+  // the former `= ANY(activity_tags)` and `accommodation_style ILIKE` hard
+  // clauses guaranteed zero results whenever the agent supplied either
+  // filter ("kayaking tours" → 0 of 11). Accepted-but-ignored until the
+  // columns populate. (2026-06-11 filter-sparsity hot patch, sibling
+  // extension.)
+  void opts.activity;
+  void opts.accommodationStyle;
   if (opts.groupSizeMax !== null && opts.groupSizeMax !== undefined) {
     binds.push(opts.groupSizeMax);
     clauses.push(`(group_size_max IS NULL OR group_size_max <= $${binds.length})`);

@@ -28,6 +28,14 @@ export interface QueryTripCardsOptions {
   durationMax?: number | null;
   budgetBand?: BudgetBand | null;
   activity?: string | null;
+  /**
+   * Accepted-but-ignored — `trip_card.accommodation_style` is 0/649 populated
+   * in puma_dev (ETL never derives it), so the ILIKE clause guaranteed zero
+   * results whenever the agent supplied the filter. Sibling of the 2026-06-11
+   * filter-sparsity hot patch; see
+   * planning/reviews/2026-06-11-widget-emptiness-diagnosis.md §3 M1.
+   * Lights up when ETL populates the column.
+   */
   accommodationStyle?: string | null;
   /**
    * Trip ids to omit (e.g. items shown in earlier turns). Empty / undefined
@@ -79,10 +87,11 @@ export async function queryTripCardsByFilter(
     binds.push(opts.activity);
     clauses.push(`$${binds.length} = ANY(activity_tags)`);
   }
-  if (opts.accommodationStyle) {
-    binds.push(`%${opts.accommodationStyle}%`);
-    clauses.push(`accommodation_style ILIKE $${binds.length}`);
-  }
+  // accommodation_style is 0/649 populated — the ILIKE clause structurally
+  // zeroed every query that supplied the filter ("lodge-based trip" → 0 of
+  // 151 matching TdP trips). Accepted-but-ignored until ETL populates the
+  // column. (2026-06-11 filter-sparsity hot patch, sibling-trap extension.)
+  void opts.accommodationStyle;
   if (opts.excludeIds && opts.excludeIds.length > 0) {
     binds.push(opts.excludeIds);
     clauses.push(`id <> ALL($${binds.length}::int[])`);

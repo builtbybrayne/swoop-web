@@ -556,3 +556,22 @@ Re-annotation of the 5,325 already-annotated images stays deferred per the parke
 5. `product/connector/src/data/query-hotels.ts` — removed `h.description ILIKE` clause for `accommodationStyle`; hotel region filter (`loc.name ILIKE`) kept (42/44 populated).
 6. `product/cms/prompts/tools/illustrate/description.md` — removed "and optionally a region slug" from the input description (was actively inviting a filter that guaranteed zero rows).
 7. Tests: `find-images-by-keywords.test.ts`, `illustrate.test.ts`, `query-hotels.test.ts` — filter tests converted to accepted-but-ignored assertions.
+
+## 2026-06-11 sibling-trap extension (F1 in the widget-emptiness diagnosis)
+
+**Back-link**: [planning/reviews/2026-06-11-widget-emptiness-diagnosis.md §3 M1 + §6 F1](reviews/2026-06-11-widget-emptiness-diagnosis.md). The full nine-tool filter sweep (the audit's §7.3 ask) found three more zero-traps the same-day hot patch above missed — same class, same fix pattern.
+
+### Coverage numbers (probed against puma_dev, 2026-06-11)
+
+| Table / column | Non-null / total | Live consequence proven |
+|---|---|---|
+| `trip_card.accommodation_style` | 0 / 649 | "lodge-based trip" with the style filter → **0** (without it, the same TdP region filter matches **151 trips**); in blends the trip variant silently vanished while hotel/region_base cards masked the gap |
+| `tour_card.accommodation_style` | 0 / 11 | structurally identical |
+| `tour_card.activity_tags` | 0 / 11 (`{}` — page ntag_ids empty) | "kayaking tours" → 0 of 11 |
+
+### Changes made
+
+1. `product/connector/src/data/query-trips.ts` — `accommodation_style ILIKE` clause removed; field accepted-but-ignored with comment. `activity` (466/649) and `region` (517/649) remain live; `budgetBand` stays soft.
+2. `product/connector/src/data/query-tour-cards.ts` — `= ANY(activity_tags)` + `accommodation_style ILIKE` clauses removed; header doc corrected (it previously *documented* the traps as benign "accept-and-document" — they were accept-and-lethal). `budgetBand` + `groupSizeMax` NULL-tolerant soft clauses stay.
+3. New tests: `query-trips.test.ts` (3) + `query-tour-cards.test.ts` (3) — accepted-but-ignored + still-live-viable + soft-clause assertions, mirroring `query-hotels.test.ts`.
+4. Handler (`find_options.ts`) deliberately untouched — forwarding is harmless once the primitives ignore (the query-hotels variant of the patch, not the find_inspiring variant).
