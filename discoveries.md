@@ -6,6 +6,14 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-06-11 — Parallel branches that each add "the Nth tool" auto-merge their identical count-pins silently; union-merge needs a pin sweep, not just conflict resolution
+
+Two branches in the goofy-goldstine wave each added one tool (`get_pricing`, `show_options`) and each updated the same count pins 9→10. Git treats identical changes on both sides as non-conflicting and keeps "10" — where the union is 11. Only two files *textually* conflicted; the dangerous pins (orchestrator `tools.test.ts` exposed-count, connector length assertions) merged clean and wrong. **Rule**: after merging sibling branches that extend the same enumerated surface (tools, migrations, event kinds), grep-sweep every count/pin/history-comment for the enum (`toHaveLength(`, "N tools", registration lists) and resolve to the union by hand — the conflict list is not the checklist.
+
+Same merge surfaced the second find_tips-class regression: a tool registered connector-side but absent from the orchestrator's `TOOL_SPECS` is invisible to the model (boot warns, nothing fails). The pricing branch's `get_pricing` had exactly this gap; caught only because the union sweep read the exposed-tools test instead of trusting green workspaces. The mandatory real-Anthropic single-turn smoke (the standing acceptance gate for tools-array changes) would also have caught it — it had been deferred as operator-pending for lack of an API key in the agent worktree. **Treat "smoke deferred" as "exposure unverified", and check TOOL_SPECS membership at merge time for any connector-side tool addition.**
+
+Operational sibling lesson from the same wave: a harness restart mid-swarm pruned two of three agent isolation worktrees; both agents relocated into the orchestrator's worktree and committed there (cleanly, but unannounced — one wrote its sibling's planning docs into the main-repo working tree). After any harness interruption during a swarm, re-verify *where* each agent is actually working (`pwd` + `git log` per worktree) before assuming the dispatch isolation still holds.
+
 ## 2026-06-11 — UI render gates are population-sensitive too; and the durable session transcript is the first diagnostic instrument
 
 Two patterns from the widget-emptiness diagnosis ([planning/reviews/2026-06-11-widget-emptiness-diagnosis.md](planning/reviews/2026-06-11-widget-emptiness-diagnosis.md)):
