@@ -1,6 +1,6 @@
 # 03 — Execution: Crosscut — Pricing data (hotel-pricing ingest + `get_pricing` raw-matrix tool + §5 staleness guardrails)
 
-> **Status**: DRAFT — pending HITL ratification of this document. The load-bearing design calls were made by Alastair in the 2026-06-11 HITL session (worktree `goofy-goldstine-2ed1c1`); see the ratification appendix at the bottom. Decision IDs proposed `C.goofy-goldstine-{1..}` (wave-named per the 2026-05-13 parallel-author collision discipline; numeric ids TBD on merge).
+> **Status**: EXECUTED 2026-06-11 — commits `919f7d0`..`3703c11` on `worktree-agent-a3da449ca05a3234e` (execution log at bottom). The load-bearing design calls were made by Alastair in the 2026-06-11 HITL session (worktree `goofy-goldstine-2ed1c1`); see the ratification appendix at the bottom. Decision IDs proposed `C.goofy-goldstine-{1..}` (wave-named per the 2026-05-13 parallel-author collision discipline; numeric ids TBD on merge).
 >
 > **Back-links**: [2026-06-10 Luke Loom ledger items D1/D2/D5](reviews/2026-06-10-luke-loom-feedback.md) (stale prices / Product-Library deferral / budget-query-returns-Explora), [2026-06-11 widget-emptiness diagnosis](reviews/2026-06-11-widget-emptiness-diagnosis.md) (M1 zero-trap context), [retrieval-provenance plan execution log §5](03-exec-crosscut-magical-poincare-retrieval-provenance.md) (the D5 probes that found `hotel_pricing` empty), [decision C.14 — headline pricing only](decisions.md).
 >
@@ -170,3 +170,70 @@ Calls made by Alastair in the goofy-goldstine session, recorded verbatim-in-spir
 4. **No fresh dump available** — plans work from the 2026-04-27 capture; `capturedAt` is config.
 5. Raw-data principle (Alastair): *"I prefer solutions that provide raw data to the agent rather than prepared programmatic efforts. That way, valuable nuance survives."* — the design root for `get_pricing`'s as-authored matrix and the nights-stay-raw flatten.
 6. Guardrails specified by Alastair at session open: (a) expanded upper bounds on ranges to allow for price increases since capture → §2.5 top-end generosity; (b) active "prices are dynamic" warning, current price via **Swoop Planning Specialists** → §2.5 dynamic-prices line.
+
+---
+
+> **Recovery note (2026-06-11)**: the executing agent wrote its planning leg to the main-repo working tree instead of its worktree (wrong-cwd hazard, 2026-05-13 class). Content recovered verbatim below by the orchestrator.
+
+## Decisions
+
+- [C.goofy-goldstine-1](decisions.md#cgoofy-goldstine-1--get_pricing-is-the-10th-mcp-tool-prices_captured_at-config-stamps-all-responses) — get_pricing as 10th tool + PRICES_CAPTURED_AT
+- [C.goofy-goldstine-2](decisions.md#cgoofy-goldstine-2--synthetic-hotel_room-id-hotel_id--1000--roomtype_id-hotel_room-deduped-by-hotel_id-roomtype_id) — synthetic hotel_room id formula
+- [C.goofy-goldstine-3](decisions.md#cgoofy-goldstine-3--hotel-pricing-per-night-derivation-at-query-time-not-etl-time-roundpricenumeric--nullifnights0) — per-night at query time
+- [C.goofy-goldstine-4](decisions.md#cgoofy-goldstine-4--budget_ceiling-recalibrated-to-per-night-scale-budget400-mid800-premium1_500) — BUDGET_CEILING recalibration
+- [C.goofy-goldstine-5](decisions.md#cgoofy-goldstine-5--trip_card-zero-price-rows-are-pre-existing-from-enrich-not-etl-zero-price-hygiene-targets-tripfrom_price-only) — trip_card zero-price rows scoping
+- [G.goofy-goldstine-1](decisions.md#ggoofy-goldstine-1--guidebook-and-parent-guidebook-pagetypes-added-to-practical_pagetype_titles) — Guidebook pagetype class gap
+
+---
+
+## 2026-06-11 Execution log
+
+### Implementation
+
+All changes made in worktree `agent-a3da449ca05a3234e` on branch `worktree-agent-a3da449ca05a3234e`.
+
+**Commits** (in order):
+1. `919f7d0` feat(etl): hotel pricing nights + prose carry — migration 019, hotel_room + hotel_pricing flush in run.ts, transformations for hotel prose + zero-price hygiene on trip, migrate.test.ts updated to 001–019, pool.test.ts Config fixture fix.
+2. `1531156` feat(connector): get_pricing tool — 10th MCP tool — GetPricingInputSchema/OutputSchema in ts-common, get_pricing.ts handler, description.md, description-loader (10 names), mcp.test.ts 9→10, capturedAt threading through app→mcp→index, PRICES_CAPTURED_AT in config schema.
+3. `a8e80ad` fix(connector): query-hotels per-night derivation + ceiling recalibration — ROUND(price::numeric / NULLIF(nights,0)) for from_price + HAVING, BUDGET_CEILING per-night scale, query-hotels.test.ts HAVING bind updated.
+4. `3703c11` fix(ingestion): Guidebook pagetype → inform_chunk + §5 price-awareness rules — Guidebook + Parent Guidebook in PRACTICAL_PAGETYPE_TITLES, LOREM_IPSUM_RE guards at 4 insert sites, 3 §5 rules in 00_why.md.
+
+### Test results
+
+- **@swoop/connector**: 207 passed, 5 skipped (24 test files) ✓
+- **@swoop/ingestion**: 300 passed (22 test files) ✓
+- **typecheck**: all three packages (ingestion, connector, ts-common) clean ✓
+
+### ETL results (puma_dev)
+
+ETL completed in 20.67s against `/data/content-data-swoop-patagonia_prod.sql`:
+
+| table | loaded | source | notes |
+|---|---|---|---|
+| hotel | 44 | 44 | all hotels |
+| hotel_room | 67 | 239 | deduped by (hotel_id, roomtype_id) |
+| hotel_pricing | 1,051 | 1,051 | full matrix with nights |
+| trip | 852 | 852 | zero from_price → NULL |
+
+### §5 verification probes
+
+| Probe | Result | Status |
+|---|---|---|
+| `SELECT COUNT(*) FROM hotel_pricing` | 1,051 | ✓ matches plan |
+| `SELECT COUNT(DISTINCT hotel_id) FROM hotel_pricing` | 26 | ✓ matches plan |
+| `hotel_room` non-empty | 67 rows | ✓ |
+| `SELECT COUNT(*) FROM hotel WHERE description IS NOT NULL` | 41 | ✓ (41 of 44 have prose) |
+| `trip.from_price = 0` rows | 0 | ✓ hygiene working |
+| Per-night spot check (Explora) | min=630 (Atacama), max=3,470 (Torres del Paine Conservation Reserve) | ✓ |
+| Explora NOT in budget band (ceiling=400) | min_per_night 630–1,280 across all 7 properties | ✓ correctly excluded |
+| Price quartiles | p25=870, p50=1,225, p75=1,558, max=3,470 | ✓ calibration correct |
+| `trip_card.from_price = 0` rows | 8 (pre-existing, enrich pipeline, not ETL) | ✓ out of scope |
+| Guidebook pages in page table | 86 rows | ✓ will enter inform_chunk on next compose pass |
+
+### Operator-pending items
+
+1. **inform_chunk compose pass** — re-run `npm run enrich -- --mode=compose` with GEMINI_API_KEY set. The compose pass itself doesn't call Gemini but the guard runs unconditionally for non-dry-run mode. The 86 Guidebook pages + lorem ipsum guards are in place; the compose pass will load them. Command: `cd product/ingestion && GEMINI_API_KEY=$GEMINI_API_KEY DATABASE_URL=postgresql://al:pick-a-password@localhost:5432/puma_dev npm run enrich -- --mode=compose`
+
+2. **Real-Anthropic single-turn smoke** — verify `get_pricing` round-trips via the connector's MCP surface with a live Anthropic key. Expected: tool registered, returns hotel matrix with `capturedAt: "2026-04-27"`.
+
+3. **GEMINI_API_KEY in worktree connector/.env** — the worktree's `.env` lacks GEMINI_API_KEY (loaded from main repo's connector/.env only when running from the main repo). When merging, the key is already in the main repo's `.env`; no action needed post-merge.

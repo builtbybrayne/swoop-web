@@ -8,6 +8,48 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## G.goofy-goldstine-1 — Guidebook and Parent Guidebook pagetypes added to PRACTICAL_PAGETYPE_TITLES
+
+**Decided**: 2026-06-11
+**Owner**: goofy-goldstine pricing-data cross-cut executing agent
+**Rationale**: Page 723 ("Patagonia travel costs explained") has pagetype_title = 'Guidebook' — not any of the existing set members — so it produced zero inform_chunk rows. Audit showed 86 Guidebook pages and 37 Parent Guidebook pages in the page table, all carrying lookup-relevant practical travel content (costs, maps, getting-there guides, sightseeing, wildlife, conservation). The class gap is a systematic omission, not a page-specific edge case. Fix: add both to PRACTICAL_PAGETYPE_TITLES in inform-chunk.ts. The costs page (the explicit probe) picks up all its contentblocks on the next compose pass.
+**Swap cost**: Zero. If a Guidebook page is later excluded, add it to an exclusion list or filter by page_id; the pagetype inclusion is correct by default.
+
+## C.goofy-goldstine-5 — trip_card zero-price rows are pre-existing from enrich, not ETL; zero-price hygiene targets trip.from_price only
+
+**Decided**: 2026-06-11
+**Owner**: goofy-goldstine pricing-data cross-cut executing agent
+**Rationale**: trip_card is populated by the enrich pipeline (not ETL). The 8 rows with from_price=0 in trip_card are pre-existing from a prior enrich run; the ETL zero-price hygiene correctly writes NULL into trip.from_price (confirmed: 0 rows with from_price=0 in trip). The fix scope is correct as implemented — trip.from_price is the canonical source, trip_card inherits from the enrich pass.
+**Swap cost**: Zero. When the enrich pipeline next re-runs trip classification it will pick up the NULL from trip.from_price and write NULL into trip_card accordingly.
+
+## C.goofy-goldstine-4 — BUDGET_CEILING recalibrated to per-night scale: budget=400, mid=800, premium=1_500
+
+**Decided**: 2026-06-11
+**Owner**: goofy-goldstine pricing-data cross-cut executing agent
+**Rationale**: Previous ceilings were package-price scale (~5,000 for mid), which let Explora slip into mid-range results. Per-night quartiles after loading: p25=870, p50=1225, p75=1558, max=3470. Budget floor of 400 captures EcoCamp (367), Los Cauquenes (173), AWA (222), Estancia El Condor (380), Chaltén Camp (393). All 7 Explora properties have min_per_night ≥ 630 — correctly above the 400 budget ceiling, correctly below the 800 mid ceiling (Explora Atacama min=630). Mid ceiling of 800 puts Explora Atacama in mid range, which matches editorial positioning. Premium=1,500 captures Explora Torres del Paine (max 3,110) in premium+luxury.
+**Swap cost**: Low. BUDGET_CEILING is an exported const in query-hotels.ts; update it when seasonal data shows ceiling drift.
+
+## C.goofy-goldstine-3 — Hotel pricing per-night derivation at query time, not ETL time: ROUND(price::numeric / NULLIF(nights,0))
+
+**Decided**: 2026-06-11
+**Owner**: goofy-goldstine pricing-data cross-cut executing agent
+**Rationale**: Source data is package prices for N nights. ETL carries nights raw (migration 019). Division to per-night happens in SQL at query time: `ROUND(price::numeric / NULLIF(nights,0))` in the MIN() aggregate for from_price and in the HAVING filter. Cast to ::numeric avoids integer division truncation; NULLIF guards the 0-nights edge; ROUND to integer avoids false decimal precision in band filtering. The alternative (store per-night in the DB) would destroy the package-price information and create redundancy with the nights column.
+**Swap cost**: Low. If a fractional per-night is ever needed, remove ROUND from the query; existing rows are unaffected.
+
+## C.goofy-goldstine-2 — Synthetic hotel_room id: hotel_id * 1000 + roomtype_id; hotel_room deduped by (hotel_id, roomtype_id)
+
+**Decided**: 2026-06-11
+**Owner**: goofy-goldstine pricing-data cross-cut executing agent
+**Rationale**: Source hotel_pricing rows carry a roomtype foreign key, not a room foreign key directly. Multiple source rows with the same (hotel_id, roomtype_id) pair map to one physical room. hotel_room needs a stable numeric id for the FK on hotel_pricing.room_id. Synthetic id = hotel_id * 1000 + roomtype_id is deterministic and idempotent across ETL re-runs. Bounds: hotel_id < 100, roomtype_id < 1000 (confirmed from source data). 239 source pricing rows deduplicate to 67 distinct rooms across 26 hotels.
+**Swap cost**: Low. If hotel or roomtype counts later exceed the bounds (hotel_id ≥ 100 or roomtype_id ≥ 1000), extend the formula to a larger multiplier and re-run ETL.
+
+## C.goofy-goldstine-1 — get_pricing is the 10th MCP tool; PRICES_CAPTURED_AT config stamps all responses
+
+**Decided**: 2026-06-11
+**Owner**: goofy-goldstine pricing-data cross-cut executing agent
+**Rationale**: Hotel pricing data is package-priced and date-stamped (captured 2026-04-27). A dedicated tool prevents the agent conflating package prices with per-night rates and makes staleness explicit in every response via capturedAt. Two targets: hotel (full room/season/nights/price matrix) and trip (headline from-prices). PRICES_CAPTURED_AT env var (default '2026-04-27') flows through config → app → mcp → registerAllTools → getPricingBody → output, so every response carries the data birthday without the tool needing to query it.
+**Swap cost**: Low. If pricing data is refreshed, update PRICES_CAPTURED_AT in connector/.env; no code change required. If a new target is needed, extend the z.enum in GetPricingInputSchema.
+
 ## D.goofy-goldstine-1 — `also_interesting` ships in the v1 schema; its widget treatment is a separate isolated UI-only commit (Phase 3) for the parallel styling agent
 
 **Decided**: 2026-06-11
