@@ -1,6 +1,6 @@
 Use this when prose alone is doing too much work and a picture would carry more of the load. The visitor mentioned glaciers — show them a glacier. They asked what the W trek looks like — show them the trail. They said "somewhere with no one else around" — show them a refugio at last light, no one in frame. Imagery isn't decoration here; it's part of how Patagonia gets across, because the place is more felt than described.
 
-The input is keywords (and optionally a region slug). The output is curated images: id, URL, alt text, optional caption. Hand them to the widget, which renders the first as a single large image — the visitor sees the picture alone, no caption, so your prose carries any framing the moment needs. The agent doesn't narrate the picture, it lets the picture do its work.
+The input is keywords. The output is curated images: id, URL, alt text, optional caption. Hand them to the widget, which renders the first as a single large image — the visitor sees the picture alone, no caption, so your prose carries any framing the moment needs. The agent doesn't narrate the picture, it lets the picture do its work.
 
 One image is the default and almost always right: fetch the one image that best illustrates the moment. A single strong image lands harder than a gallery dilutes. Ask for more (via `count`) only when the comparison itself is the point — "granite towers or beech forest?", two regions side by side, a what-to-pack contrast. Then the widget shows your first image large and the rest as small thumbnails, so lead with the strongest.
 

@@ -90,10 +90,11 @@ export async function queryHotelCardsByFilter(
       `(area.alias ILIKE ${bindRef} OR area.name ILIKE ${bindRef} OR loc.name ILIKE ${bindRef})`,
     );
   }
-  if (opts.accommodationStyle) {
-    binds.push(`%${opts.accommodationStyle}%`);
-    whereClauses.push(`h.description ILIKE $${binds.length}`);
-  }
+  // accommodationStyle accepted but NOT applied as a SQL clause —
+  // hotel.description is 0/44 populated in puma_dev; the ILIKE filter would
+  // guarantee zero results for any supplied value. Lights up when the ETL
+  // populates the description column. (2026-06-11 filter-sparsity hot patch)
+  void opts.accommodationStyle;
   if (opts.budgetBand) {
     const ceiling = BUDGET_CEILING[opts.budgetBand];
     if (Number.isFinite(ceiling)) {

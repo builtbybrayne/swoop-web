@@ -88,10 +88,13 @@ describe('illustrate handler', () => {
       makeDeps(),
     );
 
+    // regionSlug is accepted in IllustrateInput but NOT forwarded to the
+    // primitive — region_tags is 0/13,012 populated; passing it guarantees
+    // zero rows. (2026-06-11 filter-sparsity hot patch)
     expect(mockFind.mock.calls[0][2]).toMatchObject({
       limit: 3,
-      regionSlug: 'torres-del-paine',
       excludeCanonicalUrls: ['https://cdn.example.com/seen.jpg'],
     });
+    expect(mockFind.mock.calls[0][2]).not.toHaveProperty('regionSlug');
   });
 });

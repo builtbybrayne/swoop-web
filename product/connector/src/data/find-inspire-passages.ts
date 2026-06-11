@@ -2,8 +2,18 @@
  * Hybrid retrieval over `inspire_passage`. Powers `find_inspiring`.
  *
  * Cosine-distance ANN on `embedding` + ts_rank on `tsv`, fused via RRF
- * (k=60). Optional `region` filter is a simple ILIKE match on the denormalised
- * `region` column; optional `mood` filter likewise on `mood`.
+ * (k=60).
+ *
+ * **2026-06-11 filter-sparsity hot patch**: `region` and `mood` hard filters
+ * have been removed. Both columns are 0/665 populated in puma_dev (the
+ * compose pass at `ingestion/src/enrich/compose/inspire-passage.ts` has never
+ * written either column). When supplied, these clauses zeroed BOTH hybrid CTE
+ * legs — cosine ANN and ts_rank — returning zero passages every time. Fix
+ * follows the same rationale as the 2026-05-18 illustrate tag-gate removal
+ * (see `discoveries.md` §"2026-05-18 — illustrate tag-overlap gate"). Fields
+ * are still accepted by the handler and the ts-common schema (removing them
+ * would cause input_validation rejections for existing agent calls); they are
+ * accepted and silently ignored here until the ETL populate the columns.
  */
 
 import type pg from 'pg';
@@ -14,6 +24,12 @@ import { provenanceFields } from './provenance.js';
 import { resolveImagesByIds } from './resolve-image.js';
 
 export interface FindInspirePassagesOptions {
+  /**
+   * `region` and `mood` are accepted but ignored — both columns are 0/665
+   * populated in puma_dev (compose pass has never written them). Including
+   * them as hard SQL clauses zeroes both hybrid CTE legs. Lights up when
+   * ETL populates the columns. (2026-06-11 filter-sparsity hot patch)
+   */
   region?: string | null;
   mood?: string | null;
   /**
@@ -44,17 +60,11 @@ export async function findInspirePassages(
   query: string,
   opts: FindInspirePassagesOptions,
 ): Promise<InspirePassagePublic[]> {
+  // region and mood accepted in opts but NOT applied as SQL clauses —
+  // both columns are 0/665 populated (2026-06-11 filter-sparsity hot patch).
   const filterClauses: string[] = [];
   const filterBinds: unknown[] = [];
 
-  if (opts.region) {
-    filterBinds.push(`%${opts.region}%`);
-    filterClauses.push(`region ILIKE $${filterBinds.length + 3}`);
-  }
-  if (opts.mood) {
-    filterBinds.push(`%${opts.mood}%`);
-    filterClauses.push(`mood ILIKE $${filterBinds.length + 3}`);
-  }
   // Anti-repetition: exclude already-shown passage ids inside both CTEs so
   // they don't burn one of the top-50 candidate slots. Empty-array safe via
   // `<> ALL($N::uuid[])`.

@@ -40,7 +40,11 @@ export async function illustrateBody(
   const embedding = await deps.embedQuery(input.keywords.join(' '));
   const images = await deps.withClient((client) =>
     findImagesByKeywords(client, embedding, {
-      regionSlug: input.regionSlug,
+      // regionSlug NOT forwarded — image.region_tags is 0/13,012 populated;
+      // a supplied slug guarantees zero rows. Field stays in IllustrateInputSchema
+      // (removing it would cause input_validation rejections on existing agent
+      // calls). Accepted here, silently ignored; wired back post re-annotation.
+      // (2026-06-11 filter-sparsity hot patch)
       limit,
       // Anti-repetition (planning/03-exec-crosscut-anti-repetition.md,
       // HITL-ratified 2026-05-27). Orchestrator-supplied; connector stateless.

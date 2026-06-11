@@ -82,7 +82,10 @@ describe('findImagesByKeywords — unit', () => {
     expect(binds[1]).toBe(4);
   });
 
-  it('adds a `region_tags @> $2` clause when regionSlug is supplied', async () => {
+  it('accepts regionSlug without adding a region_tags clause (0/13,012 populated — 2026-06-11 hot patch)', async () => {
+    // regionSlug is accepted-and-ignored: region_tags is 0/13,012 populated;
+    // the hard filter was removed to avoid guaranteeing zero rows. The field
+    // stays in the schema so existing agent calls aren't rejected.
     const { client, calls } = makeMockClient(async () => ({ rows: [] }));
     const opts: FindImagesByKeywordsOptions = {
       regionSlug: 'torres-del-paine',
@@ -93,14 +96,14 @@ describe('findImagesByKeywords — unit', () => {
     expect(calls).toHaveLength(1);
     const { sql, binds } = calls[0]!;
 
-    expect(sql).toMatch(/region_tags @> \$2/);
+    // No region_tags clause when regionSlug is supplied.
+    expect(sql).not.toMatch(/region_tags\s*@>/);
     expect(sql).toMatch(/embedding <=> \$1::vector/);
     expect(sql).toMatch(/DISTINCT ON \(canonical_url\)/);
-    // Binds: embedding, [regionSlug], limit.
-    expect(binds).toHaveLength(3);
+    // Binds: embedding, limit (no regionSlug bind).
+    expect(binds).toHaveLength(2);
     expect(binds[0]).toBe(`[${DUMMY_EMBEDDING.join(',')}]`);
-    expect(binds[1]).toEqual(['torres-del-paine']);
-    expect(binds[2]).toBe(6);
+    expect(binds[1]).toBe(6);
   });
 
   it('parses row shape into the public ImageRow contract', async () => {
@@ -217,9 +220,10 @@ describeIfDb('findImagesByKeywords — integration (DATABASE_URL + GEMINI_API_KE
       const embedding = await embed('granite tower at golden hour');
       const client = await pool.connect();
       try {
-        // region_tags is empty across the corpus today (2026-05-18 finding) —
-        // this should return zero rows without erroring, and lights up once
-        // a future re-annotation populates the column.
+        // regionSlug is accepted-and-ignored (2026-06-11 hot patch) — the
+        // region_tags hard filter was removed (0/13,012 populated); result
+        // is now the same as without a slug (cosine ANN only). Lights up once
+        // a future re-annotation populates region_tags.
         const rows = await findImagesByKeywords(client, embedding, {
           regionSlug: 'torres-del-paine',
           limit: 4,

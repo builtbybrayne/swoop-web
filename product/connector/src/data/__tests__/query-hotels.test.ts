@@ -64,7 +64,10 @@ describe('queryHotelCardsByFilter', () => {
     expect(binds).toContain('%torres del paine%');
   });
 
-  it('threads accommodationStyle filter into the bind array', async () => {
+  it('accepts accommodationStyle without adding it to the SQL (hotel.description 0/44 populated — 2026-06-11 hot patch)', async () => {
+    // accommodationStyle is accepted-and-ignored: hotel.description is 0/44
+    // populated; the h.description ILIKE filter was removed to avoid
+    // guaranteeing zero results. Lights up when ETL populates the column.
     const queryFn = vi.fn().mockResolvedValue({ rows: [] });
     const client = { query: queryFn } as unknown as pg.PoolClient;
 
@@ -73,8 +76,10 @@ describe('queryHotelCardsByFilter', () => {
       limit: 4,
     });
 
-    const [, binds] = queryFn.mock.calls[0] as [string, unknown[]];
-    expect(binds).toContain('%lodge%');
+    const [sql, binds] = queryFn.mock.calls[0] as [string, unknown[]];
+    // No accommodationStyle bind or ILIKE against h.description.
+    expect(binds).not.toContain('%lodge%');
+    expect(sql).not.toMatch(/h\.description\s+ILIKE/);
   });
 
   it('threads budgetBand into a price-ceiling HAVING clause', async () => {

@@ -524,3 +524,35 @@ Verified at HEAD: bug still present. `vision-client.ts:117-120` reminder named o
 Changed `vision-client.ts:117-120` to list all six keys (`description`, `annotation`, `subject_tags`, `mood_tags`, `region_tags`, `tags`), kept the "no preamble" instruction. Added guarding test in `__tests__/vision-client.test.ts` (`reminder names all six v2 output fields`) — red before fix, green after. Full ingestion suite green against a fresh `rm -rf node_modules && npm install`: 291/291 passing, typecheck clean.
 
 Re-annotation of the 5,325 already-annotated images stays deferred per the parked v2 facet decision; this fix closes the latent footgun so any future re-run produces all six outputs. Commit `6692326`, branch `worktree-agent-aaccca0099e0d9f48` (off main; harness did not pre-create the worktree, so the agent branched from main locally — no main commit). Awaiting human review + merge.
+
+---
+
+## 2026-06-11 filter-sparsity hot patch
+
+**Back-link**: rationale follows the exact pattern documented in [discoveries.md — 2026-05-18 illustrate tag-overlap gate](../discoveries.md) (third instance of the same class).
+
+### Column coverage numbers (probed against puma_dev)
+
+| Table / column | Non-null / total | Structurally zeroes filter? |
+|---|---|---|
+| `inspire_passage.region` | 0 / 665 | Yes — compose pass never writes it |
+| `inspire_passage.mood` | 0 / 665 | Yes — compose pass never writes it |
+| `image.region_tags` | 0 / 13,012 | Yes — Vision reminder bug (C.t6; re-annotation parked) |
+| `hotel.description` | 0 / 44 | Yes — ETL never populated it |
+| `hotel.area_id` (→ area.alias / area.name) | 0 / 44 | Yes — no area linked to any hotel row |
+| `location.name` (via hotel.location_id) | 42 / 44 | No — viable; hotel region filter kept |
+
+### §5 decision — query-hotels.ts
+
+- **Region filter** (`area.alias ILIKE OR area.name ILIKE OR loc.name ILIKE`): **kept**. `loc.name` is 42/44 populated; the OR clause produces non-zero results when the agent names a location (`"Torres del Paine"` hits 10 hotels). The area branches always miss today (0/44 area_id set) but they're harmless in an OR.
+- **accommodationStyle filter** (`h.description ILIKE`): **removed**. `hotel.description` is 0/44 populated — structurally zeroes every query that supplies the filter.
+
+### Changes made
+
+1. `product/connector/src/data/find-inspire-passages.ts` — removed `region ILIKE` + `mood ILIKE` filter clauses; both columns 0/665 populated. Fields kept in `FindInspirePassagesOptions` with accepted-but-ignored comment.
+2. `product/connector/src/tools/find_inspiring.ts` — stopped forwarding `region`/`mood` to the primitive; comment explains why fields remain in `FindInspiringInputSchema`.
+3. `product/connector/src/data/find-images-by-keywords.ts` — removed `region_tags @> $N` clause; `regionSlug` accepted-but-ignored in opts.
+4. `product/connector/src/tools/illustrate.ts` — stopped forwarding `regionSlug` to the primitive; comment explains schema retention.
+5. `product/connector/src/data/query-hotels.ts` — removed `h.description ILIKE` clause for `accommodationStyle`; hotel region filter (`loc.name ILIKE`) kept (42/44 populated).
+6. `product/cms/prompts/tools/illustrate/description.md` — removed "and optionally a region slug" from the input description (was actively inviting a filter that guaranteed zero rows).
+7. Tests: `find-images-by-keywords.test.ts`, `illustrate.test.ts`, `query-hotels.test.ts` — filter tests converted to accepted-but-ignored assertions.

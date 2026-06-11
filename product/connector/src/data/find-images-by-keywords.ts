@@ -21,12 +21,13 @@
  * intent. Until then, single-embedding cosine ANN against the annotation is
  * the workhorse.
  *
- * `regionSlug` is retained as an optional hard filter on `region_tags @>
- * ARRAY[$slug]`. It's a **no-op today** (every image's `region_tags` is
- * empty per the 2026-05-18 finding that the Vision call's in-message
- * reminder asked the model for prose only), and lights up automatically
- * when a future annotation re-run populates the column. Forward-compatible
- * with the v2 / facet-aware version.
+ * **2026-06-11 update**: `regionSlug` is now accepted-and-ignored — the
+ * `region_tags @> ARRAY[$slug]` hard filter was removed because `region_tags`
+ * is 0/13,012 populated (the Vision pass never wrote it) and a supplied slug
+ * therefore guarantees zero rows. The field stays in the schema so existing
+ * agent calls aren't rejected; it will be wired back as a hard filter once a
+ * re-annotation populates the column. Forward-compatible with the v2 /
+ * facet-aware version. (2026-06-11 filter-sparsity hot patch)
  */
 
 import type pg from 'pg';
@@ -72,13 +73,12 @@ export async function findImagesByKeywords(
   embedding: number[],
   opts: FindImagesByKeywordsOptions,
 ): Promise<ImageRow[]> {
+  // regionSlug accepted in opts but NOT applied as a SQL clause —
+  // region_tags is 0/13,012 populated; a supplied slug guarantees zero rows.
+  // (2026-06-11 filter-sparsity hot patch; lights up post re-annotation)
   const clauses: string[] = ['embedding IS NOT NULL'];
   const binds: unknown[] = [`[${embedding.join(',')}]`];
 
-  if (opts.regionSlug) {
-    binds.push([opts.regionSlug]);
-    clauses.push(`region_tags @> $${binds.length}`);
-  }
   // Anti-repetition: exclude images whose canonical_url has already been
   // shown. Keyed by URL per HITL Q5 — "never show the same picture twice".
   // Empty-array safe via `<> ALL($N::text[])`.

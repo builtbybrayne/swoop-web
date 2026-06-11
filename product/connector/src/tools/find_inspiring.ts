@@ -27,8 +27,13 @@ export async function findInspiringBody(
   const embedding = await deps.embedQuery(input.query);
   const passages = await deps.withClient((client) =>
     findInspirePassages(client, embedding, input.query, {
-      region: input.region,
-      mood: input.mood,
+      // region and mood are NOT forwarded to the primitive — inspire_passage.region
+      // and .mood are 0/665 populated so passing them as hard SQL filters zeroes
+      // both hybrid CTE legs. Fields remain in FindInspiringInputSchema (removing
+      // them would cause input_validation rejections on existing agent calls).
+      // They are accepted here and silently ignored; they will be wired back in
+      // once the ETL compose pass populates the columns.
+      // (2026-06-11 filter-sparsity hot patch)
       limit: input.limit,
       // Anti-repetition (planning/03-exec-crosscut-anti-repetition.md,
       // HITL-ratified 2026-05-27). Orchestrator-supplied; connector stateless.
