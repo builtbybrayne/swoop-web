@@ -91,15 +91,23 @@ Boot state verified: connector 9 tools; orchestrator "8 exposed to model", `agen
 - AntiRepetition: NOT the cause of any observed emptiness — only 2 sessions exist in `puma_session`; seen-sets ≤15 items. (The B.t13 exhaustion design question remains open as a *future* concern, not a current cause.)
 - Audit corrections for the record: the blog raw fetch is **not** empty (`data/blog/raw/20260428T231414Z/posts.ndjson`, 102 posts — the missing component is a **loader** into `blog_post`/`blog_chunk`, never built); the vision-client reminder fix is **already in code** (six-output ask; only the re-annotation run is outstanding); the area taxonomy is 16 rows, not 21.
 
-## 6. Fix candidates (each gated on Alastair's explicit go — none executed at time of writing)
+## 6. Fix ledger (statuses as of 2026-06-11 late evening — F1–F4 executed with Alastair's per-instance go)
 
-| # | Fix | Shape | Size |
-|---|---|---|---|
-| F1 | Extend `1701728` to the three sibling traps (trip/tour `accommodation_style`, tour `activity_tags` → accepted-but-ignored + tests) | code-only, mirrors the hot patch | ~30 min |
-| F2 | lookup visibility: derive `inform_chunk.canonical_url` for FAQ chunks at compose time via `faqset_id → contentblock → page` (892/928 coverage; multi-page heuristic for 24 faqsets) + re-compose (embedding_cache ⇒ ~£0); **or** widget renders a URL-less fallback | data fix (preferred per T3) or UI fix | ½ day incl. tests |
-| F3 | `inspiration.tsx` rules-of-hooks violation: `useState`/`useEffect` sit after conditional early-returns (lifecycle gate, parse fail) → floods console with React "Expected static flag was missing" internal errors. Hoist hooks above returns | code-only | small |
-| F4 | `find_inspiring/description.md` says passages come "with a region tag" — region is null on all 665. Align description with reality (or populate per the wider decision set) | content | tiny |
-| F5 | Mini refresh: `git pull` + `npm install` + rebuild + restart per [cms/ops/demo-server.md](../../product/cms/ops/demo-server.md) — until then the demo still zeroes on the 16:48-shaped ask | operator step | 10 min |
+| # | Fix | Status |
+|---|---|---|
+| F1 | Extend `1701728` to the three sibling traps (trip/tour `accommodation_style`, tour `activity_tags` → accepted-but-ignored + 6 tests) | ✅ **landed `728a172`** — live-proven over MCP: tour+kayaking 0→4 cards, trip+lodge 0→4 (151 available). Addendum on [03-exec-c-t4.md](../03-exec-c-t4.md) |
+| F2 | lookup visibility: `inform_chunk.canonical_url` + `source_title` derived for FAQ chunks via `faqset_id → contentblock → page` + re-compose | ✅ **landed `55fd6a0` + `980a4d6`**; ops O0→O3 executed (baseline dump → migration 018 → ETL → £0 re-compose). Coverage **18 → 890/924**; lookup widget rendered on FAQ content for the first time, titled anchors live. Full log: [03-exec-crosscut-goofy-noether-lookup-url-fix.md](../03-exec-crosscut-goofy-noether-lookup-url-fix.md) |
+| F3 | `inspiration.tsx` rules-of-hooks violation (hooks after conditional returns → React "static flag" console flood) | ✅ **landed `01a2d5e`** — hooks hoisted; console verified clean |
+| F4 | `find_inspiring/description.md` over-promised "a region tag" (null on all 665) | ✅ **landed `01a2d5e`** |
+| F5 | Mini refresh: `git pull` + `npm install` + rebuild + restart per [cms/ops/demo-server.md](../../product/cms/ops/demo-server.md) | ⚠ **open — needs Alastair at the machine** (Mini refuses SSH, port 22; and the fixes need pushing by Alastair first — agent never pushes). Until then the demo runs pre-patch code |
+
+## 6a. F6 — NEW finding: customer_story persona summaries are stubs (needs its own go)
+
+Found during the O3 safety check: **all 953 `customer_story.persona_summary` values are fallback stubs** ("Traveller from UK" / "Traveller") — zero rich Haiku-authored personas exist. The composer's named-bucket branch falls back to the stub whenever the persona-summary classifier's output map is empty (compose-only runs always have an empty map; `composeCustomerStory` has no durable store for classifier outputs). The stubs predate the 10-Jun wave (the audit's "0 changed rows elsewhere" means byte-identical through it) — either the original classify run's outputs never reached compose, or an early compose-only re-run flattened them and every re-compose since has reproduced the stubs from cache.
+
+**Consequence**: `find_someone_who`'s persona_embedding vectors embed stub text — the Mirror tool's persona matching is semantically hollow (it returns stories, but ranked on "Traveller from UK" similarity).
+
+**Fix shape (gated, not executed)**: run `enrich --mode=all --sync` so the persona-summary classifier (Haiku, ~876 named reviewer buckets) feeds compose in-run; new persona summaries then re-embed (cache miss by design). Est. £1–3 Haiku + pennies Gemini, minutes wall-clock in sync mode. Structural follow-up worth considering: persist classifier outputs durably (the same lesson as the embedding cache) so compose-only runs stop being lossy.
 
 ## 7. Still-open wider decisions (deferred from this diagnosis; inputs in the audit §7)
 

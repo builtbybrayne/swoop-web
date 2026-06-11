@@ -28,6 +28,18 @@ The lookup widget gates its entire render on a chunk carrying `canonicalUrl`; `i
 
 Post-O3 verification: coverage probe on `inform_chunk.canonical_url`; live lookup ask in the preview → widget renders one link card titled by the page.
 
-## Execution log
+## Execution log — 2026-06-11 evening (all ops executed with Alastair's named go)
 
-*(appended post-execution)*
+**Commits**: `55fd6a0` (migration 018 + ETL projection + composer join + test pin) → `980a4d6` (amendment: faqset_id outranks the navigationcard junction + etl-rerun.md corrections).
+
+**O0** ✓ baseline `data/backups/puma_dev_pre-O3_2026-06-11.dump` (182MB, pg_dump -Fc --no-owner --no-acl). **O1** ✓ migration 018 applied cleanly.
+
+**O2** took three attempts — two findings worth keeping:
+1. *The etl-rerun runbook's "default dump location" claim was false* — `--dump` is required (and `--yes` for non-TTY). Runbook corrected in `980a4d6`.
+2. *All 183 FAQ-owning contentblocks sit in `contentblock_navigationcard`* — junction-first subtype derivation classed them as UI plumbing and dropped them (first retry reached only 80/906 via the 18 blocks that carried a second junction). Fix: `faqset_id` outranks the junction in `run.ts` — a block that owns a faqset is a FAQ block whatever chrome it renders in. Post-fix: contentblock 2,212 → 2,377 rows (+165, exactly the rescued blocks), faqset_id 183/183, **FAQ→page-URL reachability 872/906 (96%)** — matching the source ceiling (892/928 live faqitems; the gap is faqsets placing blocks only on unloaded/filtered pages). Row counts otherwise stable; image annotations (5,325) + embeddings (6,118) untouched, confirming the ON CONFLICT projection contract.
+
+**O3** ✓ `enrich --mode=compose`: 42.8s, **£0.0000 spend** (full embedding-cache hydration). Post-manifest vs pre: all six derived tables byte-stable on row count (inspire 665 / story 953 / proof 39 / inform 924 / trip 649 / tour 11), 100% embedded. The headline: `inform_chunk` canonical_url + source_title coverage **18 → 890** (872 faq + 18 swoop_practical). Sample: "Do I need a guide?" → swoop-patagonia.com/chile/aysen/hiking, titled "Hiking in Aysen".
+
+**Live verification** ✓ preview ask "How long should we go to Patagonia for? And do we need a guide?" → the lookup widget rendered **for the first time on FAQ content**: two titled link cards in the thread ("Find out more about Patagonia Tours & Vacations →", "Find out more about Hiking & Trekking in Patagonia →"); the dev-mode "rendered silently — no canonical URLs" note is gone.
+
+**Residue**: the 34 unreachable faqitems (906−872) belong to faqsets whose blocks sit only on pages the ETL filters (Profile/test pages) — acceptable; the widget falls back to silent for those rare chunks. The 165 rescued blocks added zero new inform/inspire chunks (they carry no prose text — title-only navcard chrome), so derived-table contents beyond inform's URL/title columns are unchanged.
