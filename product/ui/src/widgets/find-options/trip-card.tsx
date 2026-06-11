@@ -34,7 +34,9 @@ export function TripCard({ card }: { card: TripProposalCard }) {
     { label: "Region", value: card.region ?? null },
     {
       label: "Duration",
-      value: card.durationDays ? `${card.durationDays} days` : null,
+      value: card.durationDays
+        ? `${card.durationDays} ${card.durationDays === 1 ? "day" : "days"}`
+        : null,
     },
     {
       label: "From",
@@ -59,7 +61,7 @@ export function TripCard({ card }: { card: TripProposalCard }) {
         ) : null}
         <div className="flex flex-1 flex-col gap-3 p-4">
           <header className="flex flex-col gap-1">
-            <h3 className="text-base font-semibold text-slate-900">
+            <h3 className="font-swoop-display text-[17px] font-semibold leading-snug tracking-tight text-swoop-surface-fg">
               {card.headline}
             </h3>
             {card.vibeLine ? (

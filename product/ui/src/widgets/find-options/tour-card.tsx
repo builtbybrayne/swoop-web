@@ -28,7 +28,9 @@ export function TourCard({ card }: { card: TourProposalCard }) {
     { label: "Region", value: card.region ?? null },
     {
       label: "Duration",
-      value: card.durationDays ? `${card.durationDays} days` : null,
+      value: card.durationDays
+        ? `${card.durationDays} ${card.durationDays === 1 ? "day" : "days"}`
+        : null,
     },
     {
       label: "Itinerary",
@@ -57,7 +59,7 @@ export function TourCard({ card }: { card: TourProposalCard }) {
         ) : null}
         <div className="flex flex-1 flex-col gap-3 p-4">
           <header className="flex flex-col gap-1">
-            <h3 className="text-base font-semibold text-slate-900">
+            <h3 className="font-swoop-display text-[17px] font-semibold leading-snug tracking-tight text-swoop-surface-fg">
               {card.headline}
             </h3>
             {card.vibeLine ? (
@@ -70,9 +72,12 @@ export function TourCard({ card }: { card: TourProposalCard }) {
             <div
               data-swoop-part="find-options-tour-group-size"
               data-testid="find-options-tour-group-size"
-              className="inline-flex w-fit items-center gap-1 rounded-full border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
+              className="inline-flex w-fit items-center gap-1.5 rounded-full bg-swoop-tint px-2.5 py-1 text-xs font-semibold text-swoop-deep"
             >
-              <span aria-hidden="true">•</span>
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 rounded-full bg-swoop-accent"
+              />
               <span>max {card.groupSizeMax} guests</span>
             </div>
           ) : null}

@@ -105,7 +105,7 @@ function MessageView() {
         >
           <div
             data-swoop-part="message-bubble"
-            className="max-w-[85%] rounded-2xl rounded-br-md bg-slate-200 px-4 py-2 text-[15px] leading-6 text-slate-900 sm:max-w-[75%]"
+            className="max-w-[85%] rounded-2xl rounded-br-md bg-swoop-tint px-4 py-2 text-[15px] leading-6 text-slate-800 shadow-sm sm:max-w-[75%]"
           >
             <MessagePrimitive.Parts components={messagePartComponents} />
           </div>
@@ -135,7 +135,7 @@ function Composer() {
   return (
     <ComposerPrimitive.Root
       data-swoop-part="composer"
-      className="flex w-full max-w-2xl items-end gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm focus-within:border-slate-400"
+      className="flex w-full max-w-2xl items-end gap-2 rounded-swoop-lg border border-swoop-border bg-white p-2 shadow-swoop-card transition-[border-color,box-shadow] focus-within:border-swoop-accent focus-within:shadow-[0_0_0_3px_rgba(255,98,36,0.15)]"
     >
       <ComposerPrimitive.Input
         className="flex-1 resize-none bg-transparent px-2 py-2 text-[15px] leading-6 outline-none placeholder:text-slate-400"
@@ -144,7 +144,7 @@ function Composer() {
       />
       <ComposerPrimitive.Send
         data-swoop-part="composer-send"
-        className="inline-flex h-9 shrink-0 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="inline-flex h-9 shrink-0 items-center rounded-swoop border border-swoop-accent bg-swoop-accent px-3.5 text-[13px] font-semibold uppercase tracking-[0.05em] text-swoop-accent-fg shadow-sm transition-colors duration-150 hover:bg-white hover:text-swoop-accent motion-safe:active:scale-[0.98] disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
       >
         Send
       </ComposerPrimitive.Send>
@@ -200,8 +200,10 @@ function useDevAffordanceToggle(): { hidden: boolean; toggle: () => void } {
 function EmptyState() {
   return (
     <div className="mx-auto mt-12 max-w-2xl px-4 text-center text-slate-500">
-      <p className="text-base">Start a conversation.</p>
-      <p className="mt-1 text-xs text-slate-400">
+      <p className="font-swoop-display text-lg font-semibold tracking-tight text-swoop-surface-fg">
+        Start a conversation.
+      </p>
+      <p className="mt-1.5 text-xs text-slate-400">
         Swoop Discovery · pre-release scaffold
       </p>
     </div>
@@ -255,7 +257,10 @@ function ThreadSurface({
           >
             New conversation
           </button>
-          <div aria-hidden="true" className="hidden text-xs text-slate-400 sm:block">
+          <div
+            aria-hidden="true"
+            className="hidden font-swoop-display text-xs font-semibold tracking-tight text-swoop-surface-fg sm:block"
+          >
             Swoop Discovery
           </div>
         </div>

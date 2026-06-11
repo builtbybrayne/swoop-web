@@ -25,10 +25,15 @@ export function TerminologyCard({ entry }: { entry: SidebarStaticCardEntry }) {
     <div
       data-swoop-part="static-card"
       data-swoop-widget="terminology-card"
-      className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3"
+      className="relative overflow-hidden rounded-swoop-lg border border-swoop-border bg-gradient-to-br from-swoop-tint via-white to-white px-4 pb-4 pt-[18px] shadow-swoop-card"
     >
+      {/* Brand hairline — navy into glacial teal. Decorative only. */}
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-swoop-accent to-swoop-sky"
+      />
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-medium text-slate-900">
+        <h3 className="font-swoop-display text-[15px] font-semibold leading-snug tracking-tight text-swoop-surface-fg">
           {entry.payload.title}
         </h3>
         <button
@@ -36,13 +41,16 @@ export function TerminologyCard({ entry }: { entry: SidebarStaticCardEntry }) {
           onClick={() => dismissStaticCard(entry.id)}
           aria-label="Dismiss"
           data-testid="terminology-card-dismiss"
-          className="-mr-1 -mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+          className="-mr-1 -mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white hover:text-swoop-deep hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-swoop-accent"
         >
           ×
         </button>
       </div>
       {entry.payload.lines.map((line) => (
-        <p key={line} className="mt-1.5 text-[13px] leading-5 text-slate-600">
+        <p
+          key={line}
+          className="mt-2 text-[13px] leading-relaxed text-slate-600 first-of-type:mt-2.5"
+        >
           {line}
         </p>
       ))}

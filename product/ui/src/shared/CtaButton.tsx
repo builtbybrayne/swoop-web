@@ -33,13 +33,18 @@ type LinkProps = Common & {
 export type CtaButtonProps = ButtonProps | LinkProps;
 
 const baseClass = [
-  "inline-flex items-center justify-center",
-  "rounded-md border border-slate-300 bg-white",
-  "px-3 py-2 text-sm font-medium text-slate-900",
-  "shadow-sm transition-colors",
-  "hover:bg-slate-50",
-  "focus:outline-none focus:ring-2 focus:ring-slate-400",
-  "disabled:cursor-not-allowed disabled:opacity-60",
+  "group/cta inline-flex items-center justify-center gap-1.5",
+  "rounded-swoop border border-swoop-accent bg-swoop-accent",
+  "px-3.5 py-2 text-[13px] font-semibold uppercase tracking-[0.05em] text-swoop-accent-fg",
+  "shadow-sm transition-colors duration-150",
+  // swoop-patagonia.com's own `.btn:hover` move: the fill drops to white and
+  // the text + border take the accent. Works against any accent override.
+  "hover:bg-white hover:text-swoop-accent",
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent focus-visible:ring-offset-2",
+  "motion-safe:active:scale-[0.98]",
+  // pointer-events-none keeps the inversion hover off disabled buttons
+  // (anchors are never disabled, so this only bites the <button> form).
+  "disabled:cursor-not-allowed disabled:opacity-60 disabled:pointer-events-none",
 ].join(" ");
 
 export function CtaButton(props: CtaButtonProps) {
@@ -54,6 +59,12 @@ export function CtaButton(props: CtaButtonProps) {
         aria-label={ariaLabel}
       >
         {children}
+        <span
+          aria-hidden="true"
+          className="transition-transform duration-200 motion-safe:group-hover/cta:translate-x-0.5"
+        >
+          →
+        </span>
       </a>
     );
   }

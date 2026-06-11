@@ -144,11 +144,11 @@ export function WidgetLoadingPlaceholder({ label = "Loading…" }: { label?: str
       data-testid="widget-loading"
       data-swoop-part="widget"
       data-swoop-widget-state="loading"
-      className="my-2 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500"
+      className="my-2 inline-flex items-center gap-2 rounded-swoop border border-swoop-border bg-white px-3 py-2 text-xs text-slate-500 shadow-sm"
     >
       <span
         aria-hidden="true"
-        className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400"
+        className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-swoop-accent"
       />
       <span>{label}</span>
     </div>

@@ -169,7 +169,7 @@ function PassageCard({
             {passage.region ? (
               <span
                 data-testid="find-inspiring-region"
-                className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600"
+                className="rounded-full bg-swoop-tint px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-swoop-deep"
               >
                 {passage.region}
               </span>
@@ -181,7 +181,7 @@ function PassageCard({
               target="_blank"
               rel="noopener noreferrer"
               data-testid="find-inspiring-link"
-              className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="text-xs font-semibold text-swoop-accent underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent"
             >
               {sourceTitle ? (
                 <>

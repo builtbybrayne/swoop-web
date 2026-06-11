@@ -48,13 +48,30 @@ export default {
           success: "var(--swoop-success)",
           warning: "var(--swoop-warning)",
           danger: "var(--swoop-danger)",
+          // Extension namespace (`--swoop-x-*`) — default-theme garnish, not
+          // part of the twelve-token contract. See styles/index.css.
+          deep: "var(--swoop-x-deep)",
+          sky: "var(--swoop-x-sky)",
+          tint: "var(--swoop-x-tint)",
         },
       },
       fontFamily: {
         swoop: "var(--swoop-font-sans)",
+        "swoop-display": "var(--swoop-x-font-display)",
       },
       borderRadius: {
         swoop: "var(--swoop-radius)",
+        // Cards run 2× the radius token so brand overrides scale the whole
+        // shape language from the single `--swoop-radius` lever.
+        "swoop-lg": "calc(var(--swoop-radius) * 2)",
+      },
+      boxShadow: {
+        // Deep-navy-tinted soft shadows — lighter than Tailwind's grey
+        // defaults; base colour is the site's #05143a.
+        "swoop-card":
+          "0 1px 2px rgba(5, 20, 58, 0.05), 0 4px 14px -4px rgba(5, 20, 58, 0.12)",
+        "swoop-card-hover":
+          "0 2px 4px rgba(5, 20, 58, 0.06), 0 10px 28px -8px rgba(5, 20, 58, 0.20)",
       },
     },
   },

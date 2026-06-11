@@ -25,33 +25,63 @@ export function ImageBlock({
   loading = "lazy",
 }: ImageBlockProps) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const hasImage = typeof src === "string" && src.length > 0 && !failed;
 
   return (
     <div
       className={[
-        "relative w-full overflow-hidden bg-slate-100",
+        "relative w-full overflow-hidden bg-swoop-tint",
         className,
       ].join(" ")}
       style={{ aspectRatio }}
       data-testid="image-block"
     >
       {hasImage ? (
+        // Fade in on decode; drift gently when an ancestor carrying `group`
+        // is hovered (cards / hero buttons opt in by declaring `group` —
+        // contexts like the lightbox simply don't, and get a static image).
         <img
           src={src}
           alt={alt}
           loading={loading}
+          // Cache-hit images can be `complete` before React attaches onLoad;
+          // the ref callback catches that path so they never sit at opacity-0.
+          ref={(el) => {
+            if (el?.complete && el.naturalWidth > 0) setLoaded(true);
+          }}
           onError={() => setFailed(true)}
-          className="h-full w-full object-cover"
+          onLoad={() => setLoaded(true)}
+          className={[
+            "h-full w-full object-cover",
+            "transition-[opacity,transform] duration-700 ease-out",
+            "motion-safe:group-hover:scale-[1.04]",
+            loaded ? "opacity-100" : "opacity-0",
+          ].join(" ")}
         />
       ) : (
         <div
           role="img"
           aria-label={alt}
-          className="flex h-full w-full items-center justify-center text-xs text-slate-400"
+          className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-slate-400"
           data-testid="image-fallback"
         >
-          <span aria-hidden="true">image unavailable</span>
+          {/* Quiet peak glyph — abstract line work, not imagery. */}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 48 24"
+            className="h-5 w-10 text-swoop-deep"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M2 22 14 6l8 10 6-8 16 14" />
+          </svg>
+          <span aria-hidden="true" className="text-[11px]">
+            Image unavailable
+          </span>
         </div>
       )}
     </div>

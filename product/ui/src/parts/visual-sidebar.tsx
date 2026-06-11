@@ -64,9 +64,25 @@ function SidebarEmptyState() {
   return (
     <div
       data-swoop-part="visual-sidebar-empty"
-      className="px-4 py-6 text-sm leading-6 text-slate-400"
+      className="mt-1 rounded-swoop-lg border border-dashed border-[#cdf1ff] bg-swoop-tint px-5 py-8 text-center"
     >
-      Images and places from the conversation will gather here as you explore.
+      {/* Same quiet peak glyph as the image fallback — line work, not imagery. */}
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 48 24"
+        className="mx-auto h-5 w-10 text-swoop-deep"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M2 22 14 6l8 10 6-8 16 14" />
+      </svg>
+      <p className="mt-3 text-sm leading-6 text-slate-500">
+        Images and places from the conversation will gather here as you
+        explore.
+      </p>
     </div>
   );
 }
@@ -88,13 +104,20 @@ export function VisualSidebar({ className }: { className?: string }) {
     <aside
       data-swoop-part="visual-sidebar"
       aria-label="Visual highlights from the conversation"
-      className={`h-full flex-col border-l border-slate-200 bg-white ${className ?? ""}`}
+      className={`h-full flex-col border-l border-swoop-border bg-gradient-to-b from-white to-[#fafcfd] ${className ?? ""}`}
     >
       <div
         data-swoop-part="visual-sidebar-header"
-        className="border-b border-slate-200 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-500"
+        className="flex items-center gap-2 border-b border-swoop-border px-4 py-3"
       >
-        Highlights
+        {/* Brand tick — same navy→teal ramp as the static card's hairline. */}
+        <span
+          aria-hidden="true"
+          className="h-3.5 w-1 rounded-full bg-gradient-to-b from-swoop-accent to-swoop-sky"
+        />
+        <span className="font-swoop-display text-[11px] font-semibold uppercase tracking-[0.18em] text-swoop-deep">
+          Highlights
+        </span>
       </div>
       <div
         data-swoop-part="visual-sidebar-scroll"

@@ -6,6 +6,10 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-06-11 — Handoff submit rejected when agent's specialistSummary > 500 chars
+
+Caught live during the widget-styling verification run: the agent wrote a `specialistSummary` longer than the Zod `reasonText` max(500) in `@swoop/common`, so `/handoff/submit` rejected the whole submission and the visitor saw "We couldn't send your details just now (reasonText: String must contain at most 500 character(s))". A visitor losing the handoff because the agent over-wrote is the worst failure mode for the core conversion moment. Needs a cap/truncation decision at the right layer (tool boundary vs schema vs widget). A background-task chip was spawned in the 2026-06-11 styling session; this entry is the durable record in case the chip is dismissed. Handle in chunk E / handoff territory.
+
 ## 2026-06-10 — Luke feedback round 2: commercial-fence items (for commercials triage)
 
 The 10 Jun Loom triage ([ledger](planning/reviews/2026-06-10-luke-loom-feedback.md)) surfaced three items that sit outside the 30 Mar quote fence. **(1) Product Library ingestion** and **(2) trip-card relevance deep work** (better data + more sophisticated search) are being put to Luke in Al's email as **production-first deferrals**: ship to production now, revisit only on evidence they're suppressing marketing conversion rates — the project's real aim. Neither gets planned until that conversation lands (questions.md "Production-first prioritisation"). The data-engineer recommendation stays on file for item 2. **(3) Durable Postgres session backend** (B.t13 stub in the [demo-stability plan](planning/03-exec-crosscut-magical-poincare-demo-stability.md)) is the one nearer-term scope-add still needing a decision — it serves production stability, so it arguably belongs *inside* the production-first push rather than behind it. The build already materially exceeds the quoted 16 days (per the [2026-05-27 state-of-play](planning/reviews/2026-05-27-ingest-and-state-of-play.md) §5.1) — keep that in view when any of the three turn into quoted work.

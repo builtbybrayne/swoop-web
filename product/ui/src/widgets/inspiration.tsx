@@ -138,7 +138,7 @@ export function InspirationWidget(
         onClick={() => setExpandedId(hero.id)}
         aria-label={`Expand image: ${hero.altText}`}
         data-testid="inspiration-hero"
-        className="block w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+        className="group block w-full overflow-hidden rounded-swoop-lg border border-swoop-border bg-swoop-surface shadow-swoop-card transition-shadow duration-300 hover:shadow-swoop-card-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent focus-visible:ring-offset-2"
       >
         <ImageBlock src={hero.url} alt={hero.altText} />
       </button>
@@ -156,7 +156,7 @@ export function InspirationWidget(
                 type="button"
                 onClick={() => setExpandedId(img.id)}
                 aria-label={`Expand image: ${img.altText}`}
-                className="block w-20 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="group block w-20 overflow-hidden rounded-lg border border-swoop-border bg-swoop-surface shadow-sm transition-all duration-200 hover:border-swoop-accent hover:shadow-swoop-card focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent"
               >
                 <ImageBlock src={img.url} alt={img.altText} aspectRatio="1/1" />
               </button>
@@ -171,17 +171,17 @@ export function InspirationWidget(
           aria-label={expanded.altText}
           data-testid="inspiration-lightbox"
           onClick={() => setExpandedId(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#05143a]/80 p-4 backdrop-blur-sm"
         >
           <div
-            className="relative flex max-h-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white"
+            className="relative flex max-h-full max-w-3xl flex-col overflow-hidden rounded-swoop-lg bg-white shadow-2xl"
             onClick={(ev) => ev.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setExpandedId(null)}
               aria-label="Close expanded image"
-              className="absolute right-2 top-2 z-10 rounded-full bg-white/90 px-2 py-1 text-sm text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="absolute right-2.5 top-2.5 z-10 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-swoop-accent shadow-md transition-colors hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent"
             >
               Close
             </button>

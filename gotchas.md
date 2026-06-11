@@ -6,6 +6,18 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## Second orchestrator instance can't share a running connector — boot your own connector per stack
+
+**Symptom**: booting a second orchestrator (e.g. from a worktree, alongside the main dev stack) against the already-running connector on `:3002` dies at startup with `Error: StreamableHTTPClientTransport already started! If using Client class, note that connect() calls start() automatically.` — thrown from `withRetry` in [product/orchestrator/src/connector/retry.ts](product/orchestrator/src/connector/retry.ts) wrapping `Object.connect` in [product/orchestrator/src/connector/client.ts](product/orchestrator/src/connector/client.ts).
+
+**What's actually happening**: the first connect attempt fails (the running connector rejects the new MCP session), and the retry path then calls `client.connect()` again on the **same transport instance**, which the MCP SDK refuses — the retry bug masks the real underlying rejection.
+
+**Fix for parallel-stack dev** (proven 2026-06-11): run a full private stack per checkout. Copy `.env`s from the main checkout, then override ports — connector `CONNECTOR_PORT=3003` (or any free port), orchestrator `PORT=8081` + `CONNECTOR_URL=http://localhost:<port>/mcp` + `CORS_ALLOWED_ORIGINS=http://localhost:5180`, UI `VITE_ORCHESTRATOR_URL=http://localhost:8081` in `product/ui/.env`, UI itself via the existing `swoop-ui-preview` launch config (port 5180). Remember dotenv `override: true` means the `.env` FILE beats shell env — append overrides to the copied file, don't pass them as shell vars.
+
+**Worth fixing eventually**: `withRetry` around `Client.connect` should construct a fresh transport per attempt so the genuine first-attempt error surfaces instead of the SDK's already-started complaint.
+
+---
+
 ## New connector tool? It's invisible to the model until it's in the orchestrator's TOOL_SPECS
 
 **Symptom**: boot log prints `[connector] Connector reports tool "<name>" which the orchestrator has no schema for — ignoring.` and the exposed-count line is one short. The connector serves the tool fine over MCP, the system prompt may even teach it — but Sonnet can't call it.

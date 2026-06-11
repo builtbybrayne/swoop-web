@@ -128,7 +128,7 @@ function StoryVignette({ story }: { story: ParsedStory }) {
             data-testid="find-someone-who-persona"
             className="text-xs italic leading-relaxed text-slate-500"
           >
-            <span className="not-italic font-medium uppercase tracking-wide text-slate-400">
+            <span className="not-italic font-semibold uppercase tracking-[0.08em] text-swoop-deep">
               Someone like…
             </span>{" "}
             {story.personaSummary}
@@ -143,7 +143,7 @@ function StoryVignette({ story }: { story: ParsedStory }) {
             {story.region ? (
               <span
                 data-testid="find-someone-who-region"
-                className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600"
+                className="rounded-full bg-swoop-tint px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-swoop-deep"
               >
                 {story.region}
               </span>
@@ -156,7 +156,7 @@ function StoryVignette({ story }: { story: ParsedStory }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 data-testid="find-someone-who-link"
-                className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className="text-xs font-semibold text-swoop-accent underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent"
               >
                 Read the full story →
               </a>

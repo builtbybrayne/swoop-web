@@ -8,7 +8,9 @@ Read this once, skim the selector table when you're writing overrides, and come 
 
 ## What you're looking at
 
-The `@swoop/ui` package is a React + Vite + Tailwind SPA that renders a conversational discovery surface. It talks to a separate orchestrator service over HTTP + Server-Sent Events. For Puma, the surface is intentionally unbranded — clean Tailwind defaults, slate-grey neutrals, no typography or colour identity. You layer Swoop's brand on top using the two extension surfaces below.
+The `@swoop/ui` package is a React + Vite + Tailwind SPA that renders a conversational discovery surface. It talks to a separate orchestrator service over HTTP + Server-Sent Events. Puma ships with a default theme drawn directly from swoop-patagonia.com's own stylesheet: orange `#ff6224` as the interactive colour (with the site's signature fill-to-white inversion hover on buttons), warm near-black `#200e11` as heading ink, pale-sky `#cdf1ff` washes, and Barlow (self-hosted) as the typeface, with `din-2014` first in the display stack so adding your Typekit kit to the iframe host lights up the real DIN 2014 automatically. The default is meant to feel native to the site out of the box; you refine or replace it using the two extension surfaces below.
+
+One accessibility note to carry into your review: white-on-`#ff6224` sits at ~3.0:1 contrast, which passes WCAG AA for large text only. This mirrors swoop-patagonia.com's own buttons, so the iframe is consistent with the host site — but if your accessibility pass tightens the site palette, override `--swoop-accent` here in the same breath.
 
 Two surfaces. That's it.
 
@@ -25,18 +27,18 @@ All tokens are defined in `src/styles/index.css` under `:root`. Override by decl
 
 | Token | Default | What it drives |
 |---|---|---|
-| `--swoop-accent` | `#0f172a` | Primary CTA background, active focus ring. |
+| `--swoop-accent` | `#ff6224` | Primary CTA fill + inversion-hover text/border, text links, focus rings. The site's `.btn` / `.btn-text` orange. |
 | `--swoop-accent-fg` | `#ffffff` | Text on the primary CTA. |
 | `--swoop-surface` | `#ffffff` | Panel and card backgrounds. |
-| `--swoop-surface-fg` | `#0f172a` | Text on surfaces. |
+| `--swoop-surface-fg` | `#200e11` | Heading ink + text on surfaces. The site's `h1–h6` colour. |
 | `--swoop-border` | `#e2e8f0` | Chrome borders, card borders, composer frame. |
 | `--swoop-muted` | `#f1f5f9` | Secondary surface (hovered rows, disabled chips). |
 | `--swoop-muted-fg` | `#475569` | Text on muted surfaces, helper copy. |
 | `--swoop-success` | `#16a34a` | Success state (confirmation copy). |
 | `--swoop-warning` | `#d97706` | Recoverable-error banner (unreachable, stream drop). |
 | `--swoop-danger` | `#dc2626` | Hard-error banner (session expired), validation text. |
-| `--swoop-font-sans` | System sans stack | All sans-serif text. |
-| `--swoop-radius` | `0.5rem` | Default corner radius for cards, buttons, inputs. |
+| `--swoop-font-sans` | Barlow (self-hosted), `Arial Narrow` fallback | All sans-serif body text. Matches the site's body family. |
+| `--swoop-radius` | `0.25rem` | Corner radius for buttons and inputs — the site's 4px `.btn` radius. Cards run 2× this value, so one token scales the whole shape language. |
 
 ### How to override
 
@@ -52,6 +54,19 @@ All tokens are defined in `src/styles/index.css` under `:root`. Override by decl
 ```
 
 Dark mode is reserved but not wired. If you need it, declare a `[data-theme="dark"]` block with the same twelve tokens and flip `data-theme` on the root element from your host page.
+
+### Extension tokens (`--swoop-x-*`)
+
+Alongside the twelve contract tokens, the default theme carries a small extension namespace in `src/styles/index.css`:
+
+| Token | Default | What it drives |
+|---|---|---|
+| `--swoop-x-deep` | `#05143a` | Deep navy (the site's dark-section colour) — small-caps overlines, chips, pulled-quote rules, the sidebar header. |
+| `--swoop-x-sky` | `#cdf1ff` | Pale sky (the site's signature wash) — hairline gradient ends, quiet borders. |
+| `--swoop-x-tint` | `#eefaff` | Sky at ~35% on white — panel washes, chips, image placeholders, the visitor message bubble. |
+| `--swoop-x-font-display` | `din-2014, "Barlow Semi Condensed", "Barlow"` | Display face for card headlines, sidebar header, wordmark. `din-2014` resolves the moment you add Swoop's Typekit kit (`use.typekit.net/oqx0liy.css`) to the iframe's `index.html`; until then the self-hosted Barlow Semi Condensed carries the role (no third-party font request — GDPR-clean). |
+
+You can override these the same way as the twelve tokens, but treat them differently in one respect: they are the *default theme's garnish*, not a contract. We may evolve this namespace between releases (the twelve tokens we will not touch). If your brand pass replaces the theme wholesale, overriding the twelve tokens and ignoring `--swoop-x-*` entirely is a perfectly good strategy.
 
 ### Density
 

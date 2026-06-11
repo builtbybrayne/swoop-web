@@ -37,7 +37,7 @@ function StarRating({ value }: { value: number }) {
     <span
       data-testid="find-options-hotel-star-rating"
       aria-label={`${value} out of 5 stars`}
-      className="text-sm text-amber-500"
+      className="text-sm text-swoop-accent"
     >
       <span aria-hidden="true">{filled}</span>
       <span aria-hidden="true" className="text-slate-300">
@@ -81,7 +81,7 @@ export function HotelCard({ card }: { card: HotelProposalCard }) {
         ) : null}
         <div className="flex flex-1 flex-col gap-3 p-4">
           <header className="flex flex-col gap-1">
-            <h3 className="text-base font-semibold text-slate-900">
+            <h3 className="font-swoop-display text-[17px] font-semibold leading-snug tracking-tight text-swoop-surface-fg">
               {card.headline}
             </h3>
             {card.vibeLine ? (

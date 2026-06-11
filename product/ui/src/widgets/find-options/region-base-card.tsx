@@ -60,7 +60,7 @@ export function RegionBaseCard({ card }: { card: RegionBaseProposalCard }) {
         ) : null}
         <div className="flex flex-1 flex-col gap-3 p-4">
           <header className="flex flex-col gap-1">
-            <h3 className="text-base font-semibold text-slate-900">
+            <h3 className="font-swoop-display text-[17px] font-semibold leading-snug tracking-tight text-swoop-surface-fg">
               {card.headline}
             </h3>
             {card.vibeLine ? (
@@ -85,7 +85,7 @@ export function RegionBaseCard({ card }: { card: RegionBaseProposalCard }) {
               content={card.baseFraming}
               maxLines={3}
               testId="find-options-region-base-framing"
-              className="rounded bg-slate-50 px-3 py-2 text-xs italic leading-relaxed text-slate-700 [&_p]:m-0 [&_p+p]:mt-2"
+              className="rounded-swoop border-l-2 border-swoop-sky bg-swoop-tint px-3 py-2 text-xs italic leading-relaxed text-slate-700 [&_p]:m-0 [&_p+p]:mt-2"
             />
           ) : null}
           <AttributeTable rows={rows} />

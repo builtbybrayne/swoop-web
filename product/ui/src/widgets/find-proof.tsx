@@ -146,12 +146,12 @@ function PulledQuote({
   return (
     <figure
       data-swoop-part="find-proof-pulled-quote"
-      className="border-l-2 border-slate-200 pl-4"
+      className="border-l-2 border-swoop-deep pl-4"
     >
       {proof.claim ? (
         <figcaption
           data-testid="find-proof-claim"
-          className="mb-1 text-[11px] font-medium uppercase tracking-wide text-slate-500"
+          className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-swoop-deep"
         >
           {decodeHtmlEntities(proof.claim)}
         </figcaption>
@@ -168,7 +168,7 @@ function PulledQuote({
           target="_blank"
           rel="noopener noreferrer"
           data-testid="find-proof-link"
-          className="mt-2 inline-block text-xs font-medium text-slate-700 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-400"
+          className="mt-2 inline-block text-xs font-semibold text-swoop-accent underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent"
         >
           {sourceTitle ? (
             <>

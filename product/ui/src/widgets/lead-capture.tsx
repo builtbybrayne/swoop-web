@@ -140,9 +140,15 @@ export function LeadCaptureWidget(
           data-swoop-widget="lead-capture"
           data-swoop-widget-state="confirmation"
           role="status"
-          className="my-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700"
+          className="relative my-2 overflow-hidden rounded-swoop-lg border border-swoop-border bg-gradient-to-br from-swoop-tint via-white to-white p-4 text-sm text-slate-700 shadow-swoop-card"
         >
-          <p className="font-medium text-slate-900">Thanks — we&apos;ve got your details.</p>
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-swoop-accent to-swoop-sky"
+          />
+          <p className="font-swoop-display text-[15px] font-semibold tracking-tight text-swoop-surface-fg">
+            Thanks — we&apos;ve got your details.
+          </p>
           <p className="mt-1 text-slate-600">
             A {SPECIALIST_TERM_SINGULAR} will be in touch.
           </p>
@@ -278,7 +284,7 @@ export function LeadCaptureWidget(
       data-swoop-widget="lead-capture"
       data-swoop-widget-state="form"
       aria-label="Contact form"
-      className="order-last my-2 w-full rounded-lg border border-slate-200 bg-white p-4"
+      className="order-last my-2 w-full rounded-swoop-lg border border-swoop-border bg-swoop-surface p-4 shadow-swoop-card"
     >
       <p
         data-testid="lead-capture-verdict-intro"
@@ -298,7 +304,7 @@ export function LeadCaptureWidget(
             onChange={(ev) => setName(ev.target.value)}
             aria-invalid={Boolean(errors.name)}
             aria-describedby={errors.name ? "lc-name-err" : undefined}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className="w-full rounded-swoop border border-swoop-border bg-white px-3 py-2 text-sm shadow-sm outline-none transition-colors focus:border-swoop-accent focus:ring-1 focus:ring-swoop-accent"
           />
           {errors.name ? (
             <span id="lc-name-err" className="text-xs text-red-600">{errors.name}</span>
@@ -316,7 +322,7 @@ export function LeadCaptureWidget(
             onChange={(ev) => setEmail(ev.target.value)}
             aria-invalid={Boolean(errors.email)}
             aria-describedby={errors.email ? "lc-email-err" : undefined}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className="w-full rounded-swoop border border-swoop-border bg-white px-3 py-2 text-sm shadow-sm outline-none transition-colors focus:border-swoop-accent focus:ring-1 focus:ring-swoop-accent"
           />
           {errors.email ? (
             <span id="lc-email-err" className="text-xs text-red-600">{errors.email}</span>
@@ -332,7 +338,7 @@ export function LeadCaptureWidget(
             type="tel"
             value={phone}
             onChange={(ev) => setPhone(ev.target.value)}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className="w-full rounded-swoop border border-swoop-border bg-white px-3 py-2 text-sm shadow-sm outline-none transition-colors focus:border-swoop-accent focus:ring-1 focus:ring-swoop-accent"
           />
         </div>
 
@@ -347,7 +353,7 @@ export function LeadCaptureWidget(
         <details
           open
           data-testid="lead-capture-precis-disclosure"
-          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+          className="rounded-swoop border-l-2 border-swoop-sky bg-swoop-tint px-3 py-2"
         >
           <summary className="cursor-pointer text-xs font-medium text-slate-700">
             Review what you&apos;ve told us so far
@@ -375,7 +381,7 @@ export function LeadCaptureWidget(
             onChange={(ev) => setAdditionalNotes(ev.target.value)}
             rows={3}
             maxLength={2000}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500"
+            className="w-full rounded-swoop border border-swoop-border bg-white px-3 py-2 text-sm shadow-sm outline-none transition-colors focus:border-swoop-accent focus:ring-1 focus:ring-swoop-accent"
           />
         </div>
 
@@ -385,7 +391,7 @@ export function LeadCaptureWidget(
             checked={handoffConsent}
             onChange={(ev) => setHandoffConsent(ev.target.checked)}
             data-testid="lead-capture-consent"
-            className="mt-0.5"
+            className="mt-0.5 accent-swoop-accent"
             required
           />
           <span>
@@ -400,7 +406,7 @@ export function LeadCaptureWidget(
             checked={marketingConsent}
             onChange={(ev) => setMarketingConsent(ev.target.checked)}
             data-testid="lead-capture-marketing"
-            className="mt-0.5"
+            className="mt-0.5 accent-swoop-accent"
           />
           <span>
             Send me occasional ideas and inspiration from Swoop (optional).

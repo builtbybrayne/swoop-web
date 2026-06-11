@@ -124,7 +124,7 @@ export function ExpandableProse({
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
           data-testid={testId ? `${testId}-toggle` : "expandable-prose-toggle"}
-          className="mt-1 inline-flex text-xs font-medium text-slate-700 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-slate-400"
+          className="mt-1 inline-flex text-xs font-semibold text-swoop-accent underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent"
         >
           {expanded ? "Show less" : "Read more"}
         </button>

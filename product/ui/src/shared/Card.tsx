@@ -24,10 +24,16 @@ export function Card({ children, onClick, className, style, ariaLabel }: CardPro
   const interactive = typeof onClick === "function";
 
   const baseClasses = [
-    "flex flex-col overflow-hidden",
-    "rounded-lg border border-slate-200 bg-white",
-    "shadow-sm transition-shadow",
-    interactive ? "cursor-pointer hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400" : "",
+    // `group` lets descendants (ImageBlock) react to card hover — the gentle
+    // image drift. The hover lift lives here, NOT on the widget root, so the
+    // entrance animation's fill value never fights it (see styles/index.css).
+    "group flex flex-col overflow-hidden",
+    "rounded-swoop-lg border border-swoop-border bg-swoop-surface",
+    "shadow-swoop-card transition-all duration-300",
+    "hover:shadow-swoop-card-hover motion-safe:hover:-translate-y-0.5",
+    interactive
+      ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent focus-visible:ring-offset-2"
+      : "",
     className ?? "",
   ]
     .filter(Boolean)

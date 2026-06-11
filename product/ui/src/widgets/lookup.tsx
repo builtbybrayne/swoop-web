@@ -151,10 +151,10 @@ function SourceLink({ affordance }: { affordance: SourceAffordance }) {
       rel="noopener noreferrer"
       data-testid="lookup-link"
       data-swoop-part="lookup-source-link"
-      className="flex flex-col gap-0.5 rounded-lg border border-slate-200 bg-white px-4 py-3 transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400"
+      className="flex flex-col gap-0.5 rounded-swoop-lg border border-swoop-border bg-swoop-surface px-4 py-3 shadow-swoop-card transition-all duration-300 hover:border-swoop-sky hover:shadow-swoop-card-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-swoop-accent focus-visible:ring-offset-2"
     >
       {affordance.sourceTitle ? (
-        <span className="text-sm font-medium text-slate-800">
+        <span className="text-sm font-semibold text-swoop-accent">
           Find out more about{" "}
           {truncateText(
             decodeHtmlEntities(affordance.sourceTitle),
@@ -172,7 +172,7 @@ function SourceLink({ affordance }: { affordance: SourceAffordance }) {
               {decodeHtmlEntities(affordance.hint)}
             </span>
           ) : null}
-          <span className="text-sm font-medium text-slate-700">
+          <span className="text-sm font-semibold text-swoop-accent">
             Read the full guide on swoop-patagonia.com →
           </span>
         </>

@@ -39,14 +39,17 @@ export function AttributeTable({ rows, className = "" }: AttributeTableProps) {
   return (
     <dl
       className={[
-        "grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm",
+        "grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-1.5",
+        "border-t border-slate-100 pt-3 text-sm",
         className,
       ].join(" ")}
     >
       {visible.map((r) => (
         <div key={r.label} className="contents">
-          <dt className="font-medium text-slate-500">{r.label}</dt>
-          <dd className="text-slate-800">{r.value}</dd>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+            {r.label}
+          </dt>
+          <dd className="font-medium text-slate-800">{r.value}</dd>
         </div>
       ))}
     </dl>
