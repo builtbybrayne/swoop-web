@@ -42,6 +42,21 @@ const SHELL_CTX = {
 export function InspirationWidget(
   props: ToolCallMessagePartProps<unknown, unknown>,
 ) {
+  // Hooks before the conditional gates below — they must run on every render
+  // path (rules of hooks). Previously sat after the gate/malformed early
+  // returns, which flooded the console with React "Expected static flag was
+  // missing" internal errors whenever a render crossed the gate boundary.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expandedId) return undefined;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setExpandedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expandedId]);
+
   const gate = renderLifecycleGate(
     props as ToolCallLifecycle,
     SHELL_CTX,
@@ -81,17 +96,6 @@ export function InspirationWidget(
     .map((raw) => EnrichedImageSchema.safeParse(raw))
     .filter((r): r is { success: true; data: IllustrateImage } => r.success)
     .map((r) => r.data);
-
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!expandedId) return undefined;
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") setExpandedId(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [expandedId]);
 
   // Empty result is the agent's job to handle in prose, not a widget surface.
   // Prod: silent. Dev: indicator distinguishes "tool returned zero" vs

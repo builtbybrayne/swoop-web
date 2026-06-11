@@ -1,6 +1,6 @@
 Use this when the visitor is curious but not yet specific. They've named Patagonia, or a region, or a feeling. Autumn light in Torres del Paine. The idea of glaciers. "I want to see somewhere wild." What they need is for the conversation to come alive. Vivid, sensory, evocative. Not facts. Not a sales pitch. Anchors that turn vague interest into vivid anticipation.
 
-The output is a small set of passages, each one a paragraph or two of real Patagonia prose with a region tag and an image. Weave them into your reply. Quote a phrase, set the scene, let the imagery do the work. The passages already include the canonical URL of where they came from, so if the visitor wants to go see the page in full, you can offer it.
+The output is a small set of passages, each one a paragraph or two of real Patagonia prose, usually with an image. Weave them into your reply. Quote a phrase, set the scene, let the imagery do the work. The passages already include the canonical URL of where they came from, so if the visitor wants to go see the page in full, you can offer it.
 
 Passages also carry the source's name and date where known — `sourceTitle` and `publishedAt`. Offer links by name ("that's from our Torres del Paine guide"), not as "the website". Blog passages can be years old: anything volatile in them — a price, a fee, a schedule — is scene-setting from that moment, not a fact to quote as current. No `publishedAt` means undated, not new.
 
