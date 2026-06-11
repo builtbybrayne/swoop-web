@@ -4,6 +4,16 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## Status (2026-06-11, evening — widget-emptiness diagnosed + live-verified; gated fixes queued)
+
+**Read [planning/reviews/2026-06-11-widget-emptiness-diagnosis.md](planning/reviews/2026-06-11-widget-emptiness-diagnosis.md) first** — it supersedes the (uncommitted) retrieval-emptiness audit's framing. Headline: "no widgets" was four stacked mechanisms, none of them data damage — zero-trap filters on `find_options` (hot patch `1701728` fixes the hotel branch, live-verified: the Explora ask now returns hotel cards; **three sibling traps still live** on trip/tour `accommodation_style` + tour `activity_tags`), the `lookup` widget URL-gating its render over an 18/924-populated column (never rendered on FAQ answers since 12 May), the 1 Jun inline→sidebar widget relocation (`03847e1` — widgets render in the HIGHLIGHTS sidebar, inline copies hidden), and conversation shape (Explora asks don't trigger `find_inspiring` — correct behaviour). Full live smoke on restarted patched stack: every tool returned data; find_inspiring/illustrate/find_options/find_someone_who all rendered in the sidebar.
+
+**Gated fix queue (each needs Alastair's per-instance go; see diagnosis §6)**: F1 extend hot patch to the three sibling traps · F2 lookup canonical_url derivation via `faqset_id → contentblock → page` (892/928 coverage) + re-compose (~£0 via cache) · F3 inspiration.tsx rules-of-hooks violation · F4 find_inspiring description over-promises a region tag · F5 Mini refresh (still pre-patch — demo still zeroes on Explora-shaped asks until pulled + restarted).
+
+**Parked behind the fixes**: the wider decision set (inspire region/mood, image re-annotation ~£14 for the 53% un-annotated/un-embedded image corpus, blog loader for the 102 fetched-but-never-loaded posts, AntiRepetition exhaustion design) and the production DB-build recipe with coverage-manifest verification + baseline discipline.
+
+---
+
 ## Status (2026-06-10, evening — Luke feedback wave EXECUTED; operator steps are the gate)
 
 **All eight Tier-3 plans from the [2026-06-10 Luke Loom feedback ledger](planning/reviews/2026-06-10-luke-loom-feedback.md) are executed and merged to `main`** (`879d0d7` → `727c4ac`; 7-agent swarm + staged B.t12; fresh-install verification green — 1,303 tests + 26 skipped across six workspaces). The ledger's checklist now carries per-item merge shas and the ⚠ residual operator steps: Alastair's editorial pass on the content diff (`b90ff8b..e17d7ba`), real-Anthropic live smokes (formatting/pricing/tours behaviours + B.t12 cache-read + spoofed-clock), the Mini-side demo install (`product/cms/ops/demo-server.md`) + B.t13 live restart smoke + demo-stability Part A investigation, and terminology-card copy sign-off. Swoop asks in [questions.md](questions.md): Planning Specialists wording / 4 Group Tours / production-first data-layer prioritisation / stale-FAQ cost-figure correction. Notable data findings from the wave: blog corpus absent from `puma_dev` (blog-date provenance idle until re-ingest), `hotel_pricing` empty (budget filter no-ops on hotels). Everything below this section predates 2026-05-18 and lags reality — see the [2026-05-27 state-of-play](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the prior verified snapshot.

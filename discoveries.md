@@ -6,6 +6,16 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-06-11 — UI render gates are population-sensitive too; and the durable session transcript is the first diagnostic instrument
+
+Two patterns from the widget-emptiness diagnosis ([planning/reviews/2026-06-11-widget-emptiness-diagnosis.md](planning/reviews/2026-06-11-widget-emptiness-diagnosis.md)):
+
+**1. The fourth instance of the unprobed-population class lived in the UI, not SQL.** The `lookup` widget gates its *entire render* on a chunk carrying `canonicalUrl` — and `inform_chunk.canonical_url` is 18/924 populated (all 906 FAQ-sourced chunks have none; `faqitem` has no page linkage in the derived schema). The widget's comment called URL-less chunks an "edge case"; they're 98% of the corpus, so the lookup widget has effectively never rendered on FAQ answers since D.t9 (12 May). The 2026-05-18 coverage rule ("never expose a hard filter over a column whose population you haven't probed") extends to **UI affordance gates**: any render gate keyed on a data field — URL present, image present, title present — needs the same coverage probe as a SQL clause. Recovery path exists: `faqitem.faqset_id ↔ contentblock.faqset_id → page` reaches a page for 892/928 faqitems (the `faqset` table itself is absent from the dump but isn't needed as a join-key bridge).
+
+**2. Diagnose from `puma_session_event` before booting anything.** B.t13's Postgres session store persists the full ADK transcript — every tool call with args and full results, per session, queryable with plain SQL (`jsonb_array_elements(event->'content'->'parts')`, filter on `functionCall`/`functionResponse` keys). The decisive evidence for the whole diagnosis (which tools fired, what args the model passed, exact result payloads) came from read-only SELECTs against sessions that had already happened — no service boot, no API spend, no reproduction roulette. Related: **blends mask branch-level zeroes** — `find_options` returning hotel + region_base cards looked healthy while its trip/tour branches silently zeroed on still-live trap filters; verify polymorphic tools per-branch, not just non-empty.
+
+---
+
 ## 2026-05-21 — pg_dump → pg_restore is the clean cross-machine path; halfvec survives, no Cloud SQL gymnastics needed
 
 Moved the 236 MB `puma_dev` (Postgres 18 + pgvector 0.8.1 + halfvec(3072) + 9 HNSW indexes) from laptop to the Mac Mini for the demo-server stage. End-to-end ~10 min including Box sync. Recipe:
