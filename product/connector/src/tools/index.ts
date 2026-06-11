@@ -29,6 +29,7 @@ import { findProofSpec, findProofBody } from './find_proof.js';
 import { lookupSpec, lookupBody } from './lookup.js';
 import { findOptionsSpec, findOptionsBody } from './find_options.js';
 import { findTipsSpec, findTipsBody } from './find_tips.js';
+import { getPricingSpec, getPricingBody } from './get_pricing.js';
 import { illustrateSpec, illustrateBody } from './illustrate.js';
 import { handoffSpec, handoffBody } from './handoff.js';
 import { handoffSubmitSpec, handoffSubmitBody } from './handoff_submit.js';
@@ -60,6 +61,12 @@ export interface RegisterToolsOptions {
   readonly embedQuery: ToolHandlerDeps['embedQuery'];
   /** Loaded description map (one description.md per tool). */
   readonly descriptions: ToolDescriptions;
+  /**
+   * ISO date when the source pricing data was captured (PRICES_CAPTURED_AT
+   * config value). Stamped on every `get_pricing` response.
+   * Defaults to '2026-04-27' when absent (safe for tests that don't care).
+   */
+  readonly capturedAt?: string;
   /** Session id for envelope correlation. Tests pin; production uses 'connector-host'. */
   readonly sessionId?: string;
   /** Test-injectable sink for tool.invoked events. */
@@ -207,6 +214,7 @@ export function registerAllTools(
   server: McpServer,
   opts: RegisterToolsOptions,
 ): void {
+  const capturedAt = opts.capturedAt ?? '2026-04-27';
   const baseDeps: ToolHandlerDeps = {
     withClient: buildWithClient(opts.pool),
     embedQuery: opts.embedQuery,
@@ -280,6 +288,15 @@ export function registerAllTools(
     findTipsSpec.inputSchema,
     findTipsSpec.outputSchema,
     (input) => findTipsBody(input, baseDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    getPricingSpec.name,
+    lookupDescription(getPricingSpec.name),
+    getPricingSpec.inputSchema,
+    getPricingSpec.outputSchema,
+    (input) => getPricingBody(input, baseDeps, capturedAt),
     runtimeDeps,
   );
   registerOne(

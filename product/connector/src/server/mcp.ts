@@ -41,10 +41,15 @@ export interface CreateMcpServerDeps {
   readonly embedQuery: EmbedQueryFn;
   /** Loaded tool descriptions (one per tool, fail-fast at app-build time). */
   readonly descriptions: ToolDescriptions;
+  /**
+   * ISO date when pricing data was captured (PRICES_CAPTURED_AT).
+   * Stamped on every get_pricing response. Defaults to '2026-04-27'.
+   */
+  readonly capturedAt?: string;
 }
 
 /**
- * Build a fresh MCP server with all eight tools registered.
+ * Build a fresh MCP server with all ten tools registered.
  */
 export function createConnectorMcpServer(deps: CreateMcpServerDeps): McpServer {
   const server = new McpServer({
@@ -56,6 +61,7 @@ export function createConnectorMcpServer(deps: CreateMcpServerDeps): McpServer {
     pool: deps.pool,
     embedQuery: deps.embedQuery,
     descriptions: deps.descriptions,
+    capturedAt: deps.capturedAt,
   });
 
   return server;

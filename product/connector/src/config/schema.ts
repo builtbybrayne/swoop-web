@@ -128,6 +128,17 @@ export const configSchema = z
     // embedQuery function and never touch this.
     GEMINI_API_KEY: z.string().trim().min(1).optional(),
 
+    // --- Pricing data capture date (C.goofy-goldstine-4) -------------------
+    //
+    // ISO date when the source pricing data was captured from the Swoop CMS.
+    // Stamped on every `get_pricing` response so the agent and visitor know
+    // how fresh the figures are. Default 2026-04-27 (the SQL dump date).
+    // When a fresh dump arrives, a single env change updates the stamp.
+    PRICES_CAPTURED_AT: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'PRICES_CAPTURED_AT must be ISO date YYYY-MM-DD')
+      .default('2026-04-27'),
+
     // --- Environment selector ----------------------------------------------
     NODE_ENV: z
       .enum(['development', 'test', 'production'])

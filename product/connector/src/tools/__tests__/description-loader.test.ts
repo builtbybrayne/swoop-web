@@ -2,7 +2,7 @@
  * Description-loader tests — verifies the fail-fast contract per HITL Q3.
  *
  * Per HITL Q3 ratification: every tool's description.md must load at boot,
- * for ALL 8 tools. Missing or empty file = throw at boot, not silent
+ * for ALL tools. Missing or empty file = throw at boot, not silent
  * degradation. Test simulates a missing file by pointing at a tmpdir that
  * carries some but not all files.
  */
@@ -33,7 +33,7 @@ function makeTempToolsDir(populated: ReadonlyArray<string>): string {
 }
 
 describe('loadAllToolDescriptions', () => {
-  it('loads every tool description when all 8 files exist', () => {
+  it('loads every tool description when all files exist', () => {
     const root = makeTempToolsDir(ALL_TOOL_NAMES);
     try {
       const descriptions = loadAllToolDescriptions(root);
@@ -46,7 +46,7 @@ describe('loadAllToolDescriptions', () => {
   });
 
   it('throws ToolDescriptionLoadError when any tool description is missing', () => {
-    // Populate 7 of the 8 — the missing one should fail-fast.
+    // Populate all but one — the missing one should fail-fast.
     const populated = ALL_TOOL_NAMES.filter((n) => n !== 'illustrate');
     const root = makeTempToolsDir(populated);
     try {

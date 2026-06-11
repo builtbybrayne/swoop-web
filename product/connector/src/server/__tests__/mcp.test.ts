@@ -2,9 +2,10 @@
  * Tests for the connector's MCP-over-HTTP surface (post-C.t4).
  *
  * Boots the Express app via supertest, drives an MCP client over the SDK's
- * `StreamableHTTPClientTransport`, and verifies the nine intent-named tools
+ * `StreamableHTTPClientTransport`, and verifies the ten intent-named tools
  * are advertised + that the no-op `ping` tool is gone (per C.t4 ratification;
- * find_tips joined at the customer-tips chunk).
+ * find_tips joined at the customer-tips chunk; get_pricing added at
+ * goofy-goldstine pricing-data cross-cut).
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -31,7 +32,7 @@ function makeThrowingPool(): pg.Pool {
 /** Fixed-vector embedQuery for tests — never calls Gemini. */
 const stubEmbedQuery: EmbedQueryFn = async () => new Array(3072).fill(0);
 
-/** Synthetic descriptions covering all nine tools. */
+/** Synthetic descriptions covering all ten tools. */
 function makeStubDescriptions(): ToolDescriptions {
   const out: Record<string, string> = {};
   for (const name of ALL_TOOL_NAMES) {
@@ -83,12 +84,12 @@ async function withMcpClient<T>(fn: (client: McpClient) => Promise<T>): Promise<
 }
 
 describe('MCP /mcp endpoint', () => {
-  it('lists exactly the nine intent-named tools (no ping)', async () => {
+  it('lists exactly the ten intent-named tools (no ping)', async () => {
     const tools = await withMcpClient(async (client) => client.listTools());
     const names = tools.tools.map((t) => t.name).sort();
     expect(names).toEqual([...ALL_TOOL_NAMES].sort());
     expect(names).not.toContain('ping');
-    expect(tools.tools).toHaveLength(9);
+    expect(tools.tools).toHaveLength(10);
   });
 
   it('each tool advertises its loaded description', async () => {
