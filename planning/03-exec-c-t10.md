@@ -54,7 +54,7 @@ After this plan executes:
 - Retry + backoff on 429/5xx/network errors (same pattern as Voyage/Gemini retries).
 - Tool-use parsing identical to `AnthropicBatchClient.mapSdkResult` (DRY the shape via a shared helper).
 - New CLI flag `--sync` in `index.ts`. Mutually exclusive with `--dry-run`.
-- Documentation update in `product/cms/ops/embedding-rerun.md` (or wherever the operator runbook covers enrich) noting the new mode + when to use it.
+- Documentation update in `product/docs/ops/embedding-rerun.md` (or wherever the operator runbook covers enrich) noting the new mode + when to use it.
 - Decision C.47 in `decisions.md`.
 
 ### Out of scope
@@ -91,7 +91,7 @@ After this plan executes:
 | `product/ingestion/src/enrich/haiku.ts` | Extract the tool-use result-parsing logic from `AnthropicBatchClient.mapSdkResult` into a shared exported helper (`parseSyncToolUseResult` or similar) so both clients DRY the shape. |
 | `product/ingestion/src/enrich/anthropic-batch-client.ts` | Consume the extracted helper. |
 | `product/ingestion/src/enrich/__tests__/anthropic-batch-client.test.ts` | Adjust if the extraction affects the test seam (probably no behavioural change). |
-| `product/cms/ops/embedding-rerun.md` *(or new ops doc)* | Operator runbook entry: when to reach for `--sync`, cost expectations, what it doesn't do. |
+| `product/docs/ops/embedding-rerun.md` *(or new ops doc)* | Operator runbook entry: when to reach for `--sync`, cost expectations, what it doesn't do. |
 | `planning/decisions.md` | Append C.47. |
 | `progress.md` | Append a session entry under the 2026-05-12 cluster after sibling t9 also lands. |
 | `next-steps.md` | Remove the "sync-classifier escape hatch — planned (not yet built)" line from §0; it's done. |
@@ -382,7 +382,7 @@ feat(ingestion): C.t10 — --sync CLI flag + isBatched on BatchClient (ledger se
 
 ### Step 6 — Update operator runbook
 
-Add a new ops doc at `product/cms/ops/sync-mode.md` or append to the existing enrich runbook (`product/cms/ops/embedding-rerun.md` — verify which file is most relevant; the C.t8 runbooks should cover this surface area):
+Add a new ops doc at `product/docs/ops/sync-mode.md` or append to the existing enrich runbook (`product/docs/ops/embedding-rerun.md` — verify which file is most relevant; the C.t8 runbooks should cover this surface area):
 
 ```markdown
 # Sync enrich mode
@@ -549,7 +549,7 @@ docs(planning): C.t10 — decisions.md C.47 + progress + next-steps roll-forward
 - **Plans**: [03-exec-c-t3a.md](03-exec-c-t3a.md) (original classifier batch decision; **do not edit**), [03-exec-c-t9.md](03-exec-c-t9.md) (sibling plan — Gemini embedding swap; can dispatch in parallel).
 - **Interface**: [haiku.ts](../product/ingestion/src/enrich/haiku.ts) (`BatchClient` interface — extended with `isBatched` here but not breaking).
 - **Production adapter**: [anthropic-batch-client.ts](../product/ingestion/src/enrich/anthropic-batch-client.ts) (untouched semantically; shares the new `parseSdkSuccessMessage` helper).
-- **Operator runbook**: [`product/cms/ops/`](../product/cms/ops/) (C.t8 deliverable; gains a sync-mode entry).
+- **Operator runbook**: [`product/docs/ops/`](../product/docs/ops/) (C.t8 deliverable; gains a sync-mode entry).
 
 ---
 
@@ -612,7 +612,7 @@ By the spawning session on `claude/reverent-yonath-f1c780` after merge:
 | 3 — failing tests for SyncMessageClient | ✅ done (commit `4b9ded4` — 9 unit tests in `sync-message-client.test.ts`) |
 | 4 — implement SyncMessageClient | ✅ done (commit `4b9ded4`) |
 | 5 — wire `--sync` flag + `isBatched` on `BatchClient` | ✅ done (commit `9373112` — classifier modules + cost ledger updated) |
-| 6 — operator runbook | ✅ done (commit `fa0b733` — `product/cms/ops/sync-mode.md`) |
+| 6 — operator runbook | ✅ done (commit `fa0b733` — `product/docs/ops/sync-mode.md`) |
 | 7 — real-API smoke | **PENDING AL** — `ANTHROPIC_API_KEY` not present in the executing environments. Reproduction command for Al: `npm run -w @swoop/ingestion enrich -- --mode=classify --source=blog-post-job --sync --limit=5` after setting `ANTHROPIC_API_KEY=...` in `product/connector/.env`. Verify with `psql -d puma_dev -c "SELECT slug, primary_job FROM blog_post WHERE primary_job IS NOT NULL LIMIT 5;"`. Expected: 5 rows with non-null `primary_job` in <30s wall-clock. |
 | 8 — fresh-install verify | ✅ done in closure (covered by the C.t9 closure's fresh-install run; both plans verified together against the merged tip) |
 | 9 — decisions / progress / next-steps | ✅ done in closure |

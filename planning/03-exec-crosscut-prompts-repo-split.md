@@ -92,7 +92,7 @@ Two folders are misplaced under `product/cms/` today and should move during the 
 - `product/cms/legal/compliance-bundle/` → `planning/legal/compliance-bundle/`. This is documentation for counsel review, not runtime agent content. Belongs in `planning/`.
 - `product/cms/handover/` (planned, not yet authored under the Curator plan) → `planning/handover/`. Same logic — handover documentation belongs alongside other handover-facing material, not in the runtime content area.
 
-After both relocations, `product/cms/` holds only runtime-agent-readable content (`prompt-defaults/`, `template-defaults/`) plus `ops/` (operator runbooks, which stay as dev-only).
+After both relocations, `product/cms/` holds only runtime-agent-readable content (`prompt-defaults/`, `template-defaults/`). Operator runbooks live in `product/docs/ops/` (developer docs, not app content).
 
 ### 2.5 Folder layout after the refactor
 

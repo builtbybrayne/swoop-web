@@ -53,7 +53,7 @@ The agent then loops the child tools and calls `processLlmRequest` on each. The 
 
 ## `annotate-images --mode=batches` builds the payload then bails — submission is unwired *(CLOSED 2026-05-13 by BATCH-C.t6; entry preserved for git-blame readers hitting old logs)*
 
-**Status**: ✅ CLOSED 2026-05-13. The submit + poll + result-stream wiring landed via [planning/03-exec-c-t6-batches-submission.md — BATCH-C.t6](planning/03-exec-c-t6-batches-submission.md), decisions C.batch-1..4. `--mode=batches` now POSTs to Anthropic, polls until the batch ends, fetches results, and writes back per-result. The operator-facing runbook at [product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md) now recommends `--mode=batches` for full re-runs.
+**Status**: ✅ CLOSED 2026-05-13. The submit + poll + result-stream wiring landed via [planning/03-exec-c-t6-batches-submission.md — BATCH-C.t6](planning/03-exec-c-t6-batches-submission.md), decisions C.batch-1..4. `--mode=batches` now POSTs to Anthropic, polls until the batch ends, fetches results, and writes back per-result. The operator-facing runbook at [product/docs/ops/image-annotation-rerun.md](product/docs/ops/image-annotation-rerun.md) now recommends `--mode=batches` for full re-runs.
 
 **Historical symptom** (kept for searchability — anyone hitting an old log will find this entry): `npm run -w @swoop/ingestion annotate-images -- --mode=batches --max-budget=20` ran through the cost projection + budget gate + 80MB request-payload build, then logged
 

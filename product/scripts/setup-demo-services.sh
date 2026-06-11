@@ -10,7 +10,7 @@
 #
 # Services managed (all under label prefix uk.co.swoop.puma.*):
 #   connector    — @swoop/connector on :3002 (node --import tsx src/server/index.ts)
-#   orchestrator — @swoop/orchestrator on :8080 (node dist/index.js)
+#   orchestrator — @swoop/orchestrator on :8080 (node --import tsx src/index.ts)
 #   ui           — vite preview on :5173 (/api/* proxy → :8080)
 #
 # Usage (from product/ or any path):
@@ -23,10 +23,8 @@
 #
 # Prerequisites:
 #   1. npm install completed in product/.
-#   2. Orchestrator built: npm run build -w @swoop/orchestrator
-#      (orchestrator start = node dist/index.js — requires compiled dist/).
-#   3. UI built: npm run build -w @swoop/ui (or run `install` which builds for you).
-#   4. .env files present: orchestrator/.env and connector/.env (gitignored).
+#   2. UI built: npm run build -w @swoop/ui (or run `install` which builds for you).
+#   3. .env files present: orchestrator/.env and connector/.env (gitignored).
 #
 # Node path detection:
 #   The script resolves `node` from PATH at install time and writes its
@@ -75,14 +73,6 @@ err()  { echo "${C_RED}[setup-demo-services]${C_RESET} $*" >&2; }
 # ----------------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------------
-
-require_built_orchestrator() {
-  if [ ! -f "$PRODUCT_DIR/orchestrator/dist/index.js" ]; then
-    err "orchestrator/dist/index.js not found. Build first:"
-    err "    npm run build -w @swoop/orchestrator"
-    exit 1
-  fi
-}
 
 require_built_ui() {
   if [ ! -f "$PRODUCT_DIR/ui/dist/index.html" ]; then
@@ -158,8 +148,6 @@ cmd_install() {
   log "Product dir: ${C_BOLD}$PRODUCT_DIR${C_RESET}"
   log "Logs dir:    ${C_BOLD}$LOGS_DIR${C_RESET}"
   echo
-
-  require_built_orchestrator
 
   # Build UI if not already built (idempotent).
   if [ ! -f "$PRODUCT_DIR/ui/dist/index.html" ]; then

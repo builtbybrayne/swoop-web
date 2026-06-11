@@ -59,7 +59,7 @@ Tier 3 execution plans (`03-exec-<chunk>-<task>.md`) are the canonical brief for
 
 The project's validation strategy is driven by the **Tier 2 chunk H validation harness**, not dense per-package unit-test suites. Write unit tests only where failure modes are narrow and fixtures are cheap (pure utilities in `ts-common/`, schema parsers, small deterministic transforms). Integration and behavioural coverage belong in the H harness.
 
-Post-launch, the harness grows weekly from real conversations — see the operator runbook at `cms/ops/evalset-growth.md`.
+Post-launch, the harness grows weekly from real conversations — see the operator runbook at `docs/ops/evalset-growth.md`.
 
 ## Runtime target
 

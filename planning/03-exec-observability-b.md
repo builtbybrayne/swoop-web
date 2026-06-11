@@ -340,7 +340,7 @@ F-b is done when the following holds. Each check is mechanical and fast.
    - then either `session.ended{terminationReason: 'user_closed'}` via DELETE, or `session.expired{cause: 'idle_timeout'}` if left idle past the TTL.
    Each event parses via `EventSchema.safeParse` when piped through `jq` → a small ad-hoc validator script. If the pipe shows no parse failures, the schema contract holds in real traffic.
 8. BigQuery-export-readiness regression: `EventSchema` unchanged in shape since F-a. F-b introduced zero envelope field additions. Verify by `git diff main -- product/ts-common/src/events.ts` returning empty (or only comment changes).
-9. Spot-check runbook (Tier 2 §2.5) — owned by F.t4, a separate deliverable. F-b leaves a one-paragraph note in `product/cms/ops/` (or defers the note entirely to F.t4) confirming the happy-path sequence above. Not a blocker for F-b completeness; noted so F.t4's author knows what to write against.
+9. Spot-check runbook (Tier 2 §2.5) — owned by F.t4, a separate deliverable. F-b leaves a one-paragraph note in `product/docs/ops/` (or defers the note entirely to F.t4) confirming the happy-path sequence above. Not a blocker for F-b completeness; noted so F.t4's author knows what to write against.
 
 Final gate: verification 1–6 green + a single happy-path live check (7) passing. That's the honest "retrofit complete" signal — not a blanket console-purge test, not a dashboard that doesn't exist yet.
 

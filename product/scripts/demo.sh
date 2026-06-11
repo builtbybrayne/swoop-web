@@ -93,17 +93,6 @@ for arg in "$@"; do
 done
 
 # ----------------------------------------------------------------------------
-# Pre-flight: check orchestrator is built
-# ----------------------------------------------------------------------------
-
-if [ "$UI_ONLY" = false ] && [ ! -f "orchestrator/dist/index.js" ]; then
-  err "orchestrator/dist/index.js not found."
-  err "Build the orchestrator first:"
-  err "    npm run build -w @swoop/orchestrator"
-  exit 1
-fi
-
-# ----------------------------------------------------------------------------
 # 1. Build the UI
 # ----------------------------------------------------------------------------
 

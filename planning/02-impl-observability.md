@@ -96,7 +96,7 @@ Puma launches **without** the BigQuery export wired. The schema is designed to s
 
 ### 2.5 Spot-check runbook
 
-`product/cms/ops/spot-check-conversation.md` — how to pull the full event trace for a session id:
+`product/docs/ops/spot-check-conversation.md` — how to pull the full event trace for a session id:
 1. Session id (from the handoff record, a user report, or a support ticket).
 2. Cloud Logging query filter.
 3. Expected event sequence (what a healthy conversation looks like).

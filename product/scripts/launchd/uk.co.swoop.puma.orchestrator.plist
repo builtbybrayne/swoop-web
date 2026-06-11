@@ -15,17 +15,17 @@
 
   Behaviour:
     • Restarts automatically if the process exits (KeepAlive true).
-    • NO file-watch: runs the pre-built dist/index.js (requires
-      `npm run build -w @swoop/orchestrator` before install).
+    • NO file-watch: plain tsx run, not `tsx watch` (matches connector pattern).
     • ThrottleInterval 5s prevents restart storms on crash loops.
     • Connector must be up before orchestrator starts; the setup script loads
       connector first then waits 3s before loading orchestrator.
 
-  npm is deliberately BYPASSED: `node dist/index.js` is the package's `start`
-  script without the npm wrapper. The npm shell wrapper does not propagate
-  SIGTERM to its child (see gotchas.md "npm shell wrapper doesn't propagate
-  SIGTERM cleanly") — under npm, launchctl unload would orphan the node child
-  and leave :8080 occupied. With node as the supervised process, SIGTERM
+  npm is deliberately BYPASSED: node runs the server with tsx registered via
+  node's import flag (see ProgramArguments below) — the equivalent of the
+  package's `start` script without the npm wrapper. The npm shell wrapper does
+  not propagate SIGTERM to its child (see gotchas.md "npm shell wrapper doesn't
+  propagate SIGTERM cleanly") — under npm, launchctl unload would orphan the tsx
+  child and leave :8080 occupied. With node as the supervised process, SIGTERM
   reaches the service directly and graceful shutdown works. CWD is the
   orchestrator package dir so dotenv finds orchestrator/.env. Keep
   ProgramArguments in sync with the `start` script in orchestrator/package.json
@@ -43,7 +43,9 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/node</string>
-    <string>dist/index.js</string>
+    <string>--import</string>
+    <string>tsx</string>
+    <string>src/index.ts</string>
   </array>
 
   <key>WorkingDirectory</key>

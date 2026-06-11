@@ -90,7 +90,7 @@ Closed the deliberate C.t6 scope-cut (decision C.52). `runBatches` in [product/i
 
 - `product/ingestion/src/images/vision-batch-client.ts` — new `AnthropicVisionBatchClient` mirroring the Haiku batches pattern from `enrich/anthropic-batch-client.ts`. +12 unit tests.
 - `runBatches` end-to-ends: build → submit → `waitForVisionBatch` → fetchResults → per-result `parseAndValidate` + `writeAnnotation` + checkpoint. +5 integration tests.
-- Operator runbook ([product/cms/ops/image-annotation-rerun.md](product/cms/ops/image-annotation-rerun.md)) flipped from "deferred" to "preferred for full re-runs (~$17/£14 vs ~$34/£27 at live rate)".
+- Operator runbook ([product/docs/ops/image-annotation-rerun.md](product/docs/ops/image-annotation-rerun.md)) flipped from "deferred" to "preferred for full re-runs (~$17/£14 vs ~$34/£27 at live rate)".
 - [gotchas.md](gotchas.md) "annotate-images --mode=batches builds the payload then bails" entry rewritten as a closed-historical note.
 
 ### VERDICT-E.t1 — agent + wire `reasonCode` constrained to per-verdict enums
@@ -282,7 +282,7 @@ The C.t9 plan body specified `vector(3072)` for migration 009. The dispatched ag
 
 - `@swoop/ingestion`: new `GeminiClient` + tests (266 lines), retired `voyage.ts` + test, cost-ledger renames (`recordVoyage` → `recordEmbedding`; pass keys `voyage:*` → `gemini:*`; pricing $0.02 → $0.15 per 1M input tokens, ~7.5× per-token but full-corpus pass still ~£4–£8 once-off and inside the £10 dev cap), `--sync` CLI flag, `SyncMessageClient` (319 lines of tests), `isBatched: boolean` on `BatchClient` interface, classifier modules updated to consume it, `capToGeminiInput` defensive cap in `chunk.ts` (Gemini's 2048-token input ceiling — soft-truncate at the persona-aggregation boundary).
 - `@swoop/connector`: migration 009 (`halfvec(3072)` column re-creation + 9 HNSW indexes); `migrate.test.ts` bumped to expect 001–009.
-- `product/cms/ops/sync-mode.md`: operator runbook entry for `--sync`.
+- `product/docs/ops/sync-mode.md`: operator runbook entry for `--sync`.
 - `product/ingestion/src/enrich/index.ts`: auto-merged cleanly across the two agent branches (Gemini construction + `--sync` flag are textually orthogonal; Git's `ort` strategy handled it).
 
 ### Decisions logged
@@ -551,7 +551,7 @@ All fourteen 2026-04-30 pre-chunk-work review items now closed. Strategic deferr
 | [planning/03-exec-c-t4.md](planning/03-exec-c-t4.md) | 351 | `worktree-agent-a669aa78a0995b554` | Eight intent-named tool handlers over data primitives; `handoff_submit` thin-wrapper over E.t2/E.t3-shipped endpoint; description-load fail-fast for the five conversational tools |
 | [planning/03-exec-c-t5.md](planning/03-exec-c-t5.md) | 190 | `worktree-agent-adcea2f64a87b63bb` | `@swoop/common` image URL utility + page-as-hub resolver |
 | [planning/03-exec-c-t6.md](planning/03-exec-c-t6.md) | 233 | (same) | Claude Vision annotation pipeline over the ~6.3K images without upstream `image.description`; ~£30–£150 cost estimate |
-| [planning/03-exec-c-t8.md](planning/03-exec-c-t8.md) | 235 | (same) | ETL + annotation handover runbooks at `product/cms/ops/` |
+| [planning/03-exec-c-t8.md](planning/03-exec-c-t8.md) | 235 | (same) | ETL + annotation handover runbooks at `product/docs/ops/` |
 
 All plans carry the ★ Read this first calibration callout pointing at chunk-C anchor + theme 11 (top-down-from-sales). Open-question lists numbered for HITL adjudication; tooling picks made with explicit reasoning.
 
@@ -621,7 +621,7 @@ Five worktree-isolated agents dispatched in parallel; four committed, one (mock-
 
 - ✅ **E.t8 compliance-bundle skeleton** — Tier 3 plan at [planning/03-exec-e-t8.md](planning/03-exec-e-t8.md), 12-file bundle at [product/cms/legal/compliance-bundle/](product/cms/legal/compliance-bundle/). Status by file: 5 ✅ FILLED (README + status legend, 01-overview, 02-data-flow with mermaid + per-edge narrative, 05-retention-policy with values from E.6/E.7/E.8, 08-data-subject-rights, 09-review-checklist), 1 🟡 PARTIAL (06-processors — Anthropic + Google Cloud filled, SMTP TBC), 4 🔴 BLOCKED (03-disclosure-copy + 04-consent-flow on E.t5; 07-dpas on Swoop legal sourcing; screenshots/ on real copy + screenshot capture), naming convention documented for the empty dir. Counsel review checklist landed.
 
-- ✅ **H.t7 living-evalset growth runbook** — Tier 3 plan at [planning/03-exec-h-t7.md](planning/03-exec-h-t7.md), operator-facing runbook at [product/cms/ops/evalset-growth.md](product/cms/ops/evalset-growth.md). Decisions H.17–H.20 added (cadence Friday afternoon, sanitisation by mechanism + verified grep smoke-test, sources span handoff records + Cloud Logging, ownership-as-role rather than named individual). PII-sanitisation guidance is the load-bearing bit — explicit field table per handoff payload + in-message PII pattern table.
+- ✅ **H.t7 living-evalset growth runbook** — Tier 3 plan at [planning/03-exec-h-t7.md](planning/03-exec-h-t7.md), operator-facing runbook at [product/docs/ops/evalset-growth.md](product/docs/ops/evalset-growth.md). Decisions H.17–H.20 added (cadence Friday afternoon, sanitisation by mechanism + verified grep smoke-test, sources span handoff records + Cloud Logging, ownership-as-role rather than named individual). PII-sanitisation guidance is the load-bearing bit — explicit field table per handoff payload + in-message PII pattern table.
 
 - ✅ **Blog ingest** — confirmed already implemented in `@swoop/ingestion` workspace by an earlier session (753-line single-file pipeline + 31 passing tests). Live backfill produced 102 posts (`X-WP-Total` matches; rolling 5y window aged out 6 posts since the 2026-04-27 plan check). Plan doc at [planning/03-exec-blog-ingest.md](planning/03-exec-blog-ingest.md) flipped to "Implemented" + path corrected to `product/ingestion/src/blog/fetch.ts`.
 

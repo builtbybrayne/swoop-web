@@ -2,7 +2,7 @@
 
 **Status**: RATIFIED 2026-06-10 by Alastair ("postgres sessions asap") — promoted from the Part C stub in [03-exec-crosscut-magical-poincare-demo-stability.md](03-exec-crosscut-magical-poincare-demo-stability.md). **Chunk home**: B (agent runtime).
 **Back-link**: [2026-06-10 Luke Loom feedback ledger](reviews/2026-06-10-luke-loom-feedback.md) item B1 — structural fix for conversation loss on orchestrator restart.
-**Workspaces touched**: `@swoop/orchestrator` (primary), `@swoop/connector` (migration file only — single migrate runner), config schema, `cms/ops` runbook note.
+**Workspaces touched**: `@swoop/orchestrator` (primary), `@swoop/connector` (migration file only — single migrate runner), config schema, `docs/ops` runbook note.
 
 ---
 
@@ -45,7 +45,7 @@ Environment gotchas that WILL bite (see [gotchas.md](../gotchas.md)): `dotenv({ 
 
 **Step 7 — Tests.** Store unit tests DB-gated like the connector's pattern (skip cleanly without a DB URL). Integration: (a) **restart-survival** — store instance A creates session + events; fresh instance B (same DB) reads them; `canAcceptTurn` correct; (b) history projection round-trip; (c) sweep idle/archive/delete; (d) mutex wrap still serialises per-session updates. Full workspace suite green.
 
-**Step 8 — Live restart smoke + runbook.** Boot orchestrator `SESSION_BACKEND=postgres` against `puma_dev`: consent → one real turn → `kill -9` orchestrator → restart → browser reload → rehydrate restores the transcript → next turn continues in context. Add the env + smoke to the demo runbook surface (coordinate with [demo-stability plan](03-exec-crosscut-magical-poincare-demo-stability.md) Part B's `cms/ops/demo-server.md` — if that file doesn't exist yet in this worktree, note the env in the execution log for the runbook author).
+**Step 8 — Live restart smoke + runbook.** Boot orchestrator `SESSION_BACKEND=postgres` against `puma_dev`: consent → one real turn → `kill -9` orchestrator → restart → browser reload → rehydrate restores the transcript → next turn continues in context. Add the env + smoke to the demo runbook surface (coordinate with [demo-stability plan](03-exec-crosscut-magical-poincare-demo-stability.md) Part B's `docs/ops/demo-server.md` — if that file doesn't exist yet in this worktree, note the env in the execution log for the runbook author).
 
 ## 3. Decisions (log to decisions.md at merge)
 

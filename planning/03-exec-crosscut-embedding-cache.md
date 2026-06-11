@@ -6,7 +6,7 @@
 
 ## ★ Read this first — the problem this closes
 
-The documented behaviour (per [cms/ops/embedding-rerun.md:17](../product/cms/ops/embedding-rerun.md)): *"idempotent on `content_hash`: if the source content hasn't changed, the existing embedding stays."*
+The documented behaviour (per [docs/ops/embedding-rerun.md:17](../product/docs/ops/embedding-rerun.md)): *"idempotent on `content_hash`: if the source content hasn't changed, the existing embedding stays."*
 
 The actual behaviour:
 1. `compose*` functions in [enrich/compose/](../product/ingestion/src/enrich/compose) default to `TRUNCATE` + `INSERT FROM SELECT`. Every compose run blows away all derived rows.
@@ -222,7 +222,7 @@ Two proposed entries in [decisions.md](decisions.md):
 
 ### 2.8 Doc updates (in the same PR)
 
-- **`cms/ops/embedding-rerun.md`** — correct the "idempotent on `content_hash`" sentence; it's *now* true. Add a "How the cache works" subsection. Note the recovery affordance: direct TRUNCATEs survive.
+- **`docs/ops/embedding-rerun.md`** — correct the "idempotent on `content_hash`" sentence; it's *now* true. Add a "How the cache works" subsection. Note the recovery affordance: direct TRUNCATEs survive.
 - **`gotchas.md`** — replace the "Gemini embeddings 429 under our default concurrency" gotcha's tactical fix advice with a pointer to the cache: most re-runs cost zero tokens now.
 - **`discoveries.md`** — short entry on the divergence-then-resolution: documented vs implemented behaviour reconciled.
 

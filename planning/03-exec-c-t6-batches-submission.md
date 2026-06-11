@@ -17,7 +17,7 @@
 - `product/ingestion/src/images/__tests__/vision-batch-client.test.ts` — **new** — unit tests against a mocked SDK shape.
 - `product/ingestion/src/images/run.ts` — **edit** — `runBatches` swaps the bail-out for: build → submit → poll-with-kill-switch → fetchResults → per-result write-back + checkpoint.
 - `product/ingestion/src/images/__tests__/run.test.ts` — **edit (if exists; new otherwise)** — extend batches-mode tests with the full submit/poll/result wiring.
-- `product/cms/ops/image-annotation-rerun.md` — **edit** — flip the operator caveat from "use --mode=live; --mode=batches is unwired" to "--mode=batches now submits + polls + writes back; --mode=live remains supported for small slices".
+- `product/docs/ops/image-annotation-rerun.md` — **edit** — flip the operator caveat from "use --mode=live; --mode=batches is unwired" to "--mode=batches now submits + polls + writes back; --mode=live remains supported for small slices".
 - `gotchas.md` — **edit** — flip the "annotate-images --mode=batches builds the payload then bails" entry from current-state to historical / closed.
 - `planning/decisions.md` — append entries `C.batch-1` through `C.batch-N` (numbered with the `batch-` prefix to avoid collision).
 - `progress.md`, `next-steps.md` — orientation updates.
@@ -279,7 +279,7 @@ Extra test: when `visionClient.messages.batches.create` is missing (no SDK), the
 
 ### 2.4 Operator runbook update
 
-[product/cms/ops/image-annotation-rerun.md](../product/cms/ops/image-annotation-rerun.md) — flip the section that warns about `--mode=batches` not being wired. New language: "`--mode=batches` submits via Anthropic's Batches API (50% discount, up to 24h SLA). Use for full-corpus runs; `--mode=live` remains the supported path for small slices during prompt iteration."
+[product/docs/ops/image-annotation-rerun.md](../product/docs/ops/image-annotation-rerun.md) — flip the section that warns about `--mode=batches` not being wired. New language: "`--mode=batches` submits via Anthropic's Batches API (50% discount, up to 24h SLA). Use for full-corpus runs; `--mode=live` remains the supported path for small slices during prompt iteration."
 
 Keep the cost figures honest: full ~6.9K-image batch at the discounted rate is ~$17 / £14; live rate is ~$34 / £27.
 
@@ -363,7 +363,7 @@ Items that may surface during execution:
 - `product/ingestion/src/enrich/haiku.ts` — interface design + waitForBatch helper.
 - `product/ingestion/src/images/run.ts:435–476` — the scope-cut `runBatches` being replaced.
 - `product/ingestion/src/images/vision-client.ts` — `buildBatchRequest`, `extractAssistantText`.
-- `product/cms/ops/image-annotation-rerun.md` — operator runbook to update.
+- `product/docs/ops/image-annotation-rerun.md` — operator runbook to update.
 - `gotchas.md` — entry to update.
 - `planning/decisions.md` — C.52 (the deferred decision) + new C.batch-N entries.
 
@@ -387,7 +387,7 @@ TDD throughout. Three change clusters:
 
 1. **`vision-batch-client.ts` + tests**: new module mirroring `enrich/anthropic-batch-client.ts`. `AnthropicVisionBatchClient` implements submit/poll/fetchResults. `waitForVisionBatch` polls until `'ended'` with abort + timeout. `adaptVisionSdkForBatches` shape-checks the runtime client + wraps it. 12 unit tests (submit, poll status mapping, fetchResults across all 4 result types, waitForVisionBatch progress + abort).
 2. **`runBatches` refactor in `run.ts`**: replaces the scope-cut bail with end-to-end submit → wait → fetch → per-result write-back. Defensive fallback when `adaptVisionSdkForBatches` returns null (older SDKs or test stubs without `messages.batches`). `RunOptions` gains a `batchClient?: VisionBatchClient` field for test injection. +5 integration tests in `run.test.ts` (happy path, mixed succeeded/errored, schema-violating rawText, skip-signal, SDK-missing fallback).
-3. **Docs + decisions**: operator runbook ([product/cms/ops/image-annotation-rerun.md](../product/cms/ops/image-annotation-rerun.md)) flipped from "deferred" to "preferred for full re-runs". `gotchas.md` "annotate-images --mode=batches" entry rewritten as closed-historical. Decisions C.batch-1..4 appended to `planning/decisions.md`.
+3. **Docs + decisions**: operator runbook ([product/docs/ops/image-annotation-rerun.md](../product/docs/ops/image-annotation-rerun.md)) flipped from "deferred" to "preferred for full re-runs". `gotchas.md` "annotate-images --mode=batches" entry rewritten as closed-historical. Decisions C.batch-1..4 appended to `planning/decisions.md`.
 
 **Test totals after this landing**: `@swoop/ingestion` 266 → 283 (+17). Total across all workspaces 931 → 948 (BATCH-C.t6 alone; VERDICT-E.t1 added +10 separately).
 

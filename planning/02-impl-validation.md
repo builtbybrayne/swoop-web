@@ -127,7 +127,7 @@ Post-launch, a weekly ritual:
 3. Convert interesting ones into scenarios (with a sanitised seed — strip PII).
 4. Re-run the full suite on main.
 
-Ritual tracked in `product/cms/ops/evalset-growth.md` post-launch.
+Ritual tracked in `product/docs/ops/evalset-growth.md` post-launch.
 
 ---
 
@@ -226,7 +226,7 @@ Chunk H is done when:
 - **H.t4 — Starter evalset authorship (HITL with Al)**: draft the 10–15 scenarios, informed by G.t0 flow mapping, iterated against real orchestrator runs.
 - **H.t5 — Judge calibration**: build a small held-out set; measure κ; tune rubric prompts until calibrated.
 - **H.t6 — CI integration**: GitHub Actions workflow, report-comment on PR.
-- **H.t7 — Post-launch weekly-ritual runbook**: `product/cms/ops/evalset-growth.md`.
+- **H.t7 — Post-launch weekly-ritual runbook**: `product/docs/ops/evalset-growth.md`.
 
 H.t1–H.t3 can start as soon as B's orchestrator has a stub endpoint. H.t4 is HITL; schedule alongside G.t0. H.t5 depends on having some scenarios. H.t6 is lightweight once the harness is stable. H.t7 is documentation — lands pre-launch.
 
