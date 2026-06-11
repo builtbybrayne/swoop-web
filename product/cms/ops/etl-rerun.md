@@ -41,15 +41,16 @@ Swoop's engineering team produces dumps from `swoop_patagonia_prod`. There are t
 - The main schema dump (`export.sql` or similar — the big one, ~100MB+).
 - The supplementary customer-review dump (`customerreview_tables_-_swoop-patagonia_prod.sql`).
 
-Land both at the dump location. By default the CLI looks for them under `<repo>/data/`:
+Land both at the dump location (conventionally `<repo>/data/`):
 
 ```bash
 ls data/*.sql
-# data/export.sql
+# data/content-data-swoop-patagonia_prod.sql
 # data/customerreview_tables_-_swoop-patagonia_prod.sql
+# data/customertip_swoop-patagonia_prod.sql
 ```
 
-If you keep dumps elsewhere, pass `--dump <path>` to the transform CLI in step 3.
+**`--dump <path-to-main-dump>` is REQUIRED** — there is no default location (corrected 2026-06-11; this runbook previously claimed the CLI defaulted to `<repo>/data/`, which cost a failed run). The supplementary customerreview + customertip dumps are auto-detected in the same directory as the main dump. Non-interactive runs also need `--yes`.
 
 You'll know the dumps are right when:
 - Both files are non-empty.
@@ -76,11 +77,14 @@ If you see anything else, jump to `migration-management.md` and `troubleshooting
 ## Step 3 — Run the SQL transform
 
 ```bash
-npm run etl:sql --workspace @swoop/ingestion
+npm run etl:sql --workspace @swoop/ingestion -- \
+  --dump <repo>/data/content-data-swoop-patagonia_prod.sql --yes
 ```
 
-Optional flags:
-- `--dump <path>` — override the default dump location.
+Flags:
+- `--dump <path>` — **required**; path to the main dump (supplementary dumps auto-detected beside it).
+- `--yes` — skip the interactive confirmation (required for non-TTY runs).
+- `--only <table,table>` — scope to specific tables.
 - `--database-url <url>` — override `DATABASE_URL` from `connector/.env`.
 
 The transform streams the MariaDB inserts into the Postgres domain layer, applying the row-shape transformations declared in `product/ingestion/src/sql-transform/transformations.ts`. It's idempotent: re-running against the same dump produces zero net row delta. The second pass for `page.parent_id` runs automatically (self-FK two-pass write — see "When things go wrong").

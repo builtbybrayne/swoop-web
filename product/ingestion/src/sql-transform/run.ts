@@ -381,7 +381,16 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       (r) => {
         const id = numOrNull(r.values.id);
         if (id === null) return null;
-        const sub = subtypeByContentblockId.get(id);
+        // faqset_id OUTRANKS the junction-derived subtype: all 183 FAQ-owning
+        // blocks sit in contentblock_navigationcard, so junction-first typing
+        // classed them as UI plumbing and dropped them — leaving FAQ items
+        // unable to reach their page (2026-06-11 lookup-url crosscut). A
+        // block that owns a faqset is a FAQ block whatever chrome it renders
+        // in.
+        const sub =
+          numOrNull(r.values.faqset_id) !== null
+            ? 'faqset'
+            : subtypeByContentblockId.get(id);
         if (!sub) return null; // No subtype junction → drop (UI plumbing or unknown).
         return transformContentblock(r, lookups, sub);
       },
