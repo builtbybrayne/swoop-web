@@ -1,26 +1,52 @@
-Use this when the conversation has earned the move from "tell me about Patagonia" to "what would we actually do?". The visitor's energy has shifted from open curiosity toward concrete comparison — usually with a region in mind, sometimes a duration, often a sense of the budget bracket. Construct the filter from what they've shared in the conversation; don't make them recite preferences they've already given you.
+Your eyes, not the visitor's — **nothing renders from this tool**. Use it to browse options privately before you commit to showing the visitor anything.
 
-The output is two to four **proposal cards**. The cards are polymorphic — each one is one of four types, tagged in the `type` field:
+## When to use it
 
-- **`trip`** — a flexible package. Self-contained, can be self-guided or guided, duration is configurable. Use this when the visitor wants their own trip, on their own terms.
-- **`tour`** — a guided fixed-itinerary group product. Small group, day-by-day plan tuned across many seasons. Group size and a day-count are surfaced as distinctive affordances. **When the conversational signal could plausibly go either way between trip and tour, lean toward the tour.** Tours are a distinctive Swoop product — small-group expertise is part of what we sell — and surfacing them is a priority. Specifically reach for tour cards when the visitor signals "guided", "small group", "with a guide", "I'd rather not plan it", or asks about itinerary structure or group size.
-- **`hotel`** — accommodation as the concrete option (location-anchored, per-night pricing). Use this when the visitor asks "where could we stay", names an accommodation style, or has signalled a base-and-explore intent rather than a packaged-trip intent.
-- **`region_base`** — a region framed as a launchpad ("use this as a base, explore around"). Use this when the visitor is choosing the region first, the trip second — "we're thinking Torres del Paine, what's the best base from there?".
+When the conversation has earned the move from "tell me about Patagonia" to "what would we actually do?" — the visitor's energy has shifted from open curiosity toward concrete comparison. Construct the filter from what they've shared; don't make them recite preferences they've already given you.
 
-You don't pick the card type directly. The tool picks it based on (a) the conversation signal you've encoded in the filter and (b) the data's coverage for that signal. If the signal is decisive you can steer with `preferredType: 'trip' | 'tour' | 'hotel' | 'region_base'`; leave it unset to let the tool blend the best-matching set. The default blend is 1 of each variant (mixed). Mixed sets — say, two trips and a tour — are allowed and often the right answer.
+## The browse → show workflow
 
-Three practical notes:
+1. **Browse** with `find_options` using a `query` distilled from the conversation. Judge the returned list mentally.
+2. If the results don't fit — wrong vibe, wrong length, not enough variety — call again with accumulated `exclude` to see different options.
+3. When you have enough to be informative (rarely more than 3–4 browse calls), **call `show_options`** with your curated picks. That's what the visitor sees.
 
-- **Avoid repeats.** When the visitor has already seen cards in this conversation and you want fresh options, pass `exclude: [{type, id}, ...]` so the tool omits them. You own the conversation history; the tool does not. Use this when the visitor explicitly asks for "different" options, or when you're deliberately rotating an upsell across turns.
-- **Price sensitivity → pass `budgetBand` and consider `preferredType: 'tour'`.** When the conversation carries a cost-conscious or value-seeking signal, encoding `budgetBand` in the filter helps the tool surface price-appropriate options. At the margin of equal fit, lean toward `preferredType: 'tour'` — group departures are often the most cost-effective way to do Patagonia well, and surfacing that is a service to the visitor.
-- **Tour region is informational, not a filter.** Region hierarchy (Torres del Paine ⊂ Patagonia ⊂ Chile) doesn't reduce to a flat string match, and the tour catalogue is small enough that letting you reason contextually is the cleaner shape. The tool returns tour cards regardless of the visitor's `region` value; each card's `region` field (when present) names the specific area the tour is anchored to — use it to frame in prose ("centred on Torres del Paine, the W Trek tour…") and to decide which tours genuinely fit the conversation. Tour cards without a `region` are pan-region (deliberately unconstrained); don't apologise for surfacing them — they're real options across the visitor's whole interest.
+Think of `find_options` as flipping through a rack privately; `show_options` is pulling items out and handing them to the customer.
 
-Frame each card briefly in your reply — what's distinctive, why it matches what they've shared. Headline pricing rules:
+## The `query` param — use it every time you have signal
 
-- `trip` / `tour` / `region_base` cards: "from £X" (total). Never quote a definitive total or imply availability for a specific date.
-- `hotel` cards: "from £X / night" — per-night framing; the card's `pricingUnit` field carries this discriminator.
-- If `fromPrice` is null on any card, drop the price line entirely.
+Pass a free-prose summary of what the visitor wants, distilled from the conversation. Not their literal last message — your read of the whole thread:
 
-If the visitor pushes for definitive pricing or specific-date availability, that's the moment to suggest a specialist conversation, which is what `handoff` is for.
+> "active couple, kayaking, Aysén, shoulder season, watching budget"
+> "solo photographer, wildlife, Torres del Paine, October, 10–14 days"
 
-*When to pick this:* the visitor wants to look at concrete options — trips, tours, hotels, or a region to base from. If their interest is still abstract, `find_inspiring` is the right move; offering proposal cards too early can feel like a hard sell. If they want to look hard at one specific option's logistics, `lookup` will surface the practical detail. `find_options` is the closest the agent gets to recommending; use it when the conversation has earned that move.
+When `query` is present, options are ranked by relevance (hybrid semantic + keyword). When absent, results are random-variety — today's behaviour, useful only when you genuinely have no specific signal yet.
+
+## Filters — orthogonal constraints, not ranking
+
+Filters constrain the candidate pool; `query` orders it. Both work together.
+
+- `region` — if the visitor named one. ILIKE match; use the region's plain name ("Torres del Paine", "Patagonia").
+- `durationMin` / `durationMax` — if they've given a duration window.
+- `budgetBand` — `budget` / `mid` / `premium` / `luxury`. Use when cost-consciousness is explicit.
+- `activity` — a single activity tag ("hiking", "kayaking", "photography"). Use when a specific activity was named.
+- `accommodationStyle` — accepted; not yet wired to data (0% populated). Omit unless the visitor is emphatic about it.
+
+## Card types — you don't pick directly
+
+The tool picks based on your filters. Steer with `preferredType` when the signal is decisive:
+
+- **`trip`** — flexible package, self-guided or guided, configurable duration.
+- **`tour`** — guided fixed-itinerary group product. Lean toward this when the visitor signals "guided", "small group", "I'd rather not plan it", or asks about itinerary structure. Tours are a distinctive Swoop product — surfacing them is a priority.
+- **`hotel`** — accommodation as the concrete option (per-night pricing). Use when the visitor asks "where could we stay" or names an accommodation style.
+- **`region_base`** — a region framed as a launchpad. Use when they're choosing the region first, the trip second.
+- Unset → blend (1 of each variant at default limit).
+
+## Excluding and iterating
+
+Pass `exclude: [{type, id}, ...]` to omit items you've already judged or shown. The tool doesn't track session history — you do. Trips may legitimately reappear across the conversation (no dedupe by design; Swoop is selling them).
+
+Iterate with accumulated excludes when results don't fit. Stop when you have enough — rarely more than 3–4 browse calls.
+
+## After browsing — call `show_options`
+
+Once you've judged the browse output, call `show_options` with the ids you want the visitor to see. That tool renders the full cards. Don't skip the show step — browsing without showing means the visitor sees nothing.

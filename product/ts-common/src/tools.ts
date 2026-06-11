@@ -2,22 +2,25 @@
 // Tool I/O schemas for the Puma tool set.
 //
 // Per planning/02-impl-retrieval-and-data.md §2.2 + planning/03-exec-c-t2.md.
-// The agent's tool surface is **eight intent-named tools** mapped to the five
+// The agent's tool surface (10 intent-named tools) mapped to the five
 // conversational jobs (decisions C.24 + C.25):
 //
 //   find_inspiring   → Inspire
 //   find_someone_who → Mirror   (live; graduated 2026-04-30 per decision C.26)
 //   find_proof       → Reassure
 //   lookup           → Inform
-//   find_options     → Propose options
+//   find_options     → Browse options (agent-private; renders nothing)
+//   show_options     → Propose options (visitor-facing; full cards)
+//   find_tips        → Traveller tips  (9th tool, customer-tips chunk)
 //   illustrate       → Visual companion (any job)
 //   handoff          → Open lead-capture
 //   handoff_submit   → Submit lead
 //
 // History note: an earlier iteration shipped librarian-shaped `search` /
 // `get_detail` tools from the A.t2 stub. Those were retired 2026-05-02 in
-// B.t3a, alongside the orchestrator's connector adapter rewrite — the
-// canonical surface is now exactly the eight tools above (no deprecated pair).
+// B.t3a, alongside the orchestrator's connector adapter rewrite. The find/show
+// split of find_options → find_options + show_options landed in the
+// goofy-goldstine reshape (2026-06-11, C.goofy-goldstine-12).
 // See `discoveries.md` 2026-04-30 entry "Five-jobs / eight-tools / no-composer
 // is the load-bearing substrate of chunk C" + the chunk-C ★ Read this first
 // anchor in `planning/02-impl-retrieval-and-data.md`.
@@ -353,25 +356,31 @@ export const LookupOutputSchema = z
 export type LookupOutput = z.infer<typeof LookupOutputSchema>;
 
 // -----------------------------------------------------------------------------
-// find_options — Propose options job.
+// find_options — Propose options job (browse leg).
 //
-// Used when the visitor is ready to consider concrete options. Returns 2–4
-// *proposal cards* — polymorphic over four variants:
-//   trip         | flexible package; today's default
-//   tour         | guided fixed-itinerary group product (Luke upsell priority)
-//   hotel        | accommodation as a concrete option (per-night pricing)
-//   region_base  | a region framed as a launchpad ("use this as a base")
+// Post-goofy-goldstine reshape (C.goofy-goldstine-10..13, 2026-06-11):
 //
-// The discriminator is the `type` literal on every card. The UI dispatches
-// per-variant renderers from that discriminator. Filters are structured
-// (region, duration, budget band, activity, accommodation style) plus an
-// optional `preferredType` steer when the conversational signal is decisive.
+//   find_options = agent's BROWSE tool. Returns a compact ranked list of up
+//   to 12 options the agent can judge without showing the visitor. Renders
+//   NOTHING. Accepts an optional free-prose `query` that activates hybrid
+//   (embedding + tsv) ranking for trips and tours; absent → RANDOM() variety.
+//   Filters are orthogonal constraints (region, duration, budget, activity).
+//   Iterate with accumulated `exclude` until curated enough, then call
+//   show_options with the chosen ids.
+//
+//   show_options = visitor-facing curation. Full cards, grouped
+//   primary/also_interesting.
+//
+// Legacy notes:
+//   - v1 (2026-05-12, C.48–C.51): full cards returned, only trip live.
+//   - v3 (2026-05-13): hotels + region_bases land.
+//   - v2 (2026-05-15, C.focused-shamir-{2..5}): tours live, blendCards 4-way.
+//   - goofy-goldstine reshape (2026-06-11): compact browse output + query param.
 //
 // Per crosscut plan `03-exec-crosscut-find-options-polymorphism.md` + decisions
 // C.48 – C.51 (HITL-ratified 2026-05-12). v1 tranche wires only `type: 'trip'`
 // live; the day-one contract carries all four variants so the UI is forward
-// compatible. v2 (tours, Swoop-data-gated) and v3 (hotels + region_bases)
-// follow on the same contract without further schema work.
+// compatible.
 // -----------------------------------------------------------------------------
 
 export const BudgetBandSchema = z.enum(["budget", "mid", "premium", "luxury"]);
@@ -485,6 +494,20 @@ export type ProposalCardPublic = z.infer<typeof ProposalCardPublicSchema>;
 
 export const FindOptionsInputSchema = z
   .object({
+    /**
+     * Free-prose summary of what the visitor wants — distilled from the
+     * conversation, NOT the visitor's literal last message. Example: "active
+     * couple, kayaking, Aysén, shoulder season, watching budget". When
+     * present, activates hybrid (embedding + tsv) ranking for trips/tours so
+     * the most relevant options surface first. When absent, falls back to
+     * RANDOM() variety — today's behaviour, the safety valve if ranking
+     * quality disappoints.
+     *
+     * Decision C.goofy-goldstine-10 (2026-06-11): always pass this distilled
+     * from the conversation when the visitor's intent is clear; omit only when
+     * you genuinely have no specific signal yet.
+     */
+    query: z.string().max(500).optional(),
     region: z.string().optional(),
     durationMin: z.number().int().positive().optional(),
     durationMax: z.number().int().positive().optional(),
@@ -512,19 +535,89 @@ export const FindOptionsInputSchema = z
         }),
       )
       .optional(),
-    /** Cap on returned cards. Defaults to 4. */
-    limit: z.number().int().positive().max(6).default(4),
+    /**
+     * Cap on returned options. Defaults to 12 — browse is for the agent's
+     * eyes; higher limit gives more curation headroom. Decision
+     * C.goofy-goldstine-12.
+     */
+    limit: z.number().int().positive().max(20).default(12),
   })
   .strict();
 export type FindOptionsInput = z.infer<typeof FindOptionsInputSchema>;
 
+/**
+ * One compact browse item — enough for the agent to judge fit without image
+ * hydration. No canonical URL surfaced at browse time (no deep-link needed).
+ *
+ * Per C.goofy-goldstine-12 (find/show split, 2026-06-11).
+ */
+export const BrowseOptionSchema = z
+  .object({
+    type: ProposalTypeSchema,
+    id: z.number().int().positive(),
+    title: z.string(),
+    region: z.string().nullable().optional(),
+    durationDays: z.number().int().positive().nullable().optional(),
+    fromPrice: z.number().nullable().optional(),
+    currencyCode: z.string().nullable().optional(),
+    /** One-liner (vibe line / framing), ~120 chars. */
+    line: z.string().nullable().optional(),
+  })
+  .strict();
+export type BrowseOption = z.infer<typeof BrowseOptionSchema>;
+
 export const FindOptionsOutputSchema = z
   .object({
-    cards: z.array(ProposalCardPublicSchema),
+    options: z.array(BrowseOptionSchema),
     count: z.number().int().nonnegative(),
   })
   .strict();
 export type FindOptionsOutput = z.infer<typeof FindOptionsOutputSchema>;
+
+// -----------------------------------------------------------------------------
+// show_options — Visitor-facing curation. The 10th tool.
+//
+// After browse (find_options), the agent calls show_options with its curated
+// picks. This is what the visitor sees — full ProposalCards, grouped into
+// primary (≤4) and also_interesting (near-fits).
+//
+// Per C.goofy-goldstine-12 (find/show split, 2026-06-11).
+// -----------------------------------------------------------------------------
+
+export const ShowOptionsInputSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            type: ProposalTypeSchema,
+            id: z.number().int().positive(),
+            /**
+             * Grouping signal for the widget.
+             * - `primary` (default): render as today's full ProposalCards.
+             * - `also_interesting`: compact strip (title + one-liner + thumbnail).
+             */
+            group: z.enum(["primary", "also_interesting"]).default("primary"),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(8),
+  })
+  .strict();
+export type ShowOptionsInput = z.infer<typeof ShowOptionsInputSchema>;
+
+export const ShowOptionsOutputSchema = z
+  .object({
+    cards: z.array(
+      z.intersection(
+        ProposalCardPublicSchema,
+        z.object({ group: z.enum(["primary", "also_interesting"]) }),
+      ),
+    ),
+  })
+  .strict();
+export type ShowOptionsOutput = z.infer<typeof ShowOptionsOutputSchema>;
 
 // -----------------------------------------------------------------------------
 // find_tips — Inform job, second shape. The 9th tool.
@@ -589,6 +682,8 @@ export const TOOL_NAMES = {
   Illustrate: "illustrate",
   Handoff: "handoff",
   HandoffSubmit: "handoff_submit",
+  // Tenth tool — find/show split (C.goofy-goldstine-12, 2026-06-11)
+  ShowOptions: "show_options",
 } as const;
 export type ToolNameKey = keyof typeof TOOL_NAMES;
 export type ToolNameValue = (typeof TOOL_NAMES)[ToolNameKey];
@@ -648,6 +743,10 @@ export const TOOL_DESCRIPTIONS = {
   handoff_submit:
     "Internal: called by the lead-capture widget when the visitor submits " +
     "contact details + tier-2 consent. Not invoked by the model directly.",
+  show_options:
+    "Show the visitor a curated set of proposal cards. Call after find_options " +
+    "browse. Pass the ids you've judged as the best fit. See " +
+    "cms/prompts/tools/show_options/description.md.",
 } as const;
 
 export type ToolName = keyof typeof TOOL_DESCRIPTIONS;

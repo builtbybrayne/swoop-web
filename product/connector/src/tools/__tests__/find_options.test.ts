@@ -1,19 +1,18 @@
 /**
- * `find_options` handler — discriminated-output contract tests + v3 dispatch.
+ * `find_options` handler — browse output contract tests + dispatch.
  *
- * Crosscut C.48: the handler returns `cards: ProposalCardPublic[]` — a
- * discriminated union over `trip | tour | hotel | region_base`.
+ * goofy-goldstine reshape (2026-06-11): the handler now returns
+ * `options: BrowseOption[]` — compact (id, title, region, durationDays,
+ * fromPrice, line) rather than full ProposalCards. Full cards are the
+ * domain of show_options.
  *
- * v1 (2026-05-12): only `type: 'trip'` live; every card returned MUST carry
- * that discriminator regardless of `preferredType`.
- *
- * v3 (2026-05-13 — task BF-FO-v3): hotels + region_bases land as live data
+ * v3 dispatch (BF-FO-v3): hotels + region_bases land as live data
  * primitives. Handler dispatches on `preferredType`:
  *   - 'hotel'        → queryHotelCardsByFilter
  *   - 'region_base'  → queryRegionBaseCardsByFilter
- *   - 'trip'         → queryTripCardsByFilter (regression)
- *   - 'tour'         → queryTripCardsByFilter (v2-fallback pin; v2 swaps to tours)
- *   - undefined      → blendCards (mixed set across trip/hotel/region_base)
+ *   - 'trip'         → queryTripCardsByFilter
+ *   - 'tour'         → queryTourCardsByFilter
+ *   - undefined      → blendBrowse (mixed set across all four variants)
  *
  * These tests exercise the handler body with stubbed primitives so they
  * don't need a live `puma_dev` Postgres. SQL-shape correctness against
@@ -101,26 +100,26 @@ beforeEach(() => {
   mockRegionBases.mockReset();
 });
 
-describe('find_options handler — v1 discriminated output', () => {
-  it('returns cards with `type: "trip"` on every entry when preferredType is "trip"', async () => {
+describe('find_options handler — browse output (goofy-goldstine reshape)', () => {
+  it('returns options with `type: "trip"` on every entry when preferredType is "trip"', async () => {
     mockTrips.mockResolvedValueOnce([
       { ...TRIP_CARD, id: '1' },
       { ...TRIP_CARD, id: '2', activityTags: ['hiking'] },
     ]);
 
     const out = await findOptionsBody(
-      { region: 'patagonia', preferredType: 'trip', limit: 4 },
+      { region: 'patagonia', preferredType: 'trip', limit: 12 },
       makeDeps(),
     );
 
     expect(out.count).toBe(2);
-    expect(out.cards).toHaveLength(2);
-    for (const card of out.cards) {
-      expect(card.type).toBe('trip');
+    expect(out.options).toHaveLength(2);
+    for (const option of out.options) {
+      expect(option.type).toBe('trip');
     }
   });
 
-  it('validates trip output against FindOptionsOutputSchema (discriminated union)', async () => {
+  it('validates trip output against FindOptionsOutputSchema (compact browse)', async () => {
     mockTrips.mockResolvedValueOnce([
       {
         type: 'trip' as const,
@@ -135,7 +134,7 @@ describe('find_options handler — v1 discriminated output', () => {
     ]);
 
     const out = await findOptionsBody(
-      { preferredType: 'trip', limit: 4 },
+      { preferredType: 'trip', limit: 12 },
       makeDeps(),
     );
     expect(() => FindOptionsOutputSchema.parse(out)).not.toThrow();
@@ -176,7 +175,7 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     mockHotels.mockResolvedValueOnce([HOTEL_CARD]);
 
     const out = await findOptionsBody(
-      { preferredType: 'hotel', region: 'torres del paine', limit: 4 },
+      { preferredType: 'hotel', region: 'torres del paine', limit: 12 },
       makeDeps(),
     );
 
@@ -184,7 +183,7 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     expect(mockTrips).not.toHaveBeenCalled();
     expect(mockRegionBases).not.toHaveBeenCalled();
     expect(out.count).toBe(1);
-    expect(out.cards[0]!.type).toBe('hotel');
+    expect(out.options[0]!.type).toBe('hotel');
     expect(() => FindOptionsOutputSchema.parse(out)).not.toThrow();
   });
 
@@ -222,14 +221,14 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     mockRegionBases.mockResolvedValueOnce([REGION_BASE_CARD]);
 
     const out = await findOptionsBody(
-      { preferredType: 'region_base', limit: 4 },
+      { preferredType: 'region_base', limit: 12 },
       makeDeps(),
     );
 
     expect(mockRegionBases).toHaveBeenCalledOnce();
     expect(mockTrips).not.toHaveBeenCalled();
     expect(mockHotels).not.toHaveBeenCalled();
-    expect(out.cards[0]!.type).toBe('region_base');
+    expect(out.options[0]!.type).toBe('region_base');
     expect(() => FindOptionsOutputSchema.parse(out)).not.toThrow();
   });
 
@@ -265,7 +264,7 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     mockTours.mockResolvedValueOnce([TOUR_CARD]);
 
     const out = await findOptionsBody(
-      { preferredType: 'tour', limit: 4 },
+      { preferredType: 'tour', limit: 12 },
       makeDeps(),
     );
 
@@ -273,7 +272,7 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     expect(mockTrips).not.toHaveBeenCalled();
     expect(mockHotels).not.toHaveBeenCalled();
     expect(mockRegionBases).not.toHaveBeenCalled();
-    expect(out.cards[0]!.type).toBe('tour');
+    expect(out.options[0]!.type).toBe('tour');
     expect(() => FindOptionsOutputSchema.parse(out)).not.toThrow();
   });
 
@@ -290,7 +289,7 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     expect(mockHotels).toHaveBeenCalledOnce();
     expect(mockRegionBases).toHaveBeenCalledOnce();
     expect(out.count).toBe(4);
-    expect(out.cards.map((c) => c.type).sort()).toEqual([
+    expect(out.options.map((c) => c.type).sort()).toEqual([
       'hotel',
       'region_base',
       'tour',
@@ -332,12 +331,12 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
     // Top-up fires (trips called twice).
     expect(mockTrips).toHaveBeenCalledTimes(2);
     // No duplicate ids in the output.
-    const ids = out.cards.map((c) => c.id);
+    const ids = out.options.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(out.count).toBeLessThanOrEqual(4);
   });
 
-  it('blend at limit=2 falls back to trips-only (rare at default Sonnet limit=4)', async () => {
+  it('blend at limit=2 falls back to trips-only (rare at default limit=12)', async () => {
     // base = floor(2/4) = 0, remainder = 2 → tripQuota = 2, others = 0.
     mockTrips.mockResolvedValueOnce([]);
 
@@ -352,19 +351,19 @@ describe('find_options handler — v3 dispatch (BF-FO-v3)', () => {
   it('handles an empty primitive result (count = 0) for hotel branch', async () => {
     mockHotels.mockResolvedValueOnce([]);
     const out = await findOptionsBody(
-      { preferredType: 'hotel', limit: 4 },
+      { preferredType: 'hotel', limit: 12 },
       makeDeps(),
     );
-    expect(out).toEqual({ cards: [], count: 0 });
+    expect(out).toEqual({ options: [], count: 0 });
   });
 
   it('handles an empty primitive result (count = 0) for region_base branch', async () => {
     mockRegionBases.mockResolvedValueOnce([]);
     const out = await findOptionsBody(
-      { preferredType: 'region_base', limit: 4 },
+      { preferredType: 'region_base', limit: 12 },
       makeDeps(),
     );
-    expect(out).toEqual({ cards: [], count: 0 });
+    expect(out).toEqual({ options: [], count: 0 });
   });
 });
 

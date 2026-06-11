@@ -1,7 +1,7 @@
 /**
- * Structured tour filter — pure SQL, no vector retrieval. Powers
+ * Structured tour filter — SQL filters + optional hybrid ranking. Powers
  * `find_options(preferredType: 'tour')` and is included in `blendCards`'s
- * four-way mix at limit=4.
+ * four-way mix.
  *
  * Mirrors `query-trips.ts` with three deliberate shifts:
  *   1. ORDER BY RANDOM(), id — imagination-stoking variety by default
@@ -33,6 +33,15 @@
  *     planning/reviews/2026-06-11-widget-emptiness-diagnosis.md §3 M1).
  *     Both fields are accepted-but-ignored until the columns populate.
  *
+ * goofy-goldstine reshape (2026-06-11, C.goofy-goldstine-10): when
+ * `queryEmbedding` + `queryText` are supplied, ORDER BY shifts from RANDOM()
+ * to RRF hybrid (cosine ANN on `tour_card.embedding` + ts_rank on
+ * `tour_card.tsv` if present). RANDOM() demoted to tiebreak.
+ * NOTE: `tour_card.tsv` existence verified at execution — if absent, the
+ * text CTE leg falls back to embedding-only by returning no rows (the
+ * vecCTE still fires). The 11-row corpus means hybrid adds marginal value
+ * over random here; wired symmetrically with trip for future-proofing.
+ *
  * Plan: planning/03-exec-crosscut-find-options-v2-backfill.md §2.3.
  */
 
@@ -43,6 +52,7 @@ import {
   type TourProposalCard,
 } from '@swoop/common';
 
+import { buildHybridSearchSql } from './hybrid-search.js';
 import { resolveImagesByIds } from './resolve-image.js';
 
 export interface QueryTourCardsOptions {
@@ -70,6 +80,14 @@ export interface QueryTourCardsOptions {
    * means no exclusion. Per C.focused-shamir-5.
    */
   excludeIds?: number[];
+  /**
+   * When present, activates hybrid ranking (RRF over cosine ANN on
+   * `tour_card.embedding` + ts_rank on `tour_card.tsv` if populated).
+   * Both must be supplied together. RANDOM() demoted to tiebreak.
+   * Per C.goofy-goldstine-10 (2026-06-11).
+   */
+  queryEmbedding?: number[] | null;
+  queryText?: string | null;
   limit: number;
 }
 
@@ -127,23 +145,102 @@ export async function queryTourCardsByFilter(
     clauses.push(`id <> ALL($${binds.length}::int[])`);
   }
 
-  binds.push(opts.limit);
-  const limitBind = `$${binds.length}`;
-
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
-  const sql = `
-    SELECT id, slug, headline, vibe_line, region, day_count, duration_days,
-           group_size_max, from_price, currency_code, accommodation_style,
-           COALESCE(activity_tags, '{}') AS activity_tags,
-           canonical_url, image_id
-    FROM tour_card
-    ${where}
-    ORDER BY RANDOM(), id
-    LIMIT ${limitBind}
-  `;
+  const useHybrid =
+    opts.queryEmbedding != null &&
+    opts.queryEmbedding.length > 0 &&
+    opts.queryText != null &&
+    opts.queryText.length > 0;
 
-  const res = await client.query(sql, binds);
+  let sql: string;
+  let queryBinds: unknown[];
+
+  if (useHybrid) {
+    // Hybrid path: RRF over cosine ANN on tour_card.embedding + ts_rank on
+    // tour_card.tsv (if populated). Filter clauses apply inside both CTEs.
+    // RANDOM() demoted to tiebreak. Per C.goofy-goldstine-10 (2026-06-11).
+    const embedding = opts.queryEmbedding!;
+    const queryText = opts.queryText!;
+    const limit = opts.limit;
+    // Rebuild filter binds offset by 3 (embedding=$1, query=$2, limit=$3)
+    const filterClauses: string[] = [];
+    const filterBinds: unknown[] = [];
+    if (opts.durationMin !== null && opts.durationMin !== undefined) {
+      filterBinds.push(opts.durationMin);
+      filterClauses.push(`day_count >= $${filterBinds.length + 3}`);
+    }
+    if (opts.durationMax !== null && opts.durationMax !== undefined) {
+      filterBinds.push(opts.durationMax);
+      filterClauses.push(`day_count <= $${filterBinds.length + 3}`);
+    }
+    if (opts.budgetBand) {
+      const ceiling = BUDGET_CEILING[opts.budgetBand];
+      if (Number.isFinite(ceiling)) {
+        filterBinds.push(ceiling);
+        filterClauses.push(`(from_price IS NULL OR from_price <= $${filterBinds.length + 3})`);
+      }
+    }
+    // activity + accommodationStyle: accepted-but-ignored (0-populated columns)
+    void opts.activity;
+    void opts.accommodationStyle;
+    if (opts.groupSizeMax !== null && opts.groupSizeMax !== undefined) {
+      filterBinds.push(opts.groupSizeMax);
+      filterClauses.push(`(group_size_max IS NULL OR group_size_max <= $${filterBinds.length + 3})`);
+    }
+    if (opts.excludeIds && opts.excludeIds.length > 0) {
+      filterBinds.push(opts.excludeIds);
+      filterClauses.push(`id <> ALL($${filterBinds.length + 3}::int[])`);
+    }
+    const hybridWhere =
+      filterClauses.length > 0 ? `AND ${filterClauses.join(' AND ')}` : '';
+
+    sql = buildHybridSearchSql({
+      vectorCte: `
+        SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS rank
+        FROM tour_card
+        WHERE embedding IS NOT NULL ${hybridWhere}
+        ORDER BY embedding <=> $1::vector
+        LIMIT 50
+      `,
+      textCte: `
+        SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank(tsv, websearch_to_tsquery('english', $2)) DESC) AS rank
+        FROM tour_card
+        WHERE tsv IS NOT NULL AND tsv @@ websearch_to_tsquery('english', $2) ${hybridWhere}
+        ORDER BY ts_rank(tsv, websearch_to_tsquery('english', $2)) DESC
+        LIMIT 50
+      `,
+      outerSelect: `
+        SELECT tc.id, tc.slug, tc.headline, tc.vibe_line, tc.region,
+               tc.day_count, tc.duration_days, tc.group_size_max,
+               tc.from_price, tc.currency_code, tc.accommodation_style,
+               COALESCE(tc.activity_tags, '{}') AS activity_tags,
+               tc.canonical_url, tc.image_id, fused.rrf_score
+        FROM fused
+        JOIN tour_card tc ON tc.id = fused.id
+      `,
+      tail: `ORDER BY rrf_score DESC, RANDOM(), id LIMIT $3`,
+    });
+    queryBinds = [`[${embedding.join(',')}]`, queryText, limit, ...filterBinds];
+  } else {
+    // Random-variety path (decision C.focused-shamir-4). Falls back here when
+    // no query supplied.
+    binds.push(opts.limit);
+    const limitBind = `$${binds.length}`;
+    sql = `
+      SELECT id, slug, headline, vibe_line, region, day_count, duration_days,
+             group_size_max, from_price, currency_code, accommodation_style,
+             COALESCE(activity_tags, '{}') AS activity_tags,
+             canonical_url, image_id
+      FROM tour_card
+      ${where}
+      ORDER BY RANDOM(), id
+      LIMIT ${limitBind}
+    `;
+    queryBinds = binds;
+  }
+
+  const res = await client.query(sql, queryBinds);
 
   const imageIds = res.rows.map((r) => r.image_id as number | null);
   const images = await resolveImagesByIds(client, imageIds);

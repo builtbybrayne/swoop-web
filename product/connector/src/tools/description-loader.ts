@@ -3,8 +3,12 @@
  *
  * Reads each tool's `cms/prompts/tools/<tool>/description.md` at boot, caches
  * the result for the connector lifetime. Per HITL Q3 ratification: **fail-fast
- * on ALL tools** (eight at C.t4; nine after find_tips) — development-time
- * visibility beats silent degradation.
+ * on ALL tools** — development-time visibility beats silent degradation.
+ *
+ * Tool count history:
+ *   - 8 tools at C.t4 (find_inspiring through handoff_submit)
+ *   - 9 tools after find_tips (customer-tips chunk)
+ *   - 10 tools after goofy-goldstine reshape (show_options, 2026-06-11)
  *
  * Pattern mirrors the orchestrator's prompt-loader.ts. Single-file-per-tool
  * read; not generic across `cms/prompts/{system,skills,tools}/` (per G.11 —
@@ -25,6 +29,8 @@ export const ALL_TOOL_NAMES = [
   TOOL_NAMES.Illustrate,
   TOOL_NAMES.Handoff,
   TOOL_NAMES.HandoffSubmit,
+  // Tenth tool — find/show split (C.goofy-goldstine-12, 2026-06-11)
+  TOOL_NAMES.ShowOptions,
 ] as const;
 export type RegisteredToolName = (typeof ALL_TOOL_NAMES)[number];
 

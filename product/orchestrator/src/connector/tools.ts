@@ -57,6 +57,8 @@ import {
   IllustrateOutputSchema,
   LookupInputSchema,
   LookupOutputSchema,
+  ShowOptionsInputSchema,
+  ShowOptionsOutputSchema,
   TOOL_NAMES,
   defaultEmptySeenItems,
   mergeSeen,
@@ -177,6 +179,14 @@ const TOOL_SPECS: ReadonlyArray<ToolSpec> = [
     inputSchema: HandoffSubmitInputSchema,
     outputSchema: HandoffSubmitOutputSchema,
     exposedToModel: false,
+  },
+  // Tenth tool — find/show split (C.goofy-goldstine-12, 2026-06-11).
+  // Visitor-facing curation: full cards, grouped primary/also_interesting.
+  {
+    name: TOOL_NAMES.ShowOptions,
+    inputSchema: ShowOptionsInputSchema,
+    outputSchema: ShowOptionsOutputSchema,
+    exposedToModel: true,
   },
 ];
 

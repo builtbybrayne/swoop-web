@@ -1,0 +1,82 @@
+name: kayaking-relevance
+description: >
+  Validates the find_options → show_options browse/show split with a concrete
+  activity signal. Visitor asks about kayaking in Patagonia; agent should
+  browse with find_options (query + activity filter), curate, then call
+  show_options to render the cards the visitor sees. Also checks the tool
+  does not surface options that are obviously irrelevant to kayaking.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your character: early 30s, male, based in Edinburgh. You've sea-kayaked
+    around the Scottish islands twice with a small touring company and you're
+    looking for something bigger — a proper multi-day kayaking expedition in
+    Patagonia or somewhere equally remote. You've done some research and you
+    know the general area you're interested in is the Aysén region and the
+    channels around Tortel, though you're open to Torres del Paine if there's
+    a kayaking-specific trip there. You're travelling solo and you're happy to
+    join a small guided group. Budget is mid-range — not shoestring, not
+    luxury. You'd be going in March or April if you can get the time off work
+    (you're a freelance software developer so timing is flexible within reason).
+
+    You are practical and direct. You don't need to be sold on Patagonia —
+    you're already sold. You want to see what specific options Swoop has for
+    kayaking-focused trips, compare them briefly, and then talk to someone who
+    knows the paddling conditions in Aysén in autumn. You'll get there quickly
+    and you'll want the agent to match your pace.
+
+    Your tone: friendly but efficient. You don't wander. You share enough for
+    the agent to filter well. You warm up a little if the agent surfaces
+    something specific and genuinely well-matched; you cool if they're vague
+    or push something clearly irrelevant (hiking trips, luxury lodges).
+
+    Your tells: you name kayaking immediately; you mention Aysén or Tortel
+    in turn two or three; you're receptive to group tours; you respond well
+    to concrete options with prices; you'll ask a follow-up if the cards look
+    good.
+  goal: |
+    See two or three concrete kayaking-focused options that match your
+    profile — Aysén preferred, guided, mid-range, autumn-viable. If the
+    options look good, ask a brief follow-up about conditions, then agree
+    to be introduced to a specialist.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "the agent has shown you specific kayaking options and you've decided whether to speak to a specialist"
+      - "the agent has offered a handoff and the conversation has reached a natural close"
+
+assertions:
+  # browse step must fire
+  - kind: tool_call
+    toolName: find_options
+  # show step must fire (the visitor-facing card render)
+  - kind: tool_call
+    toolName: show_options
+  # find_options must precede show_options (browse before show)
+  - kind: tool_call_order
+    first: find_options
+    second: show_options
+  - kind: triage_verdict
+    verdict: qualified
+  - kind: judge_rubric
+    rubric: |
+      Did the agent surface kayaking-relevant options and frame them usefully?
+
+      Look for:
+      - find_options called with a query that reflects the kayaking + Aysén signal
+        (the query param should be present, not omitted)
+      - show_options called after find_options with the curated ids — not skipped
+      - Cards shown are plausibly relevant to kayaking (not hiking-only trips or
+        luxury lodges with no activity match)
+      - The agent's framing after the cards briefly names what's distinctive about
+        each option and why it matches what the visitor shared — not a verbatim
+        headline repeat
+      - No fabricated pricing or availability commitments
+      - Handoff offered at an appropriate moment (visitor warm + options discussed)
+
+      Fail if: show_options is never called (browse-only, visitor sees nothing);
+      or find_options is called with no query despite a clear activity signal;
+      or the cards shown are obviously irrelevant to kayaking.

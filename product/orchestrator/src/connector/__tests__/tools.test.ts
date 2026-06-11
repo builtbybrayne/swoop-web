@@ -45,8 +45,8 @@ function stubClient(overrides: Partial<ConnectorClient> = {}): ConnectorClient {
   };
 }
 
-describe('TOOL_SPECS — nine intent-named tools', () => {
-  it('registers exactly the nine intent-named tools (no deprecated search / get_detail)', () => {
+describe('TOOL_SPECS — ten intent-named tools (goofy-goldstine: show_options added)', () => {
+  it('registers exactly the ten intent-named tools (no deprecated search / get_detail)', () => {
     const names = TOOL_SPECS.map((s) => s.name).sort();
     expect(names).toEqual(
       [
@@ -59,11 +59,12 @@ describe('TOOL_SPECS — nine intent-named tools', () => {
         'handoff_submit',
         'illustrate',
         'lookup',
+        'show_options',
       ].sort(),
     );
   });
 
-  it('exposes eight tools to the model — handoff_submit stays internal', () => {
+  it('exposes nine tools to the model — handoff_submit stays internal', () => {
     const exposed = TOOL_SPECS.filter((s) => s.exposedToModel).map((s) => s.name);
     expect(exposed).toContain('find_inspiring');
     expect(exposed).toContain('find_someone_who');
@@ -76,8 +77,10 @@ describe('TOOL_SPECS — nine intent-named tools', () => {
     expect(exposed).toContain('find_tips');
     expect(exposed).toContain('illustrate');
     expect(exposed).toContain('handoff');
+    // goofy-goldstine: show_options is visitor-facing (exposed to model)
+    expect(exposed).toContain('show_options');
     expect(exposed).not.toContain('handoff_submit');
-    expect(exposed).toHaveLength(8);
+    expect(exposed).toHaveLength(9);
   });
 });
 
