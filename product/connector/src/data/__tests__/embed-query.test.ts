@@ -58,13 +58,15 @@ describe('buildEmbedQuery (Gemini-embedding-001 / 3072d)', () => {
     expect(vec[0]).toBe(0.1);
 
     expect(fetcher).toHaveBeenCalledTimes(1);
-    const [url, init] = fetcher.mock.calls[0]!;
+    // The bare vi.fn() mock types `calls[0]` as an empty tuple — assert the
+    // real (url, init) shape once instead of casting per-line.
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(GEMINI_QUERY_ENDPOINT);
-    expect((init as RequestInit).method).toBe('POST');
-    const headers = (init as RequestInit).headers as Record<string, string>;
+    expect(init.method).toBe('POST');
+    const headers = init.headers as Record<string, string>;
     expect(headers['x-goog-api-key']).toBe('test-key');
     expect(headers['content-type']).toBe('application/json');
-    const body = JSON.parse(String((init as RequestInit).body));
+    const body = JSON.parse(String(init.body));
     expect(body.task_type).toBe('RETRIEVAL_QUERY');
     expect(body.output_dimensionality).toBe(GEMINI_QUERY_DIM);
     expect(body.content.parts[0].text).toBe('torres del paine');

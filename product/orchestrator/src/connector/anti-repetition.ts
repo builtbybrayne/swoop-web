@@ -123,12 +123,15 @@ export function computeExcludes(
       return { excludeIds: dedupe(seenItems.trust_proof) };
     case 'lookup':
       return { excludeIds: dedupe(seenItems.inform_chunk) };
-    case 'find_tips':
+    case 'find_tips': {
+      // dedupe() is undefined-when-empty by design (lean envelopes — no empty
+      // arrays on the wire); numify the stringified seen-set only when there
+      // is something to exclude.
+      const seen = dedupe(seenItems.customer_tip ?? []);
       return {
-        excludeIds: dedupe(seenItems.customer_tip)
-          .map(Number)
-          .filter((n) => Number.isInteger(n)),
+        excludeIds: seen?.map(Number).filter((n) => Number.isInteger(n)),
       };
+    }
     case 'illustrate':
       return { excludeCanonicalUrls: dedupe(seenItems.image) };
     case 'find_options': {
