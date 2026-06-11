@@ -64,10 +64,10 @@ describe('queryHotelCardsByFilter', () => {
     expect(binds).toContain('%torres del paine%');
   });
 
-  it('accepts accommodationStyle without adding it to the SQL (hotel.description 0/44 populated — 2026-06-11 hot patch)', async () => {
-    // accommodationStyle is accepted-and-ignored: hotel.description is 0/44
-    // populated; the h.description ILIKE filter was removed to avoid
-    // guaranteeing zero results. Lights up when ETL populates the column.
+  it('accepts accommodationStyle without adding it to the SQL (no dedicated source column for hotel accommodation style)', async () => {
+    // accommodationStyle is accepted-and-ignored: there is no dedicated
+    // accommodation-style column on hotel in the source data. The field is
+    // carried on the schema for forward compatibility but not filtered in SQL.
     const queryFn = vi.fn().mockResolvedValue({ rows: [] });
     const client = { query: queryFn } as unknown as pg.PoolClient;
 
@@ -86,7 +86,8 @@ describe('queryHotelCardsByFilter', () => {
     const queryFn = vi.fn().mockResolvedValue({ rows: [] });
     const client = { query: queryFn } as unknown as pg.PoolClient;
 
-    // budget band 'mid' → ceiling 5000 (mirrors query-trips.ts BUDGET_CEILING).
+    // budget band 'mid' → ceiling 800 per-night (per-night scale; recalibrated
+    // from the trip-scale 5000 GBP at C.goofy-goldstine plan §2.3).
     await queryHotelCardsByFilter(client, {
       budgetBand: 'mid',
       limit: 4,
@@ -94,7 +95,7 @@ describe('queryHotelCardsByFilter', () => {
 
     const [sql, binds] = queryFn.mock.calls[0] as [string, unknown[]];
     expect(sql).toMatch(/HAVING|having/);
-    expect(binds).toContain(5_000);
+    expect(binds).toContain(800);
   });
 
   it('does NOT add a HAVING clause when budgetBand is luxury (POSITIVE_INFINITY ceiling)', async () => {

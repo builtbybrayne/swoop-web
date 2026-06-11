@@ -38,14 +38,29 @@ export interface QueryHotelCardsOptions {
 }
 
 /**
- * Mirrors `query-trips.ts` BUDGET_CEILING. Order-of-magnitude pricing for
- * filter narrowing only — actual pricing surfaces via `from_price`. `luxury`
- * is `+Infinity` so the filter is a no-op (every priced hotel passes).
+ * Per-night budget ceilings for hotel cards.
+ *
+ * Calibrated against the 2026-04-27 pricing matrix quartiles (probed at ETL
+ * execution — see execution log in the plan). Unlike the trip BUDGET_CEILING
+ * (which is trip-scale GBP), these are per-night figures in the hotel's own
+ * authored currency.
+ *
+ * - budget  ≤ 400 /night   (lower quartile of the priced matrix)
+ * - mid     ≤ 800 /night   (around median)
+ * - premium ≤ 1500 /night  (upper quartile)
+ * - luxury  no ceiling     (every priced hotel passes)
+ *
+ * The HAVING clause is NULL-tolerant: unpriced hotels (no hotel_pricing rows)
+ * always pass regardless of band, so they appear alongside priced results
+ * unless the agent specifically needs a priced comparison (use get_pricing
+ * for that).
+ *
+ * Decision C.goofy-goldstine-2 + plan §2.3.
  */
-const BUDGET_CEILING: Record<BudgetBand, number> = {
-  budget: 2_000,
-  mid: 5_000,
-  premium: 10_000,
+export const BUDGET_CEILING: Record<BudgetBand, number> = {
+  budget: 400,
+  mid: 800,
+  premium: 1_500,
   luxury: Number.POSITIVE_INFINITY,
 };
 
@@ -99,10 +114,12 @@ export async function queryHotelCardsByFilter(
     const ceiling = BUDGET_CEILING[opts.budgetBand];
     if (Number.isFinite(ceiling)) {
       binds.push(ceiling);
-      // Applied as HAVING because the aggregate MIN(price) isn't available
-      // in the WHERE clause.
+      // Applied as HAVING because the aggregate is not available in WHERE.
+      // Per-night derivation: price::numeric / NULLIF(nights, 0). NULL-tolerant:
+      // unpriced hotels (no hotel_pricing rows) always pass so they surface
+      // alongside priced results.
       havingClauses.push(
-        `(MIN(hp.price) IS NULL OR MIN(hp.price) <= $${binds.length})`,
+        `(MIN(hp.price::numeric / NULLIF(hp.nights, 0)) IS NULL OR MIN(hp.price::numeric / NULLIF(hp.nights, 0)) <= $${binds.length})`,
       );
     }
   }
@@ -130,7 +147,12 @@ export async function queryHotelCardsByFilter(
       h.page_id,
       COALESCE(loc.name, area.name)             AS location,
       COALESCE(area.name, country.name)         AS region,
-      MIN(hp.price) FILTER (WHERE hp.price IS NOT NULL) AS from_price,
+      -- Per-night derivation: divide by nights, cast to avoid integer division.
+      -- ROUND to nearest integer — "from $907/night" is false precision.
+      -- FILTER ensures unpriced hotels yield NULL (not 0) for from_price.
+      ROUND(MIN(hp.price::numeric / NULLIF(hp.nights, 0))
+        FILTER (WHERE hp.price IS NOT NULL AND hp.nights IS NOT NULL AND hp.nights > 0)
+      )::integer                                AS from_price,
       (SELECT hp2.currency_code FROM hotel_pricing hp2
         WHERE hp2.hotel_id = h.id AND hp2.currency_code IS NOT NULL
         GROUP BY hp2.currency_code
