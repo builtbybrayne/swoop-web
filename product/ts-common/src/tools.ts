@@ -588,14 +588,59 @@ export type FindTipsOutput = z.infer<typeof FindTipsOutputSchema>;
 // Adding a tool: add an entry here; downstream code picks it up.
 // =============================================================================
 
+// -----------------------------------------------------------------------------
+// get_pricing — raw pricing matrix, tenth tool (C.goofy-goldstine-3).
+//
+// Returns hotel and/or trip pricing data as Swoop authored it, stamped with
+// the capture date. Scoped by ids/region; full-matrix fallback allowed.
+// Interpretation (per-night arithmetic, range construction) happens in the
+// conversation, not here. Per plan §2.4.
+// -----------------------------------------------------------------------------
+
+export const GetPricingInputSchema = z.object({
+  target: z.enum(['hotel', 'trip']),
+  /** Scope by entity ids (hotel.id or trip.id). */
+  ids: z.array(z.number().int().positive()).max(20).optional(),
+  /** Scope by region (ILIKE, same semantics as find_options). */
+  region: z.string().optional(),
+}).strict();
+export type GetPricingInput = z.infer<typeof GetPricingInputSchema>;
+
+export const GetPricingOutputSchema = z.object({
+  /** ISO date the source data was captured (PRICES_CAPTURED_AT config value). */
+  capturedAt: z.string(),
+  hotels: z.array(z.object({
+    id: z.number(),
+    name: z.string(),
+    location: z.string().nullable(),
+    currencyCode: z.string().nullable(),
+    rows: z.array(z.object({
+      room: z.string(),
+      season: z.string().nullable(),
+      /** Number of nights the price covers (package price, NOT per-night). */
+      nights: z.number().int().nullable(),
+      /** Package price exactly as authored in the Swoop CMS. NOT per-night. */
+      price: z.number(),
+    })),
+  })).optional(),
+  trips: z.array(z.object({
+    id: z.number(),
+    title: z.string(),
+    fromPrice: z.number().nullable(),
+    currencyCode: z.string().nullable(),
+  })).optional(),
+}).strict();
+export type GetPricingOutput = z.infer<typeof GetPricingOutputSchema>;
+
 export const TOOL_NAMES = {
-  // Eight-tool intent-named surface (C.25)
+  // Ten-tool intent-named surface (C.25 + C.goofy-goldstine-3)
   FindInspiring: "find_inspiring",
   FindSomeoneWho: "find_someone_who",
   FindProof: "find_proof",
   Lookup: "lookup",
   FindOptions: "find_options",
   FindTips: "find_tips",
+  GetPricing: "get_pricing",
   Illustrate: "illustrate",
   Handoff: "handoff",
   HandoffSubmit: "handoff_submit",
@@ -646,6 +691,12 @@ export const TOOL_DESCRIPTIONS = {
     "with attribution. Reach for this when the visitor wants lived-experience " +
     "advice from fellow travellers rather than Swoop's own answer (use lookup " +
     "for that). See cms/prompts/tools/find_tips/description.md.",
+  get_pricing:
+    "Return the raw pricing matrix — hotel package prices per room type, " +
+    "season, and number of nights, or trip headline from-prices — exactly as " +
+    "Swoop authored them, stamped with the capture date. Reach for this when " +
+    "the visitor pushes past band-level cost talk into actual figures. " +
+    "See cms/prompts/tools/get_pricing/description.md.",
   illustrate:
     "Return curated imagery matching a conversation moment. Use keywords or " +
     "a region slug. Visual companion to any of the content tools. See " +

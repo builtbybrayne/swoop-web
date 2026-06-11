@@ -18,6 +18,13 @@ import { GEMINI_MODEL_ID } from '../gemini.js';
 
 const SOURCE_TYPE = 'inform_chunk';
 
+/**
+ * Guard against lorem ipsum placeholder text. One live lorem block confirmed
+ * on the costs page's inspire_passage rows (2026-06-11 diagnosis). Any text
+ * matching this pattern is skipped with a WARN log.
+ */
+const LOREM_IPSUM_RE = /lorem ipsum/i;
+
 const PRACTICAL_PAGETYPE_TITLES = new Set([
   'Before-you-travel',
   'Before You Travel',
@@ -25,6 +32,15 @@ const PRACTICAL_PAGETYPE_TITLES = new Set([
   'Practical',
   'Month',
   'FAQ-host',
+  // Guidebook pages contain practical travel information (costs, maps,
+  // getting-there guides, sightseeing, wildlife, conservation). The costs
+  // page (id 723, "Patagonia travel costs explained") is a Guidebook; so
+  // are 85 other pages with lookup-relevant content. Class gap fix per
+  // planning/03-exec-crosscut-goofy-goldstine-pricing-data.md §2.6.
+  'Guidebook',
+  // Parent Guidebook pages are index/hub pages — they carry intro_text that
+  // is useful for orientation ("here's what this section covers").
+  'Parent Guidebook',
 ]);
 
 interface FaqRow {
@@ -114,6 +130,10 @@ export async function composeInformChunk(
   for (const f of faqs) {
     const c = chunkFaqItem(f.title, f.content ?? '');
     if (c.text.trim().length === 0) continue;
+    if (LOREM_IPSUM_RE.test(c.text)) {
+      console.warn(`[inform-chunk] WARN: skipping lorem ipsum FAQ id=${f.id} title="${f.title}"`);
+      continue;
+    }
     await insertInformChunkRow(opts.client, {
       provenance: 'faq',
       sourceId: String(f.id),
@@ -141,30 +161,40 @@ export async function composeInformChunk(
   for (const p of pages) {
     practicalPageIds.push(p.id);
     if (p.intro_text?.trim()) {
-      await insertInformChunkRow(opts.client, {
-        provenance: 'swoop_practical',
-        sourceId: `${p.id}_intro`,
-        question: null,
-        text: stripHtml(p.intro_text),
-        canonicalUrl: p.canonical_url,
-        // Step 0 (2026-06-10): page.created_at is an ETL timestamp, not a
-        // real editorial date — date ships NULL for page-derived rows.
-        sourceTitle: p.title ?? null,
-        sourcePublishedAt: null,
-      });
-      practicalPageRows += 1;
+      const introText = stripHtml(p.intro_text);
+      if (LOREM_IPSUM_RE.test(introText)) {
+        console.warn(`[inform-chunk] WARN: skipping lorem ipsum page intro id=${p.id} title="${p.title}"`);
+      } else {
+        await insertInformChunkRow(opts.client, {
+          provenance: 'swoop_practical',
+          sourceId: `${p.id}_intro`,
+          question: null,
+          text: introText,
+          canonicalUrl: p.canonical_url,
+          // Step 0 (2026-06-10): page.created_at is an ETL timestamp, not a
+          // real editorial date — date ships NULL for page-derived rows.
+          sourceTitle: p.title ?? null,
+          sourcePublishedAt: null,
+        });
+        practicalPageRows += 1;
+      }
     }
     if (p.summary?.trim()) {
-      await insertInformChunkRow(opts.client, {
-        provenance: 'swoop_practical',
-        sourceId: `${p.id}_summary`,
-        question: null,
-        text: stripHtml(p.summary),
-        canonicalUrl: p.canonical_url,
-        sourceTitle: p.title ?? null,
-        sourcePublishedAt: null,
-      });
-      practicalPageRows += 1;
+      const summaryText = stripHtml(p.summary);
+      if (LOREM_IPSUM_RE.test(summaryText)) {
+        console.warn(`[inform-chunk] WARN: skipping lorem ipsum page summary id=${p.id} title="${p.title}"`);
+      } else {
+        await insertInformChunkRow(opts.client, {
+          provenance: 'swoop_practical',
+          sourceId: `${p.id}_summary`,
+          question: null,
+          text: summaryText,
+          canonicalUrl: p.canonical_url,
+          sourceTitle: p.title ?? null,
+          sourcePublishedAt: null,
+        });
+        practicalPageRows += 1;
+      }
     }
   }
   if (practicalPageIds.length > 0) {
@@ -183,6 +213,10 @@ export async function composeInformChunk(
     for (const cb of cbs) {
       const chunks = chunkContentblockText(cb.text!);
       for (const c of chunks) {
+        if (LOREM_IPSUM_RE.test(c.text)) {
+          console.warn(`[inform-chunk] WARN: skipping lorem ipsum contentblock id=${cb.id} page_id=${cb.page_id}`);
+          continue;
+        }
         await insertInformChunkRow(opts.client, {
           provenance: 'swoop_practical',
           sourceId: `${cb.id}_${c.index}`,

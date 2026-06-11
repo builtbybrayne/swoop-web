@@ -41,7 +41,7 @@ async function main(): Promise<void> {
   const descriptions = loadAllToolDescriptions(config.toolsPromptDirAbsolutePath);
   const embedQuery = buildEmbedQuery(config);
 
-  const app = buildApp({ pool, embedQuery, descriptions });
+  const app = buildApp({ pool, embedQuery, descriptions, capturedAt: config.PRICES_CAPTURED_AT });
 
   const server = app.listen(config.CONNECTOR_PORT, () => {
     console.log(`[connector] ready on http://localhost:${config.CONNECTOR_PORT}`);

@@ -32,6 +32,11 @@ export interface BuildAppDeps {
   /** Loaded tool descriptions (one per registered tool). */
   readonly descriptions: ToolDescriptions;
   /**
+   * ISO date when pricing data was captured (PRICES_CAPTURED_AT config value).
+   * Stamped on every get_pricing response. Defaults to '2026-04-27' when absent.
+   */
+  readonly capturedAt?: string;
+  /**
    * Optional readiness override — tests substitute a deterministic handler
    * to exercise the 200 / 503 branches without touching pg. Production
    * leaves this undefined and gets the real DB-probe handler.
@@ -77,6 +82,7 @@ export function buildApp(deps: BuildAppDeps): Express {
         pool: deps.pool,
         embedQuery: deps.embedQuery,
         descriptions: deps.descriptions,
+        capturedAt: deps.capturedAt,
       });
       await server.connect(transport);
     }

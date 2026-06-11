@@ -50,6 +50,8 @@ import {
   transformCustomerTip,
   transformFaqItem,
   transformHotel,
+  transformHotelRoomFromPricingRow,
+  transformHotelPricingRow,
   transformImage,
   transformLocation,
   transformNtag,
@@ -59,6 +61,26 @@ import {
   transformTrip,
   transformVessel,
 } from './transformations.js';
+
+// ---------------------------------------------------------------------------
+// Local helpers for the hotel pricing pass.
+// ---------------------------------------------------------------------------
+
+/** Mirror of transformations.ts isDeleted — true when value is a non-zero number. */
+function isDeletedRow(row: DumpRow): boolean {
+  const v = row.values.deleted;
+  return typeof v === 'number' && v !== 0;
+}
+
+/** Parse maximum_occupancy (varchar in source) to int, null when unparseable. */
+function parseIntOrNullLocal(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? Math.trunc(v) : null;
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (s.length === 0) return null;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : null;
+}
 
 export interface RunOptions {
   client: pg.PoolClient;
@@ -155,6 +177,10 @@ const COLS = {
   hotel: [
     'id', 'slug', 'name', 'description', 'location_id', 'area_id', 'page_id',
     'canonical_url', 'star_rating',
+  ] as const,
+  hotel_room: ['id', 'hotel_id', 'name', 'description', 'capacity'] as const,
+  hotel_pricing: [
+    'id', 'hotel_id', 'room_id', 'nights', 'season', 'price', 'currency_code',
   ] as const,
   vessel: ['id', 'slug', 'name', 'description', 'page_id', 'canonical_url'] as const,
   cabintype: ['id', 'name', 'description'] as const,
@@ -494,6 +520,115 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     }
   }
 
+  // ---- Hotel pricing chain (hotel_room → hotel_pricing) -------------------
+  // Must run AFTER hotel so keptHotelIds is fully populated.
+  // hotel_room must land BEFORE hotel_pricing (FK: hotel_pricing.room_id → hotel_room.id).
+
+  if (want('hotel_room') || want('hotel_pricing')) {
+    // Build roomtype lookup from buffered roomtype rows.
+    const roomtypeLookup = new Map<number, { title: string | null; capacity: number | null }>();
+    for (const r of buffers.roomtype) {
+      if (isDeletedRow(r)) continue;
+      const id = numOrNull(r.values.id);
+      if (id === null) continue;
+      roomtypeLookup.set(id, {
+        title: strOrNull(r.values.title),
+        capacity: parseIntOrNullLocal(r.values.maximum_occupancy),
+      });
+    }
+
+    // Build hotel_pricing parent lookup: id → { hotelId, roomtypeId, nights }
+    const hpLookup = new Map<number, { hotelId: number; roomtypeId: number; nights: number }>();
+    for (const r of buffers.hotel_pricing_src) {
+      const id = numOrNull(r.values.id);
+      const hotelId = numOrNull(r.values.hotel_id);
+      const roomtypeId = numOrNull(r.values.roomtype_id);
+      const nights = numOrNull(r.values.nights);
+      if (id === null || hotelId === null || roomtypeId === null || nights === null) continue;
+      hpLookup.set(id, { hotelId, roomtypeId, nights });
+    }
+
+    // Build hotel_seasons lookup: id → title
+    const seasonLookup = new Map<number, string>();
+    for (const r of buffers.hotel_seasons) {
+      const id = numOrNull(r.values.id);
+      const title = strOrNull(r.values.title);
+      if (id !== null && title !== null) seasonLookup.set(id, title);
+    }
+
+    // Build hotel currency lookup: hotel_id → currency_code string.
+    // Resolves hotel.currency_id via lookups.currencyById once; avoids
+    // repeated lookups per pricing row.
+    const hotelCurrencyById = new Map<number, string>();
+    for (const r of buffers.hotel) {
+      const id = numOrNull(r.values.id);
+      const currencyId = numOrNull(r.values.currency_id);
+      if (id === null || currencyId === null) continue;
+      const code = lookups.currencyById.get(currencyId);
+      if (code) hotelCurrencyById.set(id, code);
+    }
+
+    // Derive distinct hotel_room rows (dedupe by (hotel_id, roomtype_id)).
+    const seenRoomKeys = new Set<string>();
+    const hotelRoomRows: Record<string, unknown>[] = [];
+    let hotelRoomDropped = 0;
+    for (const r of buffers.hotel_pricing_src) {
+      const hotelId = numOrNull(r.values.hotel_id);
+      const roomtypeId = numOrNull(r.values.roomtype_id);
+      if (hotelId === null || roomtypeId === null) { hotelRoomDropped++; continue; }
+      const key = `${hotelId}:${roomtypeId}`;
+      if (seenRoomKeys.has(key)) continue;
+      seenRoomKeys.add(key);
+      try {
+        const out = transformHotelRoomFromPricingRow(r, roomtypeLookup, keptHotelIds);
+        if (out === null) { hotelRoomDropped++; continue; }
+        hotelRoomRows.push(out as unknown as Record<string, unknown>);
+      } catch (e) {
+        log(`[etl:sql]   WARN hotel_room id-overflow: ${String(e)}`);
+        hotelRoomDropped++;
+      }
+    }
+
+    if (want('hotel_room')) {
+      if (!opts.dryRun) {
+        await writeBatches(opts.client, 'hotel_room', COLS.hotel_room, hotelRoomRows);
+      }
+      tables.hotel_room = {
+        rowsIn: buffers.hotel_pricing_src.length,
+        rowsOut: hotelRoomRows.length,
+        skipped: hotelRoomDropped > 0 ? [{ reason: 'filter_or_dup', count: hotelRoomDropped }] : [],
+      };
+    }
+
+    // Track populated hotel_room ids for FK enforcement on hotel_pricing.
+    const keptHotelRoomIds = new Set<number>();
+    for (const r of hotelRoomRows) keptHotelRoomIds.add(r.id as number);
+
+    // Flatten hotel_pricing_prices → hotel_pricing rows.
+    const hotelPricingRows: Record<string, unknown>[] = [];
+    let hotelPricingDropped = 0;
+    for (const r of buffers.hotel_pricing_prices) {
+      const out = transformHotelPricingRow(
+        r, hpLookup, seasonLookup, keptHotelIds, hotelCurrencyById,
+      );
+      if (out === null) { hotelPricingDropped++; continue; }
+      // FK guard: only emit if the room landed.
+      if (!keptHotelRoomIds.has(out.room_id)) { hotelPricingDropped++; continue; }
+      hotelPricingRows.push(out as unknown as Record<string, unknown>);
+    }
+
+    if (want('hotel_pricing')) {
+      if (!opts.dryRun) {
+        await writeBatches(opts.client, 'hotel_pricing', COLS.hotel_pricing, hotelPricingRows);
+      }
+      tables.hotel_pricing = {
+        rowsIn: buffers.hotel_pricing_prices.length,
+        rowsOut: hotelPricingRows.length,
+        skipped: hotelPricingDropped > 0 ? [{ reason: 'filter_or_fk', count: hotelPricingDropped }] : [],
+      };
+    }
+  }
+
   if (want('vessel')) {
     tables.vessel = await flushBuffer(
       opts,
@@ -605,6 +740,11 @@ interface Buffers {
   customerreview: DumpRow[];
   customerreview_trip: DumpRow[];
   customertip: DumpRow[];
+  // Hotel pricing chain (source tables → puma_dev hotel_room + hotel_pricing)
+  hotel_pricing_src: DumpRow[];       // source `hotel_pricing` (hotel_id, roomtype_id, nights)
+  hotel_pricing_prices: DumpRow[];    // source `hotel_pricing_prices` (hotel_pricing_id, hotel_season_id, price)
+  hotel_seasons: DumpRow[];           // source `hotel_seasons` (id, hotel_id, title)
+  roomtype: DumpRow[];                // source `roomtype` (id, title, maximum_occupancy, deleted)
 }
 
 function makeEmptyBuffers(): Buffers {
@@ -614,6 +754,7 @@ function makeEmptyBuffers(): Buffers {
     trip: [], tours: [], tour_items: [], hotel: [], vessel: [],
     cabintype: [], cabin: [], customerreview: [], customerreview_trip: [],
     customertip: [],
+    hotel_pricing_src: [], hotel_pricing_prices: [], hotel_seasons: [], roomtype: [],
   };
 }
 
@@ -651,6 +792,13 @@ function routeRow(
   // `contentblock_customertip` (the junction), a different table name, so
   // there's no collision, but the explicit ordering keeps intent obvious.
   else if (t === 'customertip') buffers.customertip.push(row);
+
+  // Hotel pricing chain — three source tables feed the hotel_room +
+  // hotel_pricing ETL pass (plan §2.2, C.goofy-goldstine-1/2).
+  else if (t === 'hotel_pricing') buffers.hotel_pricing_src.push(row);
+  else if (t === 'hotel_pricing_prices') buffers.hotel_pricing_prices.push(row);
+  else if (t === 'hotel_seasons') buffers.hotel_seasons.push(row);
+  else if (t === 'roomtype') buffers.roomtype.push(row);
 
   // Subtype-junction tables — derive contentblock.subtype.
   else if (t in CONTENTBLOCK_SUBTYPE_TABLES) {

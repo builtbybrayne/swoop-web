@@ -359,7 +359,10 @@ export function transformTrip(
 
   const currencyId = numOrNull(row.values.currency_id);
   const currency_code = currencyId !== null ? lookups.currencyById.get(currencyId) ?? null : null;
-  const basePrice = parseDecimalOrNull(row.values.base_price);
+  const rawBasePrice = parseDecimalOrNull(row.values.base_price);
+  // Zero-price hygiene (C.goofy-goldstine plan §2.2): 0 is a data bug, not a
+  // real price. Map 0 → null so budget-band filtering is not skewed.
+  const basePrice = rawBasePrice !== null && rawBasePrice !== 0 ? rawBasePrice : null;
 
   const canonical_url = pageId !== null ? pageCanonicalById.get(pageId) ?? null : null;
   const tagIds = lookups.ntagsByEntity.get('trip')?.get(id) ?? [];
@@ -492,6 +495,57 @@ export function transformTourItem(row: DumpRow): Record<string, unknown> | null 
 // Hotel + hotel_room (mapped from hotel) + hotel_pricing
 // ---------------------------------------------------------------------------
 
+/**
+ * Strip inline `style="…"` attributes from HTML strings. The Swoop CMS uses
+ * a WYSIWYG editor that emits Tailwind-style `style` attributes on span/div
+ * elements (e.g. `<span style="font-size:1rem;color:#333">`). These are pure
+ * decorative chrome — they add noise to any prose we surface to the agent.
+ */
+function stripInlineStyles(html: string): string {
+  return html.replace(/\s+style="[^"]*"/gi, '');
+}
+
+/**
+ * Compose the `description` field for a hotel from the three CMS prose fields.
+ * Empty/null sections are omitted. Each section is passed through
+ * `trimCmsDecorativeWhitespace` + `stripInlineStyles`.
+ *
+ * Returns null when all three fields are empty/null.
+ */
+function composeHotelDescription(
+  whyWeLike: string | null,
+  whatWeDontLike: string | null,
+  roomsAndPricing: string | null,
+): string | null {
+  const sections: string[] = [];
+  const clean = (raw: string | null): string | null => {
+    if (!raw) return null;
+    const s = stripInlineStyles(trimCmsDecorativeWhitespace(raw) ?? '');
+    return s.trim().length > 0 ? s : null;
+  };
+  const why = clean(whyWeLike);
+  const what = clean(whatWeDontLike);
+  const rooms = clean(roomsAndPricing);
+  if (why) sections.push(`**Why we like it**\n${why}`);
+  if (what) sections.push(`**What we don't like**\n${what}`);
+  if (rooms) sections.push(`**Rooms & pricing**\n${rooms}`);
+  return sections.length > 0 ? sections.join('\n\n') : null;
+}
+
+// Import trimCmsDecorativeWhitespace — it lives in the connector's data layer
+// but we need it here in the ETL layer. To avoid a cross-workspace import, we
+// inline a compatible implementation (same logic as the connector's version).
+function trimCmsDecorativeWhitespace(html: string | null | undefined): string | undefined {
+  if (!html) return undefined;
+  // Strip trailing <br> tags, &nbsp;, empty <p></p> blocks, and collapse whitespace.
+  let s = html
+    .replace(/(<br\s*\/?>|&nbsp;| )+(\s*(<br\s*\/?>|&nbsp;| )*)*/gi, ' ')
+    .replace(/<p>\s*<\/p>/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s.length > 0 ? s : undefined;
+}
+
 export function transformHotel(
   row: DumpRow,
   lookups: Lookups,
@@ -502,16 +556,142 @@ export function transformHotel(
   const name = strOrNull(row.values.title);
   if (id === null || name === null) return null;
   const pageId = numOrNull(row.values.page_id);
+
+  // Prose carry (C.goofy-goldstine-5): assemble labelled markdown from the
+  // three prose fields. Raw-data principle: keep Swoop's candid wording
+  // including what_we_dont_like.
+  const description = composeHotelDescription(
+    strOrNull(row.values.why_we_like),
+    strOrNull(row.values.what_we_dont_like),
+    strOrNull(row.values.rooms_and_pricing_description),
+  );
+
   return {
     id,
     slug: strOrNull(row.values.alias),
     name,
-    description: null,
+    description,
     location_id: numOrNull(row.values.location_id),
     area_id: null,
     page_id: pageId,
     canonical_url: pageId !== null ? pageCanonicalById.get(pageId) ?? null : null,
     star_rating: null,
+  };
+}
+
+/**
+ * Synthetic hotel_room row from a hotel_pricing source row.
+ *
+ * The puma_dev schema uses `hotel_id * 1000 + roomtype_id` as the synthetic
+ * primary key. This is deterministic and idempotent: the same (hotel, roomtype)
+ * pair always produces the same id. Assumes hotel_id < 100 and roomtype_id <
+ * 1000 — we assert both bounds (caller is responsible for the assert).
+ *
+ * Per plan §2.2 (C.goofy-goldstine-1 + C.goofy-goldstine-2).
+ */
+export function syntheticHotelRoomId(hotelId: number, roomtypeId: number): number {
+  return hotelId * 1000 + roomtypeId;
+}
+
+export interface HotelRoomRow {
+  id: number;
+  hotel_id: number;
+  name: string | null;
+  description: null;
+  capacity: number | null;
+}
+
+/**
+ * Derive distinct hotel_room rows from hotel_pricing source rows.
+ *
+ * Source `hotel_pricing` carries (hotel_id, roomtype_id, nights) — one row per
+ * pricing bundle. We dedupe by (hotel_id, roomtype_id) to get the room
+ * catalogue. Roomtype metadata (title, capacity) comes from the roomtype lookup.
+ *
+ * Returns null for any row whose hotel or roomtype was deleted or has invalid ids.
+ */
+export function transformHotelRoomFromPricingRow(
+  hpRow: DumpRow,
+  roomtypeLookup: Map<number, { title: string | null; capacity: number | null }>,
+  keptHotelIds: ReadonlySet<number>,
+): HotelRoomRow | null {
+  const hotelId = numOrNull(hpRow.values.hotel_id);
+  const roomtypeId = numOrNull(hpRow.values.roomtype_id);
+  if (hotelId === null || roomtypeId === null) return null;
+  if (!keptHotelIds.has(hotelId)) return null;
+
+  // Bounds assert for the synthetic id formula.
+  if (hotelId >= 100 || roomtypeId >= 1000) {
+    throw new Error(
+      `[transformHotelRoom] id overflow: hotel_id=${hotelId} roomtype_id=${roomtypeId}. ` +
+        'The synthetic id formula (hotel_id * 1000 + roomtype_id) assumes hotel_id < 100 and roomtype_id < 1000.',
+    );
+  }
+
+  const rt = roomtypeLookup.get(roomtypeId);
+  const id = syntheticHotelRoomId(hotelId, roomtypeId);
+
+  return {
+    id,
+    hotel_id: hotelId,
+    name: rt?.title ?? null,
+    description: null,
+    capacity: rt?.capacity ?? null,
+  };
+}
+
+export interface HotelPricingRow {
+  id: number;
+  hotel_id: number;
+  room_id: number;
+  nights: number;
+  season: string | null;
+  price: number;
+  currency_code: string | null;
+}
+
+/**
+ * Flatten a hotel_pricing_prices row into a puma_dev hotel_pricing row.
+ *
+ * Source chain: hotel_pricing_prices → hotel_pricing (nights) → hotel (currency).
+ * Season title comes from hotel_seasons lookup.
+ *
+ * `hotelCurrencyById`: map from hotel_id → currency_code string (pre-resolved
+ * from hotel.currency_id → lookups.currencyById at caller side, once).
+ *
+ * Returns null when a required parent (hotel_pricing, hotel) is missing or
+ * when the parent hotel was dropped.
+ */
+export function transformHotelPricingRow(
+  hppRow: DumpRow,
+  hpLookup: Map<number, { hotelId: number; roomtypeId: number; nights: number }>,
+  seasonLookup: Map<number, string>,
+  keptHotelIds: ReadonlySet<number>,
+  hotelCurrencyById: Map<number, string>,
+): HotelPricingRow | null {
+  const id = numOrNull(hppRow.values.id);
+  const hpId = numOrNull(hppRow.values.hotel_pricing_id);
+  const rawPrice = numOrNull(hppRow.values.price);
+  if (id === null || hpId === null || rawPrice === null) return null;
+
+  const hp = hpLookup.get(hpId);
+  if (!hp) return null;
+  if (!keptHotelIds.has(hp.hotelId)) return null;
+
+  const roomId = syntheticHotelRoomId(hp.hotelId, hp.roomtypeId);
+  const seasonId = numOrNull(hppRow.values.hotel_season_id);
+  const season = seasonId !== null ? (seasonLookup.get(seasonId) ?? null) : null;
+
+  const currency_code = hotelCurrencyById.get(hp.hotelId) ?? null;
+
+  return {
+    id,
+    hotel_id: hp.hotelId,
+    room_id: roomId,
+    nights: hp.nights,
+    season,
+    price: rawPrice,
+    currency_code,
   };
 }
 
