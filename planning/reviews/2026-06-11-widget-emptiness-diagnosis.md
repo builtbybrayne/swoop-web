@@ -107,7 +107,9 @@ Found during the O3 safety check: **all 953 `customer_story.persona_summary` val
 
 **Consequence**: `find_someone_who`'s persona_embedding vectors embed stub text — the Mirror tool's persona matching is semantically hollow (it returns stories, but ranked on "Traveller from UK" similarity).
 
-**Fix shape (gated, not executed)**: run `enrich --mode=all --sync` so the persona-summary classifier (Haiku, ~876 named reviewer buckets) feeds compose in-run; new persona summaries then re-embed (cache miss by design). Est. £1–3 Haiku + pennies Gemini, minutes wall-clock in sync mode. Structural follow-up worth considering: persist classifier outputs durably (the same lesson as the embedding cache) so compose-only runs stop being lossy.
+**Fix shape**: run `enrich --mode=all --sync` so the persona-summary classifier (Haiku) feeds compose in-run; new persona summaries then re-embed (cache miss by design). Structural follow-up worth considering: persist classifier outputs durably (the same lesson as the embedding cache) so compose-only runs stop being lossy.
+
+**✅ EXECUTED 2026-06-11 late evening (Alastair: "f6 go")**: `GEMINI_CONCURRENCY=2 GEMINI_BATCH_SIZE=50 enrich --mode=all --sync` — 9.7 min, **£1.4566 total** (Haiku persona-summary: 953 buckets, 953 succeeded / 0 errored, 1.28M in + 110K out tokens, £1.45; Gemini re-embed of all 953 persona_embeddings, £0.007; every other pass cache-hit/no-op). Post-manifest: 953 stories — **0 stubs, 0 nulls, 953 rich personas**, 953 embedded; all other derived tables byte-stable. Sample: *"A traveller who values knowledgeable, patient guides and appreciates quieter, less-crowded trekking experiences"*. Minor note for a future pass: the classifier emitted 948 distinct outputs for 953 buckets — five sanitised `persona:{name}` keys collided (same reviewer name), so those bucket-pairs share a summary; cosmetic, not blocking. Pre-F6 state is recoverable from `data/backups/puma_dev_pre-O3_2026-06-11.dump` (customer_story content was byte-identical between O3 and F6).
 
 ## 7. Still-open wider decisions (deferred from this diagnosis; inputs in the audit §7)
 
