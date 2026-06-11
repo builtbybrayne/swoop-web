@@ -84,3 +84,41 @@ Extend the existing parts tests (`product/ui/src/parts/__tests__/`):
 ## 6. Estimate
 
 ~0.5 day including tests and live smoke.
+
+---
+
+## 2026-06-11 — Execution log
+
+**Status: BUILT.** Commit `18471e5` (feat(ui): activity status line beside the thinking dots) on `claude/goofy-goldstine-2ed1c1`, effective base `dcce2bb` (the commit that added this plan). Decisions logged: [D.goofy-goldstine-10 + D.goofy-goldstine-11](decisions.md) (top of the log, back-linked here).
+
+### What landed
+
+| File | Change |
+|---|---|
+| `product/cms/ui/tool-status.en.json` | **New.** Per-tool present-progressive copy + `_default`, `$schema-notes` documenting the contract. Plan's starter copy verbatim, plus a `handoff_submit` key (it's a live tool in `cms/prompts/tools/`; same copy as `handoff`). DRAFT — Alastair's editorial pass post-merge. |
+| `product/ui/src/parts/text-thinking-indicator.tsx` | Evolved into the activity indicator (file/export kept; App.tsx untouched). Three exported layers: `getToolStatusCopy()` (loader mirroring `getToolErrorCopy()` in errors/error-banner.tsx), `deriveActivitySnapshot()` (pure state → primitive-encoded snapshot, latest pending tool wins), `ActivityIndicatorView` (props-driven presentational + arbitration layer). `TextThinkingIndicator` is a parse-and-forward shim over `useMessage`. No-pending-tool suppression dropped per §2.2. `data-swoop-part="activity-status"` on the text span; sr-only "Thinking…" renders only when no status text (one announcement, never two). |
+| `product/ui/src/parts/fyi-channel.ts` | Event union extended with `tool-status` + protocol docs. |
+| `product/ui/src/parts/fyi-renderer.tsx` | Fades on `tool-status` (one added condition + header doc). |
+| `product/ui/src/parts/__tests__/activity-indicator.test.tsx` | **New.** 19 tests: copy schema (3), pure derivation (7), view behaviour (6), fyi reconciliation (3). |
+| `product/ui/src/parts/__tests__/fyi-renderer.test.tsx` | +1 test: fades on `tool-status`. |
+
+### Single-slot ownership (the §2.2 executing-agent call)
+
+**Split ownership, event-arbitrated — the indicator owns the tool-derived line; FyiRenderer keeps owning the fyi line.** Single-owner (routing fyi text through the indicator) was rejected because FyiRenderer is mounted per `data-fyi` part by assistant-ui's registry — making it a payload forwarder would have meant restructuring the channel to carry payloads and rewriting D.10's tests for no behavioural gain, against the collision note's keep-the-diff-tight instruction. The behavioural guarantee (never two lines) holds via three rules, each tested:
+
+1. New in-flight tool (toolCallId change) → indicator emits `tool-status` → any visible fyi fades. Effect ordering is load-bearing and documented in the component: the subscription cleanup runs before the emit effect, so the indicator never hears its own signal.
+2. `fyi-appeared` → indicator suppresses its tool text, keyed to the toolCallId current at fyi-arrival; only a *different* tool call lifts it.
+3. Text arrival → fyi fades via the existing `text-arrived` signal; the indicator hides wholesale via its state derivation (no event needed).
+
+Chosen-and-documented semantics (the §2.3 "pick one" points): tool completes with no text yet → **line drops, dots stay** (state-derived: the line names what IS in flight); after an fyi auto-fades, suppressed tool text does **not** resurrect until the next tool signal (ephemeral signals don't come back; mid-call resurrection is flicker without information).
+
+### Verification
+
+- `@swoop/ui`: **209 tests passed** (was 189 before this work; +19 new file, +1 fyi suite). `npm run typecheck` green across all workspaces; touched files ESLint-clean.
+- **Operator-pending — live smoke (§5.2)**: needs the local stack + API keys; not run from the execution session to avoid colliding with services already running on this machine. Repro: `npm run dev` in `product/`, open the chat, ask something tool-heavy ("show me some Patagonia trip options with pictures"); expect dots + "Browsing trip ideas…" in the chat column during the call, the line swapping when a second tool fires (e.g. → "Finding a picture worth showing you…"), and everything vanishing on the first text token. Screenshot for this log when run.
+- **Fresh-install `npm install && npm test --workspaces`**: deferred to merge time per the dispatch instructions.
+
+### Deviations
+
+- **Worktree relocation (environmental)**: the session's original isolation worktree (`agent-a4f24117477fddac8`, base `cea31ab`) was pruned by a harness restart mid-task; work continued in this plan's home worktree `goofy-goldstine-2ed1c1` from `dcce2bb` (clean tree, plans + beautification merge present; verified the five target files had not drifted from what was read pre-restart). The orphaned directory `.claude/worktrees/agent-a4f24117477fddac8/` (only a duplicate of the cms JSON inside) could not be auto-removed (permission classifier) — safe for the operator to delete.
+- `handoff_submit` copy key added beyond the plan's starter list (rationale above). No other scope additions; `parts/index.ts` deliberately untouched (nothing new needs registering — the indicator was already mounted).
