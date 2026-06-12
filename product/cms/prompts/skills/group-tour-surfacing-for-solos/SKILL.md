@@ -57,7 +57,7 @@ The opposite risk: not surfacing group at all. Treating every solo as a tailor-m
 
 Once the visitor has engaged with group as an option, the skill's main work is done. The conversation flows back into the archetype read and the state model.
 
-- **Engaged positively** — *"oh, I hadn't thought of that"*, follow-up questions, asking about specific departures: move into CONVINCE/HAND OFF, surface group cards via `find_options`, orient toward the specialist.
+- **Engaged positively** — *"oh, I hadn't thought of that"*, follow-up questions, asking about specific departures: move into CONVINCE/HAND OFF, browse with `find_options` and put the group-tour cards on screen with `show_options`, orient toward the specialist.
 - **Engaged negatively** — *"no, definitely not a group person"*: drop cleanly, pivot to tailor-made framing.
 - **Engaged ambivalently** — *"hmm, maybe"*: don't push; let it sit; come back to it only if a natural moment arises (e.g. they raise a logistics concern that group would solve).
 

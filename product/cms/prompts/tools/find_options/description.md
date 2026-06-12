@@ -8,7 +8,7 @@ When the conversation has earned the move from "tell me about Patagonia" to "wha
 
 1. **Browse** with `find_options` using a `query` distilled from the conversation. Judge the returned list mentally.
 2. If the results don't fit — wrong vibe, wrong length, not enough variety — call again with accumulated `exclude` to see different options.
-3. When you have enough to be informative (rarely more than 3–4 browse calls), **call `show_options`** with your curated picks. That's what the visitor sees.
+3. When you have enough to be informative (rarely more than 3–4 browse calls), **call `show_options`** with your curated picks — in the **same turn**. That's what the visitor sees.
 
 Think of `find_options` as flipping through a rack privately; `show_options` is pulling items out and handing them to the customer.
 
@@ -47,6 +47,6 @@ Pass `exclude: [{type, id}, ...]` to omit items you've already judged or shown. 
 
 Iterate with accumulated excludes when results don't fit. Stop when you have enough — rarely more than 3–4 browse calls.
 
-## After browsing — call `show_options`
+## After browsing — call `show_options` (the default, not an option)
 
-Once you've judged the browse output, call `show_options` with the ids you want the visitor to see. That tool renders the full cards. Don't skip the show step — browsing without showing means the visitor sees nothing.
+Once you've judged the browse output, call `show_options` with the ids you want the visitor to see — in the same turn. That tool renders the full cards. **A browse that finds genuine fits and ends in prose is a failure mode**: the visitor sees nothing, and prose descriptions of cards they can't see read as the agent talking about its homework. The only good reasons to browse without showing: nothing genuinely fit (say so honestly), or the visitor has signalled they want conversation, not cards.

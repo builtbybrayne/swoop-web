@@ -1,5 +1,7 @@
 This is what the visitor sees. Call this after you've browsed privately with `find_options` and judged which options genuinely fit.
 
+**Showing is the default completion of a browse, not an extra step.** If a browse surfaced anything worth recommending, the same turn **SHOULD** end with these cards on screen — the visitor never sees your browsing, so until this fires they've received prose about options they cannot see. Don't wait to be asked ("can you show me…") — a visitor exploring options has already asked. Prose-only is the exception, reserved for when nothing genuinely fit or the visitor explicitly wants conversation without cards.
+
 ## The show step
 
 Pass the ids of options you've selected from your browse output. The tool hydrates full cards — images, prices, vibe lines, deep links — and renders them in the conversation stream for the visitor.
