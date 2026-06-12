@@ -2,6 +2,23 @@
 
 **Snapshot date**: 2026-06-10, evening (Luke Loom feedback round 2: triaged AND executed same-day — 8 Tier-3 plans merged to `main`, fresh-install verification green. ⚠ The per-chunk sections of this file lag reality from 2026-05-14 onwards; read [planning/reviews/2026-05-27-ingest-and-state-of-play.md](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the 27 May build snapshot, then git log for the late-May/early-June waves: find_tips ninth tool, AntiRepetition, visual sidebar, Puma memory-bug fix.)
 
+## 2026-06-12 (later) — Luke's test set as a harness family; harness measurement fixes; first judged baseline
+
+Luke's 12 themed test conversations (exact first messages he types when testing) captured verbatim in [planning/meetings/luke-test-scenarios-120626.md](planning/meetings/luke-test-scenarios-120626.md) and authored as the agent-as-user harness family **`luke-01`…`luke-12`** (`e136396`) — run with `npm run -w @swoop/harness eval -- --filter luke- --judge sonnet` (export ANTHROPIC_API_KEY from orchestrator/.env first; stack on :8080).
+
+**Two harness measurement bugs found and fixed en route** (`ca79b19`): (1) the Sonnet judge received ONLY the final utterance — it hallucinated tool-behaviour verdicts ("show_options never called" while the deterministic assertion counted 2 calls); `RunContext` now carries the per-turn transcript, `buildJudgeTranscript` renders turns + an authoritative `[tool]` call log into the judge prompt. (2) `triage_verdict` could never pass under the CLI's `NullEventCapture`; `deriveFinalTriage` now falls back to the last handoff tool call's args — the handoff input IS the verdict. +14 harness tests across the day (200 → 214).
+
+**First judged baseline: 5/12 pass** ([runs/luke-baseline-judged-2026-06-12](product/harness/runs/luke-baseline-judged-2026-06-12/results.md)). Deterministic layer a clean sweep across the family (get_pricing on both price asks; browse→show order on both options asks; **book-today handoff on turn 1**). Failure taxonomy: **2 rubric defects, fixed** (luke-02 punished the *correct* transparent package÷nights arithmetic; luke-09 demanded an "I have no departure data" proclamation the product deliberately avoids — both rubrics re-worded); **5 genuine calibration items for Alastair's editorial pass**:
+1. **luke-01** — handoff pushed at turn 6 then AGAIN at turn 7 after explicit deflection (the re-push is the §9 sin).
+2. **luke-05** — answered "how can you help" but dropped the route-advice half of the dual question.
+3. **luke-07** — the §5 tension exhibit: Patagonia Camp figures real/labelled/correctly derived, but flight + city-hotel + transfer lines are general-knowledge estimates riding under "constructed from the data I have"; strong not-a-quote caveat present. Strict §5 says no figure without source; the visitor genuinely needs trip-level bands. Policy call, not a simple defect — read the transcript before ruling.
+4. **luke-11** — agent retrieved Tierra pricing via get_pricing then handed off WITHOUT sharing the figures (fire-first discipline crowding out bring-what-you-have; the post-tool continuation is the place for them).
+5. **luke-12** — handoff fired turn 1 ✓ but preceded by an unasked-for inspiration paragraph (match-the-visitor's-pace miss).
+
+**Show-step reliability closed** (`1bd4569` defaults + `5bde685` scoped MUST): agent-212 expedition scenario went 1-of-3 show-step fires under the SHOULD era → **first-ever full pass + 2-of-2 show-step under the scoped MUST** ("once the visitor names a concrete want, a browse MUST end in cards — nearest fits when nothing is exact; early-stage dreamers keep conversation-not-cards"). agent-212's `triage_verdict` assertion removed as over-strict (its own stopWhen allows a legitimate pre-handoff close).
+
+**Open**: Alastair's editorial ruling on the five calibration items (then a content pass with the luke family as the acceptance gate); luke-02/09 re-verdicts ride the next family run; family re-run after any content pass (~£3-4, ~20 min).
+
 ## 2026-06-12 — Wave merged to main + operator smokes run (goofy-goldstine session, continued)
 
 `claude/goofy-goldstine-2ed1c1` fast-forwarded to `main` (`d255fce`); main-repo planning strays cleaned. Smokes:

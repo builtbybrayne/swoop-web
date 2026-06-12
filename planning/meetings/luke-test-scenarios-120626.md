@@ -13,6 +13,8 @@ cd product && export $(grep '^ANTHROPIC_API_KEY=' orchestrator/.env | head -1) \
 
 **Provenance rule**: if Luke revises his set, update BOTH this capture and the YAML family; this doc is the source of truth for his exact wording.
 
+**Baseline runs**: first judged baseline 2026-06-12 — **5/12 pass** ([results](../../product/harness/runs/luke-baseline-judged-2026-06-12/results.md)); deterministic tool assertions a clean sweep; failure taxonomy + the five open calibration items in [progress.md](../../progress.md) "2026-06-12 (later)". Two rubric defects found in that run are fixed in the YAMLs (luke-02 arithmetic, luke-09 over-disclosure) — their verdicts re-settle on the next family run.
+
 ---
 
 | # | Theme | First message (verbatim) |

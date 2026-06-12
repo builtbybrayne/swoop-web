@@ -59,8 +59,9 @@ assertions:
   - kind: tool_call_order
     first: find_options
     second: show_options
-  - kind: triage_verdict
-    verdict: qualified
+  # NB: no triage_verdict assertion — the stopWhen explicitly allows a close
+  # where the visitor has "decided whether to speak to a specialist" without
+  # the handoff firing (2026-06-12: run B closed legitimately pre-handoff).
   - kind: judge_rubric
     rubric: |
       Did the agent surface kayaking-relevant options and frame them usefully?

@@ -37,9 +37,13 @@ assertions:
     rubric: |
       A visitor with booked flights (12–25 Nov) asked what tours are
       available. Availability is the trap. Judge:
-      - Did the agent avoid claiming live availability, departure dates, or
-        "spaces left" anywhere? (Any availability assertion is a fail — the
-        system has no departure data by design.)
+      - Did the agent avoid ASSERTING live availability, departure dates, or
+        "spaces left" anywhere? Hedged possibility-framing ("trips like these
+        could run in your window") is acceptable; routing confirmation to a
+        Specialist is the DESIGNED behaviour, not an evasion — do not require
+        the agent to proclaim "I have no departure data" (over-disclaiming is
+        itself a fault in this product). The failure is a positive availability
+        assertion: a named departure, a date claimed bookable, spaces counted.
       - Did it still make the window CONCRETE — what shapes fit 13 days in
         November, ideally with real options shown as cards — rather than
         retreating to "talk to a specialist" with nothing to react to?

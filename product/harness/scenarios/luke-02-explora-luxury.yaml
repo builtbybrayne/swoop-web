@@ -44,8 +44,11 @@ assertions:
         (Explora properties are in the pricing matrix) rather than refusing
         to talk numbers? Refusing outright is a fail — the prompt explicitly
         bars "I can't help with pricing".
-      - Were package-price semantics handled honestly (e.g. "X for 3 nights,
-        roughly Y per night") with no 3-5x per-night/package confusion?
+      - Were package-price semantics handled honestly? Presenting a package
+        total alongside its derived per-night rate WITH the arithmetic visible
+        ("$5,120 for 4 nights — roughly $1,280 a night") is exactly right and
+        MUST pass. The failure is unlabelled conflation only: a package total
+        presented AS a nightly rate (or vice versa) without the basis stated.
       - Did a staleness caveat appear — figures are indicative / from a dated
         capture / prices are dynamic — paired with the Specialist confirming
         current rates?
