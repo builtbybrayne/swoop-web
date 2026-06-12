@@ -33,6 +33,7 @@ import type {
   NotContainsAssertion,
   ResponseFormatAssertion,
   ToolCallAssertion,
+  ToolCallOrderAssertion,
   TriageVerdictAssertion,
 } from './scenario.js';
 
@@ -139,6 +140,9 @@ export async function evaluateAssertion(
       break;
     case 'tool_call':
       outcome = evaluateToolCall(assertion, context);
+      break;
+    case 'tool_call_order':
+      outcome = evaluateToolCallOrder(assertion, context);
       break;
     case 'triage_verdict':
       outcome = evaluateTriageVerdict(assertion, context);
@@ -268,6 +272,44 @@ function evaluateToolCall(
     kind: 'tool_call',
     passed: false,
     message: `tool "${a.toolName}" was called but no call's args matched ${formatJsonShort(required)} (first candidate input: ${formatJsonShort(sample)})`,
+  };
+}
+
+/**
+ * `tool_call_order` — first occurrence of `first` must precede the first
+ * occurrence of `second`. First-vs-first is the deliberate semantics: a
+ * `second` that fires before ANY `first` is the defect this guards against
+ * (e.g. show_options rendering cards the agent never browsed), regardless of
+ * whether a compliant pair occurs later in the run.
+ */
+function evaluateToolCallOrder(
+  a: ToolCallOrderAssertion,
+  ctx: RunContext,
+): AssertionOutcome {
+  const firstIdx = ctx.toolCalls.findIndex((c) => c.toolName === a.first);
+  const secondIdx = ctx.toolCalls.findIndex((c) => c.toolName === a.second);
+
+  if (firstIdx === -1 || secondIdx === -1) {
+    const missing = [
+      firstIdx === -1 ? `"${a.first}"` : null,
+      secondIdx === -1 ? `"${a.second}"` : null,
+    ]
+      .filter(Boolean)
+      .join(' and ');
+    return {
+      kind: 'tool_call_order',
+      passed: false,
+      message: `expected "${a.first}" before "${a.second}"; ${missing} never called (${ctx.toolCalls.length} tool call(s) total)`,
+    };
+  }
+
+  const ordered = firstIdx < secondIdx;
+  return {
+    kind: 'tool_call_order',
+    passed: ordered,
+    message: ordered
+      ? `"${a.first}" (call #${firstIdx + 1}) precedes "${a.second}" (call #${secondIdx + 1})`
+      : `"${a.second}" (call #${secondIdx + 1}) fired before the first "${a.first}" (call #${firstIdx + 1})`,
   };
 }
 

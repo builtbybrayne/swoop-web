@@ -200,10 +200,26 @@ const JudgeRubricAssertionSchema = z
   })
   .strict();
 
+/**
+ * `tool_call_order` — the first occurrence of tool `first` must precede the
+ * first occurrence of tool `second`; both must occur. Catches the
+ * show-before-browse class of defect introduced by surfaces with a two-step
+ * contract (goofy-goldstine find/show split: `find_options` browses
+ * agent-privately, `show_options` renders — show must never lead).
+ */
+const ToolCallOrderAssertionSchema = z
+  .object({
+    kind: z.literal('tool_call_order'),
+    first: z.string().min(1),
+    second: z.string().min(1),
+  })
+  .strict();
+
 const AssertionUnionSchema = z.discriminatedUnion('kind', [
   ContainsAssertionSchema,
   NotContainsAssertionSchema,
   ToolCallAssertionSchema,
+  ToolCallOrderAssertionSchema,
   TriageVerdictAssertionSchema,
   HandoffEventAssertionSchema,
   DisclosureEventAssertionSchema,
@@ -368,6 +384,7 @@ export function isAgentScenario(s: Scenario): s is AgentScenario {
 export type ContainsAssertion = z.infer<typeof ContainsAssertionSchema>;
 export type NotContainsAssertion = z.infer<typeof NotContainsAssertionSchema>;
 export type ToolCallAssertion = z.infer<typeof ToolCallAssertionSchema>;
+export type ToolCallOrderAssertion = z.infer<typeof ToolCallOrderAssertionSchema>;
 export type TriageVerdictAssertion = z.infer<typeof TriageVerdictAssertionSchema>;
 export type HandoffEventAssertion = z.infer<typeof HandoffEventAssertionSchema>;
 export type DisclosureEventAssertion = z.infer<typeof DisclosureEventAssertionSchema>;

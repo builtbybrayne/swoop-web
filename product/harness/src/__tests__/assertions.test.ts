@@ -258,6 +258,80 @@ describe('tool_call', () => {
 });
 
 // ---------------------------------------------------------------------------
+// tool_call_order.
+// ---------------------------------------------------------------------------
+
+/** Arbitrary-name CapturedToolCall for order tests. */
+function namedCall(toolName: string, turnIndex: number): CapturedToolCall {
+  return { turnIndex, toolName, input: {} };
+}
+
+describe('tool_call_order', () => {
+  const order = { kind: 'tool_call_order', first: 'find_options', second: 'show_options' } as const;
+
+  it('passes when first precedes second', async () => {
+    const out = await evaluateAssertion(
+      order,
+      ctx({ toolCalls: [namedCall('find_options', 1), namedCall('show_options', 1)] }),
+      stubJudge,
+    );
+    expect(out.passed).toBe(true);
+    expect(out.message).toMatch(/precedes/);
+  });
+
+  it('fails when second fires before any first (even if a later pair complies)', async () => {
+    const out = await evaluateAssertion(
+      order,
+      ctx({
+        toolCalls: [
+          namedCall('show_options', 1),
+          namedCall('find_options', 2),
+          namedCall('show_options', 2),
+        ],
+      }),
+      stubJudge,
+    );
+    expect(out.passed).toBe(false);
+    expect(out.message).toMatch(/fired before/);
+  });
+
+  it('fails when first never fires', async () => {
+    const out = await evaluateAssertion(
+      order,
+      ctx({ toolCalls: [namedCall('show_options', 1)] }),
+      stubJudge,
+    );
+    expect(out.passed).toBe(false);
+    expect(out.message).toMatch(/"find_options" never called/);
+  });
+
+  it('fails when second never fires', async () => {
+    const out = await evaluateAssertion(
+      order,
+      ctx({ toolCalls: [namedCall('find_options', 1)] }),
+      stubJudge,
+    );
+    expect(out.passed).toBe(false);
+    expect(out.message).toMatch(/"show_options" never called/);
+  });
+
+  it('ignores unrelated tools between the pair', async () => {
+    const out = await evaluateAssertion(
+      order,
+      ctx({
+        toolCalls: [
+          namedCall('find_options', 1),
+          namedCall('illustrate', 1),
+          namedCall('show_options', 2),
+        ],
+      }),
+      stubJudge,
+    );
+    expect(out.passed).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // triage_verdict.
 // ---------------------------------------------------------------------------
 
