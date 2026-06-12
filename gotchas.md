@@ -6,6 +6,16 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## Claude Preview's managed servers inherit an injected `PORT` — the orchestrator grabs 5173 and silently vanishes off :8080
+
+**Symptom**: stack booted via the preview tool (launch.json `swoop-stack` → `npm run dev`) looks healthy in logs — connector fine, orchestrator prints "ready on http://localhost:**5173**" — but nothing listens on :8080, the UI's `/api` proxy returns empty-body 500s, and consent never grants (no `POST /session` ever fires).
+
+**Cause**: the preview harness sets `PORT=<launch.json port>` in the spawned process env. `concurrently` fans that env to all three services; the orchestrator's config (`PORT` zod-coerced, default 8080) happily reads it and tries to bind 5173 — Vite's port.
+
+**Fix**: wrap the launch command so children never see it — `"runtimeExecutable": "env", "runtimeArgs": ["-u", "PORT", "npm", "--prefix", "<abs>/product", "run", "dev"]`, plus `"autoPort": false`. The preview attaches to 5173 as before; each service binds its own configured port.
+
+**Related shell trap from the same session**: in non-interactive Bash (background tasks), the user-profile `rm`→`trash` alias resolves but `trash` isn't on PATH → exit 127 `command not found: trash`. Use `/bin/rm` (or `command rm`) in scripted/background commands.
+
 ## Second orchestrator instance can't share a running connector — boot your own connector per stack
 
 **Symptom**: booting a second orchestrator (e.g. from a worktree, alongside the main dev stack) against the already-running connector on `:3002` dies at startup with `Error: StreamableHTTPClientTransport already started! If using Client class, note that connect() calls start() automatically.` — thrown from `withRetry` in [product/orchestrator/src/connector/retry.ts](product/orchestrator/src/connector/retry.ts) wrapping `Object.connect` in [product/orchestrator/src/connector/client.ts](product/orchestrator/src/connector/client.ts).
