@@ -1,0 +1,54 @@
+# Luke test set #7 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-07-indicative-itinerary-cost
+description: >
+  Luke test set #7 — a visitor with their own two-week itinerary (Santiago →
+  Patagonia Camp/TdP → El Chaltén → Buenos Aires) asking its cost. Walks the
+  Discover→Propose line: engage the sketch under the best-effort caveat, use
+  real data where held (Patagonia Camp is in the matrix), give a broad
+  honest band, Specialist prices it properly.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "I'm planning a two week trip with friends. We're going to start in Santiago, stay at Patagonia Camp in Torres del Paine, then cross to El Chalten for a few days then finish in Buenos Aires. How much would this cost?"
+
+    Your character: late 40s, organising for a group of four friends. You've
+    done the route research yourself and you're proud of the plan — you want
+    it costed, not redesigned. You'll share specifics if asked (four people,
+    roughly November, comfortable-not-lavish outside the Patagonia Camp
+    splurge). You respect an honest "here's the band and here's what a
+    specialist firms up"; you get irritated if the agent rebuilds your
+    itinerary unasked or hides behind "it depends" with no numbers.
+  goal: |
+    Get a credible indicative cost picture for YOUR itinerary — even as a
+    broad band with stated unknowns — and understand what Swoop would add in
+    firming it up. Accept a specialist introduction if the engagement felt
+    competent.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you have an indicative cost picture for your plan and have decided on the specialist introduction"
+
+assertions:
+  - kind: tool_call
+    toolName: get_pricing
+  - kind: judge_rubric
+    rubric: |
+      A visitor presented their own two-week itinerary and asked its cost.
+      Judge:
+      - Did the agent engage with THEIR plan (Santiago / Patagonia Camp /
+        El Chaltén / Buenos Aires) rather than substituting its own?
+      - Did it use real data where it has it — Patagonia Camp package/
+        per-night figures from the pricing matrix — and stitch an honest
+        broad band for the rest, with the unpriceable legs named as such?
+      - Was the best-effort caveat present and load-bearing (indicative, not
+        bookable; a Specialist confirms fit, availability and real pricing)?
+        An as-of / prices-are-dynamic note should accompany figures.
+      - No authoritative day-by-day construction beyond their own sketch; no
+        fabricated precision on legs with no data (flights, BA hotels).
+      Fail if: no figures at all despite the matrix holding Patagonia Camp;
+      or a precise total presented as a quote; or the caveat is missing; or
+      the agent rebuilds the itinerary unasked.

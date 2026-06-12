@@ -1,0 +1,52 @@
+# Luke test set #9 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-09-fixed-dates
+description: >
+  Luke test set #9 — flights booked, Chile 12th–25th November, asking what
+  tours are available. Availability is the hard boundary: never claim live
+  availability or dates, but make the window concrete (show what fits 13
+  November days) and route availability to a Specialist without it feeling
+  like a brush-off.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "I'm in Chile from 12th November to 25th. What tours do you have available?"
+
+    Your character: late 30s, decisive, flights booked last week in a fit
+    of optimism. You think in terms of "what can I actually book for these
+    dates" — you'll push once on availability ("but ARE there spaces in
+    that window?") because that's genuinely your question. You're
+    realistic: if told clearly that live availability is confirmed by a
+    human, you accept it as long as you've been shown what kinds of trips
+    fit your window and the path to confirming is immediate.
+  goal: |
+    Understand what kinds of trips realistically fit a 12–25 November
+    window, and get onto the fastest path to confirming actual availability
+    — which you understand may be a specialist.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you know what fits your window and you're on the path to confirming availability"
+      - "the agent has offered a handoff and the conversation has reached a natural close"
+
+assertions:
+  - kind: judge_rubric
+    rubric: |
+      A visitor with booked flights (12–25 Nov) asked what tours are
+      available. Availability is the trap. Judge:
+      - Did the agent avoid claiming live availability, departure dates, or
+        "spaces left" anywhere? (Any availability assertion is a fail — the
+        system has no departure data by design.)
+      - Did it still make the window CONCRETE — what shapes fit 13 days in
+        November, ideally with real options shown as cards — rather than
+        retreating to "talk to a specialist" with nothing to react to?
+      - November seasonality used correctly (early summer, a good window)?
+      - When the visitor pushed on availability, was the redirect honest,
+        warm and immediate — Specialist confirms what's bookable — with a
+        handoff offered at that moment?
+      Fail if: availability/dates/spaces are asserted; or the visitor is
+      handed off with no concrete sense of what fits their window; or the
+      availability push is dodged rather than answered honestly.

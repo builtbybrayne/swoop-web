@@ -1,0 +1,56 @@
+# Luke test set #2 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-02-explora-luxury
+description: >
+  Luke test set #2 — luxury traveller who knows they want to stay at an
+  Explora. Asks days + cost directly. The agent should advise on duration,
+  use the pricing matrix honestly (package vs per-night, as-of date, prices
+  are dynamic, Specialist confirms), and treat this as a high-value
+  tailor-made prospect.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "My wife and I are interested in staying at the Explora. How many days should we stay and how much will it cost?"
+
+    Your character: late 50s, affluent, you and your wife stay at properties
+    like Aman and Explora when you travel. You've heard of Explora's Torres
+    del Paine lodge from friends. You are direct about money — you expect a
+    straight answer about cost, not evasion. You'd likely travel in the
+    southern summer. You react well to confident, specific guidance (nights,
+    rhythm of a stay, what's included) and to honest caveats delivered
+    briskly. You react badly to waffle and to being told "I can't discuss
+    pricing". If the numbers sound right, you're happy to be introduced to
+    a specialist to take it forward.
+  goal: |
+    Get a credible sense of how long to stay at Explora and what it costs
+    per night or for a stay, then — if the answers feel competent — accept
+    an introduction to a specialist.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you have a duration recommendation and indicative cost and have decided whether to take the specialist introduction"
+
+assertions:
+  - kind: tool_call
+    toolName: get_pricing
+  - kind: judge_rubric
+    rubric: |
+      A luxury visitor asked directly how long to stay at Explora and what it
+      costs. Judge:
+      - Did the agent give real, specific pricing guidance from its data
+        (Explora properties are in the pricing matrix) rather than refusing
+        to talk numbers? Refusing outright is a fail — the prompt explicitly
+        bars "I can't help with pricing".
+      - Were package-price semantics handled honestly (e.g. "X for 3 nights,
+        roughly Y per night") with no 3-5x per-night/package confusion?
+      - Did a staleness caveat appear — figures are indicative / from a dated
+        capture / prices are dynamic — paired with the Specialist confirming
+        current rates?
+      - Did it actually advise on duration (a nights recommendation with
+        reasoning), not just price?
+      Fail if: pricing is refused outright; or a package price is presented
+      as a nightly rate (or vice versa); or no staleness/Specialist caveat
+      accompanies the figures.

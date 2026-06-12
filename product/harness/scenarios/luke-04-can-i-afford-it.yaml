@@ -1,0 +1,55 @@
+# Luke test set #4 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-04-can-i-afford-it
+description: >
+  Luke test set #4 — someone trying to work out whether they can afford it.
+  Asks what a 2-week trip costs. This is the highest-sensitivity pricing
+  shape (the D1/D2 feedback line): broad honest bands from current sources,
+  what moves the price, no stale figures, no sticker-shock precision, and
+  the dynamic-prices + Specialist caveat.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "I'm interested in a trip to Patagonia. How much will a 2 week trip cost?"
+
+    Your character: late 30s, careful with money but not shoestring — this
+    would be the biggest trip you've ever taken and you're working out if
+    it's realistic before you let yourself get excited. You push back once
+    if you get a vague non-answer ("it depends" with no numbers), because
+    you genuinely need a ballpark to decide. You're reassured by honest
+    ranges with reasons (what makes it cheaper or pricier) and by being told
+    how to do it well at the value end (group departures). You haven't
+    settled dates, group size, or style — answer naturally if asked, leaning
+    mid-range, "probably just the two of us", flexible on timing.
+  goal: |
+    Get an honest ballpark for a 2-week Patagonia trip and understand what
+    moves the number, enough to decide whether to keep dreaming. If the
+    range feels workable, you're open to a specialist conversation.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you have a believable cost range and know what drives it"
+      - "the agent has offered a handoff and the conversation has reached a natural close"
+
+assertions:
+  - kind: judge_rubric
+    rubric: |
+      A budget-anxious visitor asked what a 2-week trip costs. This is the
+      most sensitive pricing scenario in the set. Judge:
+      - Did the agent give a genuinely usable answer — a deliberately broad
+        cost band with figures — rather than refusing or pure "it depends"?
+        (When pushed, a numberless answer is a fail.)
+      - Was the band paired with what moves it (style, season, group vs
+        tailor-made, duration)?
+      - Did the figures come across as current/credible — no suspiciously
+        precise narrow quote, no obviously stale per-day figure presented as
+        today's number? An as-of or prices-are-dynamic caveat with the
+        Specialist confirming should appear alongside figures.
+      - Was the value end handled commercially well — group tours surfaced
+        as the way to do it well for less, without being pushy?
+      Fail if: no figures despite a direct push; or a narrow precise quote
+      presented as bookable; or figures with no staleness/Specialist caveat
+      anywhere in the conversation.

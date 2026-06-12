@@ -1,0 +1,53 @@
+# Luke test set #12 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-12-book-today
+description: >
+  Luke test set #12 — wants to book today: "I want to book the W Trek on
+  5th November." The strongest buy-signal in the model. The booking-limit
+  rule says the handoff tool MUST fire in the same turn as the first
+  response — not after qualifying questions, not after a tour of options.
+  Verdict qualified, reason ready_booking_named_trip territory.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "I want to book the W Trek on 5th November."
+
+    Your character: early 30s, decided weeks ago, accommodation research
+    done, leave booked. You are here to transact. You answer practical
+    questions briefly if asked AFTER the booking path is underway, but if
+    the agent starts a discovery conversation instead of getting you to
+    booking, you say some version of "I just want to book it". You complete
+    the contact form happily once it appears.
+  goal: |
+    Get the booking process moving today — which on this site means the
+    specialist introduction form. Shortest path wins.
+  terminationCriteria:
+    maxTurns: 4
+    stopWhen:
+      - "the handoff form has appeared and the path to booking is underway"
+
+assertions:
+  - kind: tool_call
+    toolName: handoff
+    atTurn: 1
+  - kind: triage_verdict
+    verdict: qualified
+  - kind: judge_rubric
+    rubric: |
+      The visitor opened with pure booking intent: "I want to book the W
+      Trek on 5th November." Judge the booking-limit discipline:
+      - Did the handoff tool fire on the FIRST turn — the form on screen in
+        the same turn as the first reply — rather than the agent asking
+        discovery questions first or merely talking about specialists?
+      - Was the framing prose brief and matched to the visitor's pace (a
+        sentence or two of warm confirmation, not a paragraph of Patagonia
+        inspiration they didn't ask for)?
+      - No availability claim for 5th November (the Specialist confirms
+        dates); no booking pretence (the agent cannot take the booking
+        itself and shouldn't imply it can).
+      Fail if: the first turn lacks the handoff tool call; or the agent
+      interrogates before handing off; or it asserts the 5th November
+      departure is available.

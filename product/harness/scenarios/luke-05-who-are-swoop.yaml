@@ -1,0 +1,54 @@
+# Luke test set #5 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-05-who-are-swoop
+description: >
+  Luke test set #5 — someone who knows what they're looking for (Torres del
+  Paine + Australis cruise + Atacama) and is trying to understand who the
+  hell Swoop are and how they can help. The agent should advise credibly on
+  the route AND make Swoop's value proposition land: lived expertise,
+  impartial operator relationships, same cost as direct, the Specialists.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "We're looking to visit Torres del Paine and do the Australis cruise before heading up to the Atacama desert. What would you advise? How can you help?"
+
+    Your character: early 60s, well-travelled couple, you've already
+    sketched this route yourselves from blogs and a guidebook. You've never
+    heard of Swoop before landing on this site — part of your question is
+    genuinely "who are you and why would I book through you instead of
+    direct?" You probe on that if it isn't addressed: ask directly what
+    Swoop adds and whether it costs more to book through them. You respect
+    candour and specific knowledge; you're allergic to marketing fluff.
+  goal: |
+    Understand (a) whether your TdP → Australis → Atacama shape is sensible
+    and what you'd refine, and (b) what Swoop actually is and what value
+    they add. If both land credibly, accept a specialist introduction.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you understand what Swoop adds and have a view on your route, and the conversation reaches a natural close"
+
+assertions:
+  - kind: judge_rubric
+    rubric: |
+      A self-directed couple with a formed route asked "what would you
+      advise? how can you help?" — the second question is load-bearing.
+      Judge:
+      - Did the agent actually answer "who are Swoop / how can you help" with
+        the substance of the value proposition — on-the-ground expertise,
+        direct/impartial operator relationships, costs the same as booking
+        direct, the human Specialists who shape and support the trip? (Vague
+        "we're a travel company" is a fail.)
+      - Was the route advice genuinely useful — sequencing, time allocation,
+        seasonal sense for TdP + Australis + Atacama — engaging with THEIR
+        plan rather than substituting a different one?
+      - Was the Australis handled within bounds — engaging generally with the
+        cruise without fabricating ship specifics, steering ship-level detail
+        to the Specialists?
+      - No fabricated pricing or availability for the cruise.
+      Fail if: the "how can you help" question is never substantively
+      answered; or the agent invents cruise details/prices; or the route
+      advice ignores what the couple already planned.

@@ -1,0 +1,53 @@
+# Luke test set #6 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-06-pumas-and-whales
+description: >
+  Luke test set #6 — someone whose primary motivation is wildlife, pumas or
+  whales, with a photography bent. The agent should know its wildlife
+  geography (pumas around Torres del Paine; whales at Península Valdés /
+  the fjords), handle the both-in-one-trip question honestly, and bring the
+  visual channel to life.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "Where's the best place for us to photograph Pumas and Whales?"
+
+    Your character: a serious amateur wildlife photographer (long lenses,
+    patience, you've done Yellowstone wolves and Botswana). Travelling with
+    your partner. Pumas are the dream shot; whales are the partner's. You
+    think in seasons, light, and sighting probability — you'll ask when the
+    odds are best and whether both are realistic in one trip. You warm to
+    specific, field-real answers (named areas, named seasons, what a puma
+    tracking day actually looks like) and to seeing imagery; you cool at
+    generic "Patagonia has amazing wildlife" filler.
+  goal: |
+    Learn where and when puma and whale photography is genuinely best,
+    whether one trip can do both, and what a specialist would add for a
+    photography-led itinerary.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you know the where/when for both animals and whether one trip covers them"
+      - "the agent has offered a handoff and the conversation has reached a natural close"
+
+assertions:
+  - kind: judge_rubric
+    rubric: |
+      A wildlife photographer asked where to photograph pumas and whales.
+      Judge:
+      - Geographic truthfulness: pumas should anchor to the Torres del Paine
+        area; whales to the Atlantic side (Península Valdés) and/or the
+        Chilean fjords — with honest treatment of the distances/seasons
+        involved in combining them. Wrong or invented geography is a fail.
+      - Seasonal honesty: did when-to-go guidance appear with the where?
+      - Photography-awareness: did the agent engage with the photographic
+        framing (sighting odds, tracking days, guides) rather than generic
+        tourism copy?
+      - Did the visual channel come to life — imagery and/or concrete trip
+        options shown, not a wall of prose?
+      Fail if: geography is wrong or fabricated; or the both-in-one-trip
+      question is dodged when asked; or the entire conversation stays
+      prose-only with the visual channel unused.

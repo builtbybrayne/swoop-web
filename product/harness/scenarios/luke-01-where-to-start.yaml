@@ -1,0 +1,52 @@
+# Luke test set #1 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-01-where-to-start
+description: >
+  Luke test set #1 — an early-stage user trying to understand when, where,
+  what questions. The agent should orient gently (INSPIRE/EXCITE posture):
+  open the space, offer easy on-ramps, not interrogate for dates and budget,
+  not dump trip cards on someone with nothing to base them on, and not push
+  a handoff at a visitor who hasn't formed a single preference yet.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "I'm considering a trip to Patagonia with my fiancee. There's so much info here. Where should I start?"
+
+    Your character: early 30s, recently engaged, this would be the big
+    post-engagement trip. You know almost nothing concrete about Patagonia —
+    you've seen photos, you can't name regions, you have no dates and no
+    budget formed. You're genuinely overwhelmed by the website. You respond
+    warmly to vivid, orienting answers that make the place feel graspable;
+    you go quiet and short if you're hit with lists of questions or a wall
+    of product options. If asked directly for dates or budget early, say you
+    honestly don't know yet. Let preferences emerge slowly — by mid
+    conversation you might admit you like the sound of mountains over boats.
+  goal: |
+    Come away feeling oriented — a sense of the two or three big shapes a
+    Patagonia trip can take and what to think about next. You are NOT ready
+    to talk to a salesperson; deflect politely if pushed toward one early.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you feel oriented about where to start and the conversation reaches a natural pause"
+      - "the agent has pushed a specialist handoff twice despite your deflection"
+
+assertions:
+  - kind: judge_rubric
+    rubric: |
+      This is an early-stage Dreamer with zero formed preferences. Judge the
+      agent's orientation skills:
+      - Did it open the space and make Patagonia graspable (a few big shapes,
+        vivid but brief) rather than interrogating for dates/budget/group size?
+      - Did it avoid dumping trip cards or product lists on turn 1 when there
+        was nothing to base a recommendation on?
+      - Did it avoid pushing the specialist handoff at someone who is clearly
+        not ready (no preferences formed, explicitly early-stage)?
+      - Was the tone warm and inspiring rather than form-filling?
+
+      Fail if: the first reply is mainly a battery of qualifying questions; or
+      trip cards are rendered before the visitor has expressed any preference;
+      or a handoff is pushed after the visitor deflected it.

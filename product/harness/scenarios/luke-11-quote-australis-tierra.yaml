@@ -1,0 +1,54 @@
+# Luke test set #11 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-11-quote-australis-tierra
+description: >
+  Luke test set #11 — a date-bound quote ask: Australis on 5th January then
+  Tierra Patagonia. Booking-limit boundary in pricing form: saying
+  date-specific pricing is a Specialist matter MUST fire the handoff that
+  same turn — but the agent should first bring the data it has (Tierra is
+  in the pricing matrix; the cruise is not).
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "I want to book the Australis cruise on 5th January then stay at Tierra Patagonia. How much would that cost?"
+
+    Your character: late 40s, decisive, you've done the research elsewhere
+    and now you want numbers for a specific plan on a specific date. You are
+    transactional and a little impatient — you want a quote, or the fastest
+    path to one. Indicative figures are acceptable if clearly labelled and
+    the path to a firm quote is immediate. You'll take the specialist
+    introduction readily once it's offered — that IS the quote path.
+  goal: |
+    Get whatever real indicative figures exist for the plan, and get onto
+    the fastest path to a firm quote for 5th January — the specialist.
+  terminationCriteria:
+    maxTurns: 6
+    stopWhen:
+      - "you have indicative figures and the specialist introduction is underway"
+
+assertions:
+  - kind: tool_call
+    toolName: handoff
+  - kind: triage_verdict
+    verdict: qualified
+  - kind: judge_rubric
+    rubric: |
+      A transactional visitor asked the cost of Australis on 5th January +
+      a Tierra Patagonia stay. Judge:
+      - Did the agent bring the data it HAS — Tierra Patagonia indicative
+        package/per-night figures from the pricing matrix, clearly labelled
+        as indicative with the as-of/dynamic caveat — rather than refusing
+        all numbers?
+      - Was it honest about what it doesn't have — no cruise pricing, no
+        date-specific rates or availability — without fabricating either?
+      - The booking-limit rule: the moment the agent says real/date-specific
+        pricing is a Specialist matter, the handoff must actually fire (the
+        form appears) in that same turn — not just be talked about.
+      - Tone: quote-path urgency respected; the Specialist framed as the
+        fastest way to a firm number for the 5th, not as a queue.
+      Fail if: the agent fabricates a cruise price or date-specific rate; or
+      refuses all figures despite holding Tierra data; or talks about a
+      specialist without the handoff firing.

@@ -1,0 +1,58 @@
+# Luke test set #10 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-10-three-days-in-patagonia
+description: >
+  Luke test set #10 — Chile + Argentina in two weeks (January 2027), about
+  three days for Patagonia, asking where to stay. Region-base/hotel
+  territory: engage the constraint (one base, not a tour), recommend where
+  to anchor, show options, name the trade-off gently without lecturing.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "We're planning to do Chile and Argentina in January 2027. Where should we stay in Patagonia?"
+
+    Your character: a couple in your early 50s doing the big South America
+    sampler — Santiago, wine country, Buenos Aires, Iguazú, and "Patagonia"
+    has roughly three days in the middle. You know it's quick; you'd rather
+    do one place well than rush. You want a straight answer: which area,
+    which kind of place to stay. You'll give the three-days detail when
+    asked about timing. You respond well to decisive recommendations with
+    reasons; you push back if told to redesign your whole trip.
+  goal: |
+    Come away with a clear recommendation for where to base yourselves for
+    a short Patagonia stay (area + accommodation shape, ideally specific
+    options shown) that respects the three-day constraint.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you have a clear base recommendation with options shown and the conversation reaches a natural close"
+
+assertions:
+  - kind: tool_call
+    toolName: find_options
+  - kind: tool_call
+    toolName: show_options
+  - kind: tool_call_order
+    first: find_options
+    second: show_options
+  - kind: judge_rubric
+    rubric: |
+      A two-week Chile+Argentina couple asked where to stay for ~3 days in
+      Patagonia. Judge:
+      - Did the agent engage with the SHORT-STAY constraint once known —
+        one well-chosen base, honest about transfer time eating a 3-day
+        window — rather than proposing a multi-stop Patagonia leg?
+      - Was a decisive base recommendation made (area + why), with concrete
+        accommodation/base options shown as cards rather than left abstract?
+      - January 2027 seasonality handled correctly (peak summer: the best
+        weather window, and the busiest — book-early pressure is fair to
+        mention; availability claims are not)?
+      - Was the trade-off named gently (what three days buys, what it
+        doesn't) WITHOUT lecturing them to restructure their trip — unless
+        they invite it?
+      Fail if: no concrete base/hotel options are ever shown; or the agent
+      ignores the three-day reality and proposes an impossible itinerary;
+      or it claims availability.

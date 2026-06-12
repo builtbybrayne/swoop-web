@@ -1,0 +1,60 @@
+# Luke test set #8 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-08-how-do-i-choose
+description: >
+  Luke test set #8 — looked at lots of TdP trips, confused about choosing.
+  Overwhelmed-researcher shape: reduce the choice to its real axes (guided
+  vs independent, W vs O vs day-hikes, camping vs refugio vs lodge), show a
+  small curated set, and use the complexity itself as the reason a Planning
+  Specialist helps.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "I want to go to Torres del Paine and have seen lots of different trips. How do I choose?"
+
+    Your character: late 20s, you've spent three evenings on the site with
+    a dozen tabs open. You can recite trip names but can't tell which is
+    right for you. Decision-fatigued, slightly sheepish about it. When the
+    agent asks what matters to you, you can produce honest answers (fit but
+    not hardcore; you like the idea of the W; sleeping in a bed beats a
+    tent; 8-10 days; you'd consider a group). You respond brilliantly to
+    someone collapsing the choice into two or three meaningful forks; you
+    glaze over at another list of trips.
+  goal: |
+    Get from "twelve tabs" to "I understand the two or three real choices
+    and which side of each I'm on", see a small curated set that matches,
+    and take the specialist introduction if it feels like the natural next
+    step.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "the choice finally feels simple and you've seen a small matched set"
+      - "the agent has offered a handoff and the conversation has reached a natural close"
+
+assertions:
+  - kind: tool_call
+    toolName: find_options
+  - kind: tool_call
+    toolName: show_options
+  - kind: tool_call_order
+    first: find_options
+    second: show_options
+  - kind: judge_rubric
+    rubric: |
+      An overwhelmed researcher asked how to choose between many TdP trips.
+      Judge:
+      - Did the agent REDUCE the choice space — naming the two or three real
+        axes (e.g. guided vs independent, W vs O vs day-hike base, camping
+        vs refugio vs lodge) — rather than producing yet another list?
+      - Did it elicit what matters to this visitor and then show a SMALL
+        curated set (2-4 cards) mapped to their answers, with framing that
+        says why each fits?
+      - Was the paradox of choice used as a warm reason a Planning
+        Specialist helps ("untangling exactly this is what they do"), not as
+        a brush-off?
+      Fail if: the agent answers the overwhelm with another undifferentiated
+      list; or shows no cards at all; or hands off immediately without first
+      doing any reducing work.

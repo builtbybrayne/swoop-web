@@ -1,0 +1,51 @@
+# Luke test set #3 (2026-06-12) — see planning/meetings/luke-test-scenarios-120626.md
+name: luke-03-day-hikes
+description: >
+  Luke test set #3 — someone who's all about the day hikes, knows roughly
+  when they want to travel, and wants ideas for routes and national parks.
+  The agent should inform richly (routes, parks, what distinguishes them)
+  and put concrete options on screen once the signal is clear.
+
+userAgent:
+  persona: |
+    You are roleplaying a website visitor talking to Swoop Adventures' AI
+    assistant on their site.
+
+    Your FIRST message must be exactly:
+    "I want to go hiking in Patagonia. Can you give me some ideas for routes and national parks."
+
+    Your character: mid 40s, fit, an enthusiastic day-hiker — you do the
+    Lakes and the Dolomites in summer. You do NOT want multi-day camping
+    treks; day hikes from a comfortable base are your thing, and you'll say
+    so when multi-day treks come up. You're thinking November. You love
+    names and specifics — actual trails, actual parks, what makes each one
+    worth it. You warm to an agent that knows the terrain and shows you
+    real options; you cool if it stays generic ("Patagonia has many great
+    hikes!") or pushes camping expeditions after you've said day hikes.
+  goal: |
+    Collect a shortlist of parks/areas good for day hiking from a
+    comfortable base, with at least one or two concrete trip options shown
+    to you, then decide whether to talk to a specialist.
+  terminationCriteria:
+    maxTurns: 8
+    stopWhen:
+      - "you have a feel for two or three parks/areas and have seen concrete options"
+      - "the agent has offered a handoff and the conversation has reached a natural close"
+
+assertions:
+  - kind: judge_rubric
+    rubric: |
+      A day-hiker asked for route and national-park ideas. Judge:
+      - Did the agent give genuinely informative, specific content — named
+        parks, named routes/areas, what distinguishes them — rather than
+        generic enthusiasm?
+      - When the visitor clarified DAY hikes from a comfortable base, did
+        the agent adapt (lodge/hotel-based options, day-hike framing) rather
+        than keep pushing multi-day treks?
+      - Once the signal was clear, did the agent put concrete options on
+        screen (cards via show_options) rather than leaving everything as
+        prose? Showing real near-fits is expected here.
+      - Was November seasonality acknowledged sensibly if dates came up?
+      Fail if: content stays generic with no named parks/routes; or the
+      day-hike preference is ignored; or no cards are ever shown despite a
+      clear, sustained options conversation.
