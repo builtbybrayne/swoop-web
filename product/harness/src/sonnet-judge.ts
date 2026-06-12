@@ -56,16 +56,46 @@ export interface SonnetJudgeOptions {
 
 /**
  * Build the system prompt explaining the judge's task. Exported for tests.
+ *
+ * `hasTranscript` switches the framing: with a transcript the judge
+ * evaluates the whole run (conversation + tool-call log); without it, only
+ * the final response (the pre-2026-06-12 behaviour, kept for callers that
+ * supply no transcript).
  */
-export function buildSonnetJudgeSystemPrompt(rubric: string): string {
+export function buildSonnetJudgeSystemPrompt(
+  rubric: string,
+  hasTranscript = false,
+): string {
+  const given = hasTranscript
+    ? [
+        'You will be given:',
+        '  1. A rubric describing what the conversation should achieve, avoid, or demonstrate.',
+        '  2. The full conversation transcript: each visitor message, the tool calls the',
+        '     assistant made that turn (lines starting "[tool]"), and the assistant reply.',
+        '  3. The final assistant response, repeated for convenience.',
+        '',
+        'Your job: decide whether the RUN satisfies the rubric.',
+        '',
+        'The "[tool]" lines are the authoritative record of tool usage. When the rubric',
+        'asks whether a tool was called (or in what order, or with what arguments),',
+        'answer from those lines ONLY — never infer tool behaviour from the prose, and',
+        'never claim a tool was not called when a "[tool]" line shows it was.',
+      ]
+    : [
+        'You will be given:',
+        '  1. A rubric describing what the response should achieve, avoid, or demonstrate.',
+        '  2. The final assistant response to evaluate.',
+        '',
+        'Your job: decide whether the response satisfies the rubric.',
+        '',
+        'You are NOT shown the rest of the conversation or any tool-call log. If the',
+        'rubric asks about things you cannot see (tool calls, earlier turns), judge only',
+        'what is visible and do not assert facts about what you were not shown.',
+      ];
   return [
-    'You are a rubric judge evaluating a single response from an AI assistant.',
+    'You are a rubric judge evaluating an AI assistant.',
     '',
-    'You will be given:',
-    '  1. A rubric describing what the response should achieve, avoid, or demonstrate.',
-    '  2. The final assistant response to evaluate.',
-    '',
-    'Your job: decide whether the response satisfies the rubric.',
+    ...given,
     '',
     '--- Rubric ---',
     rubric.trim(),
@@ -96,8 +126,12 @@ export class SonnetJudge implements Judge {
   ): Promise<JudgeVerdict> {
     const perScenarioModel = extractModelOverride(context);
     const model = perScenarioModel ?? this.model;
-    const system = buildSonnetJudgeSystemPrompt(rubric);
-    const userPayload = `--- Response to evaluate ---\n${response}`;
+    const transcript = extractTranscript(context);
+    const system = buildSonnetJudgeSystemPrompt(rubric, transcript !== undefined);
+    const userPayload =
+      transcript !== undefined
+        ? `--- Conversation transcript (with tool-call log) ---\n${transcript}\n\n--- Final assistant response ---\n${response}`
+        : `--- Response to evaluate ---\n${response}`;
 
     const res = await this.client.messages.create({
       model,
@@ -181,5 +215,18 @@ function extractModelOverride(context: unknown): string | undefined {
   const obj = context as { model?: unknown };
   return typeof obj.model === 'string' && obj.model.length > 0
     ? obj.model
+    : undefined;
+}
+
+/**
+ * The `judge_rubric` handler passes `{transcript}` — the judge-readable run
+ * projection from `buildJudgeTranscript` (assertions.ts). Optional for
+ * backward compatibility; absent means final-utterance-only judging.
+ */
+function extractTranscript(context: unknown): string | undefined {
+  if (typeof context !== 'object' || context === null) return undefined;
+  const obj = context as { transcript?: unknown };
+  return typeof obj.transcript === 'string' && obj.transcript.length > 0
+    ? obj.transcript
     : undefined;
 }

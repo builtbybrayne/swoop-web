@@ -34,6 +34,7 @@ const NULL_CONTEXT: RunContext = {
   toolCalls: [],
   events: [],
   finalTriage: null,
+  transcript: [],
 };
 
 const PASSING_JUDGE: Judge = {

@@ -427,7 +427,7 @@ interface FinaliseArgs {
 
 async function finaliseResult(args: FinaliseArgs): Promise<ScenarioResult> {
   const events = args.eventCapture.eventsForSession(args.sessionId);
-  const finalTriage = deriveFinalTriage(events);
+  const finalTriage = deriveFinalTriage(events, args.allToolCalls);
 
   const context: RunContext = {
     sessionId: args.sessionId,
@@ -436,6 +436,13 @@ async function finaliseResult(args: FinaliseArgs): Promise<ScenarioResult> {
     toolCalls: args.allToolCalls,
     events,
     finalTriage,
+    // turnResults is uniform across both loop shapes (scripted + agent-as-
+    // user): {user, utterText} per turn, 1-based to match toolCall turnIndex.
+    transcript: args.turnResults.map((t, i) => ({
+      turnIndex: i + 1,
+      user: t.user,
+      agent: t.utterText,
+    })),
   };
 
   const assertions = await evaluateAll(
@@ -532,7 +539,10 @@ function erroredResult(
  * `triage_verdict` handler) treat null as "no final triage available" and
  * fail the assertion with a clear message.
  */
-function deriveFinalTriage(events: readonly import('@swoop/common').Event[]): FinalTriage | null {
+export function deriveFinalTriage(
+  events: readonly import('@swoop/common').Event[],
+  toolCalls: readonly CapturedToolCall[] = [],
+): FinalTriage | null {
   let latest: FinalTriage | null = null;
   for (const e of events) {
     if (e.eventType === 'triage.decided') {
@@ -542,5 +552,35 @@ function deriveFinalTriage(events: readonly import('@swoop/common').Event[]): Fi
       };
     }
   }
-  return latest;
+  if (latest) return latest;
+
+  // Fallback: the CLI runs with a NullEventCapture (no orchestrator event
+  // feed is wired), so `events` is always empty there and triage_verdict
+  // assertions could never pass. The handoff tool's args ARE the triage
+  // verdict (HandoffInputSchema discriminates on `verdict`), and the SSE
+  // capture does carry tool calls — read the LAST handoff call's args.
+  // Exported for tests. (2026-06-12: both agent-212 runs "captured no final
+  // triage state" while the transcript showed handoff firing with
+  // verdict=qualified.)
+  const VERDICTS = new Set([
+    'qualified',
+    'referred_out',
+    'disqualified',
+    'inconclusive',
+  ]);
+  for (let i = toolCalls.length - 1; i >= 0; i--) {
+    const c = toolCalls[i];
+    if (c.toolName !== 'handoff') continue;
+    if (typeof c.input !== 'object' || c.input === null) continue;
+    const input = c.input as { verdict?: unknown; reasonCode?: unknown };
+    if (typeof input.verdict !== 'string' || !VERDICTS.has(input.verdict)) {
+      continue;
+    }
+    return {
+      verdict: input.verdict as FinalTriage['verdict'],
+      reasonCode:
+        typeof input.reasonCode === 'string' ? input.reasonCode : undefined,
+    };
+  }
+  return null;
 }

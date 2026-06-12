@@ -110,6 +110,22 @@ export interface RunContext {
   readonly toolCalls: readonly CapturedToolCall[];
   readonly events: readonly Event[];
   readonly finalTriage: FinalTriage | null;
+  /**
+   * Per-turn visitor/agent text pairs, in order (turnIndex is 1-based to
+   * match `CapturedToolCall.turnIndex`). Feeds the judge's transcript view —
+   * without it the judge sees only the final utterance and hallucinates
+   * about tool behaviour it was never shown (2026-06-12 lesson: a judge
+   * asserted "show_options was never called" while the deterministic
+   * assertion counted two calls).
+   */
+  readonly transcript: readonly TranscriptTurn[];
+}
+
+/** One visitor→agent exchange, for the judge's transcript view. */
+export interface TranscriptTurn {
+  readonly turnIndex: number;
+  readonly user: string;
+  readonly agent: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +203,48 @@ export async function evaluateAll(
     outcomes.push(await evaluateAssertion(a, context, judge, observability));
   }
   return outcomes;
+}
+
+// ---------------------------------------------------------------------------
+// Judge transcript projection.
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the run as a judge-readable transcript: per turn, the visitor
+ * message, the tool calls the agent made (name + compacted args), and the
+ * agent's reply. The tool-call lines are what make tool-behaviour rubrics
+ * judgeable — the judge must answer "was X called?" from this log, never
+ * from the prose. Exported for tests.
+ *
+ * Consecutive duplicate tool lines (same turn, name, args) collapse to one —
+ * the capture layer can record a call twice (input-available +
+ * output-available); genuine re-calls differ in args (e.g. accumulated
+ * `exclude`) and survive.
+ */
+export function buildJudgeTranscript(ctx: RunContext): string {
+  const lines: string[] = [];
+  for (const turn of ctx.transcript) {
+    lines.push(`=== Turn ${turn.turnIndex} ===`);
+    lines.push(`Visitor: ${turn.user}`);
+    const calls = ctx.toolCalls.filter((c) => c.turnIndex === turn.turnIndex);
+    let prev = '';
+    for (const c of calls) {
+      let args: string;
+      try {
+        args = JSON.stringify(c.input) ?? '{}';
+      } catch {
+        args = '(unserialisable args)';
+      }
+      if (args.length > 180) args = `${args.slice(0, 180)}…`;
+      const line = `[tool] ${c.toolName}(${args})`;
+      if (line === prev) continue;
+      prev = line;
+      lines.push(line);
+    }
+    lines.push(`Agent: ${turn.agent}`);
+    lines.push('');
+  }
+  return lines.join('\n').trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -533,6 +591,8 @@ async function evaluateJudgeRubric(
   try {
     const verdict = await judge.evaluate(a.rubric, ctx.finalUtterance, {
       model: a.model,
+      transcript:
+        ctx.transcript.length > 0 ? buildJudgeTranscript(ctx) : undefined,
     });
     const durationMs = Date.now() - startedAt;
     if (observability) {

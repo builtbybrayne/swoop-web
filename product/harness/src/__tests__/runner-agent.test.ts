@@ -273,3 +273,58 @@ describe('runScenario — scripted dispatch (sanity)', () => {
     expect(userAgent.nextMessage).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// deriveFinalTriage — handoff-args fallback (2026-06-12).
+// The CLI runs with NullEventCapture, so `triage.decided` events never
+// arrive; the handoff tool call's args carry the verdict and must back-fill.
+// ---------------------------------------------------------------------------
+
+import { deriveFinalTriage } from '../runner.js';
+
+describe('deriveFinalTriage handoff fallback', () => {
+  it('derives verdict + reasonCode from the last handoff tool call when no events exist', () => {
+    const triage = deriveFinalTriage(
+      [],
+      [
+        { turnIndex: 1, toolName: 'find_options', input: {} },
+        {
+          turnIndex: 2,
+          toolName: 'handoff',
+          input: { verdict: 'qualified', reasonCode: 'ready_booking_named_trip' },
+        },
+      ],
+    );
+    expect(triage).toEqual({
+      verdict: 'qualified',
+      reasonCode: 'ready_booking_named_trip',
+    });
+  });
+
+  it('uses the LAST handoff call when several fired', () => {
+    const triage = deriveFinalTriage(
+      [],
+      [
+        { turnIndex: 1, toolName: 'handoff', input: { verdict: 'inconclusive' } },
+        { turnIndex: 3, toolName: 'handoff', input: { verdict: 'qualified' } },
+      ],
+    );
+    expect(triage?.verdict).toBe('qualified');
+  });
+
+  it('ignores handoff calls with malformed or unknown verdicts', () => {
+    expect(
+      deriveFinalTriage(
+        [],
+        [
+          { turnIndex: 1, toolName: 'handoff', input: { verdict: 'nonsense' } },
+          { turnIndex: 1, toolName: 'handoff', input: 'not-an-object' },
+        ],
+      ),
+    ).toBeNull();
+  });
+
+  it('returns null when neither events nor handoff calls exist', () => {
+    expect(deriveFinalTriage([], [])).toBeNull();
+  });
+});

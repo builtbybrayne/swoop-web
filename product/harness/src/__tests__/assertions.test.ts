@@ -16,6 +16,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  buildJudgeTranscript,
   evaluateAll,
   evaluateAssertion,
   type AssertionOutcome,
@@ -38,6 +39,7 @@ function ctx(overrides: Partial<RunContext> = {}): RunContext {
     toolCalls: [],
     events: [],
     finalTriage: null,
+    transcript: [],
     ...overrides,
   };
 }
@@ -328,6 +330,102 @@ describe('tool_call_order', () => {
       stubJudge,
     );
     expect(out.passed).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildJudgeTranscript + judge transcript wiring.
+// ---------------------------------------------------------------------------
+
+describe('buildJudgeTranscript', () => {
+  it('interleaves visitor, tool lines, and agent per turn', () => {
+    const text = buildJudgeTranscript(
+      ctx({
+        transcript: [
+          { turnIndex: 1, user: 'kayaking?', agent: 'Here are options.' },
+          { turnIndex: 2, user: 'show me', agent: 'Done.' },
+        ],
+        toolCalls: [
+          { turnIndex: 1, toolName: 'find_options', input: { query: 'kayaking' } },
+          { turnIndex: 2, toolName: 'show_options', input: { items: [] } },
+        ],
+      }),
+    );
+    expect(text).toContain('=== Turn 1 ===');
+    expect(text).toContain('Visitor: kayaking?');
+    expect(text).toContain('[tool] find_options({"query":"kayaking"})');
+    expect(text).toContain('Agent: Here are options.');
+    expect(text.indexOf('[tool] show_options')).toBeGreaterThan(
+      text.indexOf('=== Turn 2 ==='),
+    );
+  });
+
+  it('collapses consecutive duplicate tool lines, keeps distinct re-calls', () => {
+    const text = buildJudgeTranscript(
+      ctx({
+        transcript: [{ turnIndex: 1, user: 'q', agent: 'a' }],
+        toolCalls: [
+          { turnIndex: 1, toolName: 'find_options', input: { query: 'x' } },
+          { turnIndex: 1, toolName: 'find_options', input: { query: 'x' } },
+          { turnIndex: 1, toolName: 'find_options', input: { query: 'y' } },
+        ],
+      }),
+    );
+    const occurrences = text.match(/\[tool] find_options/g) ?? [];
+    expect(occurrences).toHaveLength(2);
+  });
+
+  it('truncates oversized args', () => {
+    const text = buildJudgeTranscript(
+      ctx({
+        transcript: [{ turnIndex: 1, user: 'q', agent: 'a' }],
+        toolCalls: [
+          { turnIndex: 1, toolName: 'lookup', input: { q: 'z'.repeat(500) } },
+        ],
+      }),
+    );
+    const line = text.split('\n').find((l) => l.startsWith('[tool]'))!;
+    expect(line.length).toBeLessThan(220);
+    expect(line).toContain('…');
+  });
+});
+
+describe('judge_rubric transcript wiring', () => {
+  it('passes the built transcript to the judge when turns exist', async () => {
+    let seen: unknown;
+    const capturingJudge: Judge = {
+      async evaluate(_r, _resp, context) {
+        seen = context;
+        return { passed: true, reasoning: 'ok' };
+      },
+    };
+    await evaluateAssertion(
+      { kind: 'judge_rubric', rubric: 'anything' },
+      ctx({
+        transcript: [{ turnIndex: 1, user: 'hi', agent: 'hello' }],
+        toolCalls: [{ turnIndex: 1, toolName: 'illustrate', input: {} }],
+      }),
+      capturingJudge,
+    );
+    const context = seen as { transcript?: string };
+    expect(context.transcript).toContain('Visitor: hi');
+    expect(context.transcript).toContain('[tool] illustrate({})');
+  });
+
+  it('omits the transcript when there are no turns (legacy behaviour)', async () => {
+    let seen: unknown;
+    const capturingJudge: Judge = {
+      async evaluate(_r, _resp, context) {
+        seen = context;
+        return { passed: true, reasoning: 'ok' };
+      },
+    };
+    await evaluateAssertion(
+      { kind: 'judge_rubric', rubric: 'anything' },
+      ctx(),
+      capturingJudge,
+    );
+    expect((seen as { transcript?: string }).transcript).toBeUndefined();
   });
 });
 
