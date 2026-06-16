@@ -39,6 +39,7 @@
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { emitErrorRaised, emitEvent, messageOf, parseSseFrames } from "@swoop/common";
+import { getDevModelOverride } from "./dev-model-store";
 
 /** Key used to persist the session id in tab-scoped storage. */
 export const SESSION_STORAGE_KEY = "swoop.session.id";
@@ -432,11 +433,19 @@ export function createOrchestratorTransport<
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
 
+      // M-PICK — dev/test-only model override. `getDevModelOverride()` returns
+      // `undefined` in production builds and when unset, so the `model` field
+      // is omitted and the orchestrator uses its env default. The orchestrator
+      // also ignores the field outside dev + allow-list (M-PICK-2/3) — the
+      // client gate is convenience, not the security boundary.
+      const modelOverride = getDevModelOverride();
+
       const body = JSON.stringify({
         ...(extraBody ?? {}),
         sessionId,
         message: latestUserMessage,
         clientTime,
+        ...(modelOverride ? { model: modelOverride } : {}),
       });
 
       let response: Response;

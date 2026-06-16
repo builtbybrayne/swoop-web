@@ -32,6 +32,7 @@ import {
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createOrchestratorTransport } from "./runtime/orchestrator-adapter";
+import { DevModelPicker } from "./runtime/model-picker";
 import { emitUiEvent } from "./runtime/emit-ui-event";
 // Registers the `data-fyi` renderer + reasoning-guard (D.t2). Importing here
 // is what gives assistant-ui the component map below; the module itself has
@@ -239,15 +240,18 @@ function ThreadSurface({
         <ChromeBadge />
         <div className="flex items-center gap-3">
           {import.meta.env.DEV ? (
-            <button
-              type="button"
-              onClick={() => devHidden.toggle()}
-              data-testid="toggle-dev-affordances"
-              aria-pressed={devHidden.hidden}
-              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-            >
-              {devHidden.hidden ? "Show dev" : "Hide dev"}
-            </button>
+            <>
+              <DevModelPicker onModelChange={onFreshChat} />
+              <button
+                type="button"
+                onClick={() => devHidden.toggle()}
+                data-testid="toggle-dev-affordances"
+                aria-pressed={devHidden.hidden}
+                className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+              >
+                {devHidden.hidden ? "Show dev" : "Hide dev"}
+              </button>
+            </>
           ) : null}
           <button
             type="button"
