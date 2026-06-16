@@ -1,6 +1,6 @@
 # Swoop handover
 
-Handover documents for Swoop's team taking ownership of Puma. Companion to the operator runbooks in [`../docs/ops/`](../docs/ops/README.md) (day-task recipes) and the UI handover at [`../ui/HANDOVER.md`](../ui/HANDOVER.md) (brand styling + iframe embed).
+Handover documents for the Swoop team taking ownership of Puma. Companion to the operator runbooks in [`../docs/ops/`](../docs/ops/README.md) (day-task recipes).
 
 ## Developer handover
 
@@ -8,6 +8,7 @@ Handover documents for Swoop's team taking ownership of Puma. Companion to the o
 |---|---|
 | [`productionisation.md`](productionisation.md) | **Stand Puma up in Swoop's GCP the first time** — what to provision (IAM, secrets, services), the env surface, the first database build, deploy, and the go-live gates. |
 | [`maintenance.md`](maintenance.md) | **Keep it running and evolve it** — data refreshes, migrations, prompt/content updates, observability + incident response, retention, dependency updates, scaling. |
+| [`ui-integration.md`](ui-integration.md) | **Brand + embed the chat UI** — the 12 CSS theme tokens + the part-marker contract, and the iframe embed (build, `VITE_ORCHESTRATOR_URL`, CORS). For Swoop's web team. |
 
 ## Sales handover
 

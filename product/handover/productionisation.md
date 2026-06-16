@@ -1,6 +1,6 @@
 # Puma — productionisation (first-time stand-up)
 
-How to provision and deploy the Puma backend (orchestrator + connector + Postgres + ingestion) into Swoop's GCP **for the first time**. Ongoing operation: [`maintenance.md`](maintenance.md). The visitor-facing UI (brand + iframe embed): [`../ui/HANDOVER.md`](../ui/HANDOVER.md).
+How to provision and deploy the Puma backend (orchestrator + connector + Postgres + ingestion) into Swoop's GCP **for the first time**. Ongoing operation: [`maintenance.md`](maintenance.md). The visitor-facing UI (brand + iframe embed): [`ui-integration.md`](ui-integration.md).
 
 > ⚠ **§5 (deploy topology) is pending the M4 deployment-shape decision** — single-VM-all-on-one vs Cloud SQL + Cloud Run (deferred; [planning/01-top-level.md](../../planning/01-top-level.md) §9). Single-VM is the leading shape. Everything else here is final.
 
@@ -13,7 +13,7 @@ How to provision and deploy the Puma backend (orchestrator + connector + Postgre
 | **connector** | `@swoop/connector` | 3002 | MCP-over-HTTP tool surface; the Postgres pool (retrieval + handoff + `event_log`) |
 | **orchestrator** | `@swoop/orchestrator` | 8080 | the agent loop (Claude Sonnet via Google ADK); calls the connector; serves the UI's `/chat` SSE |
 | **ingestion** | `@swoop/ingestion` | — (CLI) | builds/refreshes the derived store from Swoop's SQL dump |
-| **ui** | `@swoop/ui` | static | React app in an iframe — see `../ui/HANDOVER.md` |
+| **ui** | `@swoop/ui` | static | React app in an iframe — see [`ui-integration.md`](ui-integration.md) |
 
 One **Postgres 18** (`pgvector` + `tsvector` + `pg_trgm`) backs everything — single store per decision C.18. Architecture detail in [`../../discoveries.md`](../../discoveries.md) and the Tier-1 plan.
 

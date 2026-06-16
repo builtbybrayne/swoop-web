@@ -123,7 +123,7 @@ Puma's event stream is now wired to a pluggable sink (`EVENT_SINK`; F-c). The de
 
 Why it matters: until this lands, production events are ephemeral (stdout) and there is **no error alerting**. Gated on the same "AI Pat Chat" IAM as the rest of M4. **No new processor** — Cloud Logging is already in the compliance processor list ([06-processors.md](product/cms/legal/compliance-bundle/06-processors.md)); **add Error Reporting** to that list for completeness (it is a Google Cloud sub-service under the existing GCP DPA, so no new DPA).
 
-Where it lands: Tier 2 chunk F + the M4/M5 prod handover (currently only `product/ui/HANDOVER.md` exists, which is UI-scoped — a backend prod-provisioning checklist is an M4/M5 deliverable; this entry is the interim home).
+Where it lands: Tier 2 chunk F. The provisioning steps now live in [product/handover/productionisation.md](product/handover/productionisation.md) §2/§6 (the dev handover folder); this entry stays as the tracked Swoop-side ask.
 
 ### Media library location + access — Thomas / Richard / Martin (Friday hackathon scope)
 
