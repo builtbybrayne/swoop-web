@@ -6,6 +6,8 @@
 > future Claude skill for sales teams to refine feedback before submission. The git PR
 > approach was judged unlikely to fit non-technical contributors' workflow. Body preserved
 > as path-not-taken design thinking.
+>
+> **2026-06-16 update**: the "sales-team write access" instinct here is now being met — inline, no git, no PATs — by [02-impl-sales-memory.md](02-impl-sales-memory.md) (conversational sales-authored agent memory, off Luke's 16/06 feedback). The Why/How/What elicitation and the talk-them-out-of-it / conditional-success instincts survive in the memory-agent design; the git-PR / override-repo machinery does not.
 
 **Status**: Draft. Awaiting ratification.
 **Authored**: 2026-05-21

@@ -4,6 +4,10 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## Status (2026-06-16 — Sales-team agent memory designed; DRAFT T2, T3s pending)
+
+New capability off Luke's 16/06 feedback: **inline sales-team-authored agent memory**. DRAFT Tier-2 at [planning/02-impl-sales-memory.md](planning/02-impl-sales-memory.md); decisions `sm-1`…`sm-8` in [planning/decisions.md](planning/decisions.md). Next actions, in order: (1) **spike** the Opus-memory-agent / shared-session mechanism (T3-3 head, ~½ day — the only framework-capability unknown); (2) author T3-1 (store+CRUD) … T3-5 (prompt content); (3) **independent, ship now**: a static `product/cms/prompts/system/20_field-notes.md` closing Luke's seasonality gap (authoring pending Alastair). Built in the `sales-knowledge-feedback` worktree; HITL on main — nothing committed yet.
+
 ## Status (2026-06-11, evening — widget-emptiness diagnosed + live-verified; gated fixes queued)
 
 **Read [planning/reviews/2026-06-11-widget-emptiness-diagnosis.md](planning/reviews/2026-06-11-widget-emptiness-diagnosis.md) first** — it supersedes the (uncommitted) retrieval-emptiness audit's framing. Headline: "no widgets" was four stacked mechanisms, none of them data damage — zero-trap filters on `find_options` (hot patch `1701728` fixes the hotel branch, live-verified: the Explora ask now returns hotel cards; **three sibling traps still live** on trip/tour `accommodation_style` + tour `activity_tags`), the `lookup` widget URL-gating its render over an 18/924-populated column (never rendered on FAQ answers since 12 May), the 1 Jun inline→sidebar widget relocation (`03847e1` — widgets render in the HIGHLIGHTS sidebar, inline copies hidden), and conversation shape (Explora asks don't trigger `find_inspiring` — correct behaviour). Full live smoke on restarted patched stack: every tool returned data; find_inspiring/illustrate/find_options/find_someone_who all rendered in the sidebar.
