@@ -47,15 +47,23 @@ import { wrapWithSidebarPublish } from "./sidebar-publish";
 // The six *display* widgets that relocate to the visual sidebar on desktop
 // (planning/02-impl-visual-sidebar.md §1). Each is additionally wrapped so it
 // publishes its tool-part into the sidebar store and hides its inline copy on
-// desktop. `handoff` is deliberately absent: its lead-capture form is an
-// interactive CTA bound to the conversational moment, so it stays inline in
-// both layouts.
+// desktop.
+//
+// `show_options` is the card renderer here, NOT `find_options`: the
+// goofy-goldstine find/show split (2026-06-11) made `find_options` the
+// agent-private browse tool that renders nothing, and `show_options` the
+// visitor-facing card surface (widgets/index.ts). The renderer moved but this
+// routing list didn't — so proposal cards rendered inline in the transcript
+// instead of relocating to the sidebar, until 2026-06-16. `find_options` is
+// now deliberately absent (it renders no widget); `handoff` is absent too —
+// its lead-capture form is an interactive CTA bound to the conversational
+// moment, so it stays inline in both layouts.
 const SIDEBAR_DISPLAY_TOOLS: ReadonlySet<string> = new Set([
   "find_inspiring",
   "find_someone_who",
   "find_proof",
   "lookup",
-  "find_options",
+  "show_options",
   "illustrate",
 ]);
 
