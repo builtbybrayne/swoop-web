@@ -50,6 +50,13 @@ export interface BuildAgentParams {
    * the loaded skills.
    */
   readonly tools?: FunctionTool[];
+  /**
+   * Optional model id for the orchestrator's `ClaudeLlm`. Defaults to
+   * `config.ORCHESTRATOR_MODEL`. The dev/test model picker passes an
+   * allow-listed override here when building a per-model runner
+   * (planning/03-exec-crosscut-test-mode-model-picker.md, M-PICK-1).
+   */
+  readonly modelId?: string;
 }
 
 export interface BuildAgentResult {
@@ -62,9 +69,10 @@ export async function buildOrchestratorAgent({
   config,
   promptLoader,
   tools = [],
+  modelId,
 }: BuildAgentParams): Promise<BuildAgentResult> {
   const model = new ClaudeLlm({
-    model: config.ORCHESTRATOR_MODEL,
+    model: modelId ?? config.ORCHESTRATOR_MODEL,
     apiKey: config.ANTHROPIC_API_KEY,
   });
 

@@ -51,6 +51,7 @@ import {
 import { loadConfig } from './config/index.js';
 import { createPromptLoader } from './agent/prompt-loader.js';
 import { buildOrchestratorAgent } from './agent/factory.js';
+import { createRunnerRegistry } from './agent/runner-registry.js';
 import { setupConnector } from './connector/index.js';
 import {
   createSessionStore,
@@ -165,6 +166,30 @@ async function main(): Promise<void> {
     runner = new InMemoryRunner({ agent, appName: ORCHESTRATOR_APP_NAME });
   }
 
+  // Dev/test model picker (M-PICK-1): a lazy per-model runner registry that
+  // reuses the default runner's sessionService. `getRunner` returns the default
+  // runner unless the picker is enabled AND the requested id is allow-listed.
+  // Off by default (MODEL_PICKER_ALLOWLIST empty / NODE_ENV=production).
+  const runnerRegistry = createRunnerRegistry({
+    defaultRunner: runner,
+    defaultModelId: config.ORCHESTRATOR_MODEL,
+    enabled: config.modelPickerEnabled,
+    allowlist: config.MODEL_PICKER_ALLOWLIST,
+    buildAgentFor: (modelId) =>
+      buildOrchestratorAgent({ config, promptLoader, tools: connector.tools, modelId }),
+    // Per-model runners reuse the default runner's sessionService so a session
+    // bootstrapped under the default is found whichever model the turn routes
+    // to. Artifact/memory services are ADK internals Puma doesn't use for state.
+    buildRunner: (agent) =>
+      new Runner({
+        agent,
+        appName: ORCHESTRATOR_APP_NAME,
+        sessionService: runner.sessionService,
+        artifactService: new InMemoryArtifactService(),
+        memoryService: new InMemoryMemoryService(),
+      }),
+  });
+
   // F-c — register the durable event sink (planning/03-exec-observability-c.md).
   // Reuse the postgres session pool when present; otherwise provision a small
   // dedicated pool for EVENT_SINK=postgres (the config refine guarantees the URL).
@@ -241,6 +266,10 @@ async function main(): Promise<void> {
     version,
     userId: ANONYMOUS_USER_ID,
     triageClassifier,
+    getRunner: runnerRegistry.getRunner,
+    modelPicker: config.modelPickerEnabled
+      ? { defaultModelId: config.ORCHESTRATOR_MODEL, modelIds: config.MODEL_PICKER_ALLOWLIST }
+      : undefined,
     allocator,
     onSessionCreated,
     handoffStore,
@@ -275,6 +304,11 @@ async function main(): Promise<void> {
     console.log(`[orchestrator] ready on http://localhost:${config.PORT}`);
     console.log(`[orchestrator] system prompt loaded from ${promptLoader.path} (${initialPrompt.length} chars)`);
     console.log(`[orchestrator] model: ${config.ORCHESTRATOR_MODEL}`);
+    if (config.modelPickerEnabled) {
+      console.log(
+        `[orchestrator] model picker (dev/test): ENABLED — orchestrator overridable to [${config.MODEL_PICKER_ALLOWLIST.join(', ')}]`,
+      );
+    }
     console.log(`[orchestrator] triage classifier model: ${triageClassifier.modelId}`);
     console.log(`[orchestrator] connector: ${connector.client.url}`);
     console.log(

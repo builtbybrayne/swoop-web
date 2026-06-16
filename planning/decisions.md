@@ -8,6 +8,20 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## M-PICK-1..7 — Test-mode model picker for the conversational orchestrator
+
+**Decided**: 2026-06-16 (HITL — Alastair ratified the T3 plan: *"Start with just claude models… Commit. Then proceed."*)
+**Owner**: luke-questioning-tone session (execution) — [planning/03-exec-crosscut-test-mode-model-picker.md](03-exec-crosscut-test-mode-model-picker.md)
+**Scope**: Claude-only v1; non-Claude provider seam designed in.
+
+- **M-PICK-1** — Lazy per-model **runner registry** keyed by model id; per-model runners reuse the default runner's `sessionService` (one session store across models), differing only in the `ClaudeLlm` (model id + request shape). The runner constructor is injected (`buildRunner`) so the gating/caching is unit-testable without a real ADK Runner. Default runner path untouched. *Swap cost: low — additive; removing it collapses `getRunner` to the single default runner.*
+- **M-PICK-2** — Override rides optional `model?` on `ChatRequestSchema` (the `clientTime` precedent; schema stays `.strict()`). Honoured only when `!isProduction` AND `model ∈ MODEL_PICKER_ALLOWLIST`; else silently ignored → default. The cost/abuse gate. *Swap cost: trivial — optional field, breaks no caller.*
+- **M-PICK-3** — Dev-only both ends: UI gates on `import.meta.env.DEV`; the orchestrator hard-ignores the override and 404s `GET /models` when `isProduction`. No production surface. *Swap cost: n/a.*
+- **M-PICK-4** — Per-family request-shaping in `ClaudeLlm` (`modelAcceptsSamplingParams`): **omit `temperature`/`top_p`/`top_k` for Opus 4.7+ and Fable** (they 400 on sampling params), keep them for Sonnet 4.x / Opus 4.6- / Haiku. Forward-safe by comparing the opus minor. The load-bearing gotcha guard. *Swap cost: low — one pure helper.*
+- **M-PICK-5** — `GET /models` (dev-only) returns the allow-list as `{default, models:[{id,label}]}` with friendly labels derived from the bare aliases. Registered only when the picker is enabled. v1 = the configured allow-list (exactly the set `/chat` honours); a future enhancement can back it with the Anthropic Models API (`client.models.list()`) for live discovery, filtered to the same allow-list. *Swap cost: low.*
+- **M-PICK-6** — Switching model forces a **new session** (UI starts a fresh thread on change) → a model is fixed for a session's life; no mid-conversation swap. *Swap cost: n/a (UI behaviour).*
+- **M-PICK-7** — Non-Claude **deferred behind a provider seam**: `buildAgentFor`/`buildRunner` are provider-agnostic; a future `GeminiLlm`/ADK-native `BaseLlm` slots in with no v1 rework. *Swap cost: the follow-on adds a shim + allow-list ids; v1 unchanged.*
+
 ## G.visitor-location-1 — Visitor location is inferred from the per-turn timezone; default US when unknown; Southern-Hemisphere seasonality anchored
 
 **Decided**: 2026-06-16 (HITL-ratified — Luke 16-Jun feedback: *"if assuming users location then let's presume US"*)

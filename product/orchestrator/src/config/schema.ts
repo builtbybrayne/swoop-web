@@ -104,6 +104,29 @@ export const configSchema = z
     // still owns the single source of truth.
     PRIMARY_MODEL: z.string().trim().min(1).optional(),
 
+    // --- Test-mode model picker (dev only) ------------------------------
+    // Comma-separated allow-list of model ids the dev/test model dropdown
+    // may switch the *conversational orchestrator* to (the functional
+    // classifier is NEVER overridden). Empty (default) = feature off.
+    // Honoured only when NODE_ENV !== 'production'. Use bare aliases, e.g.
+    // "claude-sonnet-4-6,claude-opus-4-6,claude-opus-4-8". The picker UI is
+    // dev-only (Vite strips it from prod builds) and the orchestrator
+    // hard-ignores the per-request override in production besides.
+    // See planning/03-exec-crosscut-test-mode-model-picker.md.
+    MODEL_PICKER_ALLOWLIST: z
+      .string()
+      .default('')
+      .transform((raw) =>
+        Array.from(
+          new Set(
+            raw
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0),
+          ),
+        ),
+      ),
+
     // --- Content paths ---------------------------------------------------
     // Per G.11: system prompt is the concatenation of files matching
     // `^\d{2}_[a-z0-9-]+\.md$` inside SYSTEM_PROMPT_DIR. SKILLS_DIR is the
@@ -350,5 +373,12 @@ export type Config = Readonly<
     readonly handoffTemplatesDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. Controls prompt-loader caching, CORS strictness, etc. */
     readonly isProduction: boolean;
+    /**
+     * True iff the dev/test model picker is active: `MODEL_PICKER_ALLOWLIST`
+     * non-empty AND not production. When false, the orchestrator ignores any
+     * per-request `model` override and the dev `GET /models` endpoint 404s.
+     * See planning/03-exec-crosscut-test-mode-model-picker.md (M-PICK-2/3).
+     */
+    readonly modelPickerEnabled: boolean;
   }
 >;

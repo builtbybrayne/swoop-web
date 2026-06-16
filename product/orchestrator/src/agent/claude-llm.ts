@@ -99,6 +99,26 @@ export interface AnthropicClientLike {
   };
 }
 
+/**
+ * Whether a Claude model accepts sampling params (`temperature`/`top_p`/`top_k`).
+ *
+ * Opus 4.7+ and the Fable family REMOVED these — sending any returns HTTP 400.
+ * Sonnet 4.x, Opus 4.6 and earlier, and Haiku still accept them. Keyed off the
+ * bare-alias id; forward-safe for opus 4.8 / 4.9 / … by comparing the minor
+ * version. See planning/03-exec-crosscut-test-mode-model-picker.md (the
+ * temperature-400 gotcha) and the claude-api skill's current-models table.
+ */
+export function modelAcceptsSamplingParams(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  if (id.startsWith('claude-fable-')) return false;
+  const opus = /^claude-opus-4-(\d+)/.exec(id);
+  if (opus) {
+    const minor = Number.parseInt(opus[1] ?? '', 10);
+    if (Number.isFinite(minor) && minor >= 7) return false;
+  }
+  return true;
+}
+
 export class ClaudeLlm extends BaseLlm {
   static readonly supportedModels: Array<string | RegExp> = [/^claude-/];
 
@@ -154,12 +174,19 @@ export class ClaudeLlm extends BaseLlm {
           )
         : undefined;
 
+    // Per-family request-shaping: Opus 4.7+ and the Fable family REMOVED
+    // sampling params — sending `temperature` to them is an HTTP 400. Include
+    // it only for families that still accept it (Sonnet 4.x, Opus 4.6-, Haiku).
+    // See modelAcceptsSamplingParams + planning/03-exec-crosscut-test-mode-model-picker.md.
+    const effectiveModel = llmRequest.model ?? this.model;
     const params: MessageCreateParamsStreaming = {
-      model: llmRequest.model ?? this.model,
+      model: effectiveModel,
       max_tokens: this.maxTokens,
-      temperature: this.temperature,
       stream: true,
       messages,
+      ...(modelAcceptsSamplingParams(effectiveModel)
+        ? { temperature: this.temperature }
+        : {}),
       ...(systemWithCache ? { system: systemWithCache } : {}),
       ...(toolsWithCache ? { tools: toolsWithCache } : {}),
     };

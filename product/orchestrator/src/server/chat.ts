@@ -66,6 +66,15 @@ export interface ChatDeps {
    * surface don't have to build the classifier.
    */
   readonly triageClassifier?: TriageClassifier;
+  /**
+   * Dev/test model-picker resolver (M-PICK-1). When present, `/chat` resolves
+   * the runner for this turn's (optional, allow-listed, non-production) `model`
+   * override via this; when absent (HTTP-surface unit tests) it uses `runner`.
+   * All resolved runners share `runner`'s sessionService, so the session
+   * created at bootstrap is found regardless of which model the turn routes to.
+   * See planning/03-exec-crosscut-test-mode-model-picker.md.
+   */
+  readonly getRunner?: (modelId?: string) => Promise<Runner>;
 }
 
 const DEFAULT_USER_ID = 'anonymous';
@@ -85,7 +94,7 @@ export function createChatHandler(
       sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    const { sessionId, message, clientTime } = parsed.data;
+    const { sessionId, message, clientTime, model } = parsed.data;
     if (message.trim().length === 0) {
       sendError(res, 400, 'message_empty', 'message cannot be empty.');
       return;
@@ -273,8 +282,13 @@ export function createChatHandler(
     };
 
     try {
+      // Dev/test model picker (M-PICK-1): resolve the runner for this turn's
+      // (optional, allow-listed, non-production) model override. Falls back to
+      // the default runner for unknown/disallowed/prod ids and when getRunner
+      // is absent (unit tests). All runners share one sessionService.
+      const turnRunner = deps.getRunner ? await deps.getRunner(model) : deps.runner;
       const adkStream = runAgentTurn({
-        runner: deps.runner,
+        runner: turnRunner,
         userId,
         sessionId,
         message,
