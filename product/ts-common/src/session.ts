@@ -177,6 +177,21 @@ export const SessionStateSchema = z.object({
       timeZone: z.string().min(1).max(64),
     })
     .optional(),
+  // Staff authentication state — set by the orchestrator when a valid
+  // staff JWT is presented on /session or /chat. Optional + additive so
+  // anonymous visitor sessions (the vast majority) round-trip cleanly.
+  //
+  // `staff: true` — the session holder presented a valid staff token.
+  // `mode`        — routing hint for later agent-selection logic:
+  //   'conversation' (default) — normal discovery flow.
+  //   'memory'                 — staff-authored memory agent (future task).
+  //
+  // A later task reads these to route turns to the memory agent; this task
+  // only sets them. Invalid/expired/absent token → staff stays false,
+  // mode stays 'conversation'. Server-side validation is the ONLY trust
+  // boundary — never propagate a client-supplied flag directly.
+  staff: z.boolean().optional().default(false),
+  mode: z.enum(["conversation", "memory"]).optional().default("conversation"),
 });
 export type SessionState = z.infer<typeof SessionStateSchema>;
 

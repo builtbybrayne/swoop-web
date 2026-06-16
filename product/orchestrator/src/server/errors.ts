@@ -28,7 +28,11 @@ export type OrchestratorErrorCode =
   | 'invalid_request'
   | 'message_empty'
   | 'internal_error'
-  | 'stream_aborted';
+  | 'stream_aborted'
+  // staff-auth codes (staff-auth task):
+  | 'rate_limited'
+  | 'staff_auth_disabled'
+  | 'invalid_credentials';
 
 export interface OrchestratorErrorBody {
   error: {

@@ -34,6 +34,7 @@ import type {
   ReasoningPart,
   SessionState,
   ConversationEntry,
+  StaffAuthenticator,
 } from '@swoop/common';
 
 import type { SessionStore } from '../session/index.js';
@@ -63,6 +64,14 @@ export interface ChatDeps {
    * surface don't have to build the classifier.
    */
   readonly triageClassifier?: TriageClassifier;
+  /**
+   * Staff authenticator (staff-auth task). When present and the request
+   * carries a `staffToken`, the token is re-validated each turn. On success,
+   * `session.staff` + `session.mode` are refreshed. Failure → flags stay at
+   * their current values (visitor session if never set). Optional — unit
+   * tests that don't need auth don't have to supply it.
+   */
+  readonly staffAuthenticator?: StaffAuthenticator | null;
 }
 
 const DEFAULT_USER_ID = 'anonymous';
@@ -82,7 +91,7 @@ export function createChatHandler(
       sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    const { sessionId, message, clientTime } = parsed.data;
+    const { sessionId, message, clientTime, staffToken } = parsed.data;
     if (message.trim().length === 0) {
       sendError(res, 400, 'message_empty', 'message cannot be empty.');
       return;
@@ -112,6 +121,27 @@ export function createChatHandler(
         ...s,
         clientTime,
       }));
+    }
+
+    // staff-auth — re-validate the staff JWT on every /chat turn so a revoked
+    // or expired token is caught promptly, not just at session bootstrap.
+    // Failure (invalid/expired/absent) → session keeps its current staff/mode
+    // values (visitor defaults if never set). Never blocks the turn — staff
+    // auth is advisory routing infrastructure, not a hard gate. The only hard
+    // gate is tier-1 consent (canAcceptTurn above).
+    if (staffToken && deps.staffAuthenticator) {
+      try {
+        const verifyResult = await deps.staffAuthenticator.verify(staffToken);
+        if (verifyResult.ok) {
+          await deps.sessionStore.update(sessionId, (s) => ({
+            ...s,
+            staff: true,
+            mode: s.mode ?? ('conversation' as const),
+          }));
+        }
+      } catch {
+        // Degrade gracefully — turn proceeds as visitor session.
+      }
     }
 
     // B.t12 — build a per-turn dateline for injection into the user-message

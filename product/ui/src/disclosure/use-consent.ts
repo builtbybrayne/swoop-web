@@ -25,6 +25,7 @@ import {
   emitAdapterError,
 } from "../runtime/orchestrator-adapter";
 import { emitUiEvent } from "../runtime/emit-ui-event";
+import { readStaffToken } from "./use-staff-auth";
 
 /** Tab-scoped flag indicating the visitor already granted tier-1 consent. */
 export const CONSENT_STORAGE_KEY = "swoop.consent.tier1";
@@ -128,10 +129,14 @@ async function postSession(baseUrl: string): Promise<{
   sessionId: string;
   disclosureCopyVersion: string;
 }> {
+  // staff-auth: forward the JWT (if stored) so the orchestrator sets
+  // session.staff + session.mode at bootstrap time. Server validates;
+  // absent token → visitor session, no error.
+  const staffToken = readStaffToken();
   const res = await fetch(`${baseUrl}/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify(staffToken ? { staffToken } : {}),
   });
   if (!res.ok) {
     throw new Error(

@@ -14,3 +14,12 @@ export {
   DECLINE_POSTMESSAGE_TYPE,
 } from "./use-consent";
 export type { UseConsentResult, ConsentStatus } from "./use-consent";
+export {
+  useStaffAuth,
+  readStaffToken,
+  getStoredStaffToken,
+  clearStoredStaffToken,
+  openLoginPopup,
+  STAFF_TOKEN_KEY,
+} from "./use-staff-auth";
+export type { StaffAuthResponse } from "./use-staff-auth";

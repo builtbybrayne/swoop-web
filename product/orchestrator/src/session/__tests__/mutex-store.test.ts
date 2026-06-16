@@ -39,6 +39,8 @@ class AsyncRaceStore implements SessionStore {
       },
       metadata: {},
       seenItems: defaultEmptySeenItems(),
+      staff: false,
+      mode: 'conversation' as const,
       ...initial,
     };
     this.states.set(id, state);
