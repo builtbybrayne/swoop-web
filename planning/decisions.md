@@ -60,6 +60,13 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 **Rationale**: A staff authoring session has no visitor present, so the capture-time PII guard is moot. The only residue: a memory's text later loads into public conversations, so it must not *describe* a specific customer — an editorial guard in the memory-mode wrapper, not a live-data risk. The no-cross-session-memory product wall (`00_why.md` §10) is unaffected: this is organisational knowledge, not per-visitor memory.
 **Swap cost**: n/a.
 
+## sm-9 — The memory agent runs in a transcript-seeded *separate* session, not the shared ADK session
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL), from the T3-3 spike investigation
+**Rationale**: The orchestrator's `Runner` takes an injectable `sessionService` (B.t13 `PgAdkSessionService`), so two runners *could* share one session — and a second agent on a different model is already proven in-tree (the Haiku triage classifier, `index.ts`). But a shared session puts the memory-management dialogue into the **same event log the Sonnet conversational agent reads**, so it would surface on the staff member's next *test* turn — a breach of faithful testing (sm-1). Instead the memory agent runs in its **own** session, seeded with a read of the conversation-so-far (already maintained in `SessionState.conversationHistory` by `chat.ts`); multi-turn memory iteration accumulates in the memory session while the test conversation's log stays clean. Refines sm-2 (the "orchestrator routing" mechanism) with the *why* of session isolation.
+**Swap cost**: Low — the seeding read is cheap and the source already exists; reverting to a shared session is a routing change, not a data-model one.
+**Status**: feasibility + confirm-first behaviour confirmed by a live Anthropic smoke (2026-06-16, Sonnet; throwaway spike, not committed). See [03-exec-sales-memory-t3-routing.md](03-exec-sales-memory-t3-routing.md) spike section.
+
 ---
 
 ## G.goofy-goldstine-1 — Guidebook and Parent Guidebook pagetypes added to PRACTICAL_PAGETYPE_TITLES
