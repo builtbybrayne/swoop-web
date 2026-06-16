@@ -33,6 +33,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     TOOLS_PROMPT_DIR: '../cms/prompts/tools',
     PRICES_CAPTURED_AT: '2026-04-27',
     NODE_ENV: 'development' as const,
+    EVENT_SINK: 'stdout' as const,
     packageRoot: '/tmp/fake-package-root',
     migrationsDirAbsolutePath: '/tmp/fake-package-root/migrations',
     toolsPromptDirAbsolutePath: '/tmp/fake-package-root/cms/prompts/tools',

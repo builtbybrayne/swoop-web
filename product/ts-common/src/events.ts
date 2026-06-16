@@ -179,22 +179,10 @@ export const ConsentDeclinedEventSchema = z.object({
   }),
 });
 
-/**
- * Distinct from `tool.returned{outcome: "error"}`: carries the richer error
- * category surface for spot-checks without parsing text. `tool.returned` is
- * still the cardinal "every call lands here" signal; `tool.failed` is the
- * opt-in richer event for failing calls.
- */
-export const ToolFailedEventSchema = z.object({
-  eventType: z.literal("tool.failed"),
-  ...EventEnvelopeBase,
-  payload: z.object({
-    toolName: z.string(),
-    toolCallId: z.string(),
-    errorCategory: z.enum(["validation", "upstream", "timeout", "unknown"]),
-    latencyMs: z.number().int().nonnegative(),
-  }),
-});
+// NB: a `tool.failed` kind was defined here originally (F-a) but never emitted
+// — tool failures surface via `tool.returned{outcome:"error"}` (orchestrator
+// boundary) + `tool.invoked{ok:false, errorKind}` (connector). Retired in F-c
+// (decision F.sink-5) to keep the schema honest about what actually fires.
 
 export const HandoffTriggeredEventSchema = z.object({
   eventType: z.literal("handoff.triggered"),
@@ -561,7 +549,6 @@ export const EventSchema = z.discriminatedUnion("eventType", [
   // F-a additions
   ConsentGrantedEventSchema,
   ConsentDeclinedEventSchema,
-  ToolFailedEventSchema,
   HandoffTriggeredEventSchema,
   HandoffEmailSentEventSchema,
   HandoffEmailSkippedEventSchema,
@@ -603,7 +590,6 @@ export type SessionEndedEvent = z.infer<typeof SessionEndedEventSchema>;
 export type ErrorRaisedEvent = z.infer<typeof ErrorRaisedEventSchema>;
 export type ConsentGrantedEvent = z.infer<typeof ConsentGrantedEventSchema>;
 export type ConsentDeclinedEvent = z.infer<typeof ConsentDeclinedEventSchema>;
-export type ToolFailedEvent = z.infer<typeof ToolFailedEventSchema>;
 export type HandoffTriggeredEvent = z.infer<typeof HandoffTriggeredEventSchema>;
 export type HandoffEmailSentEvent = z.infer<typeof HandoffEmailSentEventSchema>;
 export type HandoffEmailSkippedEvent = z.infer<typeof HandoffEmailSkippedEventSchema>;
