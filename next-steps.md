@@ -4,6 +4,12 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## Status (2026-06-16 — visitor-location inference landed)
+
+Luke's 16-Jun feedback (infer the visitor's location; presume US when unknown) is **executed and merged to `main`** ([plan](planning/03-exec-crosscut-visitor-location-infer.md); decision G.visitor-location-1). Prompt-led: `00_why.md` §7 reads the per-turn timezone as the location signal and frames seasonality from the visitor's hemisphere; `buildDateline` reinforces (US / Northern-Hemisphere default when the zone is absent). Folds in the long-open 2026-05-18 inbox Southern-Hemisphere anchor. Orchestrator typecheck + 222 tests green. **Operator-pending**: run harness `021-visitor-location-seasons` with the `luke-` family (needs API key) to confirm behaviourally.
+
+---
+
 ## Status (2026-06-11, evening — widget-emptiness diagnosed + live-verified; gated fixes queued)
 
 **Read [planning/reviews/2026-06-11-widget-emptiness-diagnosis.md](planning/reviews/2026-06-11-widget-emptiness-diagnosis.md) first** — it supersedes the (uncommitted) retrieval-emptiness audit's framing. Headline: "no widgets" was four stacked mechanisms, none of them data damage — zero-trap filters on `find_options` (hot patch `1701728` fixes the hotel branch, live-verified: the Explora ask now returns hotel cards; **three sibling traps still live** on trip/tour `accommodation_style` + tour `activity_tags`), the `lookup` widget URL-gating its render over an 18/924-populated column (never rendered on FAQ answers since 12 May), the 1 Jun inline→sidebar widget relocation (`03847e1` — widgets render in the HIGHLIGHTS sidebar, inline copies hidden), and conversation shape (Explora asks don't trigger `find_inspiring` — correct behaviour). Full live smoke on restarted patched stack: every tool returned data; find_inspiring/illustrate/find_options/find_someone_who all rendered in the sidebar.

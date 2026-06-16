@@ -2,6 +2,19 @@
 
 **Snapshot date**: 2026-06-10, evening (Luke Loom feedback round 2: triaged AND executed same-day — 8 Tier-3 plans merged to `main`, fresh-install verification green. ⚠ The per-chunk sections of this file lag reality from 2026-05-14 onwards; read [planning/reviews/2026-05-27-ingest-and-state-of-play.md](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the 27 May build snapshot, then git log for the late-May/early-June waves: find_tips ninth tool, AntiRepetition, visual sidebar, Puma memory-bug fix.)
 
+## 2026-06-16 — Luke location feedback: infer from timezone, default US, SH seasonality anchor (worktree `visitor-location-infer`)
+
+Single-item Luke feedback (16 Jun, verbatim in the plan): *"if assuming users location then let's presume US — eg 'Patagonia's seasons run opposite to Europe's' came up in one thread."* Investigated, planned, executed, merged in one session.
+
+**Finding**: not a missing-data problem. The visitor's IANA timezone is already sent every turn (B.t12 `clientTime.timeZone`) and already rendered into the per-turn dateline the agent reads — the location signal was in context; the instruction to use it was missing. Zero geographic-anchoring guidance existed anywhere in `00_why.md` (grep-confirmed), and the 2026-05-18 Southern-Hemisphere seasonality anchor had never landed.
+
+**Landed** ([plan](planning/03-exec-crosscut-visitor-location-infer.md); decision G.visitor-location-1):
+- `00_why.md` §7 new subsection "Where the visitor is, and which way their seasons run" — read the timezone for hemisphere/region; frame seasonal comparisons from the visitor's hemisphere; Patagonia SH (Dec–Feb summer / Jun–Aug winter); **MUST NOT** default to Europe; **SHOULD** presume US/Northern-Hemisphere when the zone is absent/ambiguous; hold the read lightly; **MAY** ask one travel-origin question as fallback. Folds in the 2026-05-18 inbox seasonality item.
+- `buildDateline` (chat.ts) reinforces: present case names the timezone as the location signal; no-`clientTime` fallback states the US default.
+- New harness scenario `021-visitor-location-seasons.yaml` (acceptance gate; runs with the `luke-` family — needs API key, not run this session).
+
+**Verification**: `@swoop/orchestrator` typecheck clean; full suite **222 passed / 21 skipped**; `chat-dateline` 9/9 (7 + 2 new). Inference stays prompt-side (model over the raw zone), not a server region map. Merged to `main`.
+
 ## 2026-06-12 (later) — Luke's test set as a harness family; harness measurement fixes; first judged baseline
 
 Luke's 12 themed test conversations (exact first messages he types when testing) captured verbatim in [planning/meetings/luke-test-scenarios-120626.md](planning/meetings/luke-test-scenarios-120626.md) and authored as the agent-as-user harness family **`luke-01`…`luke-12`** (`e136396`) — run with `npm run -w @swoop/harness eval -- --filter luke- --judge sonnet` (export ANTHROPIC_API_KEY from orchestrator/.env first; stack on :8080).

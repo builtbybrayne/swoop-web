@@ -54,6 +54,8 @@ Two distinct quality problems caught in the post-skill-integration sample transc
 
 Both are 1-line WHY-prompt edits + a validator re-run to confirm. ~15 min.
 
+**Update 2026-06-16**: item 2 (Patagonia seasonality) is **addressed** — the Southern-Hemisphere anchor (Dec–Feb summer / Jun–Aug winter, framed from the visitor's own hemisphere) landed in `00_why.md` §7 via [03-exec-crosscut-visitor-location-infer.md](planning/03-exec-crosscut-visitor-location-infer.md) (decision G.visitor-location-1, merged to main). Item 1 (hallucinated phone / contact details — the `MUST NOT invent specific contact details` line) is **still open**.
+
 ## 2026-05-18 — Event-capture wiring (H.14) needed to make triage_verdict assertions useful
 
 Every H.t8 scenario with a `triage_verdict` assertion currently FALSE-FAILS because the harness defaults to `NullEventCapture` (per H.14 — deferred orchestrator-stdout-capture wiring). The runner can never see `triage.decided` events; `finalTriage` is always null; the assertion always fails with *"no final triage state captured"*. This adds significant noise to every validator run. Pick up [H.14 — StreamingEventCapture against orchestrator stdout](planning/03-exec-validation-scaffold.md) and wire it into the CLI: spawn the orchestrator as a child process from the harness, attach a `StreamingEventCapture` to its stdout, pass through to `runScenario.deps.events`. Until this lands, suppress `triage_verdict` assertions in scenario authoring, or treat their failures as known-noise rather than real signal. Estimate: 2-3 hrs including the orchestrator-spawn lifecycle handling.
