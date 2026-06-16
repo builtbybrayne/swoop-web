@@ -1,9 +1,10 @@
 // product/ui/src/__tests__/brand-extension-surface.test.tsx
 //
-// Locks in the `data-swoop-part` contract documented in HANDOVER.md.
-// Swoop's in-house team uses these attributes as the selector surface for
-// brand overrides; removing one silently breaks their stylesheet. Each
-// assertion here mirrors a row in HANDOVER.md's selector table.
+// Locks in the `data-swoop-part` contract documented in
+// product/handover/ui-integration.md. Swoop's in-house team uses these
+// attributes as the selector surface for brand overrides; removing one
+// silently breaks their stylesheet. Each assertion here mirrors a row in
+// that doc's selector table.
 //
 // Scope is intentionally narrow: we assert that the attribute is present
 // on the right element, not what classes it carries. Class churn during

@@ -19,6 +19,7 @@ If you're new here, read [`troubleshooting.md`](troubleshooting.md) first to ori
 | [`prompt-version-rollback.md`](prompt-version-rollback.md) | A prompt-version bump produced bad outputs and you want to revert without burning the whole pipeline. |
 | [`evalset-growth.md`](evalset-growth.md) | Friday afternoon: convert real Puma conversations into new harness scenarios. |
 | [`handoff-retention-sweep.md`](handoff-retention-sweep.md) | Verifying the durable handoff store's per-verdict retention enforcement, or recovering when something looks off. |
+| [`observability.md`](observability.md) | Events aren't landing anywhere queryable; wiring Cloud Logging / Error Reporting for prod; or tracing a single conversation by session id. |
 
 ---
 

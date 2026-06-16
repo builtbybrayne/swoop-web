@@ -1125,6 +1125,8 @@ The structure also resolves the G.10 coupling: positive-voice authoring (Al, tas
 
 ## D.24 — HANDOVER.md lives at `product/ui/HANDOVER.md`
 
+> **SUPERSEDED 2026-06-16:** relocated to `product/handover/ui-integration.md` when the dedicated `product/handover/` folder was created (the backend productionisation + maintenance docs joined it — one consolidated Swoop handover surface). Co-location with `ui/` gave way to a single handover home; the "file move + link update" swap cost below was paid.
+
 **Decided**: 2026-04-24
 **Owner**: D.t8 executing agent
 **Rationale**: Co-located with the package being handed over. Not in `docs/` or repo root — Swoop's team opens the `ui/` folder on day one; the doc should be at eye-level there. No separate docs site needed for one file.

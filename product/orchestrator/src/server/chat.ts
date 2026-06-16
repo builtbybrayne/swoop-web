@@ -21,7 +21,10 @@
  * What is intentionally missing:
  *   - Rate limiting (B.t5 scope: "no auth"; 429 shape reserved for later).
  *   - Warm pool hydration (B.t10).
- *   - Observability events (chunk F).
+ *
+ * Observability: this handler emits the chunk-F turn lifecycle —
+ * turn.received, triage.decided, tool.called/returned, turn.completed, and
+ * error.raised on failure — via `emitEvent` (sink selected by EVENT_SINK; F-c).
  */
 
 import type { Request, Response } from 'express';

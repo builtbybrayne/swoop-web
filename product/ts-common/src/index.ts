@@ -19,5 +19,6 @@ export * from "./handoff.js";
 export * from "./routes.js";
 export * from "./events.js";
 export * from "./emit-event.js";
+export * from "./event-sink.js";
 export * from "./image.js";
 export * from "./errors.js";

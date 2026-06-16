@@ -143,6 +143,18 @@ export const configSchema = z
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('development'),
+
+    // --- Observability sink (F-c) ------------------------------------------
+    //
+    // Where emitted events land (registered via setEventSink at boot):
+    //   stdout         — one JSON line per event (default; dev).
+    //   postgres       — durable INSERT into event_log (migration 020; single
+    //                    store per C.18 — uses the connector's own DATABASE_URL
+    //                    pool). SQL-queryable today; works on the demo Mini.
+    //   cloud-logging  — severity-tagged structured stdout for Cloud Logging +
+    //                    Error Reporting (Swoop GCP, via Cloud Run / Ops Agent).
+    // See planning/03-exec-observability-c.md.
+    EVENT_SINK: z.enum(['stdout', 'postgres', 'cloud-logging']).default('stdout'),
   })
   // No cross-field refinements at C.t1. The connector's surface is small
   // enough that single-field validation covers the failure modes that matter
