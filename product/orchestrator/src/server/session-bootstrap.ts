@@ -20,6 +20,7 @@
 
 import type { Request, Response } from 'express';
 import { SessionBootstrapRequestSchema, emitErrorRaised, emitEvent } from '@swoop/common';
+import type { StaffAuthenticator } from '@swoop/common';
 import type { SessionStore, SessionAllocator } from '../session/index.js';
 import { DISCLOSURE_COPY_VERSION, sendError } from './errors.js';
 
@@ -52,6 +53,14 @@ export interface SessionBootstrapDeps {
    * fallthrough so the HTTP surface can be driven without wiring the pool.
    */
   readonly allocator?: SessionAllocator;
+  /**
+   * Staff authenticator (staff-auth task). When present, a `staffToken` in
+   * the request body is verified; on success, `session.staff` is set to true
+   * and `session.mode` is set to 'conversation'. Invalid/absent token →
+   * ordinary visitor session, no error. A later task reads these flags to
+   * route to the memory agent.
+   */
+  readonly staffAuthenticator?: StaffAuthenticator | null;
 }
 
 export function createSessionBootstrapHandler(
@@ -71,7 +80,7 @@ export function createSessionBootstrapHandler(
       sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    const { entryUrl, regionInterestHint } = parsed.data;
+    const { entryUrl, regionInterestHint, staffToken } = parsed.data;
 
     try {
       const initial = {
@@ -97,6 +106,26 @@ export function createSessionBootstrapHandler(
             await deps.sessionStore.delete(state.sessionId).catch(() => {});
             throw err;
           }
+        }
+      }
+
+      // staff-auth: if a staffToken was presented and an authenticator is
+      // wired, verify the token and set session.staff + session.mode.
+      // Failure (invalid/expired/absent) → visitor session, no error emitted.
+      // Server-side validation is the ONLY trust boundary.
+      if (staffToken && deps.staffAuthenticator) {
+        try {
+          const verifyResult = await deps.staffAuthenticator.verify(staffToken);
+          if (verifyResult.ok) {
+            await deps.sessionStore.update(state.sessionId, (s) => ({
+              ...s,
+              staff: true,
+              mode: 'conversation' as const,
+            }));
+          }
+        } catch {
+          // verify() should never throw (see interface contract), but if it
+          // does (e.g. jose internal error), degrade to visitor session.
         }
       }
 

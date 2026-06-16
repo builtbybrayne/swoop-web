@@ -151,6 +151,8 @@ describe('canAcceptTurn consent gate', () => {
       },
       metadata: {},
       seenItems: defaultEmptySeenItems(),
+      staff: false,
+      mode: 'conversation' as const,
     };
   }
 

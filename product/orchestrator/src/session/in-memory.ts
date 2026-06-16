@@ -87,6 +87,9 @@ function buildDefaultState(
     // Anti-repetition seen-set — defaults to every per-type array empty.
     // Per planning/03-exec-crosscut-anti-repetition.md (HITL-ratified 2026-05-27).
     seenItems: initial?.seenItems ?? defaultEmptySeenItems(),
+    // staff-auth — visitor defaults. A staff session sets staff:true.
+    staff: initial?.staff ?? false,
+    mode: initial?.mode ?? 'conversation',
   };
 }
 

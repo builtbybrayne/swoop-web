@@ -36,6 +36,11 @@ import { createSessionHistoryHandler } from './session-history.js';
 import { createHandoffSubmitHandler } from './handoff-submit.js';
 import { DISCLOSURE_COPY_VERSION } from './errors.js';
 import type { TriageClassifier } from '../functional-agents/triage-classifier.js';
+import {
+  createStaffAuthHandler,
+  createStaffAuthRateLimiter,
+} from './staff-auth.js';
+import type { StaffAuthenticator } from '@swoop/common';
 
 export interface BuildServerDeps {
   readonly sessionStore: SessionStore;
@@ -80,6 +85,17 @@ export interface BuildServerDeps {
    * the recipient + transport + templates dir.
    */
   readonly mailerConfig?: MailerConfig;
+  /**
+   * Staff authenticator (staff-auth task). When supplied (STAFF_AUTH_ENABLED=true),
+   * `POST /staff/auth` is registered and validates the shared password.
+   * When null/omitted, the route is still registered but returns 503 so
+   * the endpoint is not a surprise 404 on misconfigured deploys.
+   *
+   * Design: the dep is typed as `StaffAuthenticator | null` (not optional)
+   * to force the caller to be explicit about the feature state. `null` =
+   * feature disabled; `undefined` = not wired yet (treated as null).
+   */
+  readonly staffAuthenticator?: StaffAuthenticator | null;
 }
 
 export function buildServer(deps: BuildServerDeps): Express {
@@ -159,6 +175,7 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
       disclosureCopyVersion: deps.disclosureCopyVersion ?? DISCLOSURE_COPY_VERSION,
       onSessionCreated: deps.onSessionCreated,
       allocator: deps.allocator,
+      staffAuthenticator: deps.staffAuthenticator,
     }),
   );
 
@@ -192,6 +209,7 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
       now: deps.now,
       corsAllowedOrigins: deps.corsAllowedOrigins,
       triageClassifier: deps.triageClassifier,
+      staffAuthenticator: deps.staffAuthenticator,
     }),
   );
 
@@ -209,6 +227,18 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
       }),
     );
   }
+
+  // staff-auth — always register so the route is not a surprise 404.
+  // The handler returns 503 when STAFF_AUTH_ENABLED=false (authenticator=null).
+  // Rate limiter is applied FIRST so brute-force hits 429 before the handler
+  // even parses the body — no password comparison on a locked-out IP.
+  app.post(
+    '/staff/auth',
+    createStaffAuthRateLimiter(),
+    createStaffAuthHandler({
+      authenticator: deps.staffAuthenticator ?? null,
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------

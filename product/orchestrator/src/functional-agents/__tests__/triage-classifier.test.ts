@@ -102,6 +102,8 @@ function blankSession(): SessionState {
     },
     metadata: {},
     seenItems: defaultEmptySeenItems(),
+    staff: false,
+    mode: 'conversation' as const,
   };
 }
 

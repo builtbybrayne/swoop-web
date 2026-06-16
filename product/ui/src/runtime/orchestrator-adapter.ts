@@ -39,6 +39,7 @@
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { emitErrorRaised, emitEvent, messageOf, parseSseFrames } from "@swoop/common";
+import { readStaffToken } from "../disclosure/use-staff-auth";
 
 /** Key used to persist the session id in tab-scoped storage. */
 export const SESSION_STORAGE_KEY = "swoop.session.id";
@@ -432,11 +433,17 @@ export function createOrchestratorTransport<
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
 
+      // staff-auth — attach the staff JWT if one is stored. The orchestrator
+      // validates it server-side and sets session.staff + session.mode; the
+      // value here is never trusted as a client flag.
+      const staffToken = readStaffToken();
+
       const body = JSON.stringify({
         ...(extraBody ?? {}),
         sessionId,
         message: latestUserMessage,
         clientTime,
+        ...(staffToken ? { staffToken } : {}),
       });
 
       let response: Response;
