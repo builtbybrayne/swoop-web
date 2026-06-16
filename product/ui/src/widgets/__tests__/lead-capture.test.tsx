@@ -1,10 +1,10 @@
 // product/ui/src/widgets/__tests__/lead-capture.test.tsx
 //
 // Covers the `handoff` widget's single-step form, the precis disclosure,
-// the optional "Anything else?" textarea, the consent-gate (submit disabled
-// until tier-2 tickbox is checked), and the POST-then-addResult flow that
-// lands a successful submission via the orchestrator's /handoff/submit
-// endpoint (E.t3).
+// the optional "Anything else?" textarea, the inline consent notice
+// (clicking submit IS the tier-2 consent — no tickbox), and the
+// POST-then-addResult flow that lands a successful submission via the
+// orchestrator's /handoff/submit endpoint (E.t3).
 //
 // Per the 2026-05-19 frosty-leavitt-handoff-form-polish Tier-3 plan, the
 // prior "summary preview → form" two-step flow is collapsed into a single
@@ -143,34 +143,33 @@ describe("LeadCaptureWidget", () => {
     );
   });
 
-  it("consent copy references Planning Specialist (U1/P1)", () => {
+  it("consent notice references Planning Specialist (U1/P1)", () => {
     render(<LeadCaptureWidget {...mockProps()} />);
-    // Consent line uses the centralised SPECIALIST_TERM_SINGULAR.
+    // Inline notice (no tickbox) uses the centralised SPECIALIST_TERM_SINGULAR.
     expect(
       screen.getByText(
-        /I agree my conversation summary can be shared with a Swoop Planning Specialist/i,
+        /shares your conversation summary with a Swoop Planning Specialist/i,
       ),
     ).toBeInTheDocument();
   });
 
-  it("keeps submit disabled until the consent tickbox is checked", () => {
+  it("submit is enabled without any consent tickbox — submission is the consent", () => {
     render(<LeadCaptureWidget {...mockProps()} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada Ríos" } });
     fireEvent.change(screen.getByLabelText("Email"), {
       target: { value: "ada@example.com" },
     });
-
-    const submit = screen.getByRole("button", { name: /Submit handoff details/i });
-    expect(submit).toBeDisabled();
-
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
-    expect(submit).not.toBeDisabled();
+    // No tier-2 tickbox — the inline notice carries the consent and Send is
+    // enabled from first paint (validation gates the actual POST).
+    expect(screen.getByTestId("lead-capture-consent-notice")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Submit handoff details/i }),
+    ).not.toBeDisabled();
   });
 
   it("validates name + email before attempting POST", async () => {
     const addResult = vi.fn();
     render(<LeadCaptureWidget {...mockProps({ addResult })} />);
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
 
     // Submit with empty name/email — validation should catch it locally.
     fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
@@ -202,7 +201,6 @@ describe("LeadCaptureWidget", () => {
     fireEvent.change(screen.getByTestId("lead-capture-additional-notes"), {
       target: { value: "Travelling with my partner — they're less experienced on multi-day treks." },
     });
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
     fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
 
     await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));
@@ -222,9 +220,9 @@ describe("LeadCaptureWidget", () => {
     expect(body.contact.email).toBe("ada@example.com");
     // preferredMethod removed from POST body (U2 — no preferred contact control).
     expect("preferredMethod" in body.contact).toBe(false);
+    // Submission is the tier-2 consent — handoffGranted is always true on submit.
     expect(body.consent.handoffGranted).toBe(true);
-    expect(body.consent.marketingGranted).toBe(false);
-    expect(body.consent.consentCopyVersion).toBe("consent-handoff/v1");
+    expect(body.consent.consentCopyVersion).toBe("consent-handoff/v2");
     expect(body.consent.handoffTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
     await waitFor(() => expect(addResult).toHaveBeenCalledTimes(1));
@@ -242,7 +240,6 @@ describe("LeadCaptureWidget", () => {
     render(<LeadCaptureWidget {...mockProps()} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
     fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
     await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));
     const body = postHandoffSubmitMock.mock.calls[0]![0];
@@ -260,7 +257,6 @@ describe("LeadCaptureWidget", () => {
     render(<LeadCaptureWidget {...mockProps({ addResult })} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
     fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
 
     await waitFor(() =>
@@ -284,7 +280,6 @@ describe("LeadCaptureWidget", () => {
     render(<LeadCaptureWidget {...mockProps()} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
     fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
 
     await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));
@@ -311,7 +306,6 @@ describe("LeadCaptureWidget", () => {
     render(<LeadCaptureWidget {...mockProps()} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
     fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
 
     await waitFor(() =>
@@ -335,20 +329,10 @@ describe("LeadCaptureWidget", () => {
     render(<LeadCaptureWidget {...mockProps()} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
     fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
 
     await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));
     // Survived the optional?.append call — no error thrown, submission proceeds.
-  });
-
-  it("marketing opt-in does NOT gate the submit button", () => {
-    render(<LeadCaptureWidget {...mockProps()} />);
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
-    const submit = screen.getByRole("button", { name: /Submit handoff details/i });
-    expect(submit).not.toBeDisabled();
   });
 
   it("confirmation card uses Planning Specialist term (U1/P1)", async () => {
@@ -364,7 +348,6 @@ describe("LeadCaptureWidget", () => {
     const { rerender } = render(<LeadCaptureWidget {...mockProps({ addResult })} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.com" } });
-    fireEvent.click(screen.getByTestId("lead-capture-consent"));
     fireEvent.click(screen.getByRole("button", { name: /Submit handoff details/i }));
 
     await waitFor(() => expect(postHandoffSubmitMock).toHaveBeenCalledTimes(1));

@@ -147,7 +147,7 @@ async function postSession(baseUrl: string): Promise<{
   if (!sessionId) throw new Error("Session bootstrap response missing session id");
   // Fall back to "v1" if the orchestrator omits the version — matches the
   // placeholder copy revision used below.
-  const disclosureCopyVersion = body.disclosureCopyVersion ?? "v1";
+  const disclosureCopyVersion = body.disclosureCopyVersion ?? "v2";
   return { sessionId, disclosureCopyVersion };
 }
 
@@ -250,7 +250,7 @@ export function useConsent(): UseConsentResult {
       eventType: "consent.declined",
       payload: {
         tier: "conversation",
-        copyVersion: "v1",
+        copyVersion: "v2",
       },
     });
     setStatus({ state: "declined" });

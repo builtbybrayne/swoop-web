@@ -14,9 +14,8 @@ The visitor-facing copy that constitutes:
 
 1. **EU AI Act Art. 50 disclosure** — visitor is informed they're interacting with an AI.
 2. **GDPR tier-1 consent copy** — visitor consents to conversation-data storage.
-3. **GDPR tier-2 consent copy** — visitor consents to contact-detail submission + outreach.
-4. **Marketing opt-in copy** — separate, optional, unticked-by-default.
-5. **Privacy-info page copy** — what happens with the data, retention, processors, right-to-deletion, contact.
+3. **GDPR tier-2 consent copy** — visitor consents to contact-detail submission + outreach (submission-as-consent — no tickbox).
+4. **Privacy-info page copy** — what happens with the data, retention, processors, right-to-deletion, contact.
 
 ---
 
@@ -26,8 +25,7 @@ The visitor-facing copy that constitutes:
 |---|---|---|
 | Tier-1 disclosure + consent | `product/cms/legal/disclosure-opening.md` | Opening screen, before first message |
 | Persistent chrome tag | `product/cms/legal/disclosure-chrome.md` | Top of chat surface, always visible |
-| Tier-2 handoff consent (required) | `product/cms/legal/consent-handoff.md` | Lead-capture widget tickbox label |
-| Marketing opt-in (optional) | `product/cms/legal/consent-marketing.md` | Lead-capture widget tickbox label |
+| Tier-2 handoff consent (submission-as-consent) | `product/cms/legal/consent-handoff.md` | Inline notice by the Send button (no tickbox) |
 | Privacy-info page | `product/cms/legal/privacy-info.md` | Linked from both consent screens |
 
 ---
@@ -49,10 +47,9 @@ The strings live inline in the React components today (chunk D, shipped 2026-04-
 When this section fills, counsel will be asked to confirm:
 
 1. **EU AI Act Art. 50 satisfied?** The tier-1 screen names the AI explicitly, names the operator (Swoop), and is unmissable before the first message.
-2. **GDPR Art. 7 conditions met?** Consent is freely given (refusing closes the chat without penalty), specific (separate tickbox per purpose), informed (privacy-info linked), and unambiguous (active acceptance).
-3. **Marketing opt-in genuinely separate?** Per GDPR, marketing consent must be a distinct affirmative action — not bundled with the service-consent.
-4. **Privacy-info page covers**: identity of controller, contact details, purposes, lawful basis, recipients (processors), retention, data-subject rights, complaint contact, right to withdraw.
-5. **Withdrawal pathway clear?** How does the visitor revoke consent? (Today: tier-1 withdrawal closes the chat; tier-2 withdrawal triggers the erasure runbook.)
+2. **GDPR Art. 7 conditions met?** Consent is freely given (refusing closes the chat without penalty), specific (per-purpose: tier-1 at start, tier-2 at handoff), informed (privacy-info linked), and unambiguous (active acceptance — clicking Continue / clicking Send).
+3. **Privacy-info page covers**: identity of controller, contact details, purposes, lawful basis, recipients (processors), retention, data-subject rights, complaint contact, right to withdraw.
+4. **Withdrawal pathway clear?** How does the visitor revoke consent? (Today: tier-1 withdrawal closes the chat; tier-2 withdrawal triggers the erasure runbook.)
 
 ---
 

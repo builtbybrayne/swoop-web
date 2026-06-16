@@ -16,7 +16,7 @@
 
 import type { Response } from 'express';
 
-export const DISCLOSURE_COPY_VERSION = 'v1';
+export const DISCLOSURE_COPY_VERSION = 'v2';
 
 /**
  * Canonical error code set. Extended with new values as new failure modes

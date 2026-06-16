@@ -151,7 +151,6 @@ function validRequestBody(
     consent: {
       handoffGranted: true,
       handoffTimestamp: '2026-04-22T09:07:19.000Z',
-      marketingGranted: false,
       consentCopyVersion: 'consent-handoff/v1',
     },
     ...overrides,

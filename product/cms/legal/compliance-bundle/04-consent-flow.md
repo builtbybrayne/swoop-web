@@ -19,7 +19,7 @@ The textual walkthrough below is **fillable now** — it describes the flow, mec
 **What the visitor sees**:
 - Full-screen modal or in-iframe screen, no other chat affordances visible.
 - AI disclosure (EU AI Act Art. 50): "You're talking to an AI assistant, not a human."
-- Conversation-data consent (GDPR primary): notice that messages are stored to help specialists understand what the visitor is looking for.
+- Conversation-data consent (GDPR primary): notice that messages are processed to answer, and that the chat is retained for a while — anonymised before any internal analysis — to check the assistant is working well.
 - Privacy-info link.
 - Two buttons: **Continue** | **No thanks**.
 
@@ -61,13 +61,12 @@ The textual walkthrough below is **fillable now** — it describes the flow, mec
 
 **What the visitor sees**:
 - The lead-capture widget renders inline in the chat surface as a tool-call widget.
-- Form fields: Name, Email, optional preferred contact method.
-- **Required tickbox**: Tier-2 consent label (from `consent-handoff.md`).
-- **Optional tickbox**: Marketing opt-in label (from `consent-marketing.md`), unticked by default.
-- **Send** button (disabled until required fields + required tickbox satisfied).
+- Form fields: Name + Email (required), Phone (optional), an "Anything else?" free-text note (optional), and a collapsible "what you've told us" précis.
+- **Inline consent notice** by the Send button ("Clicking 'Send my details' shares your conversation summary with a Swoop Planning Specialist…") — **submission is the tier-2 consent**; no tickbox. Marketing opt-in removed 2026-06-16.
+- **Send** button (enabled once Name + Email are valid).
 - **Cancel** affordance (returns to conversation without submitting).
 
-**Decision reference**: E.4 (two-tier consent), with the tier-2 tickbox label being the moment of consent for contact-detail processing + outreach.
+**Decision reference**: E.4 (two-tier consent). Tier-2 consent is now the affirmative act of submitting the form after the inline notice — no separate tickbox.
 
 **Screenshot slot**: `screenshots/03-handoff-widget.png` (PLACEHOLDER).
 
@@ -77,7 +76,7 @@ The textual walkthrough below is **fillable now** — it describes the flow, mec
 
 **Client-side**:
 - Tier-2 consent timestamp captured at click moment via `new Date().toISOString()` (decision **E.15**).
-- POST to `/handoff/submit` with: name + email + preferred contact + tier-2 consent flags + timestamp + marketing opt-in + agent-args bundle + session id.
+- POST to `/handoff/submit` with: name + email (+ optional phone + note) + tier-2 consent flag (granted by the act of submitting) + timestamp + copy version + agent-args bundle + session id.
 
 **Server-side**:
 - Orchestrator validates against `HandoffSubmitRequestSchema` (`.strict()`).
@@ -160,7 +159,7 @@ Both layers exist deliberately (belt-and-braces). Either layer alone would preve
 |---|---|---|
 | `screenshots/01-tier1-disclosure.png` | Step 1 modal | 🔴 Pending |
 | `screenshots/02-chrome-tag.png` | Persistent chrome during conversation | 🔴 Pending |
-| `screenshots/03-handoff-widget.png` | Lead-capture widget with both tickboxes | 🔴 Pending |
+| `screenshots/03-handoff-widget.png` | Lead-capture widget with the inline consent notice | 🔴 Pending |
 | `screenshots/04-confirmation.png` | Post-submit confirmation | 🔴 Pending |
 | `screenshots/05-tier1-declined.png` | Tier-1 declined close screen (if visual) | 🔴 Pending — optional |
 

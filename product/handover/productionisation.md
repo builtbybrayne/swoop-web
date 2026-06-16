@@ -67,3 +67,4 @@ The collection layer is wired (F-c); the prod flip is GCP config — full steps 
 - [ ] Observability flipped (§6) + the error alert verified firing.
 - [ ] Smoke a real conversation → tool call → qualified handoff; confirm the email lands and a durable record + `handoff.submitted` event are written.
 - [ ] Consent/disclosure copy versions confirmed current.
+- [ ] **Privacy contact email** — replace the `privacy@example.com` placeholder (privacy-info modal + data-subject-rights copy) with Swoop's real privacy/DSAR address ([legal pack](../../planning/swoop-legal-review-pack.md) D-3.3.3).

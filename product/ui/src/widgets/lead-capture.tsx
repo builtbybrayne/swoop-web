@@ -16,8 +16,9 @@
 //   - A free-text "Anything else the specialist should know? (optional)"
 //     textarea — persists to the durable record and renders into the
 //     specialist email.
-//   - Tier-2 handoff consent tickbox (required — submit disabled until
-//     checked), plus an optional marketing opt-in (unticked by default).
+//   - An inline consent notice by the submit button — clicking submit IS the
+//     tier-2 consent to share the conversation summary with a Planning
+//     Specialist (no separate tickbox; submission is the affirmative act).
 //
 // On submit the widget POSTs to the orchestrator's `/handoff/submit`
 // endpoint (E.t3) which runs the connector-side `submitHandoff` pipeline
@@ -74,7 +75,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Versioned token mirrored into the durable record's `consentCopyVersion`
  *  field. Bump when the tier-2 consent text changes. */
-const CONSENT_COPY_VERSION = "consent-handoff/v1";
+const CONSENT_COPY_VERSION = "consent-handoff/v2";
 
 const SHELL_CTX = {
   widgetType: "lead-capture",
@@ -101,8 +102,6 @@ export function LeadCaptureWidget(
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
-  const [handoffConsent, setHandoffConsent] = useState(false);
-  const [marketingConsent, setMarketingConsent] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -195,7 +194,6 @@ export function LeadCaptureWidget(
 
   async function handleSubmit(ev: FormEvent<HTMLFormElement>) {
     ev.preventDefault();
-    if (!handoffConsent) return; // Consent-gate: shouldn't fire since submit is disabled, but belt + braces.
     if (!validate()) return;
 
     setSubmitting(true);
@@ -229,10 +227,10 @@ export function LeadCaptureWidget(
         ...(phone.trim() ? { phone: phone.trim() } : {}),
       },
       consent: {
-        handoffGranted: handoffConsent,
+        // Submission is the tier-2 affirmative act — clicking Send IS the grant
+        // (see the inline notice by the button). No separate tickbox.
+        handoffGranted: true,
         handoffTimestamp: now,
-        marketingGranted: marketingConsent,
-        ...(marketingConsent ? { marketingTimestamp: now } : {}),
         consentCopyVersion: CONSENT_COPY_VERSION,
       },
     };
@@ -280,7 +278,7 @@ export function LeadCaptureWidget(
     setSubmitError(`We couldn't send your details just now (${detail}). Please try again.`);
   }
 
-  const canSubmit = handoffConsent && !submitting;
+  const canSubmit = !submitting;
 
   // L1 render-position fix: the agent fires `handoff` before writing its
   // framing prose (per 00_why.md §9 booking-limit rule), so the tool-call
@@ -398,33 +396,14 @@ export function LeadCaptureWidget(
           />
         </div>
 
-        <label className="mt-1 flex gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={handoffConsent}
-            onChange={(ev) => setHandoffConsent(ev.target.checked)}
-            data-testid="lead-capture-consent"
-            className="mt-0.5 accent-swoop-accent"
-            required
-          />
-          <span>
-            I agree my conversation summary can be shared with a {SPECIALIST_TERM_SINGULAR} so
-            they can follow up.
-          </span>
-        </label>
-
-        <label className="flex gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={marketingConsent}
-            onChange={(ev) => setMarketingConsent(ev.target.checked)}
-            data-testid="lead-capture-marketing"
-            className="mt-0.5 accent-swoop-accent"
-          />
-          <span>
-            Send me occasional ideas and inspiration from Swoop (optional).
-          </span>
-        </label>
+        <p
+          data-testid="lead-capture-consent-notice"
+          className="mt-1 text-xs text-slate-500"
+        >
+          Clicking &quot;Send my details&quot; shares your conversation summary
+          with a {SPECIALIST_TERM_SINGULAR} so they can make better
+          recommendations and follow up.
+        </p>
 
         {submitError ? (
           <p

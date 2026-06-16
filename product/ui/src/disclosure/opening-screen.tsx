@@ -18,7 +18,7 @@ const COPY = {
   intro:
     "This is an AI assistant. It helps you explore trip ideas by chatting with you and suggesting options from our library.",
   body:
-    "To answer your questions, we process the messages you send during this conversation. Nothing you type is used to train third-party AI models, and the conversation is kept only for as long as it takes to help you.",
+    "To answer your questions, we process the messages you send. If you continue, we'll keep a record of this chat — any saved data is always anonymised before we do any internal analyses to check the assistant is working well. Nothing you type is used to train third-party AI models.",
   bodyContinued:
     "If you'd prefer not to start the conversation, you can decline — no data is recorded.",
   privacyLinkLabel: "Read how we handle your data",
