@@ -36,12 +36,30 @@ describe('buildDateline', () => {
     expect(result).toContain('how far out');
   });
 
+  it('names the timezone as a location signal when clientTime is valid', () => {
+    const result = buildDateline(
+      { iso: '2026-06-10T17:00:00+01:00', timeZone: 'Europe/London' },
+      SERVER_NOW,
+    );
+    // The visitor's timezone should be flagged as the location signal so the
+    // agent frames seasonality from their hemisphere (Luke 16-Jun-2026 feedback).
+    expect(result).toContain('timezone');
+    expect(result).toContain('where they are');
+  });
+
   it('returns a server-clock fallback when clientTime is null', () => {
     const result = buildDateline(null, SERVER_NOW);
     expect(result).toContain('server clock');
     expect(result).toContain('visitor clock unavailable');
     expect(result).toContain('UTC');
     expect(result).toContain('Reason about');
+  });
+
+  it('defaults to a US / Northern Hemisphere frame when clientTime is null', () => {
+    // Luke 16-Jun-2026: when location can't be inferred, presume US, not Europe.
+    const result = buildDateline(null, SERVER_NOW);
+    expect(result).toContain('United States');
+    expect(result).toContain('Northern Hemisphere');
   });
 
   it('returns a server-clock fallback when clientTime.iso is unparseable', () => {

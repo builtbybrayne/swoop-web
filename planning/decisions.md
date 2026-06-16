@@ -8,6 +8,13 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## G.visitor-location-1 — Visitor location is inferred from the per-turn timezone; default US when unknown; Southern-Hemisphere seasonality anchored
+
+**Decided**: 2026-06-16 (HITL-ratified — Luke 16-Jun feedback: *"if assuming users location then let's presume US"*)
+**Owner**: visitor-location-infer worktree session ([planning/03-exec-crosscut-visitor-location-infer.md](03-exec-crosscut-visitor-location-infer.md))
+**Rationale**: The agent had been assuming a European visitor (*"Patagonia's seasons run opposite to Europe's"*). We already pass the visitor's IANA timezone on every turn (B.t12 — `clientTime.timeZone`, rendered into the per-turn dateline), so the location signal was already in the agent's context; what was missing was the instruction to use it. There was zero geographic-anchoring guidance anywhere in `00_why.md` (grep-confirmed). Fix is **prompt-led**: a new §7 subsection tells the agent to read the timezone as its best location signal and frame seasonal/relative-time talk from the visitor's hemisphere; Patagonia is Southern Hemisphere (Dec–Feb summer / Jun–Aug winter) and the inversion is stated relative to where the visitor actually is; default to a **US / Northern-Hemisphere** frame when the zone is absent or ambiguous (Luke's "presume US"); hold the read lightly (a zone is a hint, not an identity — VPN / expat / travelling); MAY ask one travel-origin question only when it matters and can't be inferred. `buildDateline` (chat.ts) reinforces at the moment the signal is/isn't present (present: names the timezone as the location signal; fallback: states the US default). Inference stays **prompt-side** (the model reasons over the raw IANA zone) rather than a server-side region map — a naïve `America/*` → Northern map is wrong for `America/Santiago` / `America/Argentina/*` (Southern), which the model handles correctly. Folds in the 2026-05-18 inbox Southern-Hemisphere seasonality anchor (same geographic-grounding gap). Acceptance gate: harness `021-visitor-location-seasons` (runs with the `luke-` family).
+**Swap cost**: Low. Behaviour is content (`00_why.md` §7) + two reinforcing clauses in `buildDateline`; reverting is deleting the subsection and the clauses. Promoting to a server-side region/hemisphere derivation later is additive (compute from `clientTime.timeZone`, inject into the dateline) and changes neither the wire nor the prompt contract.
+
 ## G.goofy-goldstine-1 — Guidebook and Parent Guidebook pagetypes added to PRACTICAL_PAGETYPE_TITLES
 
 **Decided**: 2026-06-11
