@@ -9,6 +9,20 @@
 
 ---
 
+## ✅ Execution status (2026-06-17, worktree `claude/reasoning-leak`)
+
+| Phase | Status | Commit(s) / note |
+|---|---|---|
+| 0 — worktree setup | ✅ done | env copied; `npm install`; baseline green; SDK `@anthropic-ai/sdk@0.90.0` confirmed to type `thinking:{type:'adaptive'}` + `output_config.effort` — **no bump needed**. |
+| 1 — minimal native thinking | ✅ done | `725f987` (RL.1–5) + `006ebb8` (temp-with-thinking 400 fix — omit sampling params when thinking on). |
+| **1 smoke (decides Phase 2)** | ✅ **leak gone, loop survives** | session `0fee8d42`: 8 tool-call frames then text; first visible text = the answer (no narration); `reasoningCount:28` server-side; **0** reasoning frames on the wire; full `list_skills→load_skill→find_inspiring→illustrate→answer` loop with **no 400**. ~23s latency (noted; effort lever available). |
+| 2 — signature round-trip | ⏭️ **SKIPPED** | Conditional on smoke (b) failing; it passed → not required. See RL.6 + discoveries 2026-06-17. Phase 2 recipe stays on file if a future path 400s. |
+| 3 — conditional belt | ✅ done | `daa1be1` (RL.3). Off-path behavioural smoke (step 4) **skipped** — belt injection is unit-tested (`factory.test.ts`), it's the degrade path, and live off-path recovery cost outweighed the signal. |
+| 4 — whitespace-concat fix | ✅ done | `bf986e8` (RL.7). UI suite green (227 tests). |
+| 5 — docs + re-baseline | 🔄 in progress | decisions/discoveries/gotchas updated; harness re-baseline (RL.8) + fresh-install sweep at close. **Not merged to main — Alastair's "apply" call.** |
+
+---
+
 ## ★ Context — the problem in one paragraph
 
 The conversational agent prints its planning / tool-narration as **visible text before the answer** ("I'll start by checking the pattern library… this opening is wide open, a Browser or early Dreamer, let me load those postures…" → tool calls → the real answer). Root cause: B.13 re-architected reasoning isolation from `<reasoning>`/`<utter>` tags to **native Anthropic thinking blocks**, but only the *consumer* half shipped — [reasoning-filter.ts](../product/orchestrator/src/translator/reasoning-filter.ts) strips reasoning parts, and [claude-llm.ts:249-276](../product/orchestrator/src/agent/claude-llm.ts) maps `thinking_delta` → `thought:true`. The *producer* half was never wired: `thinking` is never set on the request ([claude-llm.ts:182-192](../product/orchestrator/src/agent/claude-llm.ts)) and the system prompt has no output discipline. With no reasoning channel, the model narrates in plain `text`. The tool-heavy `list_skills → load_skill → find_*` flow gives it several hops to narrate across. Default Sonnet 4.5 leaks ~1 segment; Opus 4.8 (via the dev model picker) leaks ~2. Plausibly part of Luke's 16/06 "responses got longer" feedback.
@@ -88,6 +102,8 @@ Goal: model reasons in the thinking channel; visible text is just the answer. **
 
 ## Phase 2 — signature round-trip (CONDITIONAL on Phase-1 (b) failing)
 
+> ⏭️ **SKIPPED (2026-06-17).** The Phase-1 smoke (b) passed — the full tool loop completed with no 400 — so the signature round-trip is not required for this path. Steps below are retained as the ready recipe if a future model/path 400s for a missing pre-`tool_use` thinking block.
+
 Only if the smoke 400s. Persist thinking blocks (with signature) so they replay before `tool_use`.
 
 1. **Read first** (haven't yet): the B.t4 translator (`adkEventsToParts` / equivalent) and the session-persistence sink path, to confirm how a non-partial `thought:true` Part flows to (i) the SSE wire (must be stripped by reasoning-filter) and (ii) session history (must persist). Confirm genai `Part` carries `thoughtSignature` in the installed `@google/genai`.
@@ -105,7 +121,7 @@ Only if the smoke 400s. Persist thinking blocks (with signature) so they replay 
 1. Author `product/cms/prompts/fallbacks/silent-working.md` — concise: reason silently / put working in the thinking, not the reply / don't narrate tool use / output only the visitor-facing answer. (Voice-checked, no AI-slop.)
 2. **`factory.ts`**: when `!thinkingEnabled`, read that file and append it to the instruction in the existing `InstructionProvider` wrapper (the same place skills-prompt injection happens). When `thinkingEnabled`, inject nothing (RL.3).
 3. Unit test: instruction includes the belt iff thinking disabled. **Green check + commit**: `feat(orchestrator,cms): conditional silent-working belt for the thinking-off fallback (RL.3)`.
-4. **Smoke the off-path**: boot with `ORCHESTRATOR_THINKING_ENABLED=false`, confirm (a) the belt is in the system prompt and (b) the leak is materially reduced vs. raw status quo (prompt-only mitigation level).
+4. **Smoke the off-path**: boot with `ORCHESTRATOR_THINKING_ENABLED=false`, confirm (a) the belt is in the system prompt and (b) the leak is materially reduced vs. raw status quo (prompt-only mitigation level). — ⏭️ **Behavioural smoke skipped (2026-06-17)**: belt injection is unit-tested (`factory.test.ts` — present iff disabled), it's the degrade path (default ships thinking-on), and live off-path stack recovery cost outweighed the marginal signal. The belt's *content* is voice-checked; its *wiring* is asserted.
 
 ---
 
