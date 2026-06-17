@@ -32,6 +32,9 @@
  * `main()`, so the `await` was a one-character change there.
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { LlmAgent, SkillToolset } from '@google/adk';
 import type { FunctionTool } from '@google/adk';
 import type { Config } from '../config/index.js';
@@ -63,6 +66,36 @@ export interface BuildAgentResult {
   readonly agent: LlmAgent;
   /** The skills the loader returned, in deterministic order. Boot-log + tests assert against this. */
   readonly skills: LoadedSkill[];
+}
+
+/**
+ * RL.3 — the thinking-off fallback "belt".
+ *
+ * When native thinking is DISABLED, the model has no private reasoning channel,
+ * so without guidance it narrates its planning + tool use as visible text (the
+ * reasoning-leak this work fixes). In that mode we inject a "work silently"
+ * instruction, authored in CMS at `cms/prompts/fallbacks/silent-working.md`.
+ *
+ * When thinking is ENABLED we inject NOTHING — the thinking channel already
+ * isolates reasoning, and layering a blanket silence instruction on top risks
+ * clipping transparency or the visible answer (Alastair, 2026-06-17).
+ *
+ * Returns the block to append to the system prompt (leading separator), or ''
+ * when thinking is on. Gated on `=== false` so a cast/partial Config in tests
+ * (field undefined) is treated as "not disabled" and never reads a file.
+ */
+export function buildThinkingFallbackInjection(
+  config: Pick<Config, 'ORCHESTRATOR_THINKING_ENABLED' | 'systemPromptDirAbsolutePath'>,
+): string {
+  if (config.ORCHESTRATOR_THINKING_ENABLED !== false) return '';
+  const beltPath = path.resolve(
+    config.systemPromptDirAbsolutePath,
+    '..',
+    'fallbacks',
+    'silent-working.md',
+  );
+  const belt = readFileSync(beltPath, 'utf8').trim();
+  return belt.length > 0 ? `\n\n---\n\n${belt}` : '';
 }
 
 export async function buildOrchestratorAgent({
@@ -115,6 +148,14 @@ export async function buildOrchestratorAgent({
       `bodies=${config.PRELOAD_SKILL_BODIES ? 'PRELOADED' : 'on-demand via load_skill'}`,
   );
 
+  // RL.3: the silent-working belt is injected ONLY when thinking is off.
+  const thinkingFallback = buildThinkingFallbackInjection(config);
+  console.log(
+    config.ORCHESTRATOR_THINKING_ENABLED
+      ? '[orchestrator] thinking: ENABLED (adaptive) — reasoning isolated in the thinking channel; no belt'
+      : '[orchestrator] thinking: DISABLED — silent-working belt injected (prompt-only leak mitigation)',
+  );
+
   // SkillToolset accepts either a Skill[] or a Record<string, Skill>; we
   // pass the sorted array so iteration order matches the boot-log order.
   // No `additionalTools` — connector tools live alongside the toolset as
@@ -133,7 +174,7 @@ export async function buildOrchestratorAgent({
     // optional bodies appendix) is appended after the brief — manual
     // replacement for ADK's broken SkillToolset.processLlmRequest
     // pipeline. See skills-prompt-injection.ts + gotchas.md.
-    instruction: () => `${promptLoader.load()}\n\n---\n\n${skillsInjection}`,
+    instruction: () => `${promptLoader.load()}\n\n---\n\n${skillsInjection}${thinkingFallback}`,
     // Connector FunctionTools as top-level siblings of the SkillToolset.
     // The SkillToolset contributes the 5 skill-management tools
     // (list_skills / load_skill / etc.). Its processLlmRequest hook never
