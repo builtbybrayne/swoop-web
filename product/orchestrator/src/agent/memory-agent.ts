@@ -46,6 +46,7 @@ import type { PromptLoader } from './prompt-loader.js';
 import { ClaudeLlm } from './claude-llm.js';
 import type { ConnectorClient } from '../connector/client.js';
 import { buildMemoryTools } from '../connector/memory-tools.js';
+import type { MemoryPrompts } from './memory-prompt-loader.js';
 
 /**
  * Default Opus model id for the memory agent (decision B.5 — config value,
@@ -66,50 +67,6 @@ export const MEMORY_AGENT_APP_NAME = 'puma-memory-agent';
 export const MEMORY_AGENT_USER_ID = 'staff';
 
 // ---------------------------------------------------------------------------
-// Memory-mode wrapper prompt.
-//
-// TODO(T3-5): This is a minimal placeholder. The voice/content pass is Al's
-// editorial domain (G.7) and will be done as a separate T3-5 task. Do NOT
-// polish this copy here.
-//
-// The placeholder communicates the critical behavioural rules:
-//   1. You are in memory-management mode, not discovery mode.
-//   2. You have CRUD tools for the memory store.
-//   3. Confirm before saving — never write without an explicit yes.
-//   4. When memory work is done, call finish_memory to return to the agent.
-//   5. Do NOT describe specific past customers in memories (content hygiene).
-// ---------------------------------------------------------------------------
-
-export const MEMORY_MODE_WRAPPER = `
----
-
-## TODO(T3-5): MEMORY MODE — placeholder wrapper (voice pass required)
-
-You are currently in MEMORY MANAGEMENT MODE. The staff member wants to author,
-edit, or review agent memories — facts you will persist so every future visitor
-conversation loads them as authoritative knowledge.
-
-RULES FOR THIS MODE:
-1. You have memory CRUD tools: memory_store, memory_edit, memory_retire,
-   memory_list_active, memory_show_history. Use them to carry out the request.
-2. ALWAYS confirm before saving. Before calling memory_store or memory_edit,
-   show the staff member what you're about to save and ask "Save this? (yes/no)".
-   Only call the tool after an explicit yes.
-3. DO NOT write memories about specific past customers. Memories must be
-   general sales knowledge (e.g. seasonality, refugio availability, price
-   ranges) — never descriptions of individual visitors.
-4. When the memory work is done (the staff member says "done", "thanks",
-   "back to testing", or returns to a visitor question), call finish_memory
-   immediately. Also call it if unsure — it's recoverable.
-5. If the staff member asks a discovery question (about destinations, trips,
-   pricing), answer briefly then offer to return: "Shall I go back to the
-   agent now?"
-
-The conversation transcript so far is your context. The staff member can see
-the same chat window — pick up naturally from where the conversation left off.
-`.trim();
-
-// ---------------------------------------------------------------------------
 // finish_memory FunctionTool — orchestrator-internal signal.
 //
 // The orchestrator intercepts this tool call in the memory-agent stream and
@@ -125,7 +82,7 @@ export const FINISH_MEMORY_TOOL_NAME = 'finish_memory';
  * event in the stream BEFORE ADK executes it (by reading the SSE parts), so
  * this callback is only reached in test scenarios that drive the agent directly.
  */
-export function buildFinishMemoryTool(): FunctionTool {
+export function buildFinishMemoryTool(description: string): FunctionTool {
   const inputSchema = z
     .object({
       summary: z.string().max(200).optional(),
@@ -134,11 +91,7 @@ export function buildFinishMemoryTool(): FunctionTool {
 
   return new FunctionTool({
     name: FINISH_MEMORY_TOOL_NAME,
-    description:
-      'Signal that memory work is complete. Call this when the staff member ' +
-      'has finished managing memories and you should hand back to the ' +
-      'conversational agent. Also call if you are unsure whether to continue ' +
-      'in memory mode — it is low-stakes and recoverable.',
+    description,
     parameters: inputSchema,
     execute: async (_input: unknown) => {
       // The orchestrator intercepts this in the stream; this path is only
@@ -188,6 +141,11 @@ export interface BuildMemoryAgentParams {
    * Staff member name (from JWT claim) for attribution in memory records.
    */
   readonly staffName: string;
+  /**
+   * Memory-feature prompts loaded from cms/prompts/memory/ at boot.
+   * Provides modeWrapper, loadedHeader, seedContext, and tool descriptions.
+   */
+  readonly memoryPrompts: MemoryPrompts;
 }
 
 /**
@@ -206,6 +164,7 @@ export function buildMemoryAgent({
   connectorClient,
   staffToken,
   staffName,
+  memoryPrompts,
 }: BuildMemoryAgentParams): BuildMemoryAgentResult {
   const memoryModel = config.MEMORY_AGENT_MODEL ?? DEFAULT_MEMORY_AGENT_MODEL;
 
@@ -224,9 +183,10 @@ export function buildMemoryAgent({
     client: connectorClient,
     staffToken,
     staffName,
+    toolDescriptions: memoryPrompts.toolDescriptions,
   });
 
-  const finishMemoryTool = buildFinishMemoryTool();
+  const finishMemoryTool = buildFinishMemoryTool(memoryPrompts.toolDescriptions.finish_memory);
 
   const agent = new LlmAgent({
     name: 'puma_memory_agent',
@@ -235,8 +195,8 @@ export function buildMemoryAgent({
       'session seeded with the conversation transcript. Never reaches visitors.',
     model: llm,
     // InstructionProvider: base prompt (same product context as the
-    // conversational agent) + the memory-mode wrapper (TODO(T3-5): voice pass).
-    instruction: () => `${promptLoader.load()}\n\n${MEMORY_MODE_WRAPPER}`,
+    // conversational agent) + the memory-mode wrapper (loaded from CMS).
+    instruction: () => `${promptLoader.load()}\n\n${memoryPrompts.modeWrapper}`,
     // Memory CRUD tools + the finish_memory handback signal.
     // No SkillToolset — skills are discovery UX, irrelevant here.
     tools: [...memoryTools, finishMemoryTool],
@@ -279,11 +239,7 @@ export function buildMemoryAgent({
       role: 'user',
       parts: [
         {
-          text:
-            `[CONTEXT: You are now in memory management mode for a staff session. ` +
-            `Here is the conversation so far between the staff member and the agent:\n\n` +
-            `${params.transcriptSummary}\n\n` +
-            `The staff member's next message will be their memory instruction.]`,
+          text: memoryPrompts.seedContext.replace('{{transcript}}', params.transcriptSummary),
         },
       ],
     };

@@ -21,6 +21,7 @@ import type pg from 'pg';
 
 import type { EmbedQueryFn } from '../data/embed-query.js';
 import type { ToolDescriptions } from '../tools/index.js';
+import type { ConnectorMemoryToolName } from '../tools/memory-description-loader.js';
 import { healthzHandler, buildReadyzHandler } from './health.js';
 import { createConnectorMcpServer } from './mcp.js';
 
@@ -31,6 +32,12 @@ export interface BuildAppDeps {
   readonly embedQuery: EmbedQueryFn;
   /** Loaded tool descriptions (one per registered tool). */
   readonly descriptions: ToolDescriptions;
+  /**
+   * Loaded memory tool descriptions (one per connector-facing memory tool).
+   * Loaded from cms/prompts/memory/tools/<name>.md at boot. When absent,
+   * registerMemoryTools is not called (opt-in, same gate as enableMemoryTools).
+   */
+  readonly memoryDescriptions?: Readonly<Record<ConnectorMemoryToolName, string>>;
   /**
    * ISO date when pricing data was captured (PRICES_CAPTURED_AT config value).
    * Stamped on every get_pricing response. Defaults to '2026-04-27' when absent.
@@ -83,6 +90,10 @@ export function buildApp(deps: BuildAppDeps): Express {
         embedQuery: deps.embedQuery,
         descriptions: deps.descriptions,
         capturedAt: deps.capturedAt,
+        ...(deps.memoryDescriptions ? {
+          enableMemoryTools: true,
+          memoryDescriptions: deps.memoryDescriptions,
+        } : {}),
       });
       await server.connect(transport);
     }

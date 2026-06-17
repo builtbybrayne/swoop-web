@@ -130,6 +130,7 @@ export const configSchema = z
     SYSTEM_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/system'),
     SKILLS_DIR: z.string().trim().min(1).default('../cms/prompts/skills'),
     TOOLS_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/tools'),
+    MEMORY_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/memory'),
 
     // Demo / tactical override: when true, the full body of every loaded
     // skill is appended to the system prompt as an appendix. Bypasses the
@@ -384,6 +385,13 @@ export type Config = Readonly<
      * `loadAllToolDescriptions` from `@swoop/connector`.
      */
     readonly toolsPromptDirAbsolutePath: string;
+    /**
+     * Absolute path to the memory-prompt directory (`cms/prompts/memory/`).
+     * Holds mode-wrapper.md, loaded-header.md, seed-context.md, and
+     * tools/<name>.md for each memory tool. Loaded at boot by
+     * `loadMemoryPrompts` from `./agent/memory-prompt-loader.js`.
+     */
+    readonly memoryPromptDirAbsolutePath: string;
     /** Absolute path to the handoff email-template directory (E.t3 mailer reads from here). */
     readonly handoffTemplatesDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. Controls prompt-loader caching, CORS strictness, etc. */

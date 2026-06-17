@@ -1,0 +1,1 @@
+Save a new piece of sales knowledge as an agent memory. Content must be general (seasonality, availability, price ranges) — NEVER include specific visitor details. Always confirm with the staff member before calling this tool.

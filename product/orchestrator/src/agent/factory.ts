@@ -64,6 +64,13 @@ export interface BuildAgentParams {
    * consistency.
    */
   readonly connectorClient?: ConnectorClient;
+  /**
+   * The authoritative header for the sales-memory block (loaded from
+   * cms/prompts/memory/loaded-header.md via loadMemoryPrompts at boot).
+   * When omitted (e.g. unit tests that don't need memory loading), the memory
+   * block is silently skipped.
+   */
+  readonly memoryLoadedHeader?: string;
 }
 
 export interface BuildAgentResult {
@@ -77,6 +84,7 @@ export async function buildOrchestratorAgent({
   promptLoader,
   tools = [],
   connectorClient,
+  memoryLoadedHeader,
 }: BuildAgentParams): Promise<BuildAgentResult> {
   const model = new ClaudeLlm({
     model: config.ORCHESTRATOR_MODEL,
@@ -150,9 +158,9 @@ export async function buildOrchestratorAgent({
     // so tests that don't wire a connector still work.
     instruction: async () => {
       const base = `${promptLoader.load()}\n\n---\n\n${skillsInjection}`;
-      if (!connectorClient) return base;
+      if (!connectorClient || !memoryLoadedHeader) return base;
       try {
-        const memoryBlock = await loadSalesMemoryBlock(connectorClient);
+        const memoryBlock = await loadSalesMemoryBlock(connectorClient, memoryLoadedHeader);
         return memoryBlock.length > 0 ? `${base}\n\n---\n\n${memoryBlock}` : base;
       } catch (err) {
         // Connector hiccup must not break the user turn. Log and degrade

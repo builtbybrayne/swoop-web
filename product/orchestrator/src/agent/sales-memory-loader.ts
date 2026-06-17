@@ -61,36 +61,6 @@ const MEMORY_LIST_ACTIVE_TOOL = 'memory_list_active' as const;
 const BLOCK_SEPARATOR = '\n\n';
 
 // ---------------------------------------------------------------------------
-// Block header
-// ---------------------------------------------------------------------------
-
-/**
- * Authoritative-knowledge header for the sales-memory block.
- *
- * TODO(T3-5) — Alastair's editorial pass: replace the placeholder copy below
- * with polished voice that:
- *   - Makes unmistakably clear these are CURRENT, AUTHORITATIVE facts the
- *     agent should STATE as fact (not "use as shape-guidance", not "verify
- *     from tools") — the opposite of 00_why.md's illustrative-only reflex.
- *   - Signals the staleness-reasoning contract: time-sensitive notes (seasonal
- *     availability, pricing) should be read relative to today's date from the
- *     dateline; an old "this season" note refers to the season when it was written.
- *   - Is absent (empty string) when the memory set is empty, so nothing is
- *     appended to the instruction (handled by assembleMemoryBlock below).
- *
- * The structural signals below (authoritative / may state as fact / dated) MUST
- * be preserved in T3-5's final copy — they are load-bearing for agent behaviour.
- */
-const AUTHORITATIVE_HEADER = `## Current sales-team knowledge [AUTHORITATIVE — state as fact]
-
-<!-- TODO(T3-5): replace with edited voice copy — preserve the authoritative + dated signals -->
-The following entries are current, confirmed facts about Swoop's tours and operations, \
-authored by the sales team. You MAY state them directly as fact when relevant. \
-Each entry carries the date it was noted and who noted it — use that date relative \
-to today's date (from the dateline) to assess whether time-sensitive notes \
-(seasonal availability, pricing, refugio bookings) are likely still current.`;
-
-// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -108,14 +78,14 @@ to today's date (from the dateline) to assess whether time-sensitive notes \
  *                validation. Callers should catch and fall back to an empty
  *                block so a connector hiccup doesn't break every user turn.
  */
-export async function loadSalesMemoryBlock(client: ConnectorClient): Promise<string> {
+export async function loadSalesMemoryBlock(client: ConnectorClient, header: string): Promise<string> {
   const raw = await client.callTool(MEMORY_LIST_ACTIVE_TOOL, {});
 
   // Parse the connector response via the same schema used by the connector-side
   // handler. Throws on schema mismatch — caller decides fallback strategy.
   const parsed = parseMemoryListActiveResult(raw);
 
-  return assembleMemoryBlock(parsed.memories);
+  return assembleMemoryBlock(parsed.memories, header);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,14 +105,14 @@ export async function loadSalesMemoryBlock(client: ConnectorClient): Promise<str
  * If `memories` is empty, returns an empty string so nothing is appended to
  * the instruction (no dangling header + separator).
  */
-export function assembleMemoryBlock(memories: readonly SalesMemoryPublic[]): string {
+export function assembleMemoryBlock(memories: readonly SalesMemoryPublic[], header: string): string {
   if (memories.length === 0) return '';
 
   const entries = memories
     .map((m) => renderMemoryEntry(m))
     .join('\n');
 
-  return AUTHORITATIVE_HEADER + BLOCK_SEPARATOR + entries;
+  return header + BLOCK_SEPARATOR + entries;
 }
 
 /**

@@ -50,6 +50,7 @@ import { loadConfig } from './config/index.js';
 import { createPromptLoader } from './agent/prompt-loader.js';
 import { buildOrchestratorAgent } from './agent/factory.js';
 import { buildMemoryAgent } from './agent/memory-agent.js';
+import { loadMemoryPrompts } from './agent/memory-prompt-loader.js';
 import { setupConnector } from './connector/index.js';
 import {
   createSessionStore,
@@ -91,6 +92,7 @@ async function main(): Promise<void> {
   // orchestrator's adapter consumes the same files for its FunctionTool
   // registrations.
   const toolDescriptions = loadAllToolDescriptions(config.toolsPromptDirAbsolutePath);
+  const memoryPrompts = loadMemoryPrompts(config.memoryPromptDirAbsolutePath);
 
   // Session store created BEFORE setupConnector so it can be threaded into
   // the anti-repetition bracketing on every tool dispatch
@@ -115,6 +117,7 @@ async function main(): Promise<void> {
     promptLoader,
     tools: connector.tools,
     connectorClient: connector.client,
+    memoryLoadedHeader: memoryPrompts.loadedHeader,
   });
 
   // staff-auth + T3-3 — staff authenticator and the Opus memory-agent provider.
@@ -142,6 +145,7 @@ async function main(): Promise<void> {
         connectorClient: connector.client,
         staffToken,
         staffName,
+        memoryPrompts,
       });
   }
 

@@ -42,12 +42,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   const migrationsDirAbsolutePath = path.resolve(PACKAGE_ROOT, 'migrations');
   const toolsPromptDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.TOOLS_PROMPT_DIR);
+  const memoryPromptDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.MEMORY_PROMPT_DIR);
 
   const config: Config = Object.freeze({
     ...data,
     packageRoot: PACKAGE_ROOT,
     migrationsDirAbsolutePath,
     toolsPromptDirAbsolutePath,
+    memoryPromptDirAbsolutePath,
     isProduction: data.NODE_ENV === 'production',
   });
 

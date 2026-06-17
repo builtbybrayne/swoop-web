@@ -24,6 +24,7 @@ import {
   type ToolDescriptions,
   type ToolHandlerDeps,
 } from '../tools/index.js';
+import type { ConnectorMemoryToolName } from '../tools/memory-description-loader.js';
 
 function readPackageVersion(): string {
   try {
@@ -63,6 +64,11 @@ export interface CreateMcpServerDeps {
    * back to the built-in presence backstop.
    */
   readonly assertStaffToken?: ToolHandlerDeps['assertStaffToken'];
+  /**
+   * Loaded descriptions for the five connector-facing memory tools, from
+   * cms/prompts/memory/tools/<name>.md. Required when enableMemoryTools is true.
+   */
+  readonly memoryDescriptions?: Readonly<Record<ConnectorMemoryToolName, string>>;
 }
 
 /**
@@ -87,6 +93,7 @@ export function createConnectorMcpServer(deps: CreateMcpServerDeps): McpServer {
   if (deps.enableMemoryTools) {
     registerMemoryTools(server, {
       pool: deps.pool,
+      descriptions: deps.memoryDescriptions ?? {},
       ...(deps.assertStaffToken ? { assertStaffToken: deps.assertStaffToken } : {}),
     });
   }

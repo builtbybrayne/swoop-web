@@ -68,7 +68,6 @@ interface MemoryToolSpec {
   readonly name: MemoryToolName;
   readonly inputSchema: z.ZodTypeAny;
   readonly outputSchema: z.ZodTypeAny;
-  readonly description: string;
 }
 
 const MEMORY_TOOL_SPECS: ReadonlyArray<MemoryToolSpec> = [
@@ -76,45 +75,26 @@ const MEMORY_TOOL_SPECS: ReadonlyArray<MemoryToolSpec> = [
     name: MEMORY_TOOL_NAMES.MemoryStore,
     inputSchema: MemoryStoreInputSchema,
     outputSchema: MemoryStoreOutputSchema,
-    description:
-      'Save a new piece of sales knowledge as an agent memory. ' +
-      'Content must be general (seasonality, availability, price ranges) — ' +
-      'NEVER include specific visitor details. ' +
-      'Always confirm with the staff member before calling this tool.',
   },
   {
     name: MEMORY_TOOL_NAMES.MemoryEdit,
     inputSchema: MemoryEditInputSchema,
     outputSchema: MemoryEditOutputSchema,
-    description:
-      'Update an existing memory with corrected or refreshed content. ' +
-      'Supply the current expectedVersion to prevent concurrent-edit conflicts. ' +
-      'Always confirm with the staff member before calling this tool.',
   },
   {
     name: MEMORY_TOOL_NAMES.MemoryRetire,
     inputSchema: MemoryRetireInputSchema,
     outputSchema: MemoryRetireOutputSchema,
-    description:
-      'Soft-delete (retire) a memory that is no longer accurate. ' +
-      'Retired memories are never shown to visitors but remain in history for audit. ' +
-      'Always confirm with the staff member before calling this tool.',
   },
   {
     name: MEMORY_TOOL_NAMES.MemoryListActive,
     inputSchema: MemoryListActiveInputSchema,
     outputSchema: MemoryListActiveOutputSchema,
-    description:
-      'List all active (non-retired) memories currently loaded by the agent. ' +
-      'Useful for reviewing what the agent already knows before adding or editing.',
   },
   {
     name: MEMORY_TOOL_NAMES.MemoryShowHistory,
     inputSchema: MemoryShowHistoryInputSchema,
     outputSchema: MemoryShowHistoryOutputSchema,
-    description:
-      'Show the full edit history for a specific memory entry. ' +
-      'Useful for reviewing who changed what and when before further editing.',
   },
 ];
 
@@ -137,6 +117,11 @@ export interface BuildMemoryToolsParams {
    * on memory mutations so every record carries attribution.
    */
   readonly staffName: string;
+  /**
+   * Tool descriptions loaded from cms/prompts/memory/tools/<name>.md.
+   * Keyed by tool name; used as the FunctionTool description for each memory tool.
+   */
+  readonly toolDescriptions: Readonly<Record<string, string>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,8 +146,9 @@ export function buildMemoryTools({
   client,
   staffToken,
   staffName,
+  toolDescriptions,
 }: BuildMemoryToolsParams): FunctionTool[] {
-  return MEMORY_TOOL_SPECS.map((spec) => buildOneTool(client, spec, staffToken, staffName));
+  return MEMORY_TOOL_SPECS.map((spec) => buildOneTool(client, spec, staffToken, staffName, toolDescriptions));
 }
 
 function buildOneTool(
@@ -170,6 +156,7 @@ function buildOneTool(
   spec: MemoryToolSpec,
   staffToken: string,
   staffName: string,
+  toolDescriptions: Readonly<Record<string, string>>,
 ): FunctionTool {
   // Agent-facing parameter schema: STRIP the auto-injected identity fields
   // (`author`, `staffToken`). The execute callback fills them from the validated
@@ -187,7 +174,7 @@ function buildOneTool(
 
   return new FunctionTool({
     name: spec.name,
-    description: spec.description,
+    description: toolDescriptions[spec.name] ?? spec.name,
     parameters,
     execute: async (rawInput: unknown) => {
       // Auto-inject token + name into mutating tools so the agent never has

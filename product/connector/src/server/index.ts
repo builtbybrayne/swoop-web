@@ -26,6 +26,7 @@ import { loadConfig } from '../config/index.js';
 import { getPool, closePool } from '../data/pool.js';
 import { buildEmbedQuery } from '../data/embed-query.js';
 import { loadAllToolDescriptions, ALL_TOOL_NAMES } from '../tools/index.js';
+import { loadMemoryToolDescriptions } from '../tools/memory-description-loader.js';
 import { buildApp } from './app.js';
 
 async function main(): Promise<void> {
@@ -39,9 +40,10 @@ async function main(): Promise<void> {
   // empty file (per HITL Q3 ratification: ALL 8, not just the 5
   // conversational; development-time visibility).
   const descriptions = loadAllToolDescriptions(config.toolsPromptDirAbsolutePath);
+  const memoryDescriptions = loadMemoryToolDescriptions(config.memoryPromptDirAbsolutePath);
   const embedQuery = buildEmbedQuery(config);
 
-  const app = buildApp({ pool, embedQuery, descriptions, capturedAt: config.PRICES_CAPTURED_AT });
+  const app = buildApp({ pool, embedQuery, descriptions, memoryDescriptions, capturedAt: config.PRICES_CAPTURED_AT });
 
   const server = app.listen(config.CONNECTOR_PORT, () => {
     console.log(`[connector] ready on http://localhost:${config.CONNECTOR_PORT}`);

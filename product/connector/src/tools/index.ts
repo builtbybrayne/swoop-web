@@ -361,6 +361,11 @@ export interface RegisterMemoryToolsOptions {
   /** Pool — borrow-and-release happens inside the handler deps. */
   readonly pool: pg.Pool;
   /**
+   * Loaded descriptions for the five connector-facing memory tools, from
+   * cms/prompts/memory/tools/<name>.md. Keyed by tool name.
+   */
+  readonly descriptions: Readonly<Record<string, string>>;
+  /**
    * Staff-token enforcement gate (sm-4). Injected so the connector boot can
    * supply a real verifier (orchestrator-bound / future cryptographic check).
    * When omitted, the mutating tools fall back to the built-in
@@ -374,23 +379,6 @@ export interface RegisterMemoryToolsOptions {
   /** Test-injectable clock. */
   readonly now?: HandlerRuntimeDeps['now'];
 }
-
-/** Inline descriptions for the memory tools (no description.md — admin-only). */
-const MEMORY_TOOL_DESCRIPTIONS: Record<string, string> = {
-  memory_store:
-    'Create a new sales-memory entry (staff-only). Persists general sales ' +
-    'knowledge the agent loads into every future visitor conversation.',
-  memory_edit:
-    'Edit an existing sales-memory entry (staff-only). Requires expectedVersion ' +
-    'for optimistic concurrency.',
-  memory_retire:
-    'Retire (soft-delete) a sales-memory entry (staff-only). The row stays in ' +
-    'the DB with full version history; it is never shown to visitors again.',
-  memory_list_active:
-    'List all active (non-retired) sales-memory entries. Read-only.',
-  memory_show_history:
-    'Show the full version history for a single sales-memory entry. Read-only.',
-};
 
 /**
  * Register the five sales-memory tools on an MCP server. Call this IN ADDITION
@@ -421,7 +409,7 @@ export function registerMemoryTools(
   registerOne(
     server,
     memoryStoreSpec.name,
-    MEMORY_TOOL_DESCRIPTIONS.memory_store,
+    opts.descriptions[memoryStoreSpec.name] ?? memoryStoreSpec.name,
     memoryStoreSpec.inputSchema,
     memoryStoreSpec.outputSchema,
     (input) => memoryStoreBody(input, memoryDeps),
@@ -430,7 +418,7 @@ export function registerMemoryTools(
   registerOne(
     server,
     memoryEditSpec.name,
-    MEMORY_TOOL_DESCRIPTIONS.memory_edit,
+    opts.descriptions[memoryEditSpec.name] ?? memoryEditSpec.name,
     memoryEditSpec.inputSchema,
     memoryEditSpec.outputSchema,
     (input) => memoryEditBody(input, memoryDeps),
@@ -439,7 +427,7 @@ export function registerMemoryTools(
   registerOne(
     server,
     memoryRetireSpec.name,
-    MEMORY_TOOL_DESCRIPTIONS.memory_retire,
+    opts.descriptions[memoryRetireSpec.name] ?? memoryRetireSpec.name,
     memoryRetireSpec.inputSchema,
     memoryRetireSpec.outputSchema,
     (input) => memoryRetireBody(input, memoryDeps),
@@ -448,7 +436,7 @@ export function registerMemoryTools(
   registerOne(
     server,
     memoryListActiveSpec.name,
-    MEMORY_TOOL_DESCRIPTIONS.memory_list_active,
+    opts.descriptions[memoryListActiveSpec.name] ?? memoryListActiveSpec.name,
     memoryListActiveSpec.inputSchema,
     memoryListActiveSpec.outputSchema,
     (input) => memoryListActiveBody(input, memoryDeps),
@@ -457,7 +445,7 @@ export function registerMemoryTools(
   registerOne(
     server,
     memoryShowHistorySpec.name,
-    MEMORY_TOOL_DESCRIPTIONS.memory_show_history,
+    opts.descriptions[memoryShowHistorySpec.name] ?? memoryShowHistorySpec.name,
     memoryShowHistorySpec.inputSchema,
     memoryShowHistorySpec.outputSchema,
     (input) => memoryShowHistoryBody(input, memoryDeps),

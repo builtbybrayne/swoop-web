@@ -22,6 +22,16 @@ import type { SalesMemoryPublic } from '@swoop/common';
 import type { ConnectorClient } from '../../connector/client.js';
 
 // ---------------------------------------------------------------------------
+// Test header — must contain "AUTHORITATIVE" and "state as fact" so the
+// existing assertions in the "contains the authoritative header" test still
+// pass after the header was moved from an inline constant to a param.
+// ---------------------------------------------------------------------------
+
+const TEST_HEADER = `## Current sales-team knowledge [AUTHORITATIVE — state as fact]
+
+The following entries are current, confirmed facts about Swoop's tours and operations.`;
+
+// ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
@@ -61,17 +71,17 @@ const MEMORY_C = makeMemory(
 
 describe('assembleMemoryBlock', () => {
   it('returns an empty string when the memory set is empty', () => {
-    expect(assembleMemoryBlock([])).toBe('');
+    expect(assembleMemoryBlock([], TEST_HEADER)).toBe('');
   });
 
   it('includes each memory content in the output', () => {
-    const block = assembleMemoryBlock([MEMORY_A, MEMORY_B]);
+    const block = assembleMemoryBlock([MEMORY_A, MEMORY_B], TEST_HEADER);
     expect(block).toContain(MEMORY_A.content);
     expect(block).toContain(MEMORY_B.content);
   });
 
   it('includes the YYYY-MM-DD date portion of updatedAt for each memory', () => {
-    const block = assembleMemoryBlock([MEMORY_A, MEMORY_B]);
+    const block = assembleMemoryBlock([MEMORY_A, MEMORY_B], TEST_HEADER);
     // MEMORY_A: 2026-06-16T09:00:00.000Z → date = 2026-06-16
     expect(block).toContain('2026-06-16');
     // MEMORY_B: 2026-06-10T14:30:00.000Z → date = 2026-06-10
@@ -79,34 +89,34 @@ describe('assembleMemoryBlock', () => {
   });
 
   it('includes the author name for each memory', () => {
-    const block = assembleMemoryBlock([MEMORY_A, MEMORY_B]);
+    const block = assembleMemoryBlock([MEMORY_A, MEMORY_B], TEST_HEADER);
     expect(block).toContain('Luke');
     expect(block).toContain('Lane');
   });
 
   it('renders each memory in the format "(noted YYYY-MM-DD by <author>)"', () => {
-    const block = assembleMemoryBlock([MEMORY_A]);
+    const block = assembleMemoryBlock([MEMORY_A], TEST_HEADER);
     expect(block).toContain('(noted 2026-06-16 by Luke)');
   });
 
   it('BYTE-IDENTICAL: same set assembled twice produces identical strings', () => {
     const set = [MEMORY_A, MEMORY_B, MEMORY_C];
-    const first = assembleMemoryBlock(set);
-    const second = assembleMemoryBlock(set);
+    const first = assembleMemoryBlock(set, TEST_HEADER);
+    const second = assembleMemoryBlock(set, TEST_HEADER);
     expect(first).toBe(second);
   });
 
   it('CACHE-BUST: adding a memory changes the assembled string (exactly one bust)', () => {
-    const before = assembleMemoryBlock([MEMORY_A, MEMORY_B]);
-    const after = assembleMemoryBlock([MEMORY_A, MEMORY_B, MEMORY_C]);
+    const before = assembleMemoryBlock([MEMORY_A, MEMORY_B], TEST_HEADER);
+    const after = assembleMemoryBlock([MEMORY_A, MEMORY_B, MEMORY_C], TEST_HEADER);
     expect(before).not.toBe(after);
     expect(after).toContain(MEMORY_C.content);
   });
 
   it('CACHE-BUST: editing a memory changes the assembled string', () => {
     const editedA = { ...MEMORY_A, content: 'EDITED: W-trek refugios fully booked in January 2027', updatedAt: '2026-06-17T12:00:00.000Z' };
-    const before = assembleMemoryBlock([MEMORY_A, MEMORY_B]);
-    const after = assembleMemoryBlock([editedA, MEMORY_B]);
+    const before = assembleMemoryBlock([MEMORY_A, MEMORY_B], TEST_HEADER);
+    const after = assembleMemoryBlock([editedA, MEMORY_B], TEST_HEADER);
     expect(before).not.toBe(after);
     expect(after).toContain('EDITED:');
     expect(after).toContain('2026-06-17');
@@ -116,8 +126,8 @@ describe('assembleMemoryBlock', () => {
     // The connector returns memories in created_at DESC order; we must not
     // re-sort or the rendered text would differ from a previous call when the
     // set is unchanged, busting the cache.
-    const blockAB = assembleMemoryBlock([MEMORY_A, MEMORY_B]);
-    const blockBA = assembleMemoryBlock([MEMORY_B, MEMORY_A]);
+    const blockAB = assembleMemoryBlock([MEMORY_A, MEMORY_B], TEST_HEADER);
+    const blockBA = assembleMemoryBlock([MEMORY_B, MEMORY_A], TEST_HEADER);
     // Same memories but different order → different rendered text (expected)
     expect(blockAB).not.toBe(blockBA);
     // And the order is preserved — A before B in blockAB
@@ -131,11 +141,11 @@ describe('assembleMemoryBlock', () => {
     // (cross-instance simulation — two "instances" get the same list from DB).
     const setFromInstance1 = [MEMORY_C, MEMORY_A, MEMORY_B];
     const setFromInstance2 = [MEMORY_C, MEMORY_A, MEMORY_B]; // same order = same DB query result
-    expect(assembleMemoryBlock(setFromInstance1)).toBe(assembleMemoryBlock(setFromInstance2));
+    expect(assembleMemoryBlock(setFromInstance1, TEST_HEADER)).toBe(assembleMemoryBlock(setFromInstance2, TEST_HEADER));
   });
 
   it('contains the authoritative header', () => {
-    const block = assembleMemoryBlock([MEMORY_A]);
+    const block = assembleMemoryBlock([MEMORY_A], TEST_HEADER);
     // The header signals authoritative knowledge — T3-5 will refine the copy
     // but the structural marker must be present.
     expect(block).toContain('AUTHORITATIVE');
@@ -177,7 +187,7 @@ describe('cross-instance propagation (no restart, shared DB simulation)', () => 
     let dbState: SalesMemoryPublic[] = [MEMORY_A, MEMORY_B];
 
     // Instance 1 reads the current state.
-    const instance1Turn1 = assembleMemoryBlock(dbState);
+    const instance1Turn1 = assembleMemoryBlock(dbState, TEST_HEADER);
     expect(instance1Turn1).toContain(MEMORY_A.content);
     expect(instance1Turn1).toContain(MEMORY_B.content);
     expect(instance1Turn1).not.toContain(MEMORY_C.content);
@@ -186,12 +196,12 @@ describe('cross-instance propagation (no restart, shared DB simulation)', () => 
     dbState = [MEMORY_C, MEMORY_A, MEMORY_B];
 
     // Instance 2 reads on its NEXT turn — no restart, no cache invalidation needed.
-    const instance2Turn1 = assembleMemoryBlock(dbState);
+    const instance2Turn1 = assembleMemoryBlock(dbState, TEST_HEADER);
     expect(instance2Turn1).toContain(MEMORY_C.content);
     expect(instance2Turn1).toContain('2026-06-17'); // MEMORY_C's date
 
     // Instance 1 also picks it up on its next turn.
-    const instance1Turn2 = assembleMemoryBlock(dbState);
+    const instance1Turn2 = assembleMemoryBlock(dbState, TEST_HEADER);
     expect(instance1Turn2).toContain(MEMORY_C.content);
 
     // The two instances produce IDENTICAL output for the same DB state.
@@ -231,7 +241,7 @@ function makeConnectorStub(memories: SalesMemoryPublic[]): ConnectorClient {
 describe('loadSalesMemoryBlock (via connector stub)', () => {
   it('calls memory_list_active on the connector, NOT a direct DB query', async () => {
     const stub = makeConnectorStub([MEMORY_A, MEMORY_B]);
-    await loadSalesMemoryBlock(stub);
+    await loadSalesMemoryBlock(stub, TEST_HEADER);
     // callTool must have been called with the right tool name
     expect(stub.callTool).toHaveBeenCalledWith('memory_list_active', {});
     expect(stub.callTool).toHaveBeenCalledTimes(1);
@@ -239,7 +249,7 @@ describe('loadSalesMemoryBlock (via connector stub)', () => {
 
   it('assembles the block from the connector response', async () => {
     const stub = makeConnectorStub([MEMORY_A, MEMORY_B]);
-    const block = await loadSalesMemoryBlock(stub);
+    const block = await loadSalesMemoryBlock(stub, TEST_HEADER);
     expect(block).toContain(MEMORY_A.content);
     expect(block).toContain(MEMORY_B.content);
     expect(block).toContain('Luke');
@@ -250,7 +260,7 @@ describe('loadSalesMemoryBlock (via connector stub)', () => {
 
   it('returns an empty string when the connector returns an empty list', async () => {
     const stub = makeConnectorStub([]);
-    const block = await loadSalesMemoryBlock(stub);
+    const block = await loadSalesMemoryBlock(stub, TEST_HEADER);
     expect(block).toBe('');
   });
 
@@ -263,7 +273,7 @@ describe('loadSalesMemoryBlock (via connector stub)', () => {
       url: 'http://fake-connector',
     } as unknown as ConnectorClient;
 
-    await expect(loadSalesMemoryBlock(stub)).rejects.toThrow('connector unreachable');
+    await expect(loadSalesMemoryBlock(stub, TEST_HEADER)).rejects.toThrow('connector unreachable');
   });
 
   it('throws when the connector returns unrecognised content', async () => {
@@ -275,15 +285,15 @@ describe('loadSalesMemoryBlock (via connector stub)', () => {
       url: 'http://fake-connector',
     } as unknown as ConnectorClient;
 
-    await expect(loadSalesMemoryBlock(stub)).rejects.toThrow(/schema validation/i);
+    await expect(loadSalesMemoryBlock(stub, TEST_HEADER)).rejects.toThrow(/schema validation/i);
   });
 
   it('BYTE-IDENTICAL: two calls with the same connector state return the same string', async () => {
     const memories = [MEMORY_A, MEMORY_B];
     const stub1 = makeConnectorStub(memories);
     const stub2 = makeConnectorStub(memories);
-    const block1 = await loadSalesMemoryBlock(stub1);
-    const block2 = await loadSalesMemoryBlock(stub2);
+    const block1 = await loadSalesMemoryBlock(stub1, TEST_HEADER);
+    const block2 = await loadSalesMemoryBlock(stub2, TEST_HEADER);
     expect(block1).toBe(block2);
   });
 
@@ -304,7 +314,7 @@ describe('loadSalesMemoryBlock (via connector stub)', () => {
       url: 'http://fake-connector',
     } as unknown as ConnectorClient;
 
-    const block = await loadSalesMemoryBlock(stub);
+    const block = await loadSalesMemoryBlock(stub, TEST_HEADER);
     expect(block).toContain(MEMORY_A.content);
   });
 });

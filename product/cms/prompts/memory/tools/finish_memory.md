@@ -1,0 +1,1 @@
+Signal that memory work is complete. Call this when the staff member has finished managing memories and you should hand back to the conversational agent. Also call if you are unsure whether to continue in memory mode — it is low-stakes and recoverable.
