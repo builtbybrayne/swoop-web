@@ -75,6 +75,15 @@ export interface ChatDeps {
    */
   readonly triageClassifier?: TriageClassifier;
   /**
+   * Dev/test model-picker resolver (M-PICK-1). When present, `/chat` resolves
+   * the runner for this turn's (optional, allow-listed, non-production) `model`
+   * override via this; when absent (HTTP-surface unit tests) it uses `runner`.
+   * All resolved runners share `runner`'s sessionService, so the session
+   * created at bootstrap is found regardless of which model the turn routes to.
+   * See planning/03-exec-crosscut-test-mode-model-picker.md.
+   */
+  readonly getRunner?: (modelId?: string) => Promise<Runner>;
+  /**
    * Staff authenticator (staff-auth task). When present and the request
    * carries a `staffToken`, the token is re-validated each turn. On success,
    * `session.staff` + `session.mode` are refreshed. Failure → flags stay at
@@ -133,7 +142,7 @@ export function createChatHandler(
       sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    const { sessionId, message, clientTime, staffToken } = parsed.data;
+    const { sessionId, message, clientTime, model, staffToken } = parsed.data;
     if (message.trim().length === 0) {
       sendError(res, 400, 'message_empty', 'message cannot be empty.');
       return;
@@ -402,11 +411,11 @@ export function createChatHandler(
 
     try {
       // T3-3 — stream-source selection. The Sacred Invariant lives here: the
-      // conversational `deps.runner` (Sonnet, public tools, production prompt)
-      // is the default for EVERY turn. Only an authenticated staff turn that
-      // has explicitly entered memory mode is diverted to the Opus memory
-      // agent, in its OWN isolated session (sm-9). The visitor path never
-      // reaches the `routeToMemory` branch.
+      // conversational runner (Sonnet, public tools, production prompt) is the
+      // default for EVERY turn. Only an authenticated staff turn that has
+      // explicitly entered memory mode is diverted to the Opus memory agent,
+      // in its OWN isolated session (sm-9). The visitor path never reaches the
+      // `routeToMemory` branch.
       let adkStream: AsyncIterable<AdkEvent>;
       if (routeToMemory) {
         // `routeToMemory` implies `isStaffThisTurn`, which only becomes true
@@ -421,8 +430,13 @@ export function createChatHandler(
           abortSignal: abortController.signal,
         });
       } else {
+        // Dev/test model picker (M-PICK-1): resolve the runner for this turn's
+        // (optional, allow-listed, non-production) model override. Falls back to
+        // the default runner for unknown/disallowed/prod ids and when getRunner
+        // is absent (unit tests). All runners share one sessionService.
+        const turnRunner = deps.getRunner ? await deps.getRunner(model) : deps.runner;
         adkStream = runAgentTurn({
-          runner: deps.runner,
+          runner: turnRunner,
           userId,
           sessionId,
           message,

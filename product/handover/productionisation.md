@@ -58,7 +58,7 @@ Build/run commands, reverse-proxy + iframe-origin/CORS specifics, and the secret
 
 ## 6. Observability go-live
 
-The collection layer is wired (F-c); the prod flip is GCP config — full steps in [`../docs/ops/observability.md`](../docs/ops/observability.md) §"The GCP flip": enable the APIs, grant `logging.logWriter`, install the Ops Agent (or Cloud Run native), set `EVENT_SINK=cloud-logging`, create the `severity≥ERROR` alert policy → dev-team channel. Error Reporting auto-aggregates from there.
+The collection layer is wired (F-c); the prod flip is GCP config — full steps in [`../docs/ops/observability.md`](../docs/ops/observability.md) §"The GCP flip": enable the APIs, grant `logging.logWriter`, install the Ops Agent (or Cloud Run native), set `EVENT_SINK=cloud-logging`, create the `severity≥ERROR` alert policy → dev-team channel (the reliable error surface). Populating Error Reporting's grouped view needs a small sink enhancement — see the runbook caveat.
 
 ## 7. Go-live gates
 

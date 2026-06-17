@@ -121,7 +121,7 @@ Puma's event stream is now wired to a pluggable sink (`EVENT_SINK`; F-c). The de
 5. Create a Cloud Monitoring **alert policy** on `severity >= ERROR` → a dev-team notification channel (email / Slack). This is the "surface issues to the dev team fast" requirement.
 6. Region `europe-west2` (matches Cloud Run / Cloud SQL per the legal pack D-3.3.5).
 
-Why it matters: until this lands, production events are ephemeral (stdout) and there is **no error alerting**. Gated on the same "AI Pat Chat" IAM as the rest of M4. **No new processor** — Cloud Logging is already in the compliance processor list ([06-processors.md](product/cms/legal/compliance-bundle/06-processors.md)); **add Error Reporting** to that list for completeness (it is a Google Cloud sub-service under the existing GCP DPA, so no new DPA).
+Why it matters: until this lands, production events are ephemeral (stdout) and there is **no error alerting**. Gated on the same "AI Pat Chat" IAM as the rest of M4. **No new processor** — Cloud Logging is already in the compliance processor list ([06-processors.md](product/cms/legal/compliance-bundle/06-processors.md)); **add Error Reporting** to that list for completeness (it is a Google Cloud sub-service under the existing GCP DPA, so no new DPA). NB: the reliable error surface is the step-5 alert policy; Cloud Error Reporting's *grouped view* additionally needs the sink to format ERROR events as `ReportedErrorEvent` — a small follow-up, not yet shipped.
 
 Where it lands: Tier 2 chunk F. The provisioning steps now live in [product/handover/productionisation.md](product/handover/productionisation.md) §2/§6 (the dev handover folder); this entry stays as the tracked Swoop-side ask.
 

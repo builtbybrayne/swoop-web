@@ -6,6 +6,26 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## Native thinking is per-model-family — wrong shape = 400 (and temperature must drop when thinking is on)
+
+**Symptom**: enabling `thinking` on the `messages.create` request 400s, with messages like `temperature may only be set to 1 when thinking is enabled or in adaptive mode`, or `budget_tokens` rejected, or `effort` rejected — depending on the model.
+
+**The matrix** (encoded in `buildThinkingFragment` / `modelUsesAdaptiveThinking` in [claude-llm.ts](product/orchestrator/src/agent/claude-llm.ts)):
+- **Adaptive family** — Sonnet **4.6+**, Opus **4.6+**, Fable: use `thinking: {type:'adaptive'}` (+ optional `output_config: {effort}`). Do **not** send `budget_tokens` (deprecated/removed). On **Fable**, never send `thinking: {type:'disabled'}` — *omit* the `thinking` key entirely to disable.
+- **Legacy family** — Sonnet **4.5**, Opus ≤4.5, Haiku: use `thinking: {type:'enabled', budget_tokens: N}` where `1024 ≤ N < max_tokens`. **`effort` 400s here** — never send it to 4.5/Haiku.
+- **Temperature**: when *any* thinking mode is on, `temperature` must be `1` or unset, else 400. We omit sampling params whenever `thinkingEnabled` (RL.2) — this subsumes the M-PICK-4 "omit temp for Opus 4.7+/Fable" guard for the thinking-on case.
+- **Display**: on Opus 4.7+/Fable, thinking text is `omitted` by default (streams empty) — irrelevant to us (we strip reasoning off the wire anyway), but don't expect to *see* thinking deltas when eyeballing raw SSE on those models.
+
+**Fix**: branch on the model family before building the request; unit-test the fragment per family (see `claude-llm.test.ts`). Bare aliases only (`claude-sonnet-4-6`, not date-suffixed) — see the model-ID gotcha.
+
+## Orchestrator can't re-attach to a connector that restarted under it — bounce the connector first, then the orchestrator
+
+**Symptom**: during dev, the connector dies or is restarted (or the orchestrator's tsx-watch reloads) and the orchestrator then throws `StreamableHTTPClientTransport already started!` on its next connect, or every tool call fails because the MCP session is stale. The orchestrator process is still listening on :8080 but is effectively connector-less.
+
+**Cause**: the orchestrator opens its MCP client to the connector **once at boot**. It does not re-establish the session if the connector goes away and comes back, and the retry path re-uses the same already-started transport (the same root issue as the "second orchestrator instance" gotcha below).
+
+**Fix (proven 2026-06-17)**: recover in order — (1) start a **fresh** connector and wait until it's listening on its port, then (2) **restart the orchestrator fresh** so it opens a clean MCP session against the live connector at boot. Restarting the orchestrator against a still-dead connector, or restarting the connector under a still-running orchestrator, both leave you connector-less. Verify with a real one-turn `POST /session → PATCH consent → POST /chat` smoke (a tool-using turn) before trusting the stack — a bare `/health` 200 doesn't prove the MCP session is live. See the related "Second orchestrator instance can't share a running connector" entry below for the underlying transport bug.
+
 ## Claude Preview's managed servers inherit an injected `PORT` — the orchestrator grabs 5173 and silently vanishes off :8080
 
 **Symptom**: stack booted via the preview tool (launch.json `swoop-stack` → `npm run dev`) looks healthy in logs — connector fine, orchestrator prints "ready on http://localhost:**5173**" — but nothing listens on :8080, the UI's `/api` proxy returns empty-body 500s, and consent never grants (no `POST /session` ever fires).

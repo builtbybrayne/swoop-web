@@ -55,6 +55,14 @@ export const ChatRequestSchema = z
     message: z.string().min(1).max(CHAT_MESSAGE_MAX),
     clientTime: ClientTimeSchema.optional(),
     /**
+     * Optional model override for the conversational orchestrator (dev/test
+     * only). The orchestrator ignores it unless `NODE_ENV !== 'production'`
+     * AND the id is in `MODEL_PICKER_ALLOWLIST`. Bare alias, e.g.
+     * `"claude-opus-4-8"`. See
+     * planning/03-exec-crosscut-test-mode-model-picker.md.
+     */
+    model: z.string().min(1).max(128).optional(),
+    /**
      * Staff JWT forwarded by the UI on every request when the staff member
      * has authenticated (staff-auth task). Optional so existing sessions
      * without the field round-trip cleanly — absent token → visitor session,

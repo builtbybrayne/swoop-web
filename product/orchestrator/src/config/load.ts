@@ -89,6 +89,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     memoryPromptDirAbsolutePath,
     handoffTemplatesDirAbsolutePath,
     isProduction: data.NODE_ENV === 'production',
+    // Dev/test model picker is live only when an allow-list is configured AND
+    // we're not in production. The per-request override + GET /models endpoint
+    // both gate on this (M-PICK-2/3).
+    modelPickerEnabled:
+      data.MODEL_PICKER_ALLOWLIST.length > 0 && data.NODE_ENV !== 'production',
   });
 
   return config;

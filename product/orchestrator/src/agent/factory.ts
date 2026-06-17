@@ -32,6 +32,9 @@
  * `main()`, so the `await` was a one-character change there.
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { LlmAgent, SkillToolset } from '@google/adk';
 import type { FunctionTool } from '@google/adk';
 import type { Config } from '../config/index.js';
@@ -52,6 +55,13 @@ export interface BuildAgentParams {
    * the loaded skills.
    */
   readonly tools?: FunctionTool[];
+  /**
+   * Optional model id for the orchestrator's `ClaudeLlm`. Defaults to
+   * `config.ORCHESTRATOR_MODEL`. The dev/test model picker passes an
+   * allow-listed override here when building a per-model runner
+   * (planning/03-exec-crosscut-test-mode-model-picker.md, M-PICK-1).
+   */
+  readonly modelId?: string;
   /**
    * Connector MCP client — used per-turn to read the active sales-memory set
    * (T3-4 / sm-6). When omitted (e.g. unit tests that don't need memory
@@ -79,16 +89,55 @@ export interface BuildAgentResult {
   readonly skills: LoadedSkill[];
 }
 
+/**
+ * RL.3 — the thinking-off fallback "belt".
+ *
+ * When native thinking is DISABLED, the model has no private reasoning channel,
+ * so without guidance it narrates its planning + tool use as visible text (the
+ * reasoning-leak this work fixes). In that mode we inject a "work silently"
+ * instruction, authored in CMS at `cms/prompts/fallbacks/silent-working.md`.
+ *
+ * When thinking is ENABLED we inject NOTHING — the thinking channel already
+ * isolates reasoning, and layering a blanket silence instruction on top risks
+ * clipping transparency or the visible answer (Alastair, 2026-06-17).
+ *
+ * Returns the block to append to the system prompt (leading separator), or ''
+ * when thinking is on. Gated on `=== false` so a cast/partial Config in tests
+ * (field undefined) is treated as "not disabled" and never reads a file.
+ */
+export function buildThinkingFallbackInjection(
+  config: Pick<Config, 'ORCHESTRATOR_THINKING_ENABLED' | 'systemPromptDirAbsolutePath'>,
+): string {
+  if (config.ORCHESTRATOR_THINKING_ENABLED !== false) return '';
+  const beltPath = path.resolve(
+    config.systemPromptDirAbsolutePath,
+    '..',
+    'fallbacks',
+    'silent-working.md',
+  );
+  const belt = readFileSync(beltPath, 'utf8').trim();
+  return belt.length > 0 ? `\n\n---\n\n${belt}` : '';
+}
+
 export async function buildOrchestratorAgent({
   config,
   promptLoader,
   tools = [],
+  modelId,
   connectorClient,
   memoryLoadedHeader,
 }: BuildAgentParams): Promise<BuildAgentResult> {
   const model = new ClaudeLlm({
-    model: config.ORCHESTRATOR_MODEL,
+    model: modelId ?? config.ORCHESTRATOR_MODEL,
     apiKey: config.ANTHROPIC_API_KEY,
+    // RL.5: thread the config max-tokens/temperature through (they previously
+    // defaulted inside ClaudeLlm and were never wired) + RL.2/RL.4 native
+    // thinking. The dev model picker passes `modelId`; thinking config applies
+    // to whichever model is selected (buildThinkingFragment branches per family).
+    maxTokens: config.ORCHESTRATOR_MAX_TOKENS,
+    temperature: config.ORCHESTRATOR_TEMPERATURE,
+    thinkingEnabled: config.ORCHESTRATOR_THINKING_ENABLED,
+    effort: config.ORCHESTRATOR_EFFORT,
   });
 
   const skills: LoadedSkill[] = await loadSkillsFromDir(config.skillsDirAbsolutePath);
@@ -122,6 +171,14 @@ export async function buildOrchestratorAgent({
       `bodies=${config.PRELOAD_SKILL_BODIES ? 'PRELOADED' : 'on-demand via load_skill'}`,
   );
 
+  // RL.3: the silent-working belt is injected ONLY when thinking is off.
+  const thinkingFallback = buildThinkingFallbackInjection(config);
+  console.log(
+    config.ORCHESTRATOR_THINKING_ENABLED
+      ? `[orchestrator] thinking: ENABLED (adaptive, effort=${config.ORCHESTRATOR_EFFORT ?? 'high (default)'}) — reasoning isolated in the thinking channel; no belt`
+      : '[orchestrator] thinking: DISABLED — silent-working belt injected (prompt-only leak mitigation)',
+  );
+
   // SkillToolset accepts either a Skill[] or a Record<string, Skill>; we
   // pass the sorted array so iteration order matches the boot-log order.
   // No `additionalTools` — connector tools live alongside the toolset as
@@ -146,18 +203,17 @@ export async function buildOrchestratorAgent({
     // InstructionProvider type accepts `() => string | Promise<string>`, so
     // the async upgrade is a transparent extension.
     //
-    // Placement: memory block appended AFTER the base prompt + skills injection.
-    // The base prompt + skills injection are the cache-stable prefix; the memory
-    // block changes only when a memory is written (one cache-bust, then stable
-    // again). Appending last keeps the stable prefix intact so the Anthropic
-    // prompt cache (cache_control: ephemeral, Perf-1) maximises hits between
-    // writes. The block is empty when there are no active memories — no dangling
-    // separator in that case.
+    // Placement: base = prompt + skills injection + (RL.3) thinking belt — all
+    // boot-static, so they form the cache-stable prefix. The sales-memory block
+    // is appended AFTER base; it changes only when a memory is written (one
+    // cache-bust, then stable again), so the Anthropic prompt cache
+    // (cache_control: ephemeral, Perf-1) keeps hitting between writes. The belt
+    // is '' when thinking is on (RL.3), so it doesn't perturb the prefix then.
     //
     // Connector-client absent (test/no-memory path): skip the block silently
     // so tests that don't wire a connector still work.
     instruction: async () => {
-      const base = `${promptLoader.load()}\n\n---\n\n${skillsInjection}`;
+      const base = `${promptLoader.load()}\n\n---\n\n${skillsInjection}${thinkingFallback}`;
       if (!connectorClient || !memoryLoadedHeader) return base;
       try {
         const memoryBlock = await loadSalesMemoryBlock(connectorClient, memoryLoadedHeader);

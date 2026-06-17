@@ -85,9 +85,9 @@ FROM event_log WHERE event_type = 'handoff.submitted' GROUP BY 1;
 3. **GCE VM**: install the [Google Cloud Ops Agent](https://cloud.google.com/logging/docs/agent/ops-agent) and configure its logging receiver to tail the orchestrator + connector stdout (or a redirected log file). **Cloud Run**: nothing — stdout is captured natively.
 4. Set `EVENT_SINK=cloud-logging` in both services' env; restart.
 5. Create a Cloud Monitoring **alert policy**: log-based condition `severity >= ERROR` (optionally filtered by `jsonPayload.eventType`), notification channel = dev-team email / Slack.
-6. **Error Reporting** auto-aggregates the ERROR entries (grouped by the stable `message`) and emails on new/spiking errors — no extra config.
+6. **Error Reporting** — ⚠ **caveat**: it auto-groups only entries formatted as errors (a stack trace, or the `@type: …ReportedErrorEvent` + `serviceContext` shape). Puma's events carry `severity` + a stable `message` but **not** those fields, so a bare `severity:ERROR` entry will **not** reliably populate Error Reporting as shipped. **The alert policy (step 5) is the reliable dev-team error surface.** Lighting up Error Reporting's grouped view needs a small sink enhancement — see "Forward-compatible" below.
 
-Verify (Log Explorer): `jsonPayload.eventType="error.raised"` returns entries with `severity=ERROR`; a forced tool failure shows up in Error Reporting within ~1 min.
+Verify (Log Explorer): `jsonPayload.eventType="error.raised"` returns entries with `severity=ERROR`, and a forced tool failure fires the alert policy.
 
 ---
 
@@ -96,3 +96,4 @@ Verify (Log Explorer): `jsonPayload.eventType="error.raised"` returns entries wi
 - **BigQuery** for analysis: a one-click Logs Router sink from Cloud Logging — the event schema is already export-ready (flat, typed, versioned).
 - **`event_log` retention sweep**: a `DELETE … WHERE created_at < NOW() - INTERVAL '30 days'` fast-follow; the table is PII-safe so it's an ops-hygiene item, not compliance.
 - **UI event collection**: `ui.*` events currently emit to the browser console only; a `POST /events` transport (Phase 2) would route them server-side.
+- **Error Reporting formatting**: to populate Cloud Error Reporting's *grouped view* (beyond the alert policy), the `cloud-logging` sink should emit ERROR-severity events with the `@type: …ReportedErrorEvent` + `serviceContext` fields. A small enhancement to `cloudLoggingSink`; the alert policy covers the core "alert the devs" need meanwhile.

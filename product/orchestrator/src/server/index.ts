@@ -34,6 +34,7 @@ import { createChatHandler, type MemoryAgentProvider } from './chat.js';
 import { createSessionPingHandler } from './session-ping.js';
 import { createSessionHistoryHandler } from './session-history.js';
 import { createHandoffSubmitHandler } from './handoff-submit.js';
+import { createModelsHandler } from './models.js';
 import { DISCLOSURE_COPY_VERSION } from './errors.js';
 import type { TriageClassifier } from '../functional-agents/triage-classifier.js';
 import {
@@ -85,6 +86,22 @@ export interface BuildServerDeps {
    * the recipient + transport + templates dir.
    */
   readonly mailerConfig?: MailerConfig;
+  /**
+   * Dev/test model-picker resolver (M-PICK-1). When present, `/chat` routes
+   * each turn's `model` override through it (falling back to `runner`). Built in
+   * src/index.ts from the runner registry; absent in unit tests.
+   * See planning/03-exec-crosscut-test-mode-model-picker.md.
+   */
+  readonly getRunner?: (modelId?: string) => Promise<Runner>;
+  /**
+   * Dev/test model-picker catalogue (M-PICK-5). Present ONLY when the picker is
+   * enabled (`config.modelPickerEnabled`); when present, `GET /models` is
+   * registered. Undefined in production / unit tests → no route.
+   */
+  readonly modelPicker?: {
+    readonly defaultModelId: string;
+    readonly modelIds: readonly string[];
+  };
   /**
    * Staff authenticator (staff-auth task). When supplied (STAFF_AUTH_ENABLED=true),
    * `POST /staff/auth` is registered and validates the shared password.
@@ -217,10 +234,23 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
       now: deps.now,
       corsAllowedOrigins: deps.corsAllowedOrigins,
       triageClassifier: deps.triageClassifier,
+      getRunner: deps.getRunner,
       staffAuthenticator: deps.staffAuthenticator,
       memoryAgentProvider: deps.memoryAgentProvider,
     }),
   );
+
+  // Dev/test model picker (M-PICK-5). Registered only when enabled — the route
+  // does not exist in production (src/index.ts gates `modelPicker` to undefined).
+  if (deps.modelPicker) {
+    app.get(
+      '/models',
+      createModelsHandler({
+        defaultModelId: deps.modelPicker.defaultModelId,
+        modelIds: deps.modelPicker.modelIds,
+      }),
+    );
+  }
 
   // E.t3 — only register the handoff-submit route when both deps are
   // supplied. The mailer config carries the master `enabled` switch, so
