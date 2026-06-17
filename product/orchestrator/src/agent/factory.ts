@@ -152,7 +152,7 @@ export async function buildOrchestratorAgent({
   const thinkingFallback = buildThinkingFallbackInjection(config);
   console.log(
     config.ORCHESTRATOR_THINKING_ENABLED
-      ? '[orchestrator] thinking: ENABLED (adaptive) — reasoning isolated in the thinking channel; no belt'
+      ? `[orchestrator] thinking: ENABLED (adaptive, effort=${config.ORCHESTRATOR_EFFORT ?? 'high (default)'}) — reasoning isolated in the thinking channel; no belt`
       : '[orchestrator] thinking: DISABLED — silent-working belt injected (prompt-only leak mitigation)',
   );
 
