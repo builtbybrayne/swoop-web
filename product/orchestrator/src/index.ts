@@ -108,7 +108,14 @@ async function main(): Promise<void> {
     sessionStore,
   });
 
-  const { agent } = await buildOrchestratorAgent({ config, promptLoader, tools: connector.tools });
+  // T3-4: pass the connector client so buildOrchestratorAgent can read the
+  // active sales-memory set per-turn inside the async InstructionProvider.
+  const { agent } = await buildOrchestratorAgent({
+    config,
+    promptLoader,
+    tools: connector.tools,
+    connectorClient: connector.client,
+  });
 
   // staff-auth + T3-3 — staff authenticator and the Opus memory-agent provider.
   // Both are gated on STAFF_AUTH_ENABLED: with it off, visitor sessions are the
