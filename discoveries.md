@@ -6,6 +6,20 @@ Non-obvious architectural truths we learned during the build. Add entries when y
 
 ---
 
+## 2026-06-17 — Inline sales-team memory: the Opus agent re-seeds per turn (multi-turn rides conversationHistory); the per-turn load goes through the connector, byte-stably
+
+Three truths from building the sales-memory feature (T3-1…T3-4; decisions sm-1…sm-9):
+
+**1. The Opus memory agent runs in a fresh, transcript-seeded session per memory turn — multi-turn authoring still works because the transcript it re-seeds from accumulates.** sm-9 isolates the memory dialogue from the conversational agent's ADK event log (faithful testing). The chat handler rebuilds the memory agent + a fresh `InMemoryRunner` session on EVERY memory-mode turn, seeding it from `SessionState.conversationHistory` — which is appended unconditionally at the top of every turn (`appendUserMessage`) + per streamed agent part. So by turn 2 ("yes") the re-seed already carries turn 1's "remember X" + the agent's "Save this?"; the agent reconstructs context from the transcript, not a live session. Confirmed by a live Opus-4.8 smoke (confirm→store→finish across 3 turns). Cost note: two Opus calls per memory turn (a drained seed turn + the real turn); folding the transcript into the first real message is the documented future optimisation.
+
+**2. The conversational agent's per-turn memory load goes through the connector, never a direct orchestrator DB query (E.11).** The active set is read each turn via `callTool('memory_list_active')` ([sales-memory-loader.ts](product/orchestrator/src/agent/sales-memory-loader.ts)) — the orchestrator is a data *consumer*; the connector owns Postgres. No app-level cache (sm-6): the shared-DB read each turn gives cross-instance propagation with zero invalidation logic.
+
+**3. The loaded block must be byte-stable or it busts the prompt cache every turn.** The system block carries `cache_control: ephemeral` (Perf-1) as one cache unit. The memory block is rendered in the connector's deterministic order with a fixed template → byte-identical between writes (cache hits), one bust on a write. Nondeterministic ordering/rendering would silently re-bust the whole system prompt for every visitor on every turn. Treat byte-stability of any per-turn-assembled, cached prompt section as a correctness property and unit-test it.
+
+(See also the two gotchas this build produced — the Opus-`temperature` 400 and the auto-injected-field schema leak — in [gotchas.md](gotchas.md).)
+
+---
+
 ## 2026-06-11 — Parallel branches that each add "the Nth tool" auto-merge their identical count-pins silently; union-merge needs a pin sweep, not just conflict resolution
 
 Two branches in the goofy-goldstine wave each added one tool (`get_pricing`, `show_options`) and each updated the same count pins 9→10. Git treats identical changes on both sides as non-conflicting and keeps "10" — where the union is 11. Only two files *textually* conflicted; the dangerous pins (orchestrator `tools.test.ts` exposed-count, connector length assertions) merged clean and wrong. **Rule**: after merging sibling branches that extend the same enumerated surface (tools, migrations, event kinds), grep-sweep every count/pin/history-comment for the enum (`toHaveLength(`, "N tools", registration lists) and resolve to the union by hand — the conflict list is not the checklist.
