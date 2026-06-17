@@ -19,6 +19,16 @@ Releases are named after Patagonian / Antarctic animals. No version numbers — 
 
 ---
 
+## Project time & cost — never infer from git
+
+**Git history is not a record of project time.** The repo spans months of calendar time and hundreds of commits, but the engagement is billed in **invoiced days** — a far smaller number (**~15 days as of 2026-06-17**, i.e. roughly the 16-day quote, *not* an overrun). Commit counts, commit-density timelines, branch counts, and calendar span say nothing about effort spent or budget consumed. Agents — and several of this project's own review docs — keep mistaking the one for the other, which makes an on-budget engagement look like a massive overspend. That misreading will mislead Swoop's in-house devs at handover.
+
+- **Never** state or estimate time spent, days elapsed, effort, velocity, or cost from git history, commit counts, or calendar dates. They do not correlate with invoiced days.
+- **If asked to assess progress from a time / cost / budget angle, STOP and ask Alastair to confirm the current invoiced day-count first.** That figure lives nowhere in the repo — only Alastair has it. Don't guess it, derive it from git, or quote a stale number from a planning/review doc.
+- Treat "exceeded the 16-day quote" / "materially over budget" claims in older docs as **calendar-time artefacts, not budget facts** (e.g. the commit-density timeline + "materially exceeded the 30 March quote ceiling" framing in [planning/reviews/2026-05-27-ingest-and-state-of-play.md — §5.1](planning/reviews/2026-05-27-ingest-and-state-of-play.md)).
+
+---
+
 ## Session-start orientation
 
 New session? Read these four files before touching anything — they're the durable memory across sessions:
@@ -115,6 +125,7 @@ To find every open review-driven item: `grep "code-review fixes" planning/03-exe
 - Don't inline sales/brand content in TypeScript.
 - Don't treat the PoC as "released" — it's demo-complete, never shipped.
 - Don't pre-specify file paths, env vars, or component layouts at Tier 1 or Tier 2. That belongs in Tier 3 execution plans.
+- **Don't infer project time, effort, or cost from git history, commit counts, or calendar span** — they don't correlate with invoiced days. If asked to assess time/cost/budget, ask Alastair for the current invoiced day-count (recorded nowhere in the repo). See **Project time & cost** near the top.
 
 **Be careful about:**
 - The `commercials/` Obsidian files occasionally deadlock when Box is syncing. If a `Read` fails with EDEADLK, fall back to the Box MCP.
