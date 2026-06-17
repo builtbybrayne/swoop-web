@@ -47,7 +47,6 @@ This visitor has been talking to the Patagonia discovery agent and is ready for 
 
 - Conversation: granted at {{consent.conversationTimestamp}} (copy v{{consentCopyVersionOrDash}})
 - Handoff: granted at {{consent.handoffTimestamp}}
-- Marketing: {{marketingConsentLabel}}
 
 ---
 

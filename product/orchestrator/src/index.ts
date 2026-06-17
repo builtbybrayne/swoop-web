@@ -11,9 +11,10 @@
  *   6. Build an `InMemoryRunner` so /chat can drive agent turns end-to-end.
  *   7. Compose the HTTP surface (B.t5) and listen on `config.PORT`.
  *
- * Not here yet:
- *   - Warm session pool (B.t10).
- *   - Observability backbone (chunk F).
+ * Now wired (post the original B.t5 slice):
+ *   - Warm session pool (B.t10; disabled by default, WARM_POOL_SIZE=0).
+ *   - Observability event sink (chunk F / F-c) — selected by EVENT_SINK,
+ *     registered via setEventSink below.
  *
  * B.t7 adds:
  *   - Layer-2 functional triage classifier (`buildTriageClassifier`) running
@@ -38,10 +39,11 @@ import {
   InMemoryArtifactService,
   InMemoryMemoryService,
 } from '@google/adk';
-import { emitErrorRaised, messageOf } from '@swoop/common';
+import { emitErrorRaised, messageOf, setEventSink } from '@swoop/common';
 import {
   FsHandoffStore,
   loadAllToolDescriptions,
+  resolveEventSink,
   sweepHandoffs,
   type MailerConfig,
 } from '@swoop/connector';
@@ -205,6 +207,26 @@ async function main(): Promise<void> {
     runner = new InMemoryRunner({ agent, appName: ORCHESTRATOR_APP_NAME });
   }
 
+  // F-c — register the durable event sink (planning/03-exec-observability-c.md).
+  // Reuse the postgres session pool when present; otherwise provision a small
+  // dedicated pool for EVENT_SINK=postgres (the config refine guarantees the URL).
+  let eventPool: pg.Pool | undefined;
+  if (config.EVENT_SINK === 'postgres' && postgresPool === undefined) {
+    eventPool = new pg.Pool({
+      connectionString: config.ORCHESTRATOR_DATABASE_URL,
+      max: 3,
+      idleTimeoutMillis: 30_000,
+      application_name: 'swoop-orchestrator-events',
+      options: `-c statement_timeout=5000`,
+    });
+    eventPool.on('error', (err) => {
+      console.error(`[orchestrator] event-log pool error: ${messageOf(err)}`);
+    });
+  }
+  setEventSink(
+    resolveEventSink({ mode: config.EVENT_SINK, pool: postgresPool ?? eventPool }),
+  );
+
   const version = readPackageVersion(config.packageRoot);
 
   // ADK-side provisioning hook — used both by the warm pool (every pre-warm)
@@ -313,6 +335,10 @@ async function main(): Promise<void> {
     console.log(`[orchestrator] agent: ${agent.name} (tools: ${agent.tools.length})`);
     console.log(`[orchestrator] session backend: ${config.SESSION_BACKEND}`);
     console.log(
+      `[orchestrator] event sink: ${config.EVENT_SINK}` +
+        `${config.EVENT_SINK === 'postgres' ? ` (event_log; pool ${postgresPool ? 'shared with sessions' : 'dedicated'})` : ''}`,
+    );
+    console.log(
       `[orchestrator] warm pool size: ${config.WARM_POOL_SIZE} (ttl ${config.WARM_POOL_TTL_MINUTES}min) — ` +
         `${config.WARM_POOL_SIZE === 0 ? 'disabled (direct allocator)' : 'pre-warmed'}`,
     );
@@ -368,6 +394,11 @@ async function main(): Promise<void> {
     if (postgresPool !== undefined) {
       postgresPool.end().catch((err) => {
         console.warn('[orchestrator] postgres pool close failed during shutdown:', err);
+      });
+    }
+    if (eventPool !== undefined) {
+      eventPool.end().catch((err) => {
+        console.warn('[orchestrator] event-log pool close failed during shutdown:', err);
       });
     }
     server.close(() => process.exit(0));

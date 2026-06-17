@@ -22,8 +22,11 @@ import { config as loadDotenv } from 'dotenv';
 // per gotchas.md.
 loadDotenv({ override: true });
 
+import { setEventSink } from '@swoop/common';
+
 import { loadConfig } from '../config/index.js';
 import { getPool, closePool } from '../data/pool.js';
+import { resolveEventSink } from '../data/event-log-sink.js';
 import { buildEmbedQuery } from '../data/embed-query.js';
 import { loadAllToolDescriptions, ALL_TOOL_NAMES } from '../tools/index.js';
 import { loadMemoryToolDescriptions } from '../tools/memory-description-loader.js';
@@ -35,6 +38,11 @@ async function main(): Promise<void> {
   // Open the pool eagerly so a misconfigured DATABASE_URL surfaces at
   // boot, not on the first /readyz probe.
   const pool = getPool(config);
+
+  // F-c — register the durable event sink (planning/03-exec-observability-c.md).
+  // The connector emits tool.invoked + handoff.email.* + handoff.retention.* —
+  // this routes them to the configured destination (default stdout).
+  setEventSink(resolveEventSink({ mode: config.EVENT_SINK, pool }));
 
   // Load all eight tool descriptions at boot — fail-fast on any missing /
   // empty file (per HITL Q3 ratification: ALL 8, not just the 5
@@ -53,6 +61,7 @@ async function main(): Promise<void> {
       `[connector] pool: max=${config.PG_POOL_MAX} idle=${config.PG_POOL_IDLE_MS}ms ` +
         `statement_timeout=${config.PG_STATEMENT_TIMEOUT_MS}ms`,
     );
+    console.log(`[connector] event sink: ${config.EVENT_SINK}`);
     console.log(`[connector] tools: ${ALL_TOOL_NAMES.join(', ')}`);
     console.log(
       `[connector] descriptions loaded from: ${config.toolsPromptDirAbsolutePath}`,

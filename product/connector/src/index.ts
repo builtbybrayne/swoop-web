@@ -70,6 +70,18 @@ export {
   buildPoolConfig,
 } from './data/pool.js';
 
+// --- Observability event sink (F-c) ---------------------------------------
+//
+// The durable Postgres EventSink + the EVENT_SINK mode resolver. Re-exported
+// so the orchestrator entrypoint can register the same sink (both processes
+// emit chunk-F events). The pure stdout / cloud-logging sinks + severity live
+// in @swoop/common; the Postgres path lives here because it needs `pg`.
+export {
+  createPostgresEventSink,
+  resolveEventSink,
+  type EventSinkMode,
+} from './data/event-log-sink.js';
+
 // --- Tool description loader (C.t4) ---------------------------------------
 //
 // Re-exported so the orchestrator's connector adapter (B.t3a) can load the

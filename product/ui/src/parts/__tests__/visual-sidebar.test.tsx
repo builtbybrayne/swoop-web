@@ -81,7 +81,7 @@ describe("registry composition", () => {
       "find_someone_who",
       "find_proof",
       "lookup",
-      "find_options",
+      "show_options",
       "illustrate",
     ]) {
       expect(byName[tool]?.displayName).toBe(
@@ -94,6 +94,17 @@ describe("registry composition", () => {
     // Under Vitest, import.meta.env.DEV is true so dev-trace wraps; the
     // ABSENCE of the sidebar-publish layer is the point.
     expect(byName.handoff?.displayName).toBe("WrappedWithDevTrace(handoff)");
+  });
+
+  it("leaves find_options inline-only — it renders nothing (browse tool)", () => {
+    // find/show split: find_options is the agent-private browse tool and
+    // renders no widget, so it must NOT be sidebar-wrapped. show_options is
+    // the visitor-facing card renderer that relocates to the sidebar.
+    // Regression guard for the goofy-goldstine split, which moved the
+    // renderer (widgets/index.ts) but not the sidebar routing (parts/index.ts).
+    expect(byName.find_options?.displayName).toBe(
+      "WrappedWithDevTrace(find_options)",
+    );
   });
 });
 

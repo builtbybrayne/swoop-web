@@ -21,7 +21,10 @@
  * What is intentionally missing:
  *   - Rate limiting (B.t5 scope: "no auth"; 429 shape reserved for later).
  *   - Warm pool hydration (B.t10).
- *   - Observability events (chunk F).
+ *
+ * Observability: this handler emits the chunk-F turn lifecycle —
+ * turn.received, triage.decided, tool.called/returned, turn.completed, and
+ * error.raised on failure — via `emitEvent` (sink selected by EVENT_SINK; F-c).
  */
 
 import type { Request, Response } from 'express';
@@ -722,14 +725,14 @@ export function buildDateline(
       const date = new Date(clientTime.iso);
       if (!Number.isNaN(date.getTime())) {
         const formatted = formatVisitorDate(date, clientTime.timeZone);
-        return `Current date for this visitor: ${formatted}. Reason about seasons, lead times and "how far out" from this date.`;
+        return `Current date for this visitor: ${formatted}. Treat the timezone as your best signal for where they are (hemisphere, region) and frame seasonal comparisons from there. Reason about seasons, lead times and "how far out" from this date.`;
       }
     } catch {
       // Fall through to server-clock fallback on any formatting failure.
     }
   }
   const formatted = formatVisitorDate(serverNow, 'UTC');
-  return `Current date (server clock — visitor clock unavailable): ${formatted}. Reason about seasons, lead times and "how far out" from this date.`;
+  return `Current date (server clock — visitor clock unavailable): ${formatted}. Visitor location unknown — assume a United States / Northern Hemisphere frame unless they say otherwise. Reason about seasons, lead times and "how far out" from this date.`;
 }
 
 /** Format a Date in a given IANA timezone as a human-readable string. */

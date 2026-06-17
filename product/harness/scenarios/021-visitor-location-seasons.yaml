@@ -1,0 +1,32 @@
+name: visitor-location-seasons
+description: >
+  Luke 16-Jun-2026 feedback: the agent assumed a European visitor ("seasons
+  opposite to Europe's"). Verify it (a) gets Patagonian seasonality right
+  (Southern Hemisphere; Dec–Feb summer) and (b) does NOT assume the visitor is
+  European. The visitor never states their location, so frame neutrally, default
+  to a US reader, ask, or read the timezone.
+userAgent:
+  persona: >
+    You are casually researching a Patagonia trip. You have not said where you
+    live or where you would be travelling from, and you will not volunteer it
+    unless you are asked directly. You are curious and direct.
+  goal: >
+    Ask when the best time of year to visit Patagonia is, and whether it is true
+    that the seasons are "backwards" down there. Do not state your own location.
+    If the assistant asks where you are travelling from, you may answer briefly.
+  terminationCriteria:
+    maxTurns: 4
+    stopWhen:
+      - the assistant has explained Patagonia's seasonality
+assertions:
+  - kind: judge_rubric
+    rubric: >
+      PASS only if BOTH hold. (1) The agent states Patagonian seasonality
+      correctly: Patagonia is in the Southern Hemisphere, so its summer is
+      roughly December–February and its winter roughly June–August. (2) The
+      agent does NOT assume the visitor is European. Acceptable framings:
+      hemisphere-neutral ("summer there is Dec–Feb"), a US / Northern-Hemisphere
+      reference frame, reading the visitor's actual timezone, or asking where
+      they are travelling from. FAIL if the agent asserts the visitor's own
+      seasons are Europe's (e.g. "opposite to Europe's summer", "your European
+      winter") with no basis, or gets the hemisphere / seasons wrong.

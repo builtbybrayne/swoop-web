@@ -159,6 +159,18 @@ export const configSchema = z
     // when postgres is selected.
     ORCHESTRATOR_DATABASE_URL: z.string().trim().default(''),
 
+    // --- Observability sink (F-c) ---------------------------------------
+    // Where emitted events land (registered via setEventSink at boot):
+    //   stdout         — one JSON line per event (default; dev).
+    //   postgres       — durable INSERT into event_log (migration 020; single
+    //                    store per C.18). Requires ORCHESTRATOR_DATABASE_URL —
+    //                    enforced by the cross-field refine below. Works on the
+    //                    demo Mini + any pre-GCP host; SQL-queryable today.
+    //   cloud-logging  — severity-tagged structured stdout for Cloud Logging +
+    //                    Error Reporting (Swoop GCP, via Cloud Run / Ops Agent).
+    // See planning/03-exec-observability-c.md.
+    EVENT_SINK: z.enum(['stdout', 'postgres', 'cloud-logging']).default('stdout'),
+
     // --- Connector -------------------------------------------------------
     // Default points at the real @swoop/connector service on :3002 (per
     // C.t1 + C.t4 boot path). Pre-B.t3a (2026-05-02) this defaulted to
@@ -298,6 +310,18 @@ export const configSchema = z
       message:
         'SESSION_BACKEND=postgres requires ORCHESTRATOR_DATABASE_URL. ' +
         'Set it in .env (e.g. postgresql://al:pick-a-password@localhost:5432/puma_dev).',
+    },
+  )
+  // EVENT_SINK=postgres writes to the event_log table and therefore needs a
+  // database URL, same as the session backend (F-c). Fail-fast at parse.
+  .refine(
+    (cfg) =>
+      cfg.EVENT_SINK !== 'postgres' || cfg.ORCHESTRATOR_DATABASE_URL.length > 0,
+    {
+      path: ['ORCHESTRATOR_DATABASE_URL'],
+      message:
+        'EVENT_SINK=postgres requires ORCHESTRATOR_DATABASE_URL (it may share the connector DATABASE_URL). ' +
+        'Set it in .env or choose EVENT_SINK=stdout|cloud-logging.',
     },
   )
   // Warm-pool TTL must be strictly shorter than the idle-session TTL.

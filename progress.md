@@ -19,6 +19,22 @@ The 16/06 design (DRAFT T2 + decisions `sm-1`…`sm-9`) is now **built and verif
 ## 2026-06-16 — Sales-team agent memory: design + T2 (Cowork session, worktree `sales-knowledge-feedback`)
 
 Off Luke's 16/06 feedback (agent lacks current sales knowledge — seasonality/availability — and mis-reasons season-vs-date). Designed end-to-end and captured a DRAFT Tier-2: [planning/02-impl-sales-memory.md](planning/02-impl-sales-memory.md) + decisions `sm-1`…`sm-8`. Shape: **inline** sales-team-authored agent memory — staff authenticate (shared password behind a swappable `StaffAuthenticator`), the conversational agent stays **Sonnet** (faithful testing), an explicit "remember…" hands off (orchestrator routing, **not** ADK transfer) to a dedicated **Opus** memory agent that CRUDs a versioned/attributed/timestamped Postgres store; memories load **authoritatively + timestamped** into every conversation's per-turn instruction. Supersedes the shelved git-PR/override-repo curation plans (deprecated 2026-05-27). **T3s pending** (T3-1 store+CRUD · T3-2 auth · T3-3 routing+Opus agent [**spike first**] · T3-4 loading · T3-5 prompt content). Nothing built/committed — DRAFT awaiting ratification. Near-term independent win flagged: ship a static `20_field-notes.md` to close the seasonality gap now.
+## 2026-06-17 — harness loader fails loud on infra errors (worktree `peaceful-hoover-b45bd8`)
+
+`cli.ts` load-failure + `main()` fatal-catch paths now exit non-zero — a completed run still exits 0 so behavioural pass/fail stays non-gating (H.13) — fixing the silent failure that let 021's over-cap `description` disable the whole suite (incl. the visitor-location acceptance gate G.visitor-location-1) under a green CI. main's `9cb7263` already unblocked 021 itself; this stops the class recurring. (Gotcha also recorded: broken Homebrew `node` shadowing nvm Node 20.)
+
+## 2026-06-16 — Luke location feedback: infer from timezone, default US, SH seasonality anchor (worktree `visitor-location-infer`)
+
+Single-item Luke feedback (16 Jun, verbatim in the plan): *"if assuming users location then let's presume US — eg 'Patagonia's seasons run opposite to Europe's' came up in one thread."* Investigated, planned, executed, merged in one session.
+
+**Finding**: not a missing-data problem. The visitor's IANA timezone is already sent every turn (B.t12 `clientTime.timeZone`) and already rendered into the per-turn dateline the agent reads — the location signal was in context; the instruction to use it was missing. Zero geographic-anchoring guidance existed anywhere in `00_why.md` (grep-confirmed), and the 2026-05-18 Southern-Hemisphere seasonality anchor had never landed.
+
+**Landed** ([plan](planning/03-exec-crosscut-visitor-location-infer.md); decision G.visitor-location-1):
+- `00_why.md` §7 new subsection "Where the visitor is, and which way their seasons run" — read the timezone for hemisphere/region; frame seasonal comparisons from the visitor's hemisphere; Patagonia SH (Dec–Feb summer / Jun–Aug winter); **MUST NOT** default to Europe; **SHOULD** presume US/Northern-Hemisphere when the zone is absent/ambiguous; hold the read lightly; **MAY** ask one travel-origin question as fallback. Folds in the 2026-05-18 inbox seasonality item.
+- `buildDateline` (chat.ts) reinforces: present case names the timezone as the location signal; no-`clientTime` fallback states the US default.
+- New harness scenario `021-visitor-location-seasons.yaml` (acceptance gate; runs with the `luke-` family — needs API key, not run this session).
+
+**Verification**: `@swoop/orchestrator` typecheck clean; full suite **222 passed / 21 skipped**; `chat-dateline` 9/9 (7 + 2 new). Inference stays prompt-side (model over the raw zone), not a server region map. Merged to `main`.
 
 ## 2026-06-12 (later) — Luke's test set as a harness family; harness measurement fixes; first judged baseline
 

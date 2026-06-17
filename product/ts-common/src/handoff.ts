@@ -237,8 +237,6 @@ export const HandoffConsentSchema = z.object({
   conversationTimestamp: z.string().datetime(),
   handoffGranted: z.boolean(),
   handoffTimestamp: z.string().datetime(),
-  marketingGranted: z.boolean().optional(),
-  marketingTimestamp: z.string().datetime().optional(),
   consentCopyVersion: z.string().optional(),
 });
 export type HandoffConsent = z.infer<typeof HandoffConsentSchema>;
@@ -386,8 +384,6 @@ export type HandoffSubmitConsentGate = Pick<
 const HandoffSubmitRequestConsentSchema = z.object({
   handoffGranted: z.boolean(),
   handoffTimestamp: z.string().datetime(),
-  marketingGranted: z.boolean().optional(),
-  marketingTimestamp: z.string().datetime().optional(),
   consentCopyVersion: z.string().optional(),
 });
 

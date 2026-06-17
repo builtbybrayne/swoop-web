@@ -19,7 +19,7 @@ import { useEffect, useRef } from "react";
 const COPY = {
   heading: "How your conversation is handled",
   paragraphs: [
-    "This is an AI-powered assistant. When you send a message, your text is processed by an AI model so the assistant can respond. The conversation is retained only long enough to help you — typically until you close the window.",
+    "This is an AI-powered assistant. When you send a message, your text is processed by an AI model so the assistant can respond. We keep a record of your conversation for a while — any saved data is always anonymised before we do any internal analyses to check the assistant is working well.",
     "We do not sell your data, and your conversation is not used to train third-party AI models. Suppliers involved in processing may include our hosting provider and the AI model provider. If you'd like a copy of your conversation, or to have it deleted on request, contact us at privacy@example.com.",
   ],
   closeLabel: "Close",

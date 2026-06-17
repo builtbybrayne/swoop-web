@@ -21,7 +21,6 @@ export const SampleEventHandoffSubmitted: Event = {
     verdict: "qualified",
     consentConversationGranted: true,
     consentHandoffGranted: true,
-    consentMarketingGranted: false,
     emailDeliveryStatus: "sent",
   },
 };
@@ -49,23 +48,8 @@ export const SampleEventConsentDeclined: Event = {
   turnIndex: null,
   actor: "ui",
   payload: {
-    tier: "marketing",
+    tier: "handoff",
     copyVersion: "consent-handoff/v1",
-  },
-};
-
-export const SampleEventToolFailed: Event = {
-  eventType: "tool.failed",
-  eventVersion: 1,
-  timestamp: "2026-04-22T09:02:31.000Z",
-  sessionId: "sess_puma_demo_001",
-  turnIndex: 2,
-  actor: "connector",
-  payload: {
-    toolName: "lookup",
-    toolCallId: "call_lookup_17",
-    errorCategory: "upstream",
-    latencyMs: 430,
   },
 };
 

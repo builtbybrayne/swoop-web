@@ -58,7 +58,6 @@ export const SampleHandoffQualified: HandoffPayloadQualified = {
     conversationTimestamp: "2026-04-22T09:00:04.000Z",
     handoffGranted: true,
     handoffTimestamp: "2026-04-22T09:07:19.000Z",
-    marketingGranted: false,
     consentCopyVersion: "consent-handoff/v1",
   },
   session: {
@@ -106,7 +105,6 @@ export const SampleHandoffReferredOut: HandoffPayloadReferredOut = {
     conversationTimestamp: "2026-04-22T10:30:00.000Z",
     handoffGranted: true,
     handoffTimestamp: "2026-04-22T10:36:41.000Z",
-    marketingGranted: false,
     consentCopyVersion: "consent-handoff/v1",
   },
   session: {

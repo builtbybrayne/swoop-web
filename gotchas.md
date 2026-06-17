@@ -320,6 +320,18 @@ If running commands yourself: `nvm use` in `product/` picks up Node 20.
 
 ---
 
+## Homebrew `node` can be broken (dyld `libsimdjson`) and shadows nvm Node 20 — run dev/harness tooling under nvm
+
+**Symptom**: `node` / `npm` / `tsx` die before doing anything with `dyld[…]: Library not loaded: /opt/homebrew/opt/simdjson/lib/libsimdjson.31.dylib … Referenced from: …/Cellar/node/25.8.1_1/bin/node`. Worse, `npm install` can print **exit code 0 while installing nothing** — the dyld crash is in a child process, the wrapper still returns 0, and `node_modules/` stays empty.
+
+**Cause**: `/opt/homebrew/bin/node` is first on `$PATH` and was linked against a `simdjson` dylib version that a later `brew upgrade` replaced. It shadows the Node 20 the project pins via the root `.nvmrc`.
+
+**Fix**: run everything through nvm Node 20. `nvm use` only works in an interactive shell — in non-interactive / background Bash `nvm` is undefined, so prepend the bin dir explicitly before the command: `export PATH="$HOME/.nvm/versions/node/v20.11.1/bin:$PATH"`, then `npm install` / `npm run -w @swoop/harness eval …` behave. **Verify by artifact, not exit code** (e.g. `ls product/node_modules/yaml`) — the spurious `exit 0` lies. A host-level `brew reinstall node` also fixes it, but nvm is what the project expects regardless. Extends the `nvm use` note above.
+
+**Same-session trap**: the Bash tool's working directory does NOT persist into background tasks (and can drift between foreground calls). A background `npm install` launched "from `product/`" may actually run from the worktree root. Use absolute paths in `cd`, and confirm `node_modules` location with an absolute `ls`.
+
+---
+
 ## `product/cms/` is NOT a workspace package
 
 Symptom: adding `cms` to the workspaces array makes `npm install` fail because it has no `package.json`.

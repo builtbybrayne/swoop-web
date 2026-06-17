@@ -110,6 +110,21 @@ Why it matters: Puma ships with structured event logging. The schema we author n
 
 Where it lands: Tier 2 chunk F (observability & analytics).
 
+### Observability — Cloud Logging + Error Reporting provisioning — Thomas (raised 2026-06-16)
+
+Puma's event stream is now wired to a pluggable sink (`EVENT_SINK`; F-c). The dev/demo path (`postgres` → `event_log`) works today; the **production** path is **Cloud Logging + Cloud Error Reporting** (chosen 2026-06-16 — GCP-native, captures real app interest GA can't, and gives the dev team fast error alerting). To turn it on in the "AI Pat Chat" project, Swoop devops need to provision the following — **full paste-ready how-to in [product/docs/ops/observability.md](product/docs/ops/observability.md) §"Cloud Logging mode — the GCP flip"**:
+
+1. Enable the **Cloud Logging** + **Error Reporting** APIs.
+2. Grant the runtime service account (orchestrator + connector, GCE VM or Cloud Run) `roles/logging.logWriter`.
+3. **GCE VM**: install the **Google Cloud Ops Agent** to ship both services' stdout to Cloud Logging. **Cloud Run**: nothing — stdout is captured natively.
+4. Set `EVENT_SINK=cloud-logging` in both services' env.
+5. Create a Cloud Monitoring **alert policy** on `severity >= ERROR` → a dev-team notification channel (email / Slack). This is the "surface issues to the dev team fast" requirement.
+6. Region `europe-west2` (matches Cloud Run / Cloud SQL per the legal pack D-3.3.5).
+
+Why it matters: until this lands, production events are ephemeral (stdout) and there is **no error alerting**. Gated on the same "AI Pat Chat" IAM as the rest of M4. **No new processor** — Cloud Logging is already in the compliance processor list ([06-processors.md](product/cms/legal/compliance-bundle/06-processors.md)); **add Error Reporting** to that list for completeness (it is a Google Cloud sub-service under the existing GCP DPA, so no new DPA).
+
+Where it lands: Tier 2 chunk F. The provisioning steps now live in [product/handover/productionisation.md](product/handover/productionisation.md) §2/§6 (the dev handover folder); this entry stays as the tracked Swoop-side ask.
+
 ### Media library location + access — Thomas / Richard / Martin (Friday hackathon scope)
 
 Where do Swoop's product / region / activity images actually live, and what access path does Puma need? The 21 Apr meeting referenced "a media library somewhere" but didn't pin it. Options might be: Cloudinary, S3/GCS bucket, a CMS attachment store, direct-from-CDN URLs with no auth.

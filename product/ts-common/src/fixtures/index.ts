@@ -27,7 +27,6 @@ export {
   SampleEventHandoffSubmitted,
   SampleEventConsentGranted,
   SampleEventConsentDeclined,
-  SampleEventToolFailed,
   SampleEventToolInvoked,
   SampleEventHandoffTriggered,
   SampleEventSkillLoaded,

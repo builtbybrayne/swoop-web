@@ -200,7 +200,6 @@ export const HandoffSubmitInputSchema = z.object({
     .optional(),
   consent: z.object({
     handoffGranted: z.boolean(),
-    marketingGranted: z.boolean().optional(),
     consentCopyVersion: z.string().optional(),
   }),
 });

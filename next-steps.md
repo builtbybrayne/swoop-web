@@ -19,6 +19,11 @@ The 16/06 sales-memory design is **built + verified** on the `sales-knowledge-fe
 ## Status (2026-06-16 — Sales-team agent memory designed; DRAFT T2, T3s pending)
 
 New capability off Luke's 16/06 feedback: **inline sales-team-authored agent memory**. DRAFT Tier-2 at [planning/02-impl-sales-memory.md](planning/02-impl-sales-memory.md); decisions `sm-1`…`sm-8` in [planning/decisions.md](planning/decisions.md). Next actions, in order: (1) **spike** the Opus-memory-agent / shared-session mechanism (T3-3 head, ~½ day — the only framework-capability unknown); (2) author T3-1 (store+CRUD) … T3-5 (prompt content); (3) **independent, ship now**: a static `product/cms/prompts/system/20_field-notes.md` closing Luke's seasonality gap (authoring pending Alastair). Built in the `sales-knowledge-feedback` worktree; HITL on main — nothing committed yet.
+## Status (2026-06-16 — visitor-location inference landed)
+
+Luke's 16-Jun feedback (infer the visitor's location; presume US when unknown) is **executed and merged to `main`** ([plan](planning/03-exec-crosscut-visitor-location-infer.md); decision G.visitor-location-1). Prompt-led: `00_why.md` §7 reads the per-turn timezone as the location signal and frames seasonality from the visitor's hemisphere; `buildDateline` reinforces (US / Northern-Hemisphere default when the zone is absent). Folds in the long-open 2026-05-18 inbox Southern-Hemisphere anchor. Orchestrator typecheck + 222 tests green. **Operator-pending**: run harness `021-visitor-location-seasons` with the `luke-` family (needs API key) to confirm behaviourally.
+
+---
 
 ## Status (2026-06-11, evening — widget-emptiness diagnosed + live-verified; gated fixes queued)
 
