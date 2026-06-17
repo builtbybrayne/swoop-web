@@ -15,15 +15,17 @@
  *   - listActiveMemories: SELECT projection to SalesMemoryPublic array.
  *   - getMemoryHistory: version row projection; throws on empty result.
  *
- * DB-gated integration tests (requiring a live DATABASE_URL) are a separately-
- * authorised step per the SM.t1 brief. The describeIfDb block at the bottom
- * skips cleanly when DATABASE_URL is absent.
+ * DB-gated integration tests (the describeIfItest block at the bottom) exercise
+ * the real SQL against a throwaway Postgres with migration 021 applied — the
+ * store<->schema contract the mocks above cannot verify. They run ONLY when
+ * DATABASE_URL names a disposable DB (name contains "itest"); any other value
+ * (including puma_dev) skips cleanly. Runbook is in the block's header comment.
  *
  * SM.t1 (sales-memory store + CRUD, connector side).
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type pg from 'pg';
+import { describe, expect, it, vi, beforeEach, beforeAll, afterAll } from 'vitest';
+import pg from 'pg';
 
 import {
   createMemory,
@@ -415,20 +417,203 @@ describe('getMemoryHistory', () => {
 });
 
 // ---------------------------------------------------------------------------
-// DB-gated integration tests (skip without DATABASE_URL)
+// DB-gated integration tests — exercise the REAL SQL against Postgres.
+//
+// These are the store<->schema contract tests the mocks above cannot provide:
+// real column names, the CHECK + UNIQUE constraints, TIMESTAMPTZ/UUID
+// round-trips, and DB-level optimistic concurrency.
+//
+// They are DESTRUCTIVE (TRUNCATE the sales_memory tables in beforeEach), so
+// they run ONLY when DATABASE_URL names an obviously-throwaway DB (name
+// contains "itest"). Any other DATABASE_URL — including puma_dev — skips
+// cleanly, so a normal `npm test` (no DATABASE_URL) and a dev shell that
+// happens to export puma_dev both skip rather than clobber anything.
+//
+// Runbook (throwaway DB):
+//   createdb puma_sm_itest
+//   # connector/.env has dotenv override:true pointing at puma_dev, so run the
+//   # migrator from a dir with NO .env to let an inline DATABASE_URL win:
+//   (cd /tmp && DATABASE_URL=postgresql://USER@localhost:5432/puma_sm_itest \
+//      <repo>/product/node_modules/.bin/tsx \
+//      <repo>/product/connector/src/migrate.ts up)
+//   DATABASE_URL=postgresql://USER@localhost:5432/puma_sm_itest \
+//      npx vitest run src/data/__tests__/sales-memory.test.ts
+//   dropdb puma_sm_itest
 // ---------------------------------------------------------------------------
 
-const integrationUrl = process.env['DATABASE_URL'] ?? null;
-const describeIfDb = integrationUrl ? describe : describe.skip;
+function integrationDbName(url: string | null): string {
+  if (!url) return '';
+  try {
+    return new URL(url).pathname.replace(/^\//, '');
+  } catch {
+    return '';
+  }
+}
 
-describeIfDb(
-  'sales-memory — integration (requires DATABASE_URL)',
+const integrationUrl = process.env['DATABASE_URL'] ?? null;
+const integrationDb = integrationDbName(integrationUrl);
+// Defence-in-depth: only an "itest"-named DB is ever treated as disposable.
+const runIntegration = integrationUrl !== null && /itest/i.test(integrationDb);
+const describeIfItest = runIntegration ? describe : describe.skip;
+
+describeIfItest(
+  'sales-memory — integration (real Postgres; requires an *itest* DATABASE_URL)',
   () => {
-    // These are placeholders for a later separately-authorised step (SM.t1 brief).
-    // Wired in the "DB-gated, skipped without DATABASE_URL" style so they skip
-    // cleanly everywhere.
-    it('TODO: createMemory round-trips through real Postgres', () => {
-      // Implement in SM integration task.
+    let pool: pg.Pool;
+
+    beforeAll(() => {
+      pool = new pg.Pool({ connectionString: integrationUrl! });
+    });
+
+    afterAll(async () => {
+      await pool?.end();
+    });
+
+    beforeEach(async () => {
+      // Safe: this block only runs for an itest-named DB (see runIntegration).
+      await pool.query('TRUNCATE sales_memory, sales_memory_version CASCADE');
+    });
+
+    async function withClient<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
+      const client = await pool.connect();
+      try {
+        return await fn(client);
+      } finally {
+        client.release();
+      }
+    }
+
+    it('createMemory inserts an active row + a create version row, returns the public shape', async () => {
+      const created = await withClient((c) =>
+        createMemory(c, { content: 'Patagonia peaks Dec–Feb', author: 'Alice' }),
+      );
+      expect(created).toMatchObject({ content: 'Patagonia peaks Dec–Feb', updatedBy: 'Alice' });
+      expect(typeof created.id).toBe('string');
+      expect(typeof created.updatedAt).toBe('string');
+
+      const live = await pool.query(
+        'SELECT status, version, created_by, updated_by FROM sales_memory WHERE id = $1',
+        [created.id],
+      );
+      expect(live.rows[0]).toMatchObject({
+        status: 'active',
+        version: 1,
+        created_by: 'Alice',
+        updated_by: 'Alice',
+      });
+
+      const versions = await pool.query(
+        'SELECT version, change_kind, author, content FROM sales_memory_version WHERE memory_id = $1',
+        [created.id],
+      );
+      expect(versions.rows).toEqual([
+        { version: 1, change_kind: 'create', author: 'Alice', content: 'Patagonia peaks Dec–Feb' },
+      ]);
+    });
+
+    it('listActiveMemories orders newest-first by created_at', async () => {
+      const older = await withClient((c) => createMemory(c, { content: 'older', author: 'A' }));
+      await withClient((c) => createMemory(c, { content: 'newer', author: 'A' }));
+      // Force a deterministic gap so the assertion never depends on sub-ms ties.
+      await pool.query("UPDATE sales_memory SET created_at = NOW() - INTERVAL '1 hour' WHERE id = $1", [
+        older.id,
+      ]);
+
+      const active = await withClient((c) => listActiveMemories(c));
+      expect(active.map((m) => m.content)).toEqual(['newer', 'older']);
+    });
+
+    it('listActiveMemories excludes retired rows', async () => {
+      const keep = await withClient((c) => createMemory(c, { content: 'keep', author: 'A' }));
+      const drop = await withClient((c) => createMemory(c, { content: 'drop', author: 'A' }));
+      await withClient((c) => retireMemory(c, { id: drop.id, author: 'A' }));
+
+      const active = await withClient((c) => listActiveMemories(c));
+      expect(active.map((m) => m.id)).toEqual([keep.id]);
+    });
+
+    it('editMemory bumps the version, updates content, appends an edit version row', async () => {
+      const created = await withClient((c) => createMemory(c, { content: 'v1', author: 'A' }));
+      const edited = await withClient((c) =>
+        editMemory(c, { id: created.id, content: 'v2', expectedVersion: 1, author: 'B' }),
+      );
+      expect(edited).toMatchObject({ content: 'v2', updatedBy: 'B' });
+
+      const live = await pool.query('SELECT status, version, updated_by FROM sales_memory WHERE id = $1', [
+        created.id,
+      ]);
+      expect(live.rows[0]).toMatchObject({ status: 'active', version: 2, updated_by: 'B' });
+
+      const history = await withClient((c) => getMemoryHistory(c, created.id));
+      expect(history.map((h) => [h.version, h.changeKind])).toEqual([
+        [1, 'create'],
+        [2, 'edit'],
+      ]);
+    });
+
+    it('editMemory rejects a stale expectedVersion (conflict) and commits nothing', async () => {
+      const created = await withClient((c) => createMemory(c, { content: 'v1', author: 'A' }));
+      await withClient((c) =>
+        editMemory(c, { id: created.id, content: 'v2', expectedVersion: 1, author: 'A' }),
+      );
+      // version is now 2; editing again with expectedVersion 1 must conflict.
+      await expect(
+        withClient((c) =>
+          editMemory(c, { id: created.id, content: 'v3', expectedVersion: 1, author: 'A' }),
+        ),
+      ).rejects.toBeInstanceOf(SalesMemoryVersionConflictError);
+
+      // The failed edit left no trace: content/version unchanged, no v3 history row.
+      const live = await pool.query('SELECT version, content FROM sales_memory WHERE id = $1', [created.id]);
+      expect(live.rows[0]).toMatchObject({ version: 2, content: 'v2' });
+      const history = await withClient((c) => getMemoryHistory(c, created.id));
+      expect(history.map((h) => h.version)).toEqual([1, 2]);
+    });
+
+    it('editMemory throws SalesMemoryNotFoundError for an unknown id', async () => {
+      await expect(
+        withClient((c) =>
+          editMemory(c, { id: MEMORY_ID, content: 'x', expectedVersion: 1, author: 'A' }),
+        ),
+      ).rejects.toBeInstanceOf(SalesMemoryNotFoundError);
+    });
+
+    it('retireMemory soft-deletes (status=retired, version bump, retire row) and drops from listActive', async () => {
+      const created = await withClient((c) => createMemory(c, { content: 'temp', author: 'A' }));
+      const result = await withClient((c) => retireMemory(c, { id: created.id, author: 'B' }));
+      expect(result).toEqual({ id: created.id, status: 'retired' });
+
+      const live = await pool.query('SELECT status, version FROM sales_memory WHERE id = $1', [created.id]);
+      expect(live.rows[0]).toMatchObject({ status: 'retired', version: 2 });
+
+      expect(await withClient((c) => listActiveMemories(c))).toEqual([]);
+
+      const history = await withClient((c) => getMemoryHistory(c, created.id));
+      expect(history.map((h) => h.changeKind)).toEqual(['create', 'retire']);
+    });
+
+    it('retireMemory throws SalesMemoryNotFoundError for an unknown id', async () => {
+      await expect(
+        withClient((c) => retireMemory(c, { id: MEMORY_ID, author: 'A' })),
+      ).rejects.toBeInstanceOf(SalesMemoryNotFoundError);
+    });
+
+    it('getMemoryHistory throws SalesMemoryNotFoundError when no version rows exist', async () => {
+      await expect(withClient((c) => getMemoryHistory(c, MEMORY_ID))).rejects.toBeInstanceOf(
+        SalesMemoryNotFoundError,
+      );
+    });
+
+    it('enforces UNIQUE(memory_id, version) — the invariant the concurrency design relies on', async () => {
+      const created = await withClient((c) => createMemory(c, { content: 'v1', author: 'A' }));
+      // A second row at (memory_id, version=1) must violate the unique constraint.
+      await expect(
+        pool.query(
+          `INSERT INTO sales_memory_version (memory_id, version, content, change_kind, author)
+           VALUES ($1, 1, 'dup', 'edit', 'A')`,
+          [created.id],
+        ),
+      ).rejects.toThrow(/duplicate key|unique/i);
     });
   },
 );

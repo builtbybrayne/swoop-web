@@ -10,7 +10,7 @@
  *   listActive      — SELECT active rows ordered by created_at DESC (stable,
  *                     deterministic). Single indexed query; the index on
  *                     (status, created_at DESC) WHERE status='active' is in
- *                     migration 020.
+ *                     migration 021.
  *   getHistory      — SELECT all version rows for a memory_id, ORDER BY version ASC.
  *
  * Invariants:
@@ -302,7 +302,7 @@ export async function retireMemory(
  * then by id for deterministic tiebreak.
  *
  * This is the single indexed query a later loading task will call.
- * The index `sales_memory_status_created_at_idx` (migration 020) covers it.
+ * The index `sales_memory_status_created_at_idx` (migration 021) covers it.
  */
 export async function listActiveMemories(
   client: pg.PoolClient,

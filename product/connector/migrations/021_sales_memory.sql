@@ -1,4 +1,4 @@
--- 020_sales_memory.sql — SM.t1: sales-team agent-memory store
+-- 021_sales_memory.sql — SM.t1: sales-team agent-memory store
 --
 -- Two tables: current-state + append-only version history.
 --
