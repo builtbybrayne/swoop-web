@@ -19,7 +19,7 @@
 | 2 — signature round-trip | ⏭️ **SKIPPED** | Conditional on smoke (b) failing; it passed → not required. See RL.6 + discoveries 2026-06-17. Phase 2 recipe stays on file if a future path 400s. |
 | 3 — conditional belt | ✅ done | `daa1be1` (RL.3). Off-path behavioural smoke (step 4) **skipped** — belt injection is unit-tested (`factory.test.ts`), it's the degrade path, and live off-path recovery cost outweighed the signal. |
 | 4 — whitespace-concat fix | ✅ done | `bf986e8` (RL.7). UI suite green (227 tests). |
-| 5 — docs + re-baseline | 🔄 in progress | decisions/discoveries/gotchas updated; harness re-baseline (RL.8) + fresh-install sweep at close. **Not merged to main — Alastair's "apply" call.** |
+| 5 — docs + re-baseline | ✅ done | decisions/discoveries/gotchas updated; fresh-install sweep green (6 workspaces); RL.8 re-baseline **8/12 vs 5/12 baseline** (9/12 verdicts flipped → sim-variance-dominated; no leak/narration regressions; ~2.2× wall-clock). **Not merged to main — Alastair's "apply" call.** |
 
 ---
 
