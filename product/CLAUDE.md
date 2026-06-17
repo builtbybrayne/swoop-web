@@ -84,9 +84,3 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-
-## understand-anything dashboard
-
-A second, complementary code knowledge graph (Egonex-AI/Understand-Anything) lives under gitignored `.understand-anything/` — build it with `/understand`, browse it with `/understand-dashboard`. See `handover/README.md` → "Understanding the codebase" for scope and how it relates to graphify.
-
-**Dashboard port: 8173, never Vite's default 5173.** `ui/` owns 5173 with `strictPort: true`, so a dashboard squatting on 5173 hard-fails `npm run dev` for the UI. The plugin-cache `vite.config.ts` is patched to default to 8173; if a plugin update resets it, launch with `--port 8173`.
