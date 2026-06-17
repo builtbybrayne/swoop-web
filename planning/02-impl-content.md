@@ -224,7 +224,7 @@ Patagonia-specific inputs (coming):
 Deferred — not closed here:
 - Per-trip `salesTalkingPoints` overlays (deferred to post-Puma).
 - Per-region narrative variants (deferred).
-- A sales-team-owned prompt / skill editing UI (deferred; Puma manual edits by Al).
+- A sales-team-owned prompt / skill editing UI (deferred; Puma manual edits by Al). *2026-06-16: the knowledge-injection slice of this is now planned as inline sales-authored agent memory — see [02-impl-sales-memory.md](02-impl-sales-memory.md). Skill/voice editing stays deferred.*
 - Prompt versioning / rollback tooling (deferred; git history suffices).
 
 Added in this revision:

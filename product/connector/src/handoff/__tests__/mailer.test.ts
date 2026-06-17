@@ -279,15 +279,6 @@ describe('preparePayloadForTemplate', () => {
     expect(data.contactPreferredMethod).toBe('—');
   });
 
-  it('labels marketing consent based on the granted flag', () => {
-    // Both fixtures have marketingGranted: false → "declined".
-    const declined = preparePayloadForTemplate(SampleHandoffQualified);
-    expect(declined.marketingConsentLabel).toBe('declined');
-
-    // Disqualified fixture omits marketing fields → "not asked".
-    const notAsked = preparePayloadForTemplate(SampleHandoffDisqualified);
-    expect(notAsked.marketingConsentLabel).toBe('not asked');
-  });
 });
 
 // ---------------------------------------------------------------------------

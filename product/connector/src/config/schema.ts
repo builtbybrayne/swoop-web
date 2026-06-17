@@ -116,6 +116,14 @@ export const configSchema = z
     // path resolved against the package root at config-load time.
     TOOLS_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/tools'),
 
+    // --- Memory tool description loader (T3-3 relocation) -----------------
+    //
+    // Memory tool descriptions live as markdown under
+    // `cms/prompts/memory/tools/<tool>.md`. The connector loads them at boot
+    // and registers them with the MCP server. Mirrors the TOOLS_PROMPT_DIR
+    // pattern. Default points at the same cms/ tree next to this package.
+    MEMORY_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/memory'),
+
     // --- Gemini embeddings (visitor queries) -------------------------------
     //
     // gemini-embedding-001 / halfvec(3072), matching corpus storage shape
@@ -184,6 +192,8 @@ export type Config = Readonly<
     readonly migrationsDirAbsolutePath: string;
     /** Absolute path to the tools-prompt directory (cms/prompts/tools). */
     readonly toolsPromptDirAbsolutePath: string;
+    /** Absolute path to the memory-prompt directory (cms/prompts/memory). */
+    readonly memoryPromptDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. */
     readonly isProduction: boolean;
   }

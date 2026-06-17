@@ -249,7 +249,12 @@ async function main(): Promise<void> {
   } catch (err) {
     const reason = messageOf(err);
     console.error(`[harness] failed to load scenarios: ${reason}`);
-    process.exit(0);
+    // Infra failure (a bad/unparseable scenario), NOT a behavioural result.
+    // Exit non-zero so a broken harness surfaces loudly instead of masquerading
+    // as a green run that silently executed zero scenarios — the exact failure
+    // mode that hid scenario 021's over-cap description for weeks. Behavioural
+    // pass/fail stays non-gating (see the exit(0) at the end of main, H.13).
+    process.exit(1);
     return;
   }
 
@@ -342,7 +347,9 @@ async function main(): Promise<void> {
   console.log(`[harness] report written to ${outDir}`);
   console.log(`[harness] per-scenario JSONL + JSON under ${scenariosOutDir}`);
 
-  // Non-gating per H.13 — always exit 0.
+  // Behavioural results are non-gating per H.13: a run that completed exits 0
+  // regardless of scenario pass/fail/error. (Infra failures — a bad scenario or
+  // a fatal crash — exit non-zero instead, so a broken harness can't hide.)
   process.exit(0);
 }
 
@@ -352,9 +359,11 @@ function timestampFolder(): string {
 }
 
 main().catch((err) => {
-  // Truly unexpected — parse failure / programmer error. Log loudly but still
-  // exit 0 so CI doesn't gate on harness-internal breakage during Puma
-  // pre-launch. If this path fires, fix the harness.
+  // Truly unexpected — parse failure / programmer error. This is harness-
+  // internal breakage, not a behavioural result, so exit non-zero: a crashing
+  // harness must be visible, not hidden behind a green CI run. (Behavioural
+  // pass/fail stays non-gating — see the exit(0) at the end of main, H.13.)
+  // If this path fires, fix the harness.
   console.error('[harness] fatal error:', err);
-  process.exit(0);
+  process.exit(1);
 });

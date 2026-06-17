@@ -88,7 +88,7 @@ function handoffSubmittedEvent(
 }
 
 function consentGrantedEvent(
-  tier: 'conversation' | 'handoff' | 'marketing',
+  tier: 'conversation' | 'handoff',
 ): Event {
   return {
     eventType: 'consent.granted',

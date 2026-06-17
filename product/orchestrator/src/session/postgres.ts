@@ -60,6 +60,9 @@ function buildDefaultState(
     },
     metadata: initial?.metadata ?? {},
     seenItems: initial?.seenItems ?? defaultEmptySeenItems(),
+    // staff-auth — visitor defaults. A staff session sets staff:true.
+    staff: initial?.staff ?? false,
+    mode: initial?.mode ?? 'conversation',
   };
 }
 

@@ -4,6 +4,27 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## Status (2026-06-17 — Sales-memory mechanism BUILT (T3-1…T3-4), verified; voice pass + harness remain)
+
+The 16/06 sales-memory design is **built + verified** on the `sales-knowledge-feedback` worktree branch (commits `e8faaa4` `3c54710` `a7a29ed` `ed8e87a`; **not** merged to main — HITL). Detail in [progress.md](progress.md) 2026-06-17. The mechanism is complete: store+CRUD, staff auth, two-agent routing to the Opus memory agent (transcript-seeded, token-bound, `finish_memory` + hard user-exit), and per-turn authoritative+timestamped loading into every conversation. Live Opus-4.8 smoke PASS; full suite green (orchestrator 310 / connector 232 / ts-common 243).
+
+**Next, in order:**
+1. **T3-5 voice (Alastair, G.7)** — now plain markdown, **no code change** (prompts relocated to CMS, commit `5ec30a9`): edit (a) `product/cms/prompts/memory/mode-wrapper.md` (keep the structural signals: confirm-before-save / content-hygiene / `finish_memory` handback); (b) `product/cms/prompts/memory/loaded-header.md` (keep: authoritative / state-as-fact / dated-for-staleness). The memory tool descriptions live alongside in `product/cms/prompts/memory/tools/`.
+2. **`20_field-notes.md` voice pass (Alastair)** — the static seasonal stopgap (DRAFT, `3ea28ee`) needs Alastair's voice before going live.
+3. **`luke-` harness run** — confirm the seasonal-knowledge behaviour against Luke's 16/06 feedback (`npm run -w @swoop/harness eval -- --filter luke- --judge sonnet`; export ANTHROPIC_API_KEY from orchestrator/.env; stack on :8080). For the memory-loaded behaviour, seed the active set first.
+4. **Apply (when ready)** — merge `sales-knowledge-feedback` → main per the worktree policy (HITL; "apply" = commit + merge); fresh-install verify at the merge tip.
+
+**Noted optimisation (not blocking)**: the memory agent re-seeds a fresh session per memory turn (multi-turn works via `conversationHistory` accumulation, sm-9). Folding the transcript into the first real message (one Opus call/turn instead of two) is the future refinement.
+
+## Status (2026-06-16 — Sales-team agent memory designed; DRAFT T2, T3s pending)
+
+New capability off Luke's 16/06 feedback: **inline sales-team-authored agent memory**. DRAFT Tier-2 at [planning/02-impl-sales-memory.md](planning/02-impl-sales-memory.md); decisions `sm-1`…`sm-8` in [planning/decisions.md](planning/decisions.md). Next actions, in order: (1) **spike** the Opus-memory-agent / shared-session mechanism (T3-3 head, ~½ day — the only framework-capability unknown); (2) author T3-1 (store+CRUD) … T3-5 (prompt content); (3) **independent, ship now**: a static `product/cms/prompts/system/20_field-notes.md` closing Luke's seasonality gap (authoring pending Alastair). Built in the `sales-knowledge-feedback` worktree; HITL on main — nothing committed yet.
+## Status (2026-06-16 — visitor-location inference landed)
+
+Luke's 16-Jun feedback (infer the visitor's location; presume US when unknown) is **executed and merged to `main`** ([plan](planning/03-exec-crosscut-visitor-location-infer.md); decision G.visitor-location-1). Prompt-led: `00_why.md` §7 reads the per-turn timezone as the location signal and frames seasonality from the visitor's hemisphere; `buildDateline` reinforces (US / Northern-Hemisphere default when the zone is absent). Folds in the long-open 2026-05-18 inbox Southern-Hemisphere anchor. Orchestrator typecheck + 222 tests green. **Operator-pending**: run harness `021-visitor-location-seasons` with the `luke-` family (needs API key) to confirm behaviourally.
+
+---
+
 ## Status (2026-06-11, evening — widget-emptiness diagnosed + live-verified; gated fixes queued)
 
 **Read [planning/reviews/2026-06-11-widget-emptiness-diagnosis.md](planning/reviews/2026-06-11-widget-emptiness-diagnosis.md) first** — it supersedes the (uncommitted) retrieval-emptiness audit's framing. Headline: "no widgets" was four stacked mechanisms, none of them data damage — zero-trap filters on `find_options` (hot patch `1701728` fixes the hotel branch, live-verified: the Explora ask now returns hotel cards; **three sibling traps still live** on trip/tour `accommodation_style` + tour `activity_tags`), the `lookup` widget URL-gating its render over an 18/924-populated column (never rendered on FAQ answers since 12 May), the 1 Jun inline→sidebar widget relocation (`03847e1` — widgets render in the HIGHLIGHTS sidebar, inline copies hidden), and conversation shape (Explora asks don't trigger `find_inspiring` — correct behaviour). Full live smoke on restarted patched stack: every tool returned data; find_inspiring/illustrate/find_options/find_someone_who all rendered in the sidebar.

@@ -21,7 +21,6 @@ export const SampleEventHandoffSubmitted: Event = {
     verdict: "qualified",
     consentConversationGranted: true,
     consentHandoffGranted: true,
-    consentMarketingGranted: false,
     emailDeliveryStatus: "sent",
   },
 };
@@ -49,7 +48,7 @@ export const SampleEventConsentDeclined: Event = {
   turnIndex: null,
   actor: "ui",
   payload: {
-    tier: "marketing",
+    tier: "handoff",
     copyVersion: "consent-handoff/v1",
   },
 };

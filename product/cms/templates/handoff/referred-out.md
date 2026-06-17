@@ -44,7 +44,6 @@ This visitor reached the Patagonia discovery agent but their plans are outside S
 
 - Conversation: granted at {{consent.conversationTimestamp}}
 - Handoff: granted at {{consent.handoffTimestamp}}
-- Marketing: {{marketingConsentLabel}}
 
 ---
 

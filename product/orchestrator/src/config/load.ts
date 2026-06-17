@@ -71,6 +71,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const systemPromptDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.SYSTEM_PROMPT_DIR);
   const skillsDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.SKILLS_DIR);
   const toolsPromptDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.TOOLS_PROMPT_DIR);
+  const memoryPromptDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.MEMORY_PROMPT_DIR);
   const handoffTemplatesDirAbsolutePath = path.resolve(PACKAGE_ROOT, data.HANDOFF_TEMPLATES_DIR);
 
   // Strip PRIMARY_MODEL from the raw surface and replace it with a
@@ -85,8 +86,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     systemPromptDirAbsolutePath,
     skillsDirAbsolutePath,
     toolsPromptDirAbsolutePath,
+    memoryPromptDirAbsolutePath,
     handoffTemplatesDirAbsolutePath,
     isProduction: data.NODE_ENV === 'production',
+    // Dev/test model picker is live only when an allow-list is configured AND
+    // we're not in production. The per-request override + GET /models endpoint
+    // both gate on this (M-PICK-2/3).
+    modelPickerEnabled:
+      data.MODEL_PICKER_ALLOWLIST.length > 0 && data.NODE_ENV !== 'production',
   });
 
   return config;

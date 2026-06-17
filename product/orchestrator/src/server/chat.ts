@@ -37,6 +37,7 @@ import type {
   ReasoningPart,
   SessionState,
   ConversationEntry,
+  StaffAuthenticator,
 } from '@swoop/common';
 
 import type { SessionStore } from '../session/index.js';
@@ -46,6 +47,13 @@ import { sendError, writeSseError } from './errors.js';
 import { startHeartbeat } from './heartbeat.js';
 import type { TriageClassifier } from '../functional-agents/triage-classifier.js';
 import { applyTriageVerdict } from '../functional-agents/triage-classifier.js';
+import { isExplicitMemoryExit, isExplicitMemoryRequest } from './memory-mode.js';
+import {
+  FINISH_MEMORY_TOOL_NAME,
+  MEMORY_AGENT_USER_ID,
+  buildTranscriptSummary,
+  type BuildMemoryAgentResult,
+} from '../agent/memory-agent.js';
 
 export interface ChatDeps {
   readonly sessionStore: SessionStore;
@@ -66,7 +74,56 @@ export interface ChatDeps {
    * surface don't have to build the classifier.
    */
   readonly triageClassifier?: TriageClassifier;
+  /**
+   * Dev/test model-picker resolver (M-PICK-1). When present, `/chat` resolves
+   * the runner for this turn's (optional, allow-listed, non-production) `model`
+   * override via this; when absent (HTTP-surface unit tests) it uses `runner`.
+   * All resolved runners share `runner`'s sessionService, so the session
+   * created at bootstrap is found regardless of which model the turn routes to.
+   * See planning/03-exec-crosscut-test-mode-model-picker.md.
+   */
+  readonly getRunner?: (modelId?: string) => Promise<Runner>;
+  /**
+   * Staff authenticator (staff-auth task). When present and the request
+   * carries a `staffToken`, the token is re-validated each turn. On success,
+   * `session.staff` + `session.mode` are refreshed. Failure → flags stay at
+   * their current values (visitor session if never set). Optional — unit
+   * tests that don't need auth don't have to supply it.
+   */
+  readonly staffAuthenticator?: StaffAuthenticator | null;
+  /**
+   * Memory-agent provider (T3-3 / sm-1). A factory that builds the Opus
+   * memory agent bound to a specific staff session's validated token + name.
+   *
+   * Called ONLY on the staff + memory-mode path, ONLY after the staff token
+   * has been validated this turn (the token + name are passed in). Absence
+   * means the memory feature is not wired (visitor-only deploys, unit tests
+   * of the conversational path) — a staff member who triggers memory mode
+   * without a provider gets a graceful fallback to the conversational agent.
+   *
+   * The factory shape (not a prebuilt agent) is deliberate: the staff token
+   * is bound into the connector memory tools at build time (sm-4 dual
+   * backstop), and the token is per-session, so the agent must be built
+   * per memory-mode entry with the current turn's validated token.
+   */
+  readonly memoryAgentProvider?: MemoryAgentProvider;
 }
+
+/**
+ * Factory that builds the Opus memory agent for one staff memory session.
+ *
+ * The orchestrator entry point (src/index.ts) supplies a closure that calls
+ * `buildMemoryAgent` with the shared config + prompt loader + connector
+ * client, injecting the per-turn validated `staffToken` + `staffName`.
+ *
+ * Returns `null` when the memory agent cannot be built (e.g. connector
+ * unavailable) so the handler falls back to the conversational agent rather
+ * than erroring the staff member's turn.
+ */
+export type MemoryAgentProvider = (params: {
+  readonly staffToken: string;
+  readonly staffName: string;
+}) => BuildMemoryAgentResult | null;
 
 const DEFAULT_USER_ID = 'anonymous';
 
@@ -85,7 +142,7 @@ export function createChatHandler(
       sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    const { sessionId, message, clientTime } = parsed.data;
+    const { sessionId, message, clientTime, model, staffToken } = parsed.data;
     if (message.trim().length === 0) {
       sendError(res, 400, 'message_empty', 'message cannot be empty.');
       return;
@@ -116,6 +173,81 @@ export function createChatHandler(
         clientTime,
       }));
     }
+
+    // staff-auth — re-validate the staff JWT on every /chat turn so a revoked
+    // or expired token is caught promptly, not just at session bootstrap.
+    // Failure (invalid/expired/absent) → session keeps its current staff/mode
+    // values (visitor defaults if never set). Never blocks the turn — staff
+    // auth is advisory routing infrastructure, not a hard gate. The only hard
+    // gate is tier-1 consent (canAcceptTurn above).
+    //
+    // T3-3 — the validated `name` claim is captured here for memory-agent
+    // attribution + memory-mode routing. `isStaffThisTurn` gates ALL memory
+    // routing below: a turn is only ever routed to the memory agent when the
+    // staff token validated THIS turn. We never trust a persisted `staff`
+    // flag alone for routing — the live token is the trust boundary (sm-4).
+    let isStaffThisTurn = false;
+    let staffName = '';
+    if (staffToken && deps.staffAuthenticator) {
+      try {
+        const verifyResult = await deps.staffAuthenticator.verify(staffToken);
+        if (verifyResult.ok) {
+          isStaffThisTurn = true;
+          staffName = verifyResult.name;
+          await deps.sessionStore.update(sessionId, (s) => ({
+            ...s,
+            staff: true,
+            mode: s.mode ?? ('conversation' as const),
+          }));
+        }
+      } catch {
+        // Degrade gracefully — turn proceeds as visitor session.
+      }
+    }
+
+    // T3-3 — memory-mode transitions (sm-3): staff-only, explicit-only, never
+    // inferred and never available to visitors (all gated on isStaffThisTurn).
+    //   • ENTRY: an explicit memory-management request flips mode to 'memory'.
+    //     The confirm-before-write step inside the memory agent is the safety
+    //     net against a false-positive trigger — nothing is persisted without
+    //     an explicit staff confirmation.
+    //   • HARD EXIT (backstop): when already in 'memory' mode, an explicit
+    //     "leave memory mode" phrase flips back to 'conversation' EVEN IF the
+    //     memory agent never emitted `finish_memory`. This is the deterministic
+    //     complement to that (softer) agent-driven handback, so a staff member
+    //     can never get wedged in memory mode. Exit wins over entry this turn.
+    //
+    // Once in 'memory' mode the session stays there across turns (multi-turn
+    // authoring) until finish_memory (stream loop below) or a hard exit here.
+    if (isStaffThisTurn) {
+      if (session.mode === 'memory' && isExplicitMemoryExit(message)) {
+        await deps.sessionStore.update(sessionId, (s) => ({
+          ...s,
+          mode: 'conversation' as const,
+        }));
+      } else if (isExplicitMemoryRequest(message)) {
+        await deps.sessionStore.update(sessionId, (s) => ({
+          ...s,
+          mode: 'memory' as const,
+        }));
+      }
+    }
+
+    // Re-read the (possibly mode-flipped) session so the routing decision below
+    // sees the freshest mode value.
+    const routingSession = (await deps.sessionStore.get(sessionId)) ?? session;
+
+    // T3-3 — the binding routing decision. A turn routes to the memory agent
+    // ONLY when ALL of these hold:
+    //   1. The staff token validated THIS turn (isStaffThisTurn).
+    //   2. The session is in 'memory' mode.
+    //   3. A memory-agent provider is wired.
+    // A visitor session can satisfy none of these — it is BYTE-IDENTICAL to
+    // today's path. This is the Sacred Invariant in code.
+    const routeToMemory =
+      isStaffThisTurn &&
+      routingSession.mode === 'memory' &&
+      deps.memoryAgentProvider !== undefined;
 
     // B.t12 — build a per-turn dateline for injection into the user-message
     // envelope. The dateline must NOT go into the system prompt — the system
@@ -272,15 +404,46 @@ export function createChatHandler(
       onFiltered(part);
     };
 
+    // T3-3 — flips true if the memory agent emitted `finish_memory` this turn.
+    // After the stream drains we use it to write session.mode back to
+    // 'conversation' so the NEXT turn returns to the conversational agent.
+    let memoryHandbackRequested = false;
+
     try {
-      const adkStream = runAgentTurn({
-        runner: deps.runner,
-        userId,
-        sessionId,
-        message,
-        dateline,
-        abortSignal: abortController.signal,
-      });
+      // T3-3 — stream-source selection. The Sacred Invariant lives here: the
+      // conversational runner (Sonnet, public tools, production prompt) is the
+      // default for EVERY turn. Only an authenticated staff turn that has
+      // explicitly entered memory mode is diverted to the Opus memory agent,
+      // in its OWN isolated session (sm-9). The visitor path never reaches the
+      // `routeToMemory` branch.
+      let adkStream: AsyncIterable<AdkEvent>;
+      if (routeToMemory) {
+        // `routeToMemory` implies `isStaffThisTurn`, which only becomes true
+        // after a non-empty `staffToken` validated this turn — so the token is
+        // present here. The non-null assertion encodes that invariant.
+        adkStream = await runMemoryAgentTurn({
+          provider: deps.memoryAgentProvider!,
+          session: routingSession,
+          staffToken: staffToken!,
+          staffName,
+          message,
+          abortSignal: abortController.signal,
+        });
+      } else {
+        // Dev/test model picker (M-PICK-1): resolve the runner for this turn's
+        // (optional, allow-listed, non-production) model override. Falls back to
+        // the default runner for unknown/disallowed/prod ids and when getRunner
+        // is absent (unit tests). All runners share one sessionService.
+        const turnRunner = deps.getRunner ? await deps.getRunner(model) : deps.runner;
+        adkStream = runAgentTurn({
+          runner: turnRunner,
+          userId,
+          sessionId,
+          message,
+          dateline,
+          abortSignal: abortController.signal,
+        });
+      }
 
       for await (const part of translateAdkStream(adkStream, {
         onFiltered: onFilteredTallying,
@@ -292,6 +455,20 @@ export function createChatHandler(
         suppressNonPartialText: true,
       })) {
         if (closed) break;
+
+        // T3-3 — finish_memory interception (sm-3 handback). The memory agent
+        // emits a `finish_memory` tool call to signal it's done. This is an
+        // orchestrator-internal control signal, NOT a connector tool — its
+        // FunctionTool.execute is a no-op. We swallow the tool-call parts here
+        // (never stream them to the wire, never count them as adjuncts, never
+        // emit tool.called/tool.returned events) and record the handback so the
+        // post-stream step flips session.mode back to 'conversation'. The
+        // memory agent's natural-language wrap-up text still streams normally.
+        if (part.type === 'tool-call' && part.toolName === FINISH_MEMORY_TOOL_NAME) {
+          memoryHandbackRequested = true;
+          continue;
+        }
+
         writeSsePart(res, part);
         // Persist visible parts to history as they stream; errors are best-
         // effort, the SSE wire remains the source of truth for the client.
@@ -346,6 +523,18 @@ export function createChatHandler(
             });
           }
         }
+      }
+
+      // T3-3 — apply the memory handback (sm-3). The memory agent asked to
+      // hand back to the conversational agent (emitted finish_memory), so flip
+      // session.mode to 'conversation'. Done after the stream drains and
+      // regardless of `closed` so the server-side mode is correct for the next
+      // turn even if this turn's client disconnected mid-stream.
+      if (memoryHandbackRequested) {
+        await deps.sessionStore.update(sessionId, (s) => ({
+          ...s,
+          mode: 'conversation' as const,
+        }));
       }
 
       if (!closed) {
@@ -459,6 +648,76 @@ function runAgentTurn(params: {
 }
 
 // ---------------------------------------------------------------------------
+// T3-3 — Memory-agent turn invocation (sm-1, sm-9).
+//
+// Diverts a staff memory-mode turn to the Opus memory agent running in its OWN
+// isolated InMemoryRunner session, seeded with the conversation transcript so
+// the agent has context without polluting the conversational session's ADK
+// event log. The staff message is run in the memory session; the returned ADK
+// stream feeds the same translator + SSE wire as a normal turn, so the staff
+// member sees the memory agent's response inline in the same chat window.
+//
+// The dateline is intentionally NOT injected here — memory authoring is not
+// season/lead-time-sensitive, and the transcript seed already carries the
+// relevant context.
+// ---------------------------------------------------------------------------
+
+async function runMemoryAgentTurn(params: {
+  provider: MemoryAgentProvider;
+  session: SessionState;
+  staffToken: string;
+  staffName: string;
+  message: string;
+  abortSignal: AbortSignal;
+}): Promise<AsyncIterable<AdkEvent>> {
+  // Build the memory agent bound to this staff session's validated token+name
+  // (sm-4 — the token is bound into the connector memory tools at build time).
+  const built = params.provider({
+    staffToken: params.staffToken,
+    staffName: params.staffName,
+  });
+  if (built === null) {
+    // Provider couldn't build the agent (e.g. connector down). Surface a
+    // single explanatory text part rather than erroring the staff turn. The
+    // session stays in memory mode; the staff member can retry.
+    return singleTextEventStream(
+      "I can't reach memory management right now. Please try again in a moment.",
+    );
+  }
+
+  // Seed a fresh isolated runner with the conversation transcript (sm-9).
+  const transcriptSummary = buildTranscriptSummary(params.session.conversationHistory);
+  const seeded = await built.createSeededRunner({
+    sessionId: params.session.sessionId,
+    transcriptSummary,
+  });
+
+  // Run the staff's actual memory instruction in the seeded memory session.
+  const newMessage: Content = {
+    role: 'user',
+    parts: [{ text: params.message }],
+  };
+  return seeded.runner.runAsync({
+    userId: MEMORY_AGENT_USER_ID,
+    sessionId: seeded.sessionId,
+    newMessage,
+    abortSignal: params.abortSignal,
+  });
+}
+
+/**
+ * Build a one-event ADK stream carrying a single assistant text part. Used for
+ * graceful fallbacks (e.g. the memory provider couldn't build an agent) so the
+ * staff member sees an explanatory message on the normal SSE wire instead of an
+ * error event.
+ */
+async function* singleTextEventStream(text: string): AsyncIterable<AdkEvent> {
+  yield {
+    content: { role: 'model', parts: [{ text }] },
+  } as unknown as AdkEvent;
+}
+
+// ---------------------------------------------------------------------------
 // B.t12 — Dateline builder.
 //
 // Produces a human-readable date context line injected into the user-message
@@ -480,14 +739,14 @@ export function buildDateline(
       const date = new Date(clientTime.iso);
       if (!Number.isNaN(date.getTime())) {
         const formatted = formatVisitorDate(date, clientTime.timeZone);
-        return `Current date for this visitor: ${formatted}. Reason about seasons, lead times and "how far out" from this date.`;
+        return `Current date for this visitor: ${formatted}. Treat the timezone as your best signal for where they are (hemisphere, region) and frame seasonal comparisons from there. Reason about seasons, lead times and "how far out" from this date.`;
       }
     } catch {
       // Fall through to server-clock fallback on any formatting failure.
     }
   }
   const formatted = formatVisitorDate(serverNow, 'UTC');
-  return `Current date (server clock — visitor clock unavailable): ${formatted}. Reason about seasons, lead times and "how far out" from this date.`;
+  return `Current date (server clock — visitor clock unavailable): ${formatted}. Visitor location unknown — assume a United States / Northern Hemisphere frame unless they say otherwise. Reason about seasons, lead times and "how far out" from this date.`;
 }
 
 /** Format a Date in a given IANA timezone as a human-readable string. */

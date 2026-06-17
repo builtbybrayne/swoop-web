@@ -14,6 +14,7 @@ import {
   CHAT_MESSAGE_MAX,
   ChatRequestSchema,
   ClientTimeSchema,
+  SessionBootstrapRequestSchema,
 } from "../routes.js";
 
 describe("ClientTimeSchema", () => {
@@ -142,6 +143,64 @@ describe("ChatRequestSchema", () => {
       sessionId: "abc",
       message: "hi",
       clientTime: { iso: "2026-06-10T16:42:01", timeZone: "UTC" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // staff-auth — staffToken is optional; must be a string when present.
+  it("accepts a body with a staffToken (staff-auth task)", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: "hi",
+      staffToken: "eyJhbGciOiJIUzI1NiJ9.test.sig",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.staffToken).toBe("eyJhbGciOiJIUzI1NiJ9.test.sig");
+    }
+  });
+
+  it("accepts a body without staffToken (backward-compat — visitor session)", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: "hi",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.staffToken).toBeUndefined();
+    }
+  });
+});
+
+describe("SessionBootstrapRequestSchema — staffToken", () => {
+  it("accepts an empty body (visitor — backward-compat)", () => {
+    const result = SessionBootstrapRequestSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a body with a staffToken", () => {
+    const result = SessionBootstrapRequestSchema.safeParse({
+      staffToken: "eyJhbGciOiJIUzI1NiJ9.test.sig",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.staffToken).toBe("eyJhbGciOiJIUzI1NiJ9.test.sig");
+    }
+  });
+
+  it("accepts a body without staffToken (absent = visitor session)", () => {
+    const result = SessionBootstrapRequestSchema.safeParse({
+      entryUrl: "https://swoop-patagonia.com/",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.staffToken).toBeUndefined();
+    }
+  });
+
+  it("rejects unknown extra fields (strict)", () => {
+    const result = SessionBootstrapRequestSchema.safeParse({
+      unknown: "field",
     });
     expect(result.success).toBe(false);
   });

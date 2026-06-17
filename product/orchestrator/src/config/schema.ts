@@ -23,13 +23,16 @@ import path from 'node:path';
 import { z } from 'zod';
 
 /**
- * Default Claude Sonnet model id for the orchestrator.
+ * Default Claude model id for the orchestrator.
  *
- * Pinned to the Sonnet that was current when B.t1 was implemented
- * (2026-04-22). Override via `ORCHESTRATOR_MODEL` (or legacy `PRIMARY_MODEL`)
- * to test other tiers without a code change.
+ * RL.1 (2026-06-17): moved from `claude-sonnet-4-5-20250929` to the
+ * `claude-sonnet-4-6` bare alias so the orchestrator runs native **adaptive**
+ * thinking (the producer half of decision B.13). Sonnet 4.5 only supports the
+ * legacy `{enabled, budget_tokens}` thinking mode; 4.6 is the same $3/$15 tier.
+ * Bare alias is intentional — never date-suffix 4.6 (see gotchas.md). Override
+ * via `ORCHESTRATOR_MODEL` (or legacy `PRIMARY_MODEL`) to test other tiers.
  */
-export const DEFAULT_ORCHESTRATOR_MODEL = 'claude-sonnet-4-5-20250929';
+export const DEFAULT_ORCHESTRATOR_MODEL = 'claude-sonnet-4-6';
 
 /**
  * Default model id for the functional classifier agent (B.t7).
@@ -38,6 +41,15 @@ export const DEFAULT_ORCHESTRATOR_MODEL = 'claude-sonnet-4-5-20250929';
  * we trade capability for latency and per-call cost. B.t7 may revisit.
  */
 export const DEFAULT_CLASSIFIER_MODEL = 'claude-haiku-4-5-20251001';
+
+/**
+ * Default model id for the Opus memory agent (sm-1 / T3-3).
+ *
+ * Memory authoring is a deliberate, low-frequency staff-only task —
+ * quality beats speed, so Opus is the right tier. Override via
+ * MEMORY_AGENT_MODEL in .env without a code change (decision B.5).
+ */
+export const DEFAULT_MEMORY_AGENT_MODEL = 'claude-opus-4-8';
 
 /**
  * Package root: the directory containing this package's package.json.
@@ -91,11 +103,38 @@ export const configSchema = z
     // --- Orchestrator agent model ---------------------------------------
     ORCHESTRATOR_MODEL: z.string().trim().min(1).default(DEFAULT_ORCHESTRATOR_MODEL),
     ORCHESTRATOR_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.7),
-    ORCHESTRATOR_MAX_TOKENS: z.coerce.number().int().positive().default(2048),
+    // RL.5 (2026-06-17): bumped 2048 → 8192 so native thinking has output
+    // headroom — adaptive thinking spends output tokens, and 2048 starved the
+    // visible answer. Streaming is always on, so large values are timeout-safe.
+    ORCHESTRATOR_MAX_TOKENS: z.coerce.number().int().positive().default(8192),
+
+    // --- Native thinking (RL.2 / RL.4, 2026-06-17) ----------------------
+    // ORCHESTRATOR_THINKING_ENABLED gates the Anthropic `thinking` request
+    // param — the producer half of decision B.13. Default ON: it's the fix for
+    // the reasoning-leak (the model narrated its planning as visible text
+    // because it had no reasoning channel). Flip to false as a latency escape
+    // hatch; when off, factory.ts injects a "work silently" belt into the
+    // system prompt instead. Off only if explicitly 'false'/'0'.
+    ORCHESTRATOR_THINKING_ENABLED: z
+      .string()
+      .default('true')
+      .transform((s) => s.toLowerCase() !== 'false' && s !== '0'),
+    // Thinking-depth ↔ latency/cost lever. Server-side config only — NOT a UI
+    // control (the dev model picker is the only visual surface). Applied only
+    // when thinking is enabled AND the model supports `effort` (Sonnet 4.6+,
+    // Opus 4.6+, Fable — it errors on Sonnet 4.5 / Haiku). Unset → omitted →
+    // the model's own default (high).
+    ORCHESTRATOR_EFFORT: z.enum(['low', 'medium', 'high', 'max']).optional(),
 
     // --- Functional classifier model (B.t7 consumes) --------------------
     FUNCTIONAL_CLASSIFIER_MODEL: z.string().trim().min(1).default(DEFAULT_CLASSIFIER_MODEL),
     FUNCTIONAL_CLASSIFIER_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
+
+    // --- Memory agent model (sm-1 / T3-3) --------------------------------
+    // Opus by default — memory authoring is a deliberate staff-only task
+    // where quality beats latency. Swappable via .env (decision B.5).
+    MEMORY_AGENT_MODEL: z.string().trim().min(1).default(DEFAULT_MEMORY_AGENT_MODEL),
+    MEMORY_AGENT_MAX_TOKENS: z.coerce.number().int().positive().default(2048),
 
     // --- B.t1 legacy alias ----------------------------------------------
     // Optional. If set and ORCHESTRATOR_MODEL is not explicitly set,
@@ -103,6 +142,29 @@ export const configSchema = z
     // working. We accept it here (rather than in load.ts) so schema parse
     // still owns the single source of truth.
     PRIMARY_MODEL: z.string().trim().min(1).optional(),
+
+    // --- Test-mode model picker (dev only) ------------------------------
+    // Comma-separated allow-list of model ids the dev/test model dropdown
+    // may switch the *conversational orchestrator* to (the functional
+    // classifier is NEVER overridden). Empty (default) = feature off.
+    // Honoured only when NODE_ENV !== 'production'. Use bare aliases, e.g.
+    // "claude-sonnet-4-6,claude-opus-4-6,claude-opus-4-8". The picker UI is
+    // dev-only (Vite strips it from prod builds) and the orchestrator
+    // hard-ignores the per-request override in production besides.
+    // See planning/03-exec-crosscut-test-mode-model-picker.md.
+    MODEL_PICKER_ALLOWLIST: z
+      .string()
+      .default('')
+      .transform((raw) =>
+        Array.from(
+          new Set(
+            raw
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0),
+          ),
+        ),
+      ),
 
     // --- Content paths ---------------------------------------------------
     // Per G.11: system prompt is the concatenation of files matching
@@ -115,6 +177,7 @@ export const configSchema = z
     SYSTEM_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/system'),
     SKILLS_DIR: z.string().trim().min(1).default('../cms/prompts/skills'),
     TOOLS_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/tools'),
+    MEMORY_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/memory'),
 
     // Demo / tactical override: when true, the full body of every loaded
     // skill is appended to the system prompt as an appendix. Bypasses the
@@ -209,6 +272,39 @@ export const configSchema = z
     SMTP_USER: z.string().trim().default(''),
     SMTP_PASS: z.string().trim().default(''),
 
+    // --- Staff authentication (staff-auth task) -------------------------
+    //
+    // A single shared password lets sales staff authenticate so they can
+    // author agent memories. The v2 per-user path (Google OIDC) is behind
+    // the same StaffAuthenticator interface and needs only a constructor
+    // swap, not a caller change.
+    //
+    // Both vars are REQUIRED if STAFF_AUTH_ENABLED is true. Fail-fast at
+    // boot — a password endpoint that silently accepts any token because the
+    // secret is blank would be a critical security hole. The cross-field
+    // refine below enforces presence when the feature is enabled.
+    STAFF_AUTH_ENABLED: z
+      .string()
+      .default('false')
+      .transform((s) => s.toLowerCase() === 'true' || s === '1'),
+    /**
+     * Shared staff password. Min 12 chars enforced only when the feature is
+     * enabled (the refine below) so existing .env files without the var
+     * still parse cleanly when STAFF_AUTH_ENABLED=false.
+     */
+    STAFF_AUTH_PASSWORD: z.string().trim().default(''),
+    /**
+     * JWT signing secret. HMAC-SHA256. Treat with the same care as
+     * ANTHROPIC_API_KEY — never log it.
+     */
+    STAFF_JWT_SECRET: z.string().trim().default(''),
+    /**
+     * JWT TTL in days. Default 30 — long enough that staff are not nagged,
+     * short enough that a compromised token expires before causing lasting
+     * damage. Override in .env if policy requires shorter.
+     */
+    STAFF_JWT_TTL_DAYS: z.coerce.number().int().positive().default(30),
+
     // --- Handoff retention sweeper (E.t6) -------------------------------
     //
     // Off by default. When enabled, the orchestrator registers an
@@ -287,6 +383,20 @@ export const configSchema = z
         'WARM_POOL_TTL_MINUTES (in seconds) must be strictly less than SESSION_TTL_IDLE_HOURS (in seconds) so warm entries do not outlive the session sweeper window.',
     },
   )
+  // Staff auth requires both a password and a JWT secret when enabled.
+  // Fail-fast so a misconfigured deploy never runs a password endpoint with
+  // a blank secret (would accept any token).
+  .refine(
+    (cfg) =>
+      !cfg.STAFF_AUTH_ENABLED ||
+      (cfg.STAFF_AUTH_PASSWORD.length >= 12 && cfg.STAFF_JWT_SECRET.length >= 32),
+    {
+      path: ['STAFF_AUTH_ENABLED'],
+      message:
+        'STAFF_AUTH_ENABLED=true requires STAFF_AUTH_PASSWORD (≥12 chars) and ' +
+        'STAFF_JWT_SECRET (≥32 chars). Set them in .env or set STAFF_AUTH_ENABLED=false.',
+    },
+  )
   // When the handoff mailer is enabled, the credentials + recipient + from
   // address must all be present. Fail-fast at config parse so a misconfigured
   // production deploy never silently swallows handoffs.
@@ -346,9 +456,23 @@ export type Config = Readonly<
      * `loadAllToolDescriptions` from `@swoop/connector`.
      */
     readonly toolsPromptDirAbsolutePath: string;
+    /**
+     * Absolute path to the memory-prompt directory (`cms/prompts/memory/`).
+     * Holds mode-wrapper.md, loaded-header.md, seed-context.md, and
+     * tools/<name>.md for each memory tool. Loaded at boot by
+     * `loadMemoryPrompts` from `./agent/memory-prompt-loader.js`.
+     */
+    readonly memoryPromptDirAbsolutePath: string;
     /** Absolute path to the handoff email-template directory (E.t3 mailer reads from here). */
     readonly handoffTemplatesDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. Controls prompt-loader caching, CORS strictness, etc. */
     readonly isProduction: boolean;
+    /**
+     * True iff the dev/test model picker is active: `MODEL_PICKER_ALLOWLIST`
+     * non-empty AND not production. When false, the orchestrator ignores any
+     * per-request `model` override and the dev `GET /models` endpoint 404s.
+     * See planning/03-exec-crosscut-test-mode-model-picker.md (M-PICK-2/3).
+     */
+    readonly modelPickerEnabled: boolean;
   }
 >;

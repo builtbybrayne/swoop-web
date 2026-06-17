@@ -75,4 +75,8 @@ export const SampleSession: SessionState = {
     region_base: [],
     customer_tip: [],
   },
+  // staff-auth — visitor session defaults. A staff session would set staff:true
+  // and mode:'memory' or 'conversation'. See staff-auth task.
+  staff: false,
+  mode: "conversation",
 };

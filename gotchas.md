@@ -6,6 +6,26 @@ Environmental / tooling / library traps that cost real time when discovered. Fix
 
 ---
 
+## Native thinking is per-model-family — wrong shape = 400 (and temperature must drop when thinking is on)
+
+**Symptom**: enabling `thinking` on the `messages.create` request 400s, with messages like `temperature may only be set to 1 when thinking is enabled or in adaptive mode`, or `budget_tokens` rejected, or `effort` rejected — depending on the model.
+
+**The matrix** (encoded in `buildThinkingFragment` / `modelUsesAdaptiveThinking` in [claude-llm.ts](product/orchestrator/src/agent/claude-llm.ts)):
+- **Adaptive family** — Sonnet **4.6+**, Opus **4.6+**, Fable: use `thinking: {type:'adaptive'}` (+ optional `output_config: {effort}`). Do **not** send `budget_tokens` (deprecated/removed). On **Fable**, never send `thinking: {type:'disabled'}` — *omit* the `thinking` key entirely to disable.
+- **Legacy family** — Sonnet **4.5**, Opus ≤4.5, Haiku: use `thinking: {type:'enabled', budget_tokens: N}` where `1024 ≤ N < max_tokens`. **`effort` 400s here** — never send it to 4.5/Haiku.
+- **Temperature**: when *any* thinking mode is on, `temperature` must be `1` or unset, else 400. We omit sampling params whenever `thinkingEnabled` (RL.2) — this subsumes the M-PICK-4 "omit temp for Opus 4.7+/Fable" guard for the thinking-on case.
+- **Display**: on Opus 4.7+/Fable, thinking text is `omitted` by default (streams empty) — irrelevant to us (we strip reasoning off the wire anyway), but don't expect to *see* thinking deltas when eyeballing raw SSE on those models.
+
+**Fix**: branch on the model family before building the request; unit-test the fragment per family (see `claude-llm.test.ts`). Bare aliases only (`claude-sonnet-4-6`, not date-suffixed) — see the model-ID gotcha.
+
+## Orchestrator can't re-attach to a connector that restarted under it — bounce the connector first, then the orchestrator
+
+**Symptom**: during dev, the connector dies or is restarted (or the orchestrator's tsx-watch reloads) and the orchestrator then throws `StreamableHTTPClientTransport already started!` on its next connect, or every tool call fails because the MCP session is stale. The orchestrator process is still listening on :8080 but is effectively connector-less.
+
+**Cause**: the orchestrator opens its MCP client to the connector **once at boot**. It does not re-establish the session if the connector goes away and comes back, and the retry path re-uses the same already-started transport (the same root issue as the "second orchestrator instance" gotcha below).
+
+**Fix (proven 2026-06-17)**: recover in order — (1) start a **fresh** connector and wait until it's listening on its port, then (2) **restart the orchestrator fresh** so it opens a clean MCP session against the live connector at boot. Restarting the orchestrator against a still-dead connector, or restarting the connector under a still-running orchestrator, both leave you connector-less. Verify with a real one-turn `POST /session → PATCH consent → POST /chat` smoke (a tool-using turn) before trusting the stack — a bare `/health` 200 doesn't prove the MCP session is live. See the related "Second orchestrator instance can't share a running connector" entry below for the underlying transport bug.
+
 ## Claude Preview's managed servers inherit an injected `PORT` — the orchestrator grabs 5173 and silently vanishes off :8080
 
 **Symptom**: stack booted via the preview tool (launch.json `swoop-stack` → `npm run dev`) looks healthy in logs — connector fine, orchestrator prints "ready on http://localhost:**5173**" — but nothing listens on :8080, the UI's `/api` proxy returns empty-body 500s, and consent never grants (no `POST /session` ever fires).
@@ -228,6 +248,28 @@ Both configured in `product/orchestrator/src/config/schema.ts` as `DEFAULT_ORCHE
 
 ---
 
+## Opus 4.7+ / Fable reject `temperature` (and `top_p`/`top_k`) — 400 "deprecated for this model"
+
+**Symptom**: an agent on `claude-opus-4-8` (or 4.7 / Fable 5) 400s on *every* turn with `invalid_request_error: temperature is deprecated for this model`. Sonnet 4.6 / Haiku 4.5 are unaffected — they still accept `temperature`.
+
+**Cause**: Opus 4.7+ and Fable removed the sampling params (`temperature` / `top_p` / `top_k`); steer via prompting + `effort` instead. The `ClaudeLlm` shim ([product/orchestrator/src/agent/claude-llm.ts](product/orchestrator/src/agent/claude-llm.ts)) used to send `temperature` unconditionally (default 0.7) — fine for the Sonnet conversational agent + Haiku triage, but the T3-3 Opus memory agent 400'd on every turn. **Caught only by a live-Anthropic smoke; all mocked-LLM unit tests passed.**
+
+**Fix (landed `a7a29ed`)**: `modelAcceptsTemperature(model)` in `claude-llm.ts` — the shim omits `temperature` for `claude-opus-4-{7,8,…}` / `claude-opus-5+` / `claude-fable-*` and still sends it for Sonnet/Haiku/Opus≤4.6. Add another Opus-tier agent and you get correct behaviour for free; update the guard when a new family changes the contract. Authoritative reference: the `claude-api` skill (model-migration guide).
+
+**Lesson**: anything touching the agent graph or a new model id needs a real-Anthropic smoke — mocked-LLM tests cannot catch a model-specific 400.
+
+---
+
+## Memory/agent tools must hide auto-injected fields from the agent-facing schema
+
+**Symptom**: the Opus memory agent, on "yes, save it", asked the staff member *"whose name should I record as the author?"* instead of calling `memory_store`.
+
+**Cause**: the connector memory `*InputSchema`s carry `author` (required) + `staffToken` (optional) — but those are **auto-injected** by the orchestrator (`buildMemoryTools` in [product/orchestrator/src/connector/memory-tools.ts](product/orchestrator/src/connector/memory-tools.ts): author = JWT name, token = session token). The tools originally exposed the FULL input schema to the agent, so it saw `author` as required and dutifully solicited it.
+
+**Fix (landed `a7a29ed`)**: present the agent a REDUCED schema with the auto-injected fields stripped (`.omit({author, staffToken})`), while `execute` still injects them before the connector call. **General rule**: when a tool's `execute` auto-fills fields from server-side context, omit those fields from the `parameters` schema the model sees — or the model will ask the user for them.
+
+---
+
 ## `npm run X --workspaces --if-present` errors on empty workspaces
 
 Symptom: `npm run typecheck -ws --if-present` fails with `No workspaces found!` when no workspace packages have `package.json` yet.
@@ -295,6 +337,18 @@ Cause: Claude Code's host shell runs Node 23; `.nvmrc` pins Node 20; the shell d
 Effect: warnings only. Code runs. CI uses `.nvmrc` so this is moot in deploy.
 
 If running commands yourself: `nvm use` in `product/` picks up Node 20.
+
+---
+
+## Homebrew `node` can be broken (dyld `libsimdjson`) and shadows nvm Node 20 — run dev/harness tooling under nvm
+
+**Symptom**: `node` / `npm` / `tsx` die before doing anything with `dyld[…]: Library not loaded: /opt/homebrew/opt/simdjson/lib/libsimdjson.31.dylib … Referenced from: …/Cellar/node/25.8.1_1/bin/node`. Worse, `npm install` can print **exit code 0 while installing nothing** — the dyld crash is in a child process, the wrapper still returns 0, and `node_modules/` stays empty.
+
+**Cause**: `/opt/homebrew/bin/node` is first on `$PATH` and was linked against a `simdjson` dylib version that a later `brew upgrade` replaced. It shadows the Node 20 the project pins via the root `.nvmrc`.
+
+**Fix**: run everything through nvm Node 20. `nvm use` only works in an interactive shell — in non-interactive / background Bash `nvm` is undefined, so prepend the bin dir explicitly before the command: `export PATH="$HOME/.nvm/versions/node/v20.11.1/bin:$PATH"`, then `npm install` / `npm run -w @swoop/harness eval …` behave. **Verify by artifact, not exit code** (e.g. `ls product/node_modules/yaml`) — the spurious `exit 0` lies. A host-level `brew reinstall node` also fixes it, but nvm is what the project expects regardless. Extends the `nvm use` note above.
+
+**Same-session trap**: the Bash tool's working directory does NOT persist into background tasks (and can drift between foreground calls). A background `npm install` launched "from `product/`" may actually run from the worktree root. Use absolute paths in `cd`, and confirm `node_modules` location with an absolute `ls`.
 
 ---
 

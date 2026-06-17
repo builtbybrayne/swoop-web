@@ -122,7 +122,6 @@ export const HandoffSubmittedEventSchema = z.object({
     verdict: VerdictEnum,
     consentConversationGranted: z.boolean(),
     consentHandoffGranted: z.boolean(),
-    consentMarketingGranted: z.boolean().optional(),
     emailDeliveryStatus: z.enum(["sent", "skipped", "deferred", "bounced"]).optional(),
   }),
 });
@@ -159,7 +158,7 @@ export const ErrorRaisedEventSchema = z.object({
 // Tier 2 + the F-a execution plan).
 // -----------------------------------------------------------------------------
 
-const ConsentTierEnum = z.enum(["conversation", "handoff", "marketing"]);
+const ConsentTierEnum = z.enum(["conversation", "handoff"]);
 
 export const ConsentGrantedEventSchema = z.object({
   eventType: z.literal("consent.granted"),

@@ -79,6 +79,19 @@ export interface ClaudeLlmParams {
   /** Temperature (0..2). Defaults to 0.7. */
   readonly temperature?: number;
   /**
+   * Whether to enable native Anthropic thinking on requests (RL.2). Defaults
+   * to `false` at this layer so unit tests that construct ClaudeLlm bare keep
+   * the no-thinking behaviour; the factory passes
+   * `config.ORCHESTRATOR_THINKING_ENABLED` (default true) in production.
+   */
+  readonly thinkingEnabled?: boolean;
+  /**
+   * Optional thinking-effort level (RL.4) — applied only when thinking is on
+   * and the model supports `effort` (adaptive families). Unset → omitted →
+   * the model's own default.
+   */
+  readonly effort?: 'low' | 'medium' | 'high' | 'max';
+  /**
    * Optional Anthropic client override — used by tests to inject a stub so
    * `generateContentAsync` can be exercised without touching the network.
    */
@@ -99,12 +112,93 @@ export interface AnthropicClientLike {
   };
 }
 
+/**
+ * Whether a Claude model accepts sampling params (`temperature`/`top_p`/`top_k`).
+ *
+ * Opus 4.7+ and the Fable family REMOVED these — sending any returns HTTP 400.
+ * Sonnet 4.x, Opus 4.6 and earlier, and Haiku still accept them. Keyed off the
+ * bare-alias id; forward-safe for opus 4.8 / 4.9 / … by comparing the minor
+ * version. See planning/03-exec-crosscut-test-mode-model-picker.md (the
+ * temperature-400 gotcha) and the claude-api skill's current-models table.
+ *
+ * This single guard also covers the Opus memory agent (sm-1, Opus 4.8): it
+ * returns false there, so the request omits temperature — superseding the
+ * earlier `modelAcceptsTemperature` helper that did the same job.
+ */
+export function modelAcceptsSamplingParams(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  if (id.startsWith('claude-fable-')) return false;
+  const opus = /^claude-opus-4-(\d+)/.exec(id);
+  if (opus) {
+    const minor = Number.parseInt(opus[1] ?? '', 10);
+    if (Number.isFinite(minor) && minor >= 7) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether a Claude model uses native **adaptive** thinking (`{type:'adaptive'}`)
+ * vs the legacy fixed-budget mode (`{type:'enabled', budget_tokens}`).
+ *
+ * Adaptive: Sonnet 4.6+, Opus 4.6+, the Fable family. Legacy: Sonnet 4.5 and
+ * earlier, Opus 4.5 and earlier, Haiku. Keyed off the bare-alias minor version,
+ * forward-safe for future minors. See the claude-api skill's thinking table +
+ * RL.1 in planning/03-exec-crosscut-reasoning-leak-native-thinking.md.
+ */
+export function modelUsesAdaptiveThinking(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  if (id.startsWith('claude-fable-')) return true;
+  const sonnet = /^claude-sonnet-4-(\d+)/.exec(id);
+  if (sonnet) {
+    const minor = Number.parseInt(sonnet[1] ?? '', 10);
+    return Number.isFinite(minor) && minor >= 6;
+  }
+  const opus = /^claude-opus-4-(\d+)/.exec(id);
+  if (opus) {
+    const minor = Number.parseInt(opus[1] ?? '', 10);
+    return Number.isFinite(minor) && minor >= 6;
+  }
+  return false;
+}
+
+/**
+ * Build the Anthropic request fragment for native thinking (RL.2/RL.4).
+ *
+ *  - disabled → `{}` (no thinking channel — correct only when paired with the
+ *    system-prompt belt; see factory.ts conditional injection).
+ *  - adaptive family → `{ thinking: {type:'adaptive'} }`, plus
+ *    `{ output_config: {effort} }` when an effort level is set.
+ *  - legacy family → `{ thinking: {type:'enabled', budget_tokens} }`, budget
+ *    clamped below `max_tokens` (Anthropic requires budget < max_tokens, min
+ *    1024). No `effort` — it errors on Sonnet 4.5 / Haiku.
+ *
+ * Pure function; unit-tested. Default model is Sonnet 4.6 (adaptive) and the
+ * dev picker exposes only adaptive families, so the legacy branch is a
+ * defensive path for an explicitly-overridden older model.
+ */
+export function buildThinkingFragment(
+  modelId: string,
+  opts: { enabled: boolean; effort?: 'low' | 'medium' | 'high' | 'max'; maxTokens: number },
+): Partial<MessageCreateParamsStreaming> {
+  if (!opts.enabled) return {};
+  if (modelUsesAdaptiveThinking(modelId)) {
+    return {
+      thinking: { type: 'adaptive' },
+      ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
+    };
+  }
+  const budget = Math.max(1024, Math.min(Math.floor(opts.maxTokens / 2), opts.maxTokens - 512));
+  return { thinking: { type: 'enabled', budget_tokens: budget } };
+}
+
 export class ClaudeLlm extends BaseLlm {
   static readonly supportedModels: Array<string | RegExp> = [/^claude-/];
 
   private readonly client: AnthropicClientLike;
   private readonly maxTokens: number;
   private readonly temperature: number;
+  private readonly thinkingEnabled: boolean;
+  private readonly effort?: 'low' | 'medium' | 'high' | 'max';
 
   constructor(params: ClaudeLlmParams) {
     super({ model: params.model });
@@ -113,6 +207,8 @@ export class ClaudeLlm extends BaseLlm {
     }
     this.maxTokens = params.maxTokens ?? 2048;
     this.temperature = params.temperature ?? 0.7;
+    this.thinkingEnabled = params.thinkingEnabled ?? false;
+    this.effort = params.effort;
     this.client =
       params.client ??
       (new Anthropic({ apiKey: params.apiKey }) as unknown as AnthropicClientLike);
@@ -154,12 +250,34 @@ export class ClaudeLlm extends BaseLlm {
           )
         : undefined;
 
+    // Per-family request-shaping: Opus 4.7+ and the Fable family REMOVED
+    // sampling params — sending `temperature` to them is an HTTP 400. Include
+    // it only for families that still accept it (Sonnet 4.x, Opus 4.6-, Haiku).
+    // See modelAcceptsSamplingParams + planning/03-exec-crosscut-test-mode-model-picker.md.
+    const effectiveModel = llmRequest.model ?? this.model;
     const params: MessageCreateParamsStreaming = {
-      model: llmRequest.model ?? this.model,
+      model: effectiveModel,
       max_tokens: this.maxTokens,
-      temperature: this.temperature,
       stream: true,
       messages,
+      // Temperature is incompatible with thinking: Anthropic requires
+      // `temperature=1` (or unset) when thinking/adaptive mode is on — a 400
+      // otherwise. We omit it entirely when thinking is enabled (stick with the
+      // model default), and otherwise send it only for families that still
+      // accept sampling params (not Opus 4.7+ / Fable).
+      ...(this.thinkingEnabled || !modelAcceptsSamplingParams(effectiveModel)
+        ? {}
+        : { temperature: this.temperature }),
+      // RL.2/RL.4: native thinking — the producer half of B.13. Per-family
+      // shape (adaptive for Sonnet 4.6+/Opus 4.6+/Fable; legacy enabled+budget
+      // otherwise); empty when disabled. Reasoning is stripped from the SSE
+      // wire downstream (reasoning-filter), so the model reasons here instead
+      // of narrating its planning in visible text.
+      ...buildThinkingFragment(effectiveModel, {
+        enabled: this.thinkingEnabled,
+        effort: this.effort,
+        maxTokens: this.maxTokens,
+      }),
       ...(systemWithCache ? { system: systemWithCache } : {}),
       ...(toolsWithCache ? { tools: toolsWithCache } : {}),
     };

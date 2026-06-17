@@ -25,6 +25,7 @@ import {
   emitAdapterError,
 } from "../runtime/orchestrator-adapter";
 import { emitUiEvent } from "../runtime/emit-ui-event";
+import { readStaffToken } from "./use-staff-auth";
 
 /** Tab-scoped flag indicating the visitor already granted tier-1 consent. */
 export const CONSENT_STORAGE_KEY = "swoop.consent.tier1";
@@ -128,10 +129,14 @@ async function postSession(baseUrl: string): Promise<{
   sessionId: string;
   disclosureCopyVersion: string;
 }> {
+  // staff-auth: forward the JWT (if stored) so the orchestrator sets
+  // session.staff + session.mode at bootstrap time. Server validates;
+  // absent token → visitor session, no error.
+  const staffToken = readStaffToken();
   const res = await fetch(`${baseUrl}/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify(staffToken ? { staffToken } : {}),
   });
   if (!res.ok) {
     throw new Error(
@@ -147,7 +152,7 @@ async function postSession(baseUrl: string): Promise<{
   if (!sessionId) throw new Error("Session bootstrap response missing session id");
   // Fall back to "v1" if the orchestrator omits the version — matches the
   // placeholder copy revision used below.
-  const disclosureCopyVersion = body.disclosureCopyVersion ?? "v1";
+  const disclosureCopyVersion = body.disclosureCopyVersion ?? "v2";
   return { sessionId, disclosureCopyVersion };
 }
 
@@ -250,7 +255,7 @@ export function useConsent(): UseConsentResult {
       eventType: "consent.declined",
       payload: {
         tier: "conversation",
-        copyVersion: "v1",
+        copyVersion: "v2",
       },
     });
     setStatus({ state: "declined" });

@@ -153,9 +153,6 @@ export function createHandoffSubmitHandler(
         verdict: payload.verdict,
         consentConversationGranted: payload.consent.conversationGranted,
         consentHandoffGranted: payload.consent.handoffGranted,
-        ...(payload.consent.marketingGranted !== undefined
-          ? { consentMarketingGranted: payload.consent.marketingGranted }
-          : {}),
         emailDeliveryStatus:
           submitResult.emailResult.status === 'sent'
             ? 'sent'
@@ -207,12 +204,6 @@ function enrichPayload(args: EnrichArgs): HandoffPayload {
     conversationTimestamp: session.consent.conversation.timestamp,
     handoffGranted: reqBody.consent.handoffGranted,
     handoffTimestamp: reqBody.consent.handoffTimestamp,
-    ...(reqBody.consent.marketingGranted !== undefined
-      ? { marketingGranted: reqBody.consent.marketingGranted }
-      : {}),
-    ...(reqBody.consent.marketingTimestamp !== undefined
-      ? { marketingTimestamp: reqBody.consent.marketingTimestamp }
-      : {}),
     ...(reqBody.consent.consentCopyVersion !== undefined
       ? { consentCopyVersion: reqBody.consent.consentCopyVersion }
       : {}),

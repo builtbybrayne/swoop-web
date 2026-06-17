@@ -32,6 +32,7 @@ import {
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createOrchestratorTransport } from "./runtime/orchestrator-adapter";
+import { DevModelPicker } from "./runtime/model-picker";
 import { emitUiEvent } from "./runtime/emit-ui-event";
 // Registers the `data-fyi` renderer + reasoning-guard (D.t2). Importing here
 // is what gives assistant-ui the component map below; the module itself has
@@ -48,6 +49,7 @@ import {
   OpeningScreen,
   PrivacyInfoModal,
   useConsent,
+  useStaffAuth,
 } from "./disclosure";
 import { ErrorBanner, useRuntimeErrors } from "./errors";
 import { usePreflight, useRehydrate } from "./session";
@@ -239,15 +241,18 @@ function ThreadSurface({
         <ChromeBadge />
         <div className="flex items-center gap-3">
           {import.meta.env.DEV ? (
-            <button
-              type="button"
-              onClick={() => devHidden.toggle()}
-              data-testid="toggle-dev-affordances"
-              aria-pressed={devHidden.hidden}
-              className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
-            >
-              {devHidden.hidden ? "Show dev" : "Hide dev"}
-            </button>
+            <>
+              <DevModelPicker onModelChange={onFreshChat} />
+              <button
+                type="button"
+                onClick={() => devHidden.toggle()}
+                data-testid="toggle-dev-affordances"
+                aria-pressed={devHidden.hidden}
+                className="inline-flex h-7 items-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
+              >
+                {devHidden.hidden ? "Show dev" : "Hide dev"}
+              </button>
+            </>
           ) : null}
           <button
             type="button"
@@ -325,6 +330,12 @@ export default function App() {
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
+
+  // staff-auth: register window.swoop_login() + handle ?swoop_staff_login=1
+  // URL param trigger. Both fire once on mount. No state is exposed here —
+  // the JWT is stored in localStorage and read imperatively by the transport
+  // before each /session and /chat request.
+  useStaffAuth();
 
   // Transport is created once and reused. It reads the current session id
   // from sessionStorage per-request, so a fresh-chat / restart that mints

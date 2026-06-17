@@ -307,10 +307,6 @@ export function preparePayloadForTemplate(
 
     // ---- Consent ---------------------------------------------------------
     consentCopyVersionOrDash: formatOptional(payload.consent.consentCopyVersion),
-    marketingConsentLabel: formatMarketingConsent(
-      payload.consent.marketingGranted,
-      payload.consent.marketingTimestamp,
-    ),
   };
 }
 
@@ -339,8 +335,4 @@ function formatWishlist(items: readonly HandoffWishlistEntry[]): string {
     .join('\n');
 }
 
-function formatMarketingConsent(granted: boolean | undefined, ts: string | undefined): string {
-  if (granted === undefined) return 'not asked';
-  if (granted === false) return 'declined';
-  return ts ? `granted at ${ts}` : 'granted';
-}
+// (marketing consent removed — no formatter needed)

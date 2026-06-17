@@ -8,6 +8,103 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## RL.1–RL.8 — Native Anthropic thinking wired (the producer half of B.13)
+
+**Decided**: 2026-06-17 (HITL — Alastair ratified the T3 plan: *"I'm inclined to enable native thinking… gate it on an env variable too… Go ahead with T3 write-up… proceed to execute."*)
+**Owner**: `reasoning-leak` worktree (`claude/reasoning-leak`, branched off `luke-questioning-tone`, rebased on `main`@`d28d893`) — [planning/03-exec-crosscut-reasoning-leak-native-thinking.md](03-exec-crosscut-reasoning-leak-native-thinking.md)
+**Completes**: **B.13** (response-format resolution — reasoning isolation re-architected from `<reasoning>`/`<utter>` tags to native Anthropic thinking blocks). Only the *consumer* half had shipped — [reasoning-filter.ts](../product/orchestrator/src/translator/reasoning-filter.ts) strips reasoning from the wire and `claude-llm.ts` maps `thinking_delta`→`thought:true` — so with no thinking channel ever requested, the model narrated its planning as **visible text before the answer** (the reasoning leak). Root-cause back-link: [reasoning-leak-handoff.md](../reasoning-leak-handoff.md).
+
+- **RL.1** — `DEFAULT_ORCHESTRATOR_MODEL` `claude-sonnet-4-5-20250929` → **`claude-sonnet-4-6`** (bare alias, no date suffix). 4.6 supports clean **adaptive** thinking (`{type:'adaptive'}`); 4.5 only the legacy `{type:'enabled', budget_tokens}` mode. Same $3/$15 tier. *Swap cost: trivial — one default string; `buildThinkingFragment`'s legacy branch still covers 4.5 if reverted.*
+- **RL.2** — New env **`ORCHESTRATOR_THINKING_ENABLED`** (bool, **default on**) gates the `thinking` request param — a latency escape hatch (flip off without a code change). When thinking is **on**, sampling params are omitted: the API 400s on `temperature≠1` with thinking, so `claude-llm.ts` drops `temperature` whenever `thinkingEnabled` (commit `006ebb8`) — generalises the M-PICK-4 sampling-param guard. *Swap cost: low — additive env; the off-path degrades to the belt (RL.3).*
+- **RL.3** — **Conditional belt**: `cms/prompts/fallbacks/silent-working.md` ("work silently, don't narrate your working or tool use") is injected into the system prompt **only when thinking is disabled** — never when on. Alastair: a blanket silence instruction *with thinking on is dangerous* — the thinking channel already isolates reasoning, and layering suppression on top risks clipping transparency / the visible answer. The belt is the graceful degrade for the gate-off path (prompt-only mitigation, not raw leak), wired via `buildThinkingFallbackInjection` in [factory.ts](../product/orchestrator/src/agent/factory.ts). *Swap cost: low — a CMS file + a gated read; deleting the file + the gate reverts it.*
+- **RL.4** — New env **`ORCHESTRATOR_EFFORT`** (`low|medium|high|max`, optional, **omit → model default `high`**). Server-side config only — **not** a UI control (Alastair: a visual effort control is acceptable only in non-production; as a steady-state knob it's an env var). Applied only when thinking is on and the model is adaptive-family. *Swap cost: trivial — optional env.*
+- **RL.5** — `ORCHESTRATOR_MAX_TOKENS` default **2048 → 8192**. Adaptive thinking spends output tokens; 2048 starved the visible answer. Streaming is on, so a large `max_tokens` is timeout-safe. *Swap cost: trivial — one default. (This was also a latent gap: `factory.ts` never threaded `maxTokens`/`temperature` into `ClaudeLlm` at all — now fixed.)*
+- **RL.6** — Signature round-trip across the tool loop: **specced conditional, then SKIPPED**. The Phase-1 smoke (session `0fee8d42`) ran the full `list_skills → load_skill → find_inspiring → illustrate → answer` loop with thinking on and **no 400** on the post-tool-result continuation — so the API does not require the thinking block (with `signature`) to be replayed before `tool_use` on this path. The current drop-on-replay stands. *Swap cost: n/a — nothing built. If a future model/path 400s requiring the block, Phase 2 of the plan is the ready recipe (capture `signature_delta`, consolidate at `content_block_stop`, replay in `assistantPartsToBlocks`).*
+- **RL.7** — UI adapter whitespace-concat fix: `translatePart` ([orchestrator-adapter.ts](../product/ui/src/runtime/orchestrator-adapter.ts)) restores a single-space boundary when a tool call splits two text segments (`…alive.Patagonia` → `…alive. Patagonia`), never mid-segment and never when whitespace already exists. With the leak fixed (thinking on), the main trigger is gone, so this is now defensive. *Swap cost: trivial — one pure branch + a `TextRunState` flag, unit-tested.*
+- **RL.8** — Re-baselined the `luke-01…12` judged harness family after the thinking change. **Result (2026-06-17, run `luke-rebaseline-thinking-2026-06-17`, sonnet-4-6 + adaptive thinking)**: **8 pass / 4 fail**, vs the **5 / 7** baseline ([luke-baseline-judged-2026-06-12](../product/harness/runs/luke-baseline-judged-2026-06-12/results.md), sonnet-4-5 no-thinking). Net **+3**, but **9 of 12 verdicts flipped** (6 newly pass: 01/02/05/09/11/12; 3 newly fail: 04/06/08) — churn well beyond what the thinking change alone explains, i.e. the **LLM-simulated-user variance dominates the judged rate**; treat 8/12-vs-5/12 as "no worse, plausibly a bit better", not a clean causal A/B. **No leak/narration regressions** — none of the 4 failures concern narrated planning or tool use; they're pre-existing content themes (pricing-staleness caveats on 04/07, the pumas+whales combination dodged on 06, cards not re-shown in a later turn on 08). The decisive proof of the leak fix stays the **deterministic smoke** (0 narration parts before tools, 0 reasoning frames on the wire), not this rate. **Latency**: run wall-clock ~2175s vs ~979s baseline (~2.2×) — partly adaptive-thinking depth, partly more agent-as-user turns; `ORCHESTRATOR_EFFORT=medium` / `ORCHESTRATOR_THINKING_ENABLED=false` are the levers if it bites. *(Run was first blocked by an unrelated tip bug — `harness/scenarios/021-visitor-location-seasons.yaml` description 665 > the 400 cap aborts the whole loader since `aa85dce`; disabled in place for this run, restored after, flagged as a separate task.)* *Swap cost: n/a — measurement only.*
+
+## M-PICK-1..7 — Test-mode model picker for the conversational orchestrator
+
+**Decided**: 2026-06-16 (HITL — Alastair ratified the T3 plan: *"Start with just claude models… Commit. Then proceed."*)
+**Owner**: luke-questioning-tone session (execution) — [planning/03-exec-crosscut-test-mode-model-picker.md](03-exec-crosscut-test-mode-model-picker.md)
+**Scope**: Claude-only v1; non-Claude provider seam designed in.
+
+- **M-PICK-1** — Lazy per-model **runner registry** keyed by model id; per-model runners reuse the default runner's `sessionService` (one session store across models), differing only in the `ClaudeLlm` (model id + request shape). The runner constructor is injected (`buildRunner`) so the gating/caching is unit-testable without a real ADK Runner. Default runner path untouched. *Swap cost: low — additive; removing it collapses `getRunner` to the single default runner.*
+- **M-PICK-2** — Override rides optional `model?` on `ChatRequestSchema` (the `clientTime` precedent; schema stays `.strict()`). Honoured only when `!isProduction` AND `model ∈ MODEL_PICKER_ALLOWLIST`; else silently ignored → default. The cost/abuse gate. *Swap cost: trivial — optional field, breaks no caller.*
+- **M-PICK-3** — Dev-only both ends: UI gates on `import.meta.env.DEV`; the orchestrator hard-ignores the override and 404s `GET /models` when `isProduction`. No production surface. *Swap cost: n/a.*
+- **M-PICK-4** — Per-family request-shaping in `ClaudeLlm` (`modelAcceptsSamplingParams`): **omit `temperature`/`top_p`/`top_k` for Opus 4.7+ and Fable** (they 400 on sampling params), keep them for Sonnet 4.x / Opus 4.6- / Haiku. Forward-safe by comparing the opus minor. The load-bearing gotcha guard. *Swap cost: low — one pure helper.*
+- **M-PICK-5** — `GET /models` (dev-only) returns the allow-list as `{default, models:[{id,label}]}` with friendly labels derived from the bare aliases. Registered only when the picker is enabled. v1 = the configured allow-list (exactly the set `/chat` honours); a future enhancement can back it with the Anthropic Models API (`client.models.list()`) for live discovery, filtered to the same allow-list. *Swap cost: low.*
+- **M-PICK-6** — Switching model forces a **new session** (UI starts a fresh thread on change) → a model is fixed for a session's life; no mid-conversation swap. *Swap cost: n/a (UI behaviour).*
+- **M-PICK-7** — Non-Claude **deferred behind a provider seam**: `buildAgentFor`/`buildRunner` are provider-agnostic; a future `GeminiLlm`/ADK-native `BaseLlm` slots in with no v1 rework. *Swap cost: the follow-on adds a shim + allow-list ids; v1 unchanged.*
+
+## Sales-Team Agent Memory (`sm-*`) — design decisions, 2026-06-16
+
+> Govern [02-impl-sales-memory.md](02-impl-sales-memory.md) (DRAFT Tier-2; T3s pending). Ratified by Alastair in the 2026-06-16 design session off Luke's 16/06 feedback. `sm-` prefix per the collision-avoidance convention. Decided in principle; implementation (T3-1…T3-5) not yet built.
+
+## sm-1 — Memory management runs on a separate Opus agent; the conversational agent stays Sonnet + public tools, identical for staff and visitor
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: Staff must test the *real* public agent; routing their whole session through Opus would give a false preview. So the conversational path is byte-identical to production (Sonnet, the eight public tools, `00_why.md`); memory authoring is a distinct Opus agent layered alongside, never altering what's being tested. Opus is reserved for the curation reasoning (dedup / conflict / succinct phrasing) where the smarter model earns its place.
+**Swap cost**: Low — the memory agent is additive; removing the capability leaves the conversational agent untouched.
+
+## sm-2 — The Sonnet→Opus handoff is orchestrator-level routing over a shared session, NOT ADK inter-agent transfer
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: The orchestrator already routes per request; a per-session `mode` flag (in the B.t13 Postgres session store, so it's shared across Cloud Run instances) selects Sonnet or Opus. Both read the same session history, so "the memory agent sees the whole conversation" is free. Keeps us inside the existing one-`LlmAgent`-per-runner pattern and never engages ADK multi-agent (theme 6). The memory agent is admin-only, never in a visitor loop — so theme 6's single conversational agent stands (it's the functional-agent-behind-a-boundary that B.4 permits). Spike before banking: confirm the cleanest way to give Opus the history (shared ADK session vs. transcript-seeded loop).
+**Swap cost**: Low-medium — routing lives in the orchestrator's chat handler; reverting drops the second agent.
+
+## sm-3 — Entry to memory mode is explicit-only (no inference); natural-language trigger + confirm-before-write; explicit handback
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: Only the staff member stating intent to persist flips `mode` to `memory` — no "this seems important" classifier, no proactive offers. This is what stops a *test* utterance leaking into the store that loads into every public conversation. Natural-language trigger (inline ethos) + a confirm ("Capturing this as a memory: '…' — right?") makes a misfire harmless. No-inference governs the *write* too: Opus persists only what it's told, may suggest, writes on explicit yes. Handback is an explicit `finish_memory` signal flipping `mode` back; recoverable, with a typed/UI user-exit backstop.
+**Swap cost**: Low — trigger recognition + confirm live in the memory-mode wrapper (content) + the orchestrator router.
+
+## sm-4 — Tool gating is server-side only (no UI agent exists); connector hard-rejects unauth'd mutates
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: The UI is a pure renderer (D.11) — the browser never receives tool definitions, only rendered tool-call events. So the orchestrator wiring the memory tools/agent *only* for authed staff sessions is a complete boundary; a visitor's agent structurally lacks them (injection-proof). The connector re-validates the staff token on every memory mutate (dual backstop, as handoff consent E.4).
+**Swap cost**: n/a (security posture).
+
+## sm-5 — Memory store is Postgres, two-table current+history; versioned, attributed, timestamped, soft-delete-only
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: `sales_memory` (current truth, what the agent loads) + append-only `sales_memory_version` (one row per change, attributed by author + timestamp). "Array of attributed versions" = the version rows for a `memory_id`. Delete = `status='retired'` + a retire version row — never hard-delete (audit trail; matches C.31 forward-only / immutable-history instincts). Lives in the connector's single Postgres store (C.18) beside the B.t13 session tables.
+**Swap cost**: Low — one migration; standard current+history pattern.
+
+## sm-6 — Memories load into every conversation per-turn (one query, no app cache), authoritatively framed, each timestamped in-prompt
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: The orchestrator's per-turn `InstructionProvider` reads the active set each turn (`SELECT … WHERE status='active' ORDER BY id`). No in-process cache — shared by construction (the DB), so every Cloud Run instance folds in a change on its next turn (correct under horizontal scale — Alastair's explicit requirement; supersedes an earlier in-process-cache idea). Prompt-cache-safe: identical text between writes → the Anthropic cache still hits; a write busts it once. Framed as **authoritative** (the agent MAY state it as fact — distinct from `00_why.md`'s "source-from-tools" illustrative examples). Each memory's timestamp is in the block so the agent weighs staleness against the dateline (B.t12), as §5 already does for pricing contemporaneity.
+**Swap cost**: Low — a shared version-marker row to skip the per-turn read is a future optimisation (YAGNI now).
+
+## sm-7 — Auth: shared password + name-capture (v1) behind a swappable `StaffAuthenticator` interface; JWT (~30d) on the direct widget URL; rate-limited `/staff/auth`
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: Shared password is far less to build/maintain for a handful of staff and still stamps "who authored what" via name-capture-once. Behind a `StaffAuthenticator` interface so a later `GoogleOidcAuthenticator` (or similar) drops in with no caller change (theme 4; mirrors `HandoffStore` interim→durable E.1/E.12). JWT (~30d) in `localStorage` on the *direct* widget URL (not the embedded iframe — dodges Safari-ITP / third-party-storage limits). **Two triggers open the popup**: a magic URL param, and a global `swoop_login()` console function (fallback recipe — Inspect → console → `swoop_login` — that survives the URL param failing and is freely re-triggerable for testing/re-auth). `/staff/auth` is a public password endpoint → basic rate-limit/lockout (the one place rate-limiting is not deferred, cf. top-level §7).
+**Swap cost**: Low — the interface is the seam; v2 auth is a new impl + the popup's exchange step.
+
+## sm-8 — No live PII concern at capture (no customer present in a staff session); residue is content-hygiene only
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: A staff authoring session has no visitor present, so the capture-time PII guard is moot. The only residue: a memory's text later loads into public conversations, so it must not *describe* a specific customer — an editorial guard in the memory-mode wrapper, not a live-data risk. The no-cross-session-memory product wall (`00_why.md` §10) is unaffected: this is organisational knowledge, not per-visitor memory.
+**Swap cost**: n/a.
+
+## sm-9 — The memory agent runs in a transcript-seeded *separate* session, not the shared ADK session
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL), from the T3-3 spike investigation
+**Rationale**: The orchestrator's `Runner` takes an injectable `sessionService` (B.t13 `PgAdkSessionService`), so two runners *could* share one session — and a second agent on a different model is already proven in-tree (the Haiku triage classifier, `index.ts`). But a shared session puts the memory-management dialogue into the **same event log the Sonnet conversational agent reads**, so it would surface on the staff member's next *test* turn — a breach of faithful testing (sm-1). Instead the memory agent runs in its **own** session, seeded with a read of the conversation-so-far (already maintained in `SessionState.conversationHistory` by `chat.ts`); multi-turn memory iteration accumulates in the memory session while the test conversation's log stays clean. Refines sm-2 (the "orchestrator routing" mechanism) with the *why* of session isolation.
+**Swap cost**: Low — the seeding read is cheap and the source already exists; reverting to a shared session is a routing change, not a data-model one.
+**Status**: feasibility + confirm-first behaviour confirmed by a live Anthropic smoke (2026-06-16, Sonnet; throwaway spike, not committed). See [03-exec-sales-memory-t3-routing.md](03-exec-sales-memory-t3-routing.md) spike section.
+
+---
+
+## G.visitor-location-1 — Visitor location is inferred from the per-turn timezone; default US when unknown; Southern-Hemisphere seasonality anchored
+
+**Decided**: 2026-06-16 (HITL-ratified — Luke 16-Jun feedback: *"if assuming users location then let's presume US"*)
+**Owner**: visitor-location-infer worktree session ([planning/03-exec-crosscut-visitor-location-infer.md](03-exec-crosscut-visitor-location-infer.md))
+**Rationale**: The agent had been assuming a European visitor (*"Patagonia's seasons run opposite to Europe's"*). We already pass the visitor's IANA timezone on every turn (B.t12 — `clientTime.timeZone`, rendered into the per-turn dateline), so the location signal was already in the agent's context; what was missing was the instruction to use it. There was zero geographic-anchoring guidance anywhere in `00_why.md` (grep-confirmed). Fix is **prompt-led**: a new §7 subsection tells the agent to read the timezone as its best location signal and frame seasonal/relative-time talk from the visitor's hemisphere; Patagonia is Southern Hemisphere (Dec–Feb summer / Jun–Aug winter) and the inversion is stated relative to where the visitor actually is; default to a **US / Northern-Hemisphere** frame when the zone is absent or ambiguous (Luke's "presume US"); hold the read lightly (a zone is a hint, not an identity — VPN / expat / travelling); MAY ask one travel-origin question only when it matters and can't be inferred. `buildDateline` (chat.ts) reinforces at the moment the signal is/isn't present (present: names the timezone as the location signal; fallback: states the US default). Inference stays **prompt-side** (the model reasons over the raw IANA zone) rather than a server-side region map — a naïve `America/*` → Northern map is wrong for `America/Santiago` / `America/Argentina/*` (Southern), which the model handles correctly. Folds in the 2026-05-18 inbox Southern-Hemisphere seasonality anchor (same geographic-grounding gap). Acceptance gate: harness `021-visitor-location-seasons` (runs with the `luke-` family).
+**Swap cost**: Low. Behaviour is content (`00_why.md` §7) + two reinforcing clauses in `buildDateline`; reverting is deleting the subsection and the clauses. Promoting to a server-side region/hemisphere derivation later is additive (compute from `clientTime.timeZone`, inject into the dateline) and changes neither the wire nor the prompt contract.
+
 ## G.goofy-goldstine-1 — Guidebook and Parent Guidebook pagetypes added to PRACTICAL_PAGETYPE_TITLES
 
 **Decided**: 2026-06-11

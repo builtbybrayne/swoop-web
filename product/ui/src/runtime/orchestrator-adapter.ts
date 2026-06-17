@@ -39,6 +39,8 @@
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { emitErrorRaised, emitEvent, messageOf, parseSseFrames } from "@swoop/common";
+import { getDevModelOverride } from "./dev-model-store";
+import { readStaffToken } from "../disclosure/use-staff-auth";
 
 /** Key used to persist the session id in tab-scoped storage. */
 export const SESSION_STORAGE_KEY = "swoop.session.id";
@@ -242,6 +244,19 @@ function makeTextId(): string {
 }
 
 /**
+ * State for the single text block we keep open across an orchestrator turn.
+ * `id` pairs `text-start`/`text-delta`/`text-end`; the two boundary flags
+ * power the RL.7 separator restoration (see `translatePart`'s text case).
+ */
+type TextRunState = {
+  id: string | null;
+  /** A tool-call interrupted the run since the last text delta. */
+  sawToolSinceText?: boolean;
+  /** The last emitted text delta ended with a whitespace char. */
+  lastEndedWithWhitespace?: boolean;
+};
+
+/**
  * Translate a single orchestrator `MessagePart` into zero-or-more AI SDK
  * `UIMessageChunk` events, writing to `controller`.
  *
@@ -256,23 +271,43 @@ function makeTextId(): string {
  *   output-available → tool-output-available (no extra synth needed; the
  *                      prior `input-available` already closed the input half)
  */
-function translatePart(
+export function translatePart(
   part: OrchestratorMessagePart,
   controller: ReadableStreamDefaultController<UIMessageChunk>,
-  textState: { id: string | null },
+  textState: TextRunState,
   toolCallsSeen: Set<string>,
 ): void {
   switch (part.type) {
     case "text": {
       if (part.text.length === 0) return;
+      const opening = textState.id === null;
       if (textState.id === null) {
         textState.id = makeTextId();
         controller.enqueue({ type: "text-start", id: textState.id });
       }
+      // RL.7: every text part in a turn shares one text block (see
+      // `makeTextId`), so a tool call between two text segments would let
+      // them concatenate with no boundary (`…alive.` + `Patagonia…` →
+      // `…alive.Patagonia`). When a tool interrupted the run since the last
+      // text delta, restore a single-space boundary — but only when neither
+      // side already carries whitespace. Token-level deltas of one
+      // continuous segment never set `sawToolSinceText`, so streaming is
+      // untouched; already-spaced joins are left alone.
+      let delta = part.text;
+      if (
+        !opening &&
+        textState.sawToolSinceText === true &&
+        textState.lastEndedWithWhitespace !== true &&
+        !/^\s/.test(part.text)
+      ) {
+        delta = ` ${part.text}`;
+      }
+      textState.sawToolSinceText = false;
+      textState.lastEndedWithWhitespace = /\s$/.test(part.text);
       controller.enqueue({
         type: "text-delta",
         id: textState.id,
-        delta: part.text,
+        delta,
       });
       return;
     }
@@ -289,6 +324,10 @@ function translatePart(
       return;
     }
     case "tool-call": {
+      // RL.7: mark that a tool interrupted an open text run so the next text
+      // delta restores a boundary (see the text case). Only meaningful once
+      // text has started; a leading tool call needs no separator.
+      if (textState.id !== null) textState.sawToolSinceText = true;
       if (part.state === "input-streaming") {
         if (!toolCallsSeen.has(part.toolCallId)) {
           toolCallsSeen.add(part.toolCallId);
@@ -432,11 +471,24 @@ export function createOrchestratorTransport<
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
 
+      // M-PICK — dev/test-only model override. `getDevModelOverride()` returns
+      // `undefined` in production builds and when unset, so the `model` field
+      // is omitted and the orchestrator uses its env default. The orchestrator
+      // also ignores the field outside dev + allow-list (M-PICK-2/3) — the
+      // client gate is convenience, not the security boundary.
+      const modelOverride = getDevModelOverride();
+      // staff-auth — attach the staff JWT if one is stored. The orchestrator
+      // validates it server-side and sets session.staff + session.mode; the
+      // value here is never trusted as a client flag.
+      const staffToken = readStaffToken();
+
       const body = JSON.stringify({
         ...(extraBody ?? {}),
         sessionId,
         message: latestUserMessage,
         clientTime,
+        ...(modelOverride ? { model: modelOverride } : {}),
+        ...(staffToken ? { staffToken } : {}),
       });
 
       let response: Response;
@@ -489,7 +541,7 @@ export function createOrchestratorTransport<
 
       return new ReadableStream<UIMessageChunk>({
         async start(controller) {
-          const textState: { id: string | null } = { id: null };
+          const textState: TextRunState = { id: null };
           const toolCallsSeen = new Set<string>();
 
           const closeTextRun = (): void => {

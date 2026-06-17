@@ -35,7 +35,7 @@ The four audiences whose jobs this tool is hired to do. Every architectural and 
 - **Not waste time on low-fit enquiries** — the tool politely filters backpacker-tier and <$1k-profit cases before handoff.
 - **Carry warmth into the first call** — the handoff includes enough conversational substance that the specialist picks up mid-relationship, not cold.
 - **Trust the AI's promises** — no commitments it can't deliver on (no authoritative pricing, no availability guarantees, no itineraries).
-- **(Post-Puma, not in this release)** — shape AI behaviour without developer tickets. Architecture must leave this door open; the CMS-as-data pattern is how.
+- **(Post-Puma, not in this release)** — shape AI behaviour without developer tickets. Architecture must leave this door open; the CMS-as-data pattern is how. **→ Being picked up 2026-06-16** (the *knowledge* slice) via [02-impl-sales-memory.md](02-impl-sales-memory.md) — inline sales-team-authored agent memory, off Luke's 16/06 feedback.
 
 ### 2.3 Swoop as a business
 - **Establish AI-discovery positioning** in adventure travel while the market is embryonic. Shipping beats theorising.
@@ -195,7 +195,7 @@ Default to file-based coordination. Use direct messaging for genuinely interacti
 - Cross-page-navigation chat persistence (default no; revisit in Tier 2 chunk D if deep-linking is decided)
 - CRM integration
 - Rate limiting / abuse prevention (add reactively)
-- Sales-team-owned prompt CMS tooling (manual edits by Al during Puma)
+- Sales-team-owned prompt CMS tooling (manual edits by Al during Puma) — *partially picked up 2026-06-16*: the knowledge slice (facts the agent should hold) gets an inline sales-authored memory mechanism per [02-impl-sales-memory.md](02-impl-sales-memory.md); behaviour/voice editing stays the Google-Doc → prompt-engineer loop.
 - Analytics dashboards, cohort analysis, funnel attribution, per-conversation cost tracking
 - Vendor observability tooling (Langfuse / Braintrust / Posthog / etc.)
 - Prompt caching / cost optimisation

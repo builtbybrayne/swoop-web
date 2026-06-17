@@ -1,7 +1,7 @@
 # Swoop Web Discovery Agent: Legal review pack
 
-**Version**: 0.6
-**Date**: 2026-05-20
+**Version**: 0.7
+**Date**: 2026-06-16
 **Audience**: Swoop (internal sense-check), then Swoop legal counsel
 **Prepared by**: Alastair Brayne, WhaleyBear Ltd trading as Lope (al@lope.works)
 
@@ -223,6 +223,8 @@ This is a data-and-judgement question that can't be answered without both inputs
 
 ### D-3.1.9. Conversation retention for agent improvement
 
+> **RESOLVED 2026-06-16 (Swoop)**: conversation records ARE retained for analysis, disclosed up front in tier-1 (`opening.body`, §4.1) and the privacy modal (`privacy.paragraph-1`, §4.3). The commitment made to the visitor is **"any saved data is always anonymised before we do any internal analyses"** — raw is stored, an anonymisation sweep runs before any analytic use (a blend of options (a) disclose + (b) anonymise-before-use below). **Still open**: the concrete retention *window* (Swoop to name — see "Required" below), and whether "anonymised" vs "pseudonymised" is the right term for the commitment (counsel).
+
 **Why**: Swoop wants to retain conversation data long enough to analyse and improve the agent over time. The current handoff record retains the agent's *summary*, not the raw conversation; the conversation itself doesn't persist. That mismatch needs resolving before launch.
 
 **The tension**: "agent improvement" is a different processing purpose than "warm specialist handoff", and tier-1 consent currently only covers the latter. Three options:
@@ -246,13 +248,13 @@ This blocks the final wording of `opening.body` (§4.1) and `privacy.paragraph-1
 
 ### D-3.2.1. Two-tier consent model
 
-Tier 1 (paired with AI disclosure) at conversation start; tier 2 (separate from optional marketing opt-in) at handoff. Chosen over legitimate-interest because a chatbot freely receives PII in messages; explicit consent is the cleaner posture. See §4.1 and §4.4 for the copy.
+Tier 1 (paired with AI disclosure) at conversation start; tier 2 at handoff. Tier-2 is now **submission-as-consent** — clicking Send after a clear inline notice is the affirmative act (no separate tickbox); the marketing opt-in was removed 2026-06-16. Chosen over legitimate-interest because a chatbot freely receives PII in messages; explicit consent is the cleaner posture. See §4.1 and §4.4 for the copy.
 
 ---
 
-### D-3.2.2. Marketing opt-in default and separation
+### D-3.2.2. Marketing opt-in — REMOVED
 
-Marketing opt-in is a separate tickbox, **unticked by default**. Handoff submission doesn't require it. Both consent records are persisted independently. IDs `lead-capture.consent` and `lead-capture.marketing` in §4.4.
+> **WITHDRAWN 2026-06-16 (Swoop)**: the marketing opt-in tickbox has been removed from the lead-capture form entirely — visitor surface, wire schema, durable record, and specialist email. No marketing consent is collected. This item is closed; nothing for counsel to assess here.
 
 ---
 
@@ -370,7 +372,7 @@ The full-screen modal pairing AI disclosure with tier-1 consent. Visible once, b
 |---|---|---|---|
 | `opening.heading` | Heading at the top of the modal | Before we start | |
 | `opening.intro` | First paragraph (AI disclosure) | This is an AI assistant. It helps you explore trip ideas by chatting with you and suggesting options from our library. | |
-| `opening.body` | Second paragraph (data processing and consent body) | To answer your questions, we process the messages you send during this conversation. Nothing you type is used to train third-party AI models, and the conversation is kept only for as long as it takes to help you. | |
+| `opening.body` | Second paragraph (data processing and consent body) | To answer your questions, we process the messages you send. If you continue, we'll keep a record of this chat — any saved data is always anonymised before we do any internal analyses to check the assistant is working well. Nothing you type is used to train third-party AI models. | |
 | `opening.body-continued` | Third paragraph (decline option) | If you'd prefer not to start the conversation, you can decline — no data is recorded. | |
 | `opening.privacy-link-label` | Link opening the privacy modal | Read how we handle your data | |
 | `opening.continue-label` | Primary button (accepts consent and begins) | Continue | |
@@ -401,7 +403,7 @@ Lightweight modal opened from the privacy link on the opening screen, or from th
 | ID | When | Draft | Counsel notes |
 |---|---|---|---|
 | `privacy.heading` | Modal heading | How your conversation is handled | |
-| `privacy.paragraph-1` | First paragraph (what processing happens) | This is an AI-powered assistant. When you send a message, your text is processed by an AI model so the assistant can respond. The conversation is retained only long enough to help you — typically until you close the window. | |
+| `privacy.paragraph-1` | First paragraph (what processing happens) | This is an AI-powered assistant. When you send a message, your text is processed by an AI model so the assistant can respond. We keep a record of your conversation for a while — any saved data is always anonymised before we do any internal analyses to check the assistant is working well. | |
 | `privacy.paragraph-2` | Second paragraph (data use, processors, contact). **Note**: `privacy@example.com` is a literal placeholder; will be replaced by Swoop's nominated privacy contact (D-3.3.3). | We do not sell your data, and your conversation is not used to train third-party AI models. Suppliers involved in processing may include our hosting provider and the AI model provider. If you'd like a copy of your conversation, or to have it deleted on request, contact us at privacy@example.com. | |
 | `privacy.close-label` | Close button label | Close | |
 | `privacy.aria-close-label` | Screen-reader label for the X button (not visible) | Close privacy information | |
@@ -410,7 +412,7 @@ Lightweight modal opened from the privacy link on the opening screen, or from th
 
 ## 4.4 Lead-capture form
 
-Shown when the agent triggers a handoff. Verdict-aware intro line, contact fields, disclosure of what will be shared, consent tickbox, optional marketing opt-in.
+Shown when the agent triggers a handoff. Verdict-aware intro line, contact fields, disclosure of what will be shared, and an inline consent notice (clicking Send is the tier-2 consent — no tickbox; marketing opt-in removed 2026-06-16).
 
 **Note on verdict-aware intros**: only `qualified` and `referred_out` regularly surface the form. `disqualified` and `inconclusive` are included for type-safety but the form is not normally shown in those flows.
 
@@ -423,15 +425,10 @@ Shown when the agent triggers a handoff. Verdict-aware intro line, contact field
 | `lead-capture.label.name` | Required field label | Name | |
 | `lead-capture.label.email` | Required field label | Email | |
 | `lead-capture.label.phone` | Optional field label | Phone (optional) | |
-| `lead-capture.label.preferred-method` | Radio group legend | Preferred contact method | |
-| `lead-capture.option.email` | Radio option | email | |
-| `lead-capture.option.phone` | Radio option | phone | |
-| `lead-capture.option.either` | Radio option | either | |
 | `lead-capture.label.additional-notes` | Free-text field label | Anything else the specialist should know? (optional) | |
 | `lead-capture.precis-disclosure-label` | Collapsible disclosure button, opens to show the conversation summary | Review what you've told us so far | |
 | `lead-capture.precis-fallback` | Substituted into the disclosure if the agent didn't supply a per-visitor summary | A summary of what you've told us will be shared with the specialist. | |
-| `lead-capture.consent` | **Required** tier-2 consent tickbox label | I agree my conversation summary can be shared with a Swoop specialist so they can follow up. | |
-| `lead-capture.marketing` | **Optional, unticked by default** marketing opt-in tickbox label | Send me occasional ideas and inspiration from Swoop (optional). | |
+| `lead-capture.consent-notice` | Inline notice by the Send button — **submission is the tier-2 consent** (no tickbox) | Clicking 'Send my details' shares your conversation summary with a Swoop Planning Specialist so they can make better recommendations and follow up. | |
 | `lead-capture.submit` | Submit button label | Send my details | |
 | `lead-capture.submit.sending` | Submit button label in flight | Sending… | |
 | `lead-capture.submit.aria` | Screen-reader label for the submit button | Submit handoff details | |

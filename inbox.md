@@ -6,6 +6,10 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-06-16 — Sales-team agent memory designed (T2); seasonality gap being closed
+
+Luke's 16/06 feedback (agent lacks current sales knowledge — Patagonian seasonality / refugio availability — and mis-reasons season-vs-date) is being addressed two ways. (1) **Now, independent**: a static always-on `cms/prompts/system/20_field-notes.md` seeded with the seasonal facts currently *trapped* in conditionally-loaded skills (`arrived-with-ai-itinerary`, `engaging-a-planner`, `group-tour-surfacing-for-solos`, `pattern-budget-solo-traveller`) + the Southern-Hemisphere season-inversion anchor drafted in the 2026-05-18 entry below (still unshipped — this finally lands it), under an authoritative-framing header. Authoring pending Alastair (content/voice). (2) **The general capability**: inline sales-authored agent memory — [planning/02-impl-sales-memory.md](planning/02-impl-sales-memory.md) (DRAFT T2 + `sm-*` decisions). The 2026-05-18 seasonality-anchor note below is effectively superseded by (1).
+
 ## 2026-06-11 — Handoff submit rejected when agent's specialistSummary > 500 chars
 
 Caught live during the widget-styling verification run: the agent wrote a `specialistSummary` longer than the Zod `reasonText` max(500) in `@swoop/common`, so `/handoff/submit` rejected the whole submission and the visitor saw "We couldn't send your details just now (reasonText: String must contain at most 500 character(s))". A visitor losing the handoff because the agent over-wrote is the worst failure mode for the core conversion moment.
@@ -53,6 +57,8 @@ Two distinct quality problems caught in the post-skill-integration sample transc
 2. **Self-contradiction on Patagonia seasonality within one conversation**. Turn 2 says August is "right in the heart of the season ... most stable weather". Turn 3 says (correctly) August is winter, cold, windy, snowy. Add a geographical-anchor line: *"You are talking about destinations in the Southern Hemisphere. Patagonian seasons are inverted relative to UK/Europe/North America — December–February is summer; June–August is winter."*
 
 Both are 1-line WHY-prompt edits + a validator re-run to confirm. ~15 min.
+
+**Update 2026-06-16**: item 2 (Patagonia seasonality) is **addressed** — the Southern-Hemisphere anchor (Dec–Feb summer / Jun–Aug winter, framed from the visitor's own hemisphere) landed in `00_why.md` §7 via [03-exec-crosscut-visitor-location-infer.md](planning/03-exec-crosscut-visitor-location-infer.md) (decision G.visitor-location-1, merged to main). Item 1 (hallucinated phone / contact details — the `MUST NOT invent specific contact details` line) is **still open**.
 
 ## 2026-05-18 — Event-capture wiring (H.14) needed to make triage_verdict assertions useful
 

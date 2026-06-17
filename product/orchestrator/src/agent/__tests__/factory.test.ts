@@ -37,7 +37,7 @@ import path from 'node:path';
 import { SkillToolset } from '@google/adk';
 import type { FunctionTool } from '@google/adk';
 
-import { buildOrchestratorAgent } from '../factory.js';
+import { buildOrchestratorAgent, buildThinkingFallbackInjection } from '../factory.js';
 import type { Config } from '../../config/index.js';
 import type { PromptLoader } from '../prompt-loader.js';
 
@@ -179,5 +179,44 @@ describe('buildOrchestratorAgent — tool surface (B.t9 fix)', () => {
 
     expect(agent.tools).toHaveLength(1);
     expect(agent.tools[0]).toBeInstanceOf(SkillToolset);
+  });
+});
+
+describe('buildThinkingFallbackInjection (RL.3 — thinking-off belt)', () => {
+  function makeBeltDir(beltText: string): string {
+    const root = mkdtempSync(path.join(tmpdir(), 'puma-factory-belt-'));
+    tempDirs.push(root);
+    mkdirSync(path.join(root, 'system'), { recursive: true });
+    mkdirSync(path.join(root, 'fallbacks'), { recursive: true });
+    writeFileSync(path.join(root, 'fallbacks', 'silent-working.md'), beltText, 'utf8');
+    return path.join(root, 'system'); // == systemPromptDirAbsolutePath
+  }
+
+  it('injects the belt (with separator) when thinking is disabled', () => {
+    const systemDir = makeBeltDir('WORK SILENTLY — fixture belt');
+    const out = buildThinkingFallbackInjection({
+      ORCHESTRATOR_THINKING_ENABLED: false,
+      systemPromptDirAbsolutePath: systemDir,
+    });
+    expect(out.startsWith('\n\n---\n\n')).toBe(true);
+    expect(out).toContain('WORK SILENTLY — fixture belt');
+  });
+
+  it('injects nothing when thinking is enabled (no file read)', () => {
+    const systemDir = makeBeltDir('SHOULD NOT APPEAR');
+    expect(
+      buildThinkingFallbackInjection({
+        ORCHESTRATOR_THINKING_ENABLED: true,
+        systemPromptDirAbsolutePath: systemDir,
+      }),
+    ).toBe('');
+  });
+
+  it('treats an undefined flag (cast/partial Config) as not-disabled — returns "" without a file read', () => {
+    // Guards the existing factory tests, whose cast Config leaves the field unset.
+    const out = buildThinkingFallbackInjection({
+      systemPromptDirAbsolutePath: '/nonexistent/system',
+    } as unknown as Parameters<typeof buildThinkingFallbackInjection>[0]);
+    expect(out).toBe('');
   });
 });
