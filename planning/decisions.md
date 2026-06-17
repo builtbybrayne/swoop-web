@@ -37,6 +37,67 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 - **M-PICK-6** — Switching model forces a **new session** (UI starts a fresh thread on change) → a model is fixed for a session's life; no mid-conversation swap. *Swap cost: n/a (UI behaviour).*
 - **M-PICK-7** — Non-Claude **deferred behind a provider seam**: `buildAgentFor`/`buildRunner` are provider-agnostic; a future `GeminiLlm`/ADK-native `BaseLlm` slots in with no v1 rework. *Swap cost: the follow-on adds a shim + allow-list ids; v1 unchanged.*
 
+## Sales-Team Agent Memory (`sm-*`) — design decisions, 2026-06-16
+
+> Govern [02-impl-sales-memory.md](02-impl-sales-memory.md) (DRAFT Tier-2; T3s pending). Ratified by Alastair in the 2026-06-16 design session off Luke's 16/06 feedback. `sm-` prefix per the collision-avoidance convention. Decided in principle; implementation (T3-1…T3-5) not yet built.
+
+## sm-1 — Memory management runs on a separate Opus agent; the conversational agent stays Sonnet + public tools, identical for staff and visitor
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: Staff must test the *real* public agent; routing their whole session through Opus would give a false preview. So the conversational path is byte-identical to production (Sonnet, the eight public tools, `00_why.md`); memory authoring is a distinct Opus agent layered alongside, never altering what's being tested. Opus is reserved for the curation reasoning (dedup / conflict / succinct phrasing) where the smarter model earns its place.
+**Swap cost**: Low — the memory agent is additive; removing the capability leaves the conversational agent untouched.
+
+## sm-2 — The Sonnet→Opus handoff is orchestrator-level routing over a shared session, NOT ADK inter-agent transfer
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: The orchestrator already routes per request; a per-session `mode` flag (in the B.t13 Postgres session store, so it's shared across Cloud Run instances) selects Sonnet or Opus. Both read the same session history, so "the memory agent sees the whole conversation" is free. Keeps us inside the existing one-`LlmAgent`-per-runner pattern and never engages ADK multi-agent (theme 6). The memory agent is admin-only, never in a visitor loop — so theme 6's single conversational agent stands (it's the functional-agent-behind-a-boundary that B.4 permits). Spike before banking: confirm the cleanest way to give Opus the history (shared ADK session vs. transcript-seeded loop).
+**Swap cost**: Low-medium — routing lives in the orchestrator's chat handler; reverting drops the second agent.
+
+## sm-3 — Entry to memory mode is explicit-only (no inference); natural-language trigger + confirm-before-write; explicit handback
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: Only the staff member stating intent to persist flips `mode` to `memory` — no "this seems important" classifier, no proactive offers. This is what stops a *test* utterance leaking into the store that loads into every public conversation. Natural-language trigger (inline ethos) + a confirm ("Capturing this as a memory: '…' — right?") makes a misfire harmless. No-inference governs the *write* too: Opus persists only what it's told, may suggest, writes on explicit yes. Handback is an explicit `finish_memory` signal flipping `mode` back; recoverable, with a typed/UI user-exit backstop.
+**Swap cost**: Low — trigger recognition + confirm live in the memory-mode wrapper (content) + the orchestrator router.
+
+## sm-4 — Tool gating is server-side only (no UI agent exists); connector hard-rejects unauth'd mutates
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: The UI is a pure renderer (D.11) — the browser never receives tool definitions, only rendered tool-call events. So the orchestrator wiring the memory tools/agent *only* for authed staff sessions is a complete boundary; a visitor's agent structurally lacks them (injection-proof). The connector re-validates the staff token on every memory mutate (dual backstop, as handoff consent E.4).
+**Swap cost**: n/a (security posture).
+
+## sm-5 — Memory store is Postgres, two-table current+history; versioned, attributed, timestamped, soft-delete-only
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: `sales_memory` (current truth, what the agent loads) + append-only `sales_memory_version` (one row per change, attributed by author + timestamp). "Array of attributed versions" = the version rows for a `memory_id`. Delete = `status='retired'` + a retire version row — never hard-delete (audit trail; matches C.31 forward-only / immutable-history instincts). Lives in the connector's single Postgres store (C.18) beside the B.t13 session tables.
+**Swap cost**: Low — one migration; standard current+history pattern.
+
+## sm-6 — Memories load into every conversation per-turn (one query, no app cache), authoritatively framed, each timestamped in-prompt
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: The orchestrator's per-turn `InstructionProvider` reads the active set each turn (`SELECT … WHERE status='active' ORDER BY id`). No in-process cache — shared by construction (the DB), so every Cloud Run instance folds in a change on its next turn (correct under horizontal scale — Alastair's explicit requirement; supersedes an earlier in-process-cache idea). Prompt-cache-safe: identical text between writes → the Anthropic cache still hits; a write busts it once. Framed as **authoritative** (the agent MAY state it as fact — distinct from `00_why.md`'s "source-from-tools" illustrative examples). Each memory's timestamp is in the block so the agent weighs staleness against the dateline (B.t12), as §5 already does for pricing contemporaneity.
+**Swap cost**: Low — a shared version-marker row to skip the per-turn read is a future optimisation (YAGNI now).
+
+## sm-7 — Auth: shared password + name-capture (v1) behind a swappable `StaffAuthenticator` interface; JWT (~30d) on the direct widget URL; rate-limited `/staff/auth`
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: Shared password is far less to build/maintain for a handful of staff and still stamps "who authored what" via name-capture-once. Behind a `StaffAuthenticator` interface so a later `GoogleOidcAuthenticator` (or similar) drops in with no caller change (theme 4; mirrors `HandoffStore` interim→durable E.1/E.12). JWT (~30d) in `localStorage` on the *direct* widget URL (not the embedded iframe — dodges Safari-ITP / third-party-storage limits). **Two triggers open the popup**: a magic URL param, and a global `swoop_login()` console function (fallback recipe — Inspect → console → `swoop_login` — that survives the URL param failing and is freely re-triggerable for testing/re-auth). `/staff/auth` is a public password endpoint → basic rate-limit/lockout (the one place rate-limiting is not deferred, cf. top-level §7).
+**Swap cost**: Low — the interface is the seam; v2 auth is a new impl + the popup's exchange step.
+
+## sm-8 — No live PII concern at capture (no customer present in a staff session); residue is content-hygiene only
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL)
+**Rationale**: A staff authoring session has no visitor present, so the capture-time PII guard is moot. The only residue: a memory's text later loads into public conversations, so it must not *describe* a specific customer — an editorial guard in the memory-mode wrapper, not a live-data risk. The no-cross-session-memory product wall (`00_why.md` §10) is unaffected: this is organisational knowledge, not per-visitor memory.
+**Swap cost**: n/a.
+
+## sm-9 — The memory agent runs in a transcript-seeded *separate* session, not the shared ADK session
+
+**Decided**: 2026-06-16 · **Owner**: Alastair (HITL), from the T3-3 spike investigation
+**Rationale**: The orchestrator's `Runner` takes an injectable `sessionService` (B.t13 `PgAdkSessionService`), so two runners *could* share one session — and a second agent on a different model is already proven in-tree (the Haiku triage classifier, `index.ts`). But a shared session puts the memory-management dialogue into the **same event log the Sonnet conversational agent reads**, so it would surface on the staff member's next *test* turn — a breach of faithful testing (sm-1). Instead the memory agent runs in its **own** session, seeded with a read of the conversation-so-far (already maintained in `SessionState.conversationHistory` by `chat.ts`); multi-turn memory iteration accumulates in the memory session while the test conversation's log stays clean. Refines sm-2 (the "orchestrator routing" mechanism) with the *why* of session isolation.
+**Swap cost**: Low — the seeding read is cheap and the source already exists; reverting to a shared session is a routing change, not a data-model one.
+**Status**: feasibility + confirm-first behaviour confirmed by a live Anthropic smoke (2026-06-16, Sonnet; throwaway spike, not committed). See [03-exec-sales-memory-t3-routing.md](03-exec-sales-memory-t3-routing.md) spike section.
+
+---
+
 ## G.visitor-location-1 — Visitor location is inferred from the per-turn timezone; default US when unknown; Southern-Hemisphere seasonality anchored
 
 **Decided**: 2026-06-16 (HITL-ratified — Luke 16-Jun feedback: *"if assuming users location then let's presume US"*)

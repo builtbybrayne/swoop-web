@@ -43,6 +43,15 @@ export const DEFAULT_ORCHESTRATOR_MODEL = 'claude-sonnet-4-6';
 export const DEFAULT_CLASSIFIER_MODEL = 'claude-haiku-4-5-20251001';
 
 /**
+ * Default model id for the Opus memory agent (sm-1 / T3-3).
+ *
+ * Memory authoring is a deliberate, low-frequency staff-only task —
+ * quality beats speed, so Opus is the right tier. Override via
+ * MEMORY_AGENT_MODEL in .env without a code change (decision B.5).
+ */
+export const DEFAULT_MEMORY_AGENT_MODEL = 'claude-opus-4-8';
+
+/**
  * Package root: the directory containing this package's package.json.
  *
  * With `tsx` in dev we run from src/ directly; with `node` from dist/ after a
@@ -121,6 +130,12 @@ export const configSchema = z
     FUNCTIONAL_CLASSIFIER_MODEL: z.string().trim().min(1).default(DEFAULT_CLASSIFIER_MODEL),
     FUNCTIONAL_CLASSIFIER_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
 
+    // --- Memory agent model (sm-1 / T3-3) --------------------------------
+    // Opus by default — memory authoring is a deliberate staff-only task
+    // where quality beats latency. Swappable via .env (decision B.5).
+    MEMORY_AGENT_MODEL: z.string().trim().min(1).default(DEFAULT_MEMORY_AGENT_MODEL),
+    MEMORY_AGENT_MAX_TOKENS: z.coerce.number().int().positive().default(2048),
+
     // --- B.t1 legacy alias ----------------------------------------------
     // Optional. If set and ORCHESTRATOR_MODEL is not explicitly set,
     // load.ts copies this into ORCHESTRATOR_MODEL so B.t1 callers keep
@@ -162,6 +177,7 @@ export const configSchema = z
     SYSTEM_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/system'),
     SKILLS_DIR: z.string().trim().min(1).default('../cms/prompts/skills'),
     TOOLS_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/tools'),
+    MEMORY_PROMPT_DIR: z.string().trim().min(1).default('../cms/prompts/memory'),
 
     // Demo / tactical override: when true, the full body of every loaded
     // skill is appended to the system prompt as an appendix. Bypasses the
@@ -256,6 +272,39 @@ export const configSchema = z
     SMTP_USER: z.string().trim().default(''),
     SMTP_PASS: z.string().trim().default(''),
 
+    // --- Staff authentication (staff-auth task) -------------------------
+    //
+    // A single shared password lets sales staff authenticate so they can
+    // author agent memories. The v2 per-user path (Google OIDC) is behind
+    // the same StaffAuthenticator interface and needs only a constructor
+    // swap, not a caller change.
+    //
+    // Both vars are REQUIRED if STAFF_AUTH_ENABLED is true. Fail-fast at
+    // boot — a password endpoint that silently accepts any token because the
+    // secret is blank would be a critical security hole. The cross-field
+    // refine below enforces presence when the feature is enabled.
+    STAFF_AUTH_ENABLED: z
+      .string()
+      .default('false')
+      .transform((s) => s.toLowerCase() === 'true' || s === '1'),
+    /**
+     * Shared staff password. Min 12 chars enforced only when the feature is
+     * enabled (the refine below) so existing .env files without the var
+     * still parse cleanly when STAFF_AUTH_ENABLED=false.
+     */
+    STAFF_AUTH_PASSWORD: z.string().trim().default(''),
+    /**
+     * JWT signing secret. HMAC-SHA256. Treat with the same care as
+     * ANTHROPIC_API_KEY — never log it.
+     */
+    STAFF_JWT_SECRET: z.string().trim().default(''),
+    /**
+     * JWT TTL in days. Default 30 — long enough that staff are not nagged,
+     * short enough that a compromised token expires before causing lasting
+     * damage. Override in .env if policy requires shorter.
+     */
+    STAFF_JWT_TTL_DAYS: z.coerce.number().int().positive().default(30),
+
     // --- Handoff retention sweeper (E.t6) -------------------------------
     //
     // Off by default. When enabled, the orchestrator registers an
@@ -334,6 +383,20 @@ export const configSchema = z
         'WARM_POOL_TTL_MINUTES (in seconds) must be strictly less than SESSION_TTL_IDLE_HOURS (in seconds) so warm entries do not outlive the session sweeper window.',
     },
   )
+  // Staff auth requires both a password and a JWT secret when enabled.
+  // Fail-fast so a misconfigured deploy never runs a password endpoint with
+  // a blank secret (would accept any token).
+  .refine(
+    (cfg) =>
+      !cfg.STAFF_AUTH_ENABLED ||
+      (cfg.STAFF_AUTH_PASSWORD.length >= 12 && cfg.STAFF_JWT_SECRET.length >= 32),
+    {
+      path: ['STAFF_AUTH_ENABLED'],
+      message:
+        'STAFF_AUTH_ENABLED=true requires STAFF_AUTH_PASSWORD (≥12 chars) and ' +
+        'STAFF_JWT_SECRET (≥32 chars). Set them in .env or set STAFF_AUTH_ENABLED=false.',
+    },
+  )
   // When the handoff mailer is enabled, the credentials + recipient + from
   // address must all be present. Fail-fast at config parse so a misconfigured
   // production deploy never silently swallows handoffs.
@@ -393,6 +456,13 @@ export type Config = Readonly<
      * `loadAllToolDescriptions` from `@swoop/connector`.
      */
     readonly toolsPromptDirAbsolutePath: string;
+    /**
+     * Absolute path to the memory-prompt directory (`cms/prompts/memory/`).
+     * Holds mode-wrapper.md, loaded-header.md, seed-context.md, and
+     * tools/<name>.md for each memory tool. Loaded at boot by
+     * `loadMemoryPrompts` from `./agent/memory-prompt-loader.js`.
+     */
+    readonly memoryPromptDirAbsolutePath: string;
     /** Absolute path to the handoff email-template directory (E.t3 mailer reads from here). */
     readonly handoffTemplatesDirAbsolutePath: string;
     /** True iff NODE_ENV === 'production'. Controls prompt-loader caching, CORS strictness, etc. */

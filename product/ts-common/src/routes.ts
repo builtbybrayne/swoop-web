@@ -62,6 +62,17 @@ export const ChatRequestSchema = z
      * planning/03-exec-crosscut-test-mode-model-picker.md.
      */
     model: z.string().min(1).max(128).optional(),
+    /**
+     * Staff JWT forwarded by the UI on every request when the staff member
+     * has authenticated (staff-auth task). Optional so existing sessions
+     * without the field round-trip cleanly — absent token → visitor session,
+     * no error. The orchestrator validates this server-side and sets
+     * session.staff + session.mode; the client value is never trusted as-is.
+     *
+     * Mirror of how B.t12 added `clientTime` — additive, backward-compatible,
+     * `.strict()` accepts it explicitly so malformed fields still 400.
+     */
+    staffToken: z.string().optional(),
   })
   .strict();
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
@@ -96,6 +107,13 @@ export const SessionBootstrapRequestSchema = z
       })
       .optional(),
     regionInterestHint: z.string().optional(),
+    /**
+     * Staff JWT forwarded by the UI on session bootstrap (staff-auth task).
+     * Optional — absent token gives a normal visitor session. Validated
+     * server-side by the orchestrator; the session.staff + session.mode
+     * flags are set from the decoded token, never from this field directly.
+     */
+    staffToken: z.string().optional(),
   })
   .strict();
 export type SessionBootstrapRequest = z.infer<typeof SessionBootstrapRequestSchema>;

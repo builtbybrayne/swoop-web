@@ -6,6 +6,10 @@ Append-only capture for ad-hoc ideas, questions, and nudges that don't have a lo
 
 ---
 
+## 2026-06-16 — Sales-team agent memory designed (T2); seasonality gap being closed
+
+Luke's 16/06 feedback (agent lacks current sales knowledge — Patagonian seasonality / refugio availability — and mis-reasons season-vs-date) is being addressed two ways. (1) **Now, independent**: a static always-on `cms/prompts/system/20_field-notes.md` seeded with the seasonal facts currently *trapped* in conditionally-loaded skills (`arrived-with-ai-itinerary`, `engaging-a-planner`, `group-tour-surfacing-for-solos`, `pattern-budget-solo-traveller`) + the Southern-Hemisphere season-inversion anchor drafted in the 2026-05-18 entry below (still unshipped — this finally lands it), under an authoritative-framing header. Authoring pending Alastair (content/voice). (2) **The general capability**: inline sales-authored agent memory — [planning/02-impl-sales-memory.md](planning/02-impl-sales-memory.md) (DRAFT T2 + `sm-*` decisions). The 2026-05-18 seasonality-anchor note below is effectively superseded by (1).
+
 ## 2026-06-11 — Handoff submit rejected when agent's specialistSummary > 500 chars
 
 Caught live during the widget-styling verification run: the agent wrote a `specialistSummary` longer than the Zod `reasonText` max(500) in `@swoop/common`, so `/handoff/submit` rejected the whole submission and the visitor saw "We couldn't send your details just now (reasonText: String must contain at most 500 character(s))". A visitor losing the handoff because the agent over-wrote is the worst failure mode for the core conversion moment.

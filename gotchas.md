@@ -248,6 +248,28 @@ Both configured in `product/orchestrator/src/config/schema.ts` as `DEFAULT_ORCHE
 
 ---
 
+## Opus 4.7+ / Fable reject `temperature` (and `top_p`/`top_k`) — 400 "deprecated for this model"
+
+**Symptom**: an agent on `claude-opus-4-8` (or 4.7 / Fable 5) 400s on *every* turn with `invalid_request_error: temperature is deprecated for this model`. Sonnet 4.6 / Haiku 4.5 are unaffected — they still accept `temperature`.
+
+**Cause**: Opus 4.7+ and Fable removed the sampling params (`temperature` / `top_p` / `top_k`); steer via prompting + `effort` instead. The `ClaudeLlm` shim ([product/orchestrator/src/agent/claude-llm.ts](product/orchestrator/src/agent/claude-llm.ts)) used to send `temperature` unconditionally (default 0.7) — fine for the Sonnet conversational agent + Haiku triage, but the T3-3 Opus memory agent 400'd on every turn. **Caught only by a live-Anthropic smoke; all mocked-LLM unit tests passed.**
+
+**Fix (landed `a7a29ed`)**: `modelAcceptsTemperature(model)` in `claude-llm.ts` — the shim omits `temperature` for `claude-opus-4-{7,8,…}` / `claude-opus-5+` / `claude-fable-*` and still sends it for Sonnet/Haiku/Opus≤4.6. Add another Opus-tier agent and you get correct behaviour for free; update the guard when a new family changes the contract. Authoritative reference: the `claude-api` skill (model-migration guide).
+
+**Lesson**: anything touching the agent graph or a new model id needs a real-Anthropic smoke — mocked-LLM tests cannot catch a model-specific 400.
+
+---
+
+## Memory/agent tools must hide auto-injected fields from the agent-facing schema
+
+**Symptom**: the Opus memory agent, on "yes, save it", asked the staff member *"whose name should I record as the author?"* instead of calling `memory_store`.
+
+**Cause**: the connector memory `*InputSchema`s carry `author` (required) + `staffToken` (optional) — but those are **auto-injected** by the orchestrator (`buildMemoryTools` in [product/orchestrator/src/connector/memory-tools.ts](product/orchestrator/src/connector/memory-tools.ts): author = JWT name, token = session token). The tools originally exposed the FULL input schema to the agent, so it saw `author` as required and dutifully solicited it.
+
+**Fix (landed `a7a29ed`)**: present the agent a REDUCED schema with the auto-injected fields stripped (`.omit({author, staffToken})`), while `execute` still injects them before the connector call. **General rule**: when a tool's `execute` auto-fills fields from server-side context, omit those fields from the `parameters` schema the model sees — or the model will ask the user for them.
+
+---
+
 ## `npm run X --workspaces --if-present` errors on empty workspaces
 
 Symptom: `npm run typecheck -ws --if-present` fails with `No workspaces found!` when no workspace packages have `package.json` yet.

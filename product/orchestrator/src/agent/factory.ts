@@ -42,6 +42,8 @@ import type { PromptLoader } from './prompt-loader.js';
 import { ClaudeLlm } from './claude-llm.js';
 import { loadSkillsFromDir, type LoadedSkill } from './skill-loader.js';
 import { buildSkillsPromptInjection } from './skills-prompt-injection.js';
+import { loadSalesMemoryBlock } from './sales-memory-loader.js';
+import type { ConnectorClient } from '../connector/client.js';
 
 export interface BuildAgentParams {
   readonly config: Config;
@@ -60,6 +62,25 @@ export interface BuildAgentParams {
    * (planning/03-exec-crosscut-test-mode-model-picker.md, M-PICK-1).
    */
   readonly modelId?: string;
+  /**
+   * Connector MCP client — used per-turn to read the active sales-memory set
+   * (T3-4 / sm-6). When omitted (e.g. unit tests that don't need memory
+   * loading), the memory block is silently skipped and the instruction is
+   * assembled from prompt + skills only.
+   *
+   * The connector is the only path to the active-memory set (decision E.11:
+   * orchestrator never queries Postgres directly). No app-level cache here —
+   * each turn reads fresh; shared-DB propagation handles cross-instance
+   * consistency.
+   */
+  readonly connectorClient?: ConnectorClient;
+  /**
+   * The authoritative header for the sales-memory block (loaded from
+   * cms/prompts/memory/loaded-header.md via loadMemoryPrompts at boot).
+   * When omitted (e.g. unit tests that don't need memory loading), the memory
+   * block is silently skipped.
+   */
+  readonly memoryLoadedHeader?: string;
 }
 
 export interface BuildAgentResult {
@@ -103,6 +124,8 @@ export async function buildOrchestratorAgent({
   promptLoader,
   tools = [],
   modelId,
+  connectorClient,
+  memoryLoadedHeader,
 }: BuildAgentParams): Promise<BuildAgentResult> {
   const model = new ClaudeLlm({
     model: modelId ?? config.ORCHESTRATOR_MODEL,
@@ -174,7 +197,36 @@ export async function buildOrchestratorAgent({
     // optional bodies appendix) is appended after the brief — manual
     // replacement for ADK's broken SkillToolset.processLlmRequest
     // pipeline. See skills-prompt-injection.ts + gotchas.md.
-    instruction: () => `${promptLoader.load()}\n\n---\n\n${skillsInjection}${thinkingFallback}`,
+    // T3-4 (sm-6): async InstructionProvider — reads the active sales-memory
+    // set from the connector on EVERY turn so every Cloud Run instance folds
+    // in a write on its next turn (shared-DB, no per-instance cache). ADK's
+    // InstructionProvider type accepts `() => string | Promise<string>`, so
+    // the async upgrade is a transparent extension.
+    //
+    // Placement: base = prompt + skills injection + (RL.3) thinking belt — all
+    // boot-static, so they form the cache-stable prefix. The sales-memory block
+    // is appended AFTER base; it changes only when a memory is written (one
+    // cache-bust, then stable again), so the Anthropic prompt cache
+    // (cache_control: ephemeral, Perf-1) keeps hitting between writes. The belt
+    // is '' when thinking is on (RL.3), so it doesn't perturb the prefix then.
+    //
+    // Connector-client absent (test/no-memory path): skip the block silently
+    // so tests that don't wire a connector still work.
+    instruction: async () => {
+      const base = `${promptLoader.load()}\n\n---\n\n${skillsInjection}${thinkingFallback}`;
+      if (!connectorClient || !memoryLoadedHeader) return base;
+      try {
+        const memoryBlock = await loadSalesMemoryBlock(connectorClient, memoryLoadedHeader);
+        return memoryBlock.length > 0 ? `${base}\n\n---\n\n${memoryBlock}` : base;
+      } catch (err) {
+        // Connector hiccup must not break the user turn. Log and degrade
+        // gracefully — the instruction is assembled without the memory block.
+        console.warn(
+          `[orchestrator] sales-memory load failed (omitting block): ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return base;
+      }
+    },
     // Connector FunctionTools as top-level siblings of the SkillToolset.
     // The SkillToolset contributes the 5 skill-management tools
     // (list_skills / load_skill / etc.). Its processLlmRequest hook never

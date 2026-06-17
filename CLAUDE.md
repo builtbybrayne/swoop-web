@@ -119,6 +119,7 @@ To find every open review-driven item: `grep "code-review fixes" planning/03-exe
 **Be careful about:**
 - The `commercials/` Obsidian files occasionally deadlock when Box is syncing. If a `Read` fails with EDEADLK, fall back to the Box MCP.
 - The `swoop` skill's PoC path references use `~/studio/projects/swoop/` lowercase; the actual repo is at `~/Studio/projects/swoop/` (capital S). Same location, case-insensitive on macOS. The symlink `chatgpt_poc` -> `../swoop` in this repo normalises the access path.
+- The **understand-anything** plugin (`/understand` builds a code knowledge graph of `product/`; `/understand-dashboard` browses it — a codebase-comprehension aid for planning) serves its dashboard on **port 8173, not Vite's default 5173**: `product/ui/` owns 5173 with `strictPort`, so a dashboard there hard-fails the UI dev server. The plugin-cache `vite.config.ts` is patched to default to 8173; if a plugin update resets it, launch with `--port 8173`. Graph output lives under gitignored `product/.understand-anything/`.
 
 ---
 

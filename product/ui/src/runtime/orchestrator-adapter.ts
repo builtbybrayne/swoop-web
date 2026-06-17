@@ -40,6 +40,7 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { emitErrorRaised, emitEvent, messageOf, parseSseFrames } from "@swoop/common";
 import { getDevModelOverride } from "./dev-model-store";
+import { readStaffToken } from "../disclosure/use-staff-auth";
 
 /** Key used to persist the session id in tab-scoped storage. */
 export const SESSION_STORAGE_KEY = "swoop.session.id";
@@ -476,6 +477,10 @@ export function createOrchestratorTransport<
       // also ignores the field outside dev + allow-list (M-PICK-2/3) — the
       // client gate is convenience, not the security boundary.
       const modelOverride = getDevModelOverride();
+      // staff-auth — attach the staff JWT if one is stored. The orchestrator
+      // validates it server-side and sets session.staff + session.mode; the
+      // value here is never trusted as a client flag.
+      const staffToken = readStaffToken();
 
       const body = JSON.stringify({
         ...(extraBody ?? {}),
@@ -483,6 +488,7 @@ export function createOrchestratorTransport<
         message: latestUserMessage,
         clientTime,
         ...(modelOverride ? { model: modelOverride } : {}),
+        ...(staffToken ? { staffToken } : {}),
       });
 
       let response: Response;

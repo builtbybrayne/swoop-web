@@ -236,6 +236,8 @@ Match the contributor's register. Luke (CEO, short comms): short reply, no pream
 
 A sales-team-facing Claude skill is on the roadmap (TBD timing — see the sales doc's *Future: a Claude skill to help write good feedback* section). It'll help contributors shape requests **before** they land in the Google Doc, asking the questions the prompt engineer would ask. Implications for the prompt engineer:
 
+> **2026-06-16 — related but distinct workstream.** A separate capability now covers the *knowledge* slice — facts the agent should hold (e.g. seasonality) — via **inline** sales-authored agent memory: an authed staff member tells the live agent *"remember…"* and it persists to a Postgres store loaded into every conversation. Planned in [planning/02-impl-sales-memory.md](../planning/02-impl-sales-memory.md) (DRAFT, `sm-*` decisions). Keep **this** Google-Doc loop for *behaviour / voice* requests; the memory mechanism owns *knowledge facts*. The two are likely to converge later in how they elicit and curate, but they are not the same surface.
+
 - **Requests will arrive better-shaped.** Trigger and visitor-signal more often present; sizing less often required from scratch.
 - **The skill's elicitation pattern is downstream of this doc.** When the skill is authored, its question set should mirror the data-vs-pattern test in §2 and the pushback scripts in §5. Keep this doc the canonical source for *what good shaping looks like*; the skill is the interactive packaging.
 - **Don't pre-empt the skill's authoring** — it lands when sales-side volume and shape signal it's worth the build. Until then, the Google Doc + this workflow does the work.

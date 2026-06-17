@@ -120,6 +120,10 @@ export interface AnthropicClientLike {
  * bare-alias id; forward-safe for opus 4.8 / 4.9 / … by comparing the minor
  * version. See planning/03-exec-crosscut-test-mode-model-picker.md (the
  * temperature-400 gotcha) and the claude-api skill's current-models table.
+ *
+ * This single guard also covers the Opus memory agent (sm-1, Opus 4.8): it
+ * returns false there, so the request omits temperature — superseding the
+ * earlier `modelAcceptsTemperature` helper that did the same job.
  */
 export function modelAcceptsSamplingParams(modelId: string): boolean {
   const id = modelId.toLowerCase();

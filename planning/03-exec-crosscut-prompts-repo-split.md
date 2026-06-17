@@ -9,6 +9,8 @@
 > non-technical contributors' workflow. The override-repo + bootstrap-clone design stays
 > on the shelf in case sales-team write access becomes a real need later. Body preserved
 > as path-not-taken design thinking.
+>
+> **2026-06-16 update**: that need arrived (Luke's 16/06 feedback) — and it's being met *without* this override-repo split. Sales-team writes go to a Postgres memory store via an authed, in-session Opus agent, loaded into the prompt at runtime. No second repo, no bootstrap-clone, no PATs. See [02-impl-sales-memory.md](02-impl-sales-memory.md).
 
 **Status**: Draft. Awaiting ratification.
 **Authored**: 2026-05-21

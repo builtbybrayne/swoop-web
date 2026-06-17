@@ -49,6 +49,7 @@ import {
   OpeningScreen,
   PrivacyInfoModal,
   useConsent,
+  useStaffAuth,
 } from "./disclosure";
 import { ErrorBanner, useRuntimeErrors } from "./errors";
 import { usePreflight, useRehydrate } from "./session";
@@ -329,6 +330,12 @@ export default function App() {
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
+
+  // staff-auth: register window.swoop_login() + handle ?swoop_staff_login=1
+  // URL param trigger. Both fire once on mount. No state is exposed here —
+  // the JWT is stored in localStorage and read imperatively by the transport
+  // before each /session and /chat request.
+  useStaffAuth();
 
   // Transport is created once and reused. It reads the current session id
   // from sessionStorage per-request, so a fresh-chat / restart that mints
