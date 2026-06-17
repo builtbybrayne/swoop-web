@@ -23,7 +23,12 @@ import type {
   MessageCreateParamsStreaming,
 } from '@anthropic-ai/sdk/resources/messages/messages.js';
 
-import { ClaudeLlm, type AnthropicClientLike } from '../claude-llm.js';
+import {
+  ClaudeLlm,
+  buildThinkingFragment,
+  modelUsesAdaptiveThinking,
+  type AnthropicClientLike,
+} from '../claude-llm.js';
 import type { LlmRequest, LlmResponse } from '@google/adk';
 
 function streamFrom(events: RawMessageStreamEvent[]): AsyncIterable<RawMessageStreamEvent> {
@@ -387,5 +392,110 @@ describe('ClaudeLlm.generateContentAsync', () => {
       expect(capture.params?.system).toBeUndefined();
       expect(capture.params?.tools).toBeUndefined();
     });
+  });
+});
+
+// RL.1/RL.2/RL.4 — native thinking. Pure mapping surface (per-family) plus the
+// request-shape wiring. See planning/03-exec-crosscut-reasoning-leak-native-thinking.md.
+describe('modelUsesAdaptiveThinking', () => {
+  const cases: Array<[string, boolean]> = [
+    ['claude-sonnet-4-6', true],
+    ['claude-opus-4-6', true],
+    ['claude-opus-4-8', true],
+    ['claude-fable-5', true],
+    ['claude-sonnet-4-5-20250929', false],
+    ['claude-sonnet-4-0', false],
+    ['claude-opus-4-5-20251101', false],
+    ['claude-haiku-4-5-20251001', false],
+  ];
+  it.each(cases)('%s -> %s', (model, expected) => {
+    expect(modelUsesAdaptiveThinking(model)).toBe(expected);
+  });
+});
+
+describe('buildThinkingFragment', () => {
+  it('returns {} when disabled, regardless of model', () => {
+    expect(buildThinkingFragment('claude-sonnet-4-6', { enabled: false, maxTokens: 8192 })).toEqual({});
+    expect(
+      buildThinkingFragment('claude-sonnet-4-5-20250929', { enabled: false, maxTokens: 8192 }),
+    ).toEqual({});
+  });
+
+  it('uses adaptive thinking for Sonnet 4.6 (no effort by default)', () => {
+    expect(buildThinkingFragment('claude-sonnet-4-6', { enabled: true, maxTokens: 8192 })).toEqual({
+      thinking: { type: 'adaptive' },
+    });
+  });
+
+  it('adds output_config.effort for adaptive models when effort is set', () => {
+    expect(
+      buildThinkingFragment('claude-opus-4-8', { enabled: true, effort: 'medium', maxTokens: 8192 }),
+    ).toEqual({ thinking: { type: 'adaptive' }, output_config: { effort: 'medium' } });
+  });
+
+  it('uses adaptive for the Fable family', () => {
+    expect(buildThinkingFragment('claude-fable-5', { enabled: true, maxTokens: 8192 })).toEqual({
+      thinking: { type: 'adaptive' },
+    });
+  });
+
+  it('falls back to legacy enabled+budget for Sonnet 4.5; budget < max_tokens, >= 1024, no effort', () => {
+    const frag = buildThinkingFragment('claude-sonnet-4-5-20250929', {
+      enabled: true,
+      effort: 'high', // ignored on the legacy path — effort errors on 4.5
+      maxTokens: 8192,
+    });
+    expect(frag).toEqual({ thinking: { type: 'enabled', budget_tokens: 4096 } });
+    expect('output_config' in frag).toBe(false);
+  });
+
+  it('clamps the legacy budget to >= 1024 and < max_tokens for small max_tokens', () => {
+    const frag = buildThinkingFragment('claude-haiku-4-5-20251001', {
+      enabled: true,
+      maxTokens: 1536,
+    });
+    const budget = (frag.thinking as { type: 'enabled'; budget_tokens: number }).budget_tokens;
+    expect(budget).toBeGreaterThanOrEqual(1024);
+    expect(budget).toBeLessThan(1536);
+  });
+});
+
+describe('ClaudeLlm thinking wiring (request shape)', () => {
+  it('includes adaptive thinking in the request when enabled', async () => {
+    const capture: { params?: MessageCreateParamsStreaming; signal?: AbortSignal } = {};
+    const llm = new ClaudeLlm({
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      thinkingEnabled: true,
+      client: stubClient([{ type: 'message_stop' }], capture),
+    });
+    await collect(llm.generateContentAsync(baseRequest({ model: 'claude-sonnet-4-6' })));
+    expect(capture.params?.thinking).toEqual({ type: 'adaptive' });
+  });
+
+  it('omits thinking and output_config entirely when disabled', async () => {
+    const capture: { params?: MessageCreateParamsStreaming; signal?: AbortSignal } = {};
+    const llm = new ClaudeLlm({
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      thinkingEnabled: false,
+      client: stubClient([{ type: 'message_stop' }], capture),
+    });
+    await collect(llm.generateContentAsync(baseRequest({ model: 'claude-sonnet-4-6' })));
+    expect(capture.params?.thinking).toBeUndefined();
+    expect(capture.params?.output_config).toBeUndefined();
+  });
+
+  it('wires effort into output_config when set and thinking is on', async () => {
+    const capture: { params?: MessageCreateParamsStreaming; signal?: AbortSignal } = {};
+    const llm = new ClaudeLlm({
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      thinkingEnabled: true,
+      effort: 'low',
+      client: stubClient([{ type: 'message_stop' }], capture),
+    });
+    await collect(llm.generateContentAsync(baseRequest({ model: 'claude-sonnet-4-6' })));
+    expect(capture.params?.output_config).toEqual({ effort: 'low' });
   });
 });

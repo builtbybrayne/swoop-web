@@ -23,13 +23,16 @@ import path from 'node:path';
 import { z } from 'zod';
 
 /**
- * Default Claude Sonnet model id for the orchestrator.
+ * Default Claude model id for the orchestrator.
  *
- * Pinned to the Sonnet that was current when B.t1 was implemented
- * (2026-04-22). Override via `ORCHESTRATOR_MODEL` (or legacy `PRIMARY_MODEL`)
- * to test other tiers without a code change.
+ * RL.1 (2026-06-17): moved from `claude-sonnet-4-5-20250929` to the
+ * `claude-sonnet-4-6` bare alias so the orchestrator runs native **adaptive**
+ * thinking (the producer half of decision B.13). Sonnet 4.5 only supports the
+ * legacy `{enabled, budget_tokens}` thinking mode; 4.6 is the same $3/$15 tier.
+ * Bare alias is intentional — never date-suffix 4.6 (see gotchas.md). Override
+ * via `ORCHESTRATOR_MODEL` (or legacy `PRIMARY_MODEL`) to test other tiers.
  */
-export const DEFAULT_ORCHESTRATOR_MODEL = 'claude-sonnet-4-5-20250929';
+export const DEFAULT_ORCHESTRATOR_MODEL = 'claude-sonnet-4-6';
 
 /**
  * Default model id for the functional classifier agent (B.t7).
@@ -91,7 +94,28 @@ export const configSchema = z
     // --- Orchestrator agent model ---------------------------------------
     ORCHESTRATOR_MODEL: z.string().trim().min(1).default(DEFAULT_ORCHESTRATOR_MODEL),
     ORCHESTRATOR_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.7),
-    ORCHESTRATOR_MAX_TOKENS: z.coerce.number().int().positive().default(2048),
+    // RL.5 (2026-06-17): bumped 2048 → 8192 so native thinking has output
+    // headroom — adaptive thinking spends output tokens, and 2048 starved the
+    // visible answer. Streaming is always on, so large values are timeout-safe.
+    ORCHESTRATOR_MAX_TOKENS: z.coerce.number().int().positive().default(8192),
+
+    // --- Native thinking (RL.2 / RL.4, 2026-06-17) ----------------------
+    // ORCHESTRATOR_THINKING_ENABLED gates the Anthropic `thinking` request
+    // param — the producer half of decision B.13. Default ON: it's the fix for
+    // the reasoning-leak (the model narrated its planning as visible text
+    // because it had no reasoning channel). Flip to false as a latency escape
+    // hatch; when off, factory.ts injects a "work silently" belt into the
+    // system prompt instead. Off only if explicitly 'false'/'0'.
+    ORCHESTRATOR_THINKING_ENABLED: z
+      .string()
+      .default('true')
+      .transform((s) => s.toLowerCase() !== 'false' && s !== '0'),
+    // Thinking-depth ↔ latency/cost lever. Server-side config only — NOT a UI
+    // control (the dev model picker is the only visual surface). Applied only
+    // when thinking is enabled AND the model supports `effort` (Sonnet 4.6+,
+    // Opus 4.6+, Fable — it errors on Sonnet 4.5 / Haiku). Unset → omitted →
+    // the model's own default (high).
+    ORCHESTRATOR_EFFORT: z.enum(['low', 'medium', 'high', 'max']).optional(),
 
     // --- Functional classifier model (B.t7 consumes) --------------------
     FUNCTIONAL_CLASSIFIER_MODEL: z.string().trim().min(1).default(DEFAULT_CLASSIFIER_MODEL),

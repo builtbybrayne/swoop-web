@@ -74,6 +74,14 @@ export async function buildOrchestratorAgent({
   const model = new ClaudeLlm({
     model: modelId ?? config.ORCHESTRATOR_MODEL,
     apiKey: config.ANTHROPIC_API_KEY,
+    // RL.5: thread the config max-tokens/temperature through (they previously
+    // defaulted inside ClaudeLlm and were never wired) + RL.2/RL.4 native
+    // thinking. The dev model picker passes `modelId`; thinking config applies
+    // to whichever model is selected (buildThinkingFragment branches per family).
+    maxTokens: config.ORCHESTRATOR_MAX_TOKENS,
+    temperature: config.ORCHESTRATOR_TEMPERATURE,
+    thinkingEnabled: config.ORCHESTRATOR_THINKING_ENABLED,
+    effort: config.ORCHESTRATOR_EFFORT,
   });
 
   const skills: LoadedSkill[] = await loadSkillsFromDir(config.skillsDirAbsolutePath);
