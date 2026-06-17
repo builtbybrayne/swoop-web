@@ -2,6 +2,15 @@
 
 **Snapshot date**: 2026-06-10, evening (Luke Loom feedback round 2: triaged AND executed same-day — 8 Tier-3 plans merged to `main`, fresh-install verification green. ⚠ The per-chunk sections of this file lag reality from 2026-05-14 onwards; read [planning/reviews/2026-05-27-ingest-and-state-of-play.md](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the 27 May build snapshot, then git log for the late-May/early-June waves: find_tips ninth tool, AntiRepetition, visual sidebar, Puma memory-bug fix.)
 
+## 2026-06-16 — Analytics F-c: durable event sink + Swoop dev-handover docs (worktree `analytics-review`, merged to `main`)
+
+Forked analytics session (sibling to the Luke-feedback workstreams). Two threads, both on `main`:
+
+- **F-c collection layer** — the chunk-F event stream was richly emitted but **stdout-only**, so nothing accrued. New `EVENT_SINK` env selects a pluggable sink via the existing `setEventSink` seam: `stdout` (dev) · `postgres` (durable `event_log`, **migration 020**, single store per C.18 — works on the demo Mini today, SQL-queryable) · `cloud-logging` (severity-tagged structured stdout → Cloud Logging + a `severity>=ERROR` alert policy = the dev-team error surface). `severityForEvent`/`messageForEvent` + pure sinks in `@swoop/common`; pg sink + resolver in `@swoop/connector`; registered at both process startups. Retired the dead `tool.failed` kind (F.sink-5). Assessment + plan: [reviews/2026-06-16-analytics.md](planning/reviews/2026-06-16-analytics.md) + [03-exec-observability-c.md](planning/03-exec-observability-c.md). **Operator steps remaining**: the live Postgres smoke (mocked in tests, never run live) + the GCP flip (gated on the AI-Pat-Chat IAM) — how-to in [docs/ops/observability.md](product/docs/ops/observability.md). Self-review caveat: Cloud Error Reporting's *grouped view* needs ERROR events formatted as `ReportedErrorEvent` (small follow-up); the alert policy covers the core need meanwhile.
+- **Swoop dev handover** — new [`product/handover/`](product/handover/README.md): `productionisation.md` (first-time stand-up + the consolidated provisioning checklist) + `maintenance.md` (run & evolve) + the relocated `ui-integration.md` (was `ui/HANDOVER.md`; D.24 superseded). Scope: [03-exec-prod-handover.md](planning/03-exec-prod-handover.md). Sales handover deferred. Provisioning tracked in [questions.md](questions.md).
+
+**Verified**: typecheck clean (5 workspaces); common 224 / connector 217(+5sk) / orchestrator 222(+21sk) green at the F-c tip; clean 3-way merge to `main` (`df67a6a`). `020_event_log` + the sales-memory branch's `021_sales_memory` coexist cleanly (no number collision).
+
 ## 2026-06-17 — Sales-team agent memory: mechanism BUILT (T3-1…T3-4), verified, committed (Cowork session, worktree `sales-knowledge-feedback`)
 
 The 16/06 design (DRAFT T2 + decisions `sm-1`…`sm-9`) is now **built and verified** on the `sales-knowledge-feedback` branch (**not** merged to main — HITL). Landed via a parallel+serial Sonnet swarm, each step reviewed against the diff + fresh-install-verified:
