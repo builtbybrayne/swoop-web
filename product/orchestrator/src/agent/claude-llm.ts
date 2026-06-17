@@ -256,9 +256,14 @@ export class ClaudeLlm extends BaseLlm {
       max_tokens: this.maxTokens,
       stream: true,
       messages,
-      ...(modelAcceptsSamplingParams(effectiveModel)
-        ? { temperature: this.temperature }
-        : {}),
+      // Temperature is incompatible with thinking: Anthropic requires
+      // `temperature=1` (or unset) when thinking/adaptive mode is on — a 400
+      // otherwise. We omit it entirely when thinking is enabled (stick with the
+      // model default), and otherwise send it only for families that still
+      // accept sampling params (not Opus 4.7+ / Fable).
+      ...(this.thinkingEnabled || !modelAcceptsSamplingParams(effectiveModel)
+        ? {}
+        : { temperature: this.temperature }),
       // RL.2/RL.4: native thinking — the producer half of B.13. Per-family
       // shape (adaptive for Sonnet 4.6+/Opus 4.6+/Fable; legacy enabled+budget
       // otherwise); empty when disabled. Reasoning is stripped from the SSE

@@ -498,4 +498,31 @@ describe('ClaudeLlm thinking wiring (request shape)', () => {
     await collect(llm.generateContentAsync(baseRequest({ model: 'claude-sonnet-4-6' })));
     expect(capture.params?.output_config).toEqual({ effort: 'low' });
   });
+
+  it('omits temperature when thinking is enabled (Anthropic requires temp=1/unset with thinking)', async () => {
+    const capture: { params?: MessageCreateParamsStreaming; signal?: AbortSignal } = {};
+    const llm = new ClaudeLlm({
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      thinkingEnabled: true,
+      temperature: 0.7,
+      client: stubClient([{ type: 'message_stop' }], capture),
+    });
+    await collect(llm.generateContentAsync(baseRequest({ model: 'claude-sonnet-4-6' })));
+    expect(capture.params?.thinking).toEqual({ type: 'adaptive' });
+    expect(capture.params?.temperature).toBeUndefined();
+  });
+
+  it('sends temperature when thinking is disabled on a sampling-capable model', async () => {
+    const capture: { params?: MessageCreateParamsStreaming; signal?: AbortSignal } = {};
+    const llm = new ClaudeLlm({
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      thinkingEnabled: false,
+      temperature: 0.5,
+      client: stubClient([{ type: 'message_stop' }], capture),
+    });
+    await collect(llm.generateContentAsync(baseRequest({ model: 'claude-sonnet-4-6' })));
+    expect(capture.params?.temperature).toBe(0.5);
+  });
 });
