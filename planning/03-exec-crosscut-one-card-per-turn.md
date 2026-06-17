@@ -125,3 +125,83 @@ Phase 1+2 (prompt + description) ~0.5 day incl. Alastair's editorial pass. Phase
 2. **§4 wording** — the draft in Phase 1 is a first cut; final voice is your editorial call (chunk G / G.7).
 3. **Confirm** the multi-item caps + multi-hybrid residual stay deferred (§6) — i.e. ship illustrate-fallback first and measure, before any harder curation.
 4. **Luke ambiguity** — proceeding on "one *block* per turn", not one literal card. Worth a line back to Luke at review (questions.md), but not blocking.
+
+---
+
+## 2026-06-16 (later) — revised model: sales-intention visual ladder + root cause of the show_options regression
+
+**Supersedes** the flat "one card per turn / illustrate-as-fallback" framing in §1–§5 above (revises G.one-card-1/2). `D.one-card-1` (show_options → sidebar wiring, committed `4bba791`) is unaffected and stays. Reframed by Alastair from Luke's single line ("just 1 card per response") to the underlying sales intention. Branch rebased onto `main` `d28d893` (2026-06-16).
+
+### Root cause — why `show_options` stopped firing after `find_options`
+The §4 rewrite (commit `2d306ff`) created a **system-prompt-vs-tool-description conflict**:
+- `find_options`/`show_options` descriptions (unchanged, correct) hold the contract: *a browse made with a concrete want **MUST** end in `show_options` — never nothing.*
+- New §4 reframed `find_options` as a free, render-nothing consult (*"Inform widely, show narrowly … browses privately … call those as freely as the moment needs … the one-card default governs what the visitor sees, not what you consult"*) and made showing a rationed, discretionary act. The model resolved the tension by browsing then narrating in prose — gatekeeping the visitor out of the options.
+
+**Reproduced (£0, from the prior agent's runs):** `runs/luke-rebased-2026-06-16` = **4/12**. luke-03 browsed ×2, showed 0 (*"never displayed cards … prose only"*); luke-10 showed trips once then never showed the hotels; luke-08 showed once then abandoned curation. Regression vs the 12 Jun baseline (luke-03/10 were not failures there); present from the **first** one-card run, so it traces to the §4 prose, not the later illustrate recal.
+
+### The revised model — visual priority ladder (the spec)
+Graded dial (MoSCoW); **MUST** only where reliability is non-negotiable and the trigger is unambiguous. Work down the ladder:
+
+1. **Trips/tours are the move → show them (MUST, scoped).** IF trips/tours are the right move for the turn AND the agent browses with `find_options`, THEN the best results MUST be shown via `show_options` (primary + also_interesting, one widget). Curate the best; never browse-then-show-nothing; never total gatekeeping. **NOT "trips every turn"** — whether trips are the move, and whether to browse at all, stays judgment (early dreamers get conversation). Binds only the find→show coupling.
+2. **New theme/place/idea, no trips → one thematic card (SHOULD).** find_inspiring / find_someone_who / find_proof / lookup. **Two acceptable when the visitor genuinely raised two distinct things** — permission, not a target.
+3. **Ongoing theme, nothing new → MAY add a related card**, frequency set by conversational mode: discovery (INSPIRE/EXCITE) leans visual; settled continuance eases off. Handle: *has a new concept entered since the last card?*
+4. **Nothing else, but a visual helps → `illustrate` is the floor (MAY).** Pure-sensory pull, or a live theme with no card for a few turns. Anti-stacking kept: SHOULD NOT pile illustrate on a card that already carries imagery.
+
+Governing principle (#6): the surface stokes imagination → exploration → excitement → desire to convert; balance overload against barrenness. Agent has leeway (#5) to vary and read what moves *this* visitor.
+
+**Why this beats the flat cap:** measured busyness was (a) cumulative sidebar accumulation (avg 3.7 / max 15 per session — a UI axis, deferred) and (b) illustrate riding along on image-bearing cards (59 turns — killed by anti-stacking), NOT genuine two-valuable-card turns. A blunt per-turn cap fought the wrong enemy and gagged `show_options`. In this codebase the demonstrated failure mode of the visual tools is *under*-firing ([find_someone_who debug](reviews/2026-05-27-find-someone-who-debug.md); the show-step's SHOULD→MUST history), so the dial coerces only rung 1.
+
+### Changes applied (2026-06-16)
+- `cms/prompts/system/00_why.md` §4: replaced the one-card block with the ladder; replaced "One strong card beats a stack" with the governing principle. **Removed the "inform widely … browses privately, call freely … not what you consult" line** (the poison).
+- `cms/prompts/tools/illustrate/description.md`: realigned from "first-class / often the best card" to "the floor of the visual channel" (consistent with rung 4); kept available for genuine seeing moments + anti-stacking.
+- `find_options`/`show_options` descriptions: **unchanged** — already correct; §4 now aligns with them instead of overriding.
+- Voice is a draft for Alastair's editorial pass (chunk G / G.7).
+
+### Verification
+- Deterministic: `tool_call_order` find_options→show_options on luke-03/08/10 + `agent-212-kayaking-relevance` (the contract check).
+- Judge rubric: per-turn calm without going barren; rung-1 contract met.
+- Targeted subset run on a **private-port stack** (connector 3003 / orchestrator 8081 — avoids the running `luke-questioning-tone` stack on the defaults), then one full `luke-` family pass.
+
+### Verification result (2026-06-17, private-stack 8081→3003, single judged runs) — PARTIAL
+
+| scenario | contract (find→show) | note |
+|---|---|---|
+| luke-03 | ✅ restored | 4 browse→show pairs (was **0** show pre-fix); ~1 card/turn; judge PASS |
+| luke-10 | ✅ restored | `find_options`→`show_options` order assertion now passes (was the bug); residual judge fail = hotel-card *relevance*, separate/pre-existing |
+| kayaking (agent-212) | ❌ persists | `find_options` ×4 + `find_inspiring` ×4 + prose → `handoff`; **`show_options` 0** |
+| luke-08 | ❌ (noisy) | `find_options` 0 / `show_options` 0 (used `find_inspiring` ×4 + `lookup` ×4); only 2 turns — user-agent variance + pre-existing weak spot |
+
+**Two distinct mechanisms.** The §4 fix cured the *consult-reframe* path (find_options-as-free-lookup → prose): luke-03/10. **Residual path = `find_inspiring`/prose substituting for `show_options`** — the one-card ethos lets a rung-2 inspire card take the turn's slot and discharge the agent's sense of "I showed a card", so after browsing trips it skips the rung-1 show. A **priority inversion**: the lower-priority rung-2 card preempts the higher-priority rung-1 obligation. On handoff-bound closes (kayaking) the §9 fire-first handoff compounds it (cf. the 12 Jun luke-11 "fire-first crowds out bring-what-you-have" calibration item).
+
+**Noise caveat:** single stochastic runs (Sonnet user-agent + agent + judge). luke-08's 0-browse / 2-turn is likely partly variance. Multi-run sampling (×3) needed to separate signal before further iteration.
+
+**Proposed refinement (pending HITL):** make explicit that *when you've browsed trips, the `show_options` card IS the one card* — a `find_inspiring`/thematic card does not discharge the trip-show obligation, and "one card" never means substituting inspiration for the trips you went looking for; a handoff-bound close still shows the near-fits first (reconcile with §9). Then re-verify each affected scenario ×3.
+
+### ×3 re-verification (2026-06-17, after the handoff/substitution refinement applied to §4 rung-1) — regression reversed; two residuals
+
+Applied: §4 rung-1 clause "neither a thematic card nor an imminent handoff discharges the trip-show" (+637 chars; prompt 73,418→74,055). Stack: connector :3017 / orchestrator :8097 (3003 was contended by another session's `reasoning-leak` stack — moved to unique ports). Per-scenario find→show contract across 3 reps:
+
+| scenario | reps showing | read |
+|---|---|---|
+| luke-10 | **3/3** | solidly fixed (was broken pre-fix) |
+| luke-08 | **2/3** | mostly; 1 rep didn't browse at all |
+| luke-03 | **1/3** | flaky (the single earlier smoke was lucky) |
+| kayaking | **0/3** | agent declines to show broad near-fits — see (3) |
+
+**1. The one-card regression is reversed** where the catalogue has real matches (luke-10 solid; luke-08/03 show in some reps).
+
+**2. The show-step is flaky under prompt control — architectural, not a wording problem.** luke-03 = 1/3 *with* the fix; the fix-#2 handoff/substitution clause did **not** move kayaking. Two prompt iterations in, returns are unreliable: prompt wording shifts the *probability* the show fires; it can't *guarantee* it. Robustly enforcing the find→show MUST likely needs a **deterministic orchestrator backstop** (detect `find_options`-this-turn + no `show_options` + showable results → auto-render top picks, or inject a forced-show nudge), reconciled with the niche-ask judgment in (3). Code change + design decision, not a tweak.
+
+**3. kayaking 0/3 is the niche-ask calibration question (12 Jun open item), NOT a contract bug.** Transcript reasoning: agent browses, gets only *"a couple of broader Patagonia options"* (no bespoke Aysén/Tortel kayaking in the catalogue), judges them not worth showing to an expert who wants the bespoke thing, routes to specialists with honest prose — invoking show_options' own *"unless the nearest fit would mislead"* exception. Fix-#2's handoff-crowding hypothesis was **wrong here**; the root is near-fit-declining. **Editorial call:** force broad near-fits onto niche experts (cards even when imperfect), or honour the prose+handoff judgment?
+
+**Open decisions (STOP-and-consult — systematic-debugging "question the instrument" after 2 fixes):** (a) kayaking calibration ruling; (b) deterministic show-step backstop vs accept the contract as probabilistic + non-gating (it's net-improved vs the regression); (c) keep or revert fix #2 (principled but unproven by the ×3).
+
+### Disposition (2026-06-17) — effort paused, committed on `worktree-one-card-per-turn` (NOT merged)
+
+The one-card regression is reversed and committed. Stack torn down; `.env` port overrides reverted. Deferred until Luke re-raises:
+
+1. **Show-step flakiness → model-upgrade workstream.** luke-03 was 1/3 *with* the fix; prompt wording shifts the probability the show fires but can't pin it. A stronger orchestrator model (separate agent's in-flight work) is the likely lever — re-run the `luke-` family after the upgrade lands before investing in a deterministic backstop.
+2. **kayaking niche-ask calibration** — Alastair's editorial call (force broad near-fits onto niche experts, or honour prose+handoff). Not a model-upgrade fix.
+3. **Optional deterministic show-step backstop** in the orchestrator (find_options-this-turn + no show_options + showable results → auto-render / force-show), reconciled with (2). Only if (1) proves insufficient.
+
+Fix #2 (handoff/substitution clause) kept — principled and harmless, though unproven by the ×3.
