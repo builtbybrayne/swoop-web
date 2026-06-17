@@ -40,6 +40,15 @@ export const DEFAULT_ORCHESTRATOR_MODEL = 'claude-sonnet-4-5-20250929';
 export const DEFAULT_CLASSIFIER_MODEL = 'claude-haiku-4-5-20251001';
 
 /**
+ * Default model id for the Opus memory agent (sm-1 / T3-3).
+ *
+ * Memory authoring is a deliberate, low-frequency staff-only task —
+ * quality beats speed, so Opus is the right tier. Override via
+ * MEMORY_AGENT_MODEL in .env without a code change (decision B.5).
+ */
+export const DEFAULT_MEMORY_AGENT_MODEL = 'claude-opus-4-8';
+
+/**
  * Package root: the directory containing this package's package.json.
  *
  * With `tsx` in dev we run from src/ directly; with `node` from dist/ after a
@@ -96,6 +105,12 @@ export const configSchema = z
     // --- Functional classifier model (B.t7 consumes) --------------------
     FUNCTIONAL_CLASSIFIER_MODEL: z.string().trim().min(1).default(DEFAULT_CLASSIFIER_MODEL),
     FUNCTIONAL_CLASSIFIER_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.2),
+
+    // --- Memory agent model (sm-1 / T3-3) --------------------------------
+    // Opus by default — memory authoring is a deliberate staff-only task
+    // where quality beats latency. Swappable via .env (decision B.5).
+    MEMORY_AGENT_MODEL: z.string().trim().min(1).default(DEFAULT_MEMORY_AGENT_MODEL),
+    MEMORY_AGENT_MAX_TOKENS: z.coerce.number().int().positive().default(2048),
 
     // --- B.t1 legacy alias ----------------------------------------------
     // Optional. If set and ORCHESTRATOR_MODEL is not explicitly set,

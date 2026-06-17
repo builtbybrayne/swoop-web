@@ -99,6 +99,30 @@ export interface AnthropicClientLike {
   };
 }
 
+/**
+ * Does this model accept the `temperature` sampling parameter?
+ *
+ * Opus 4.7+ and Fable 5 REMOVED sampling params (temperature/top_p/top_k):
+ * sending `temperature` returns a 400 ("temperature is deprecated for this
+ * model"). Opus ≤4.6, Sonnet, and Haiku still accept it. We therefore send
+ * `temperature` only for models that support it — the Opus-tier memory agent
+ * (decision B.5 / sm-1) runs on Opus 4.8 and must omit it, while the Sonnet
+ * conversational agent keeps its exact production sampling (faithful testing).
+ *
+ * Ref: Anthropic model-migration guide; confirmed by a live smoke (2026-06-17).
+ * Update this guard when a new model family changes the sampling-param contract.
+ */
+export function modelAcceptsTemperature(model: string): boolean {
+  if (/^claude-fable-/.test(model)) return false;
+  const opus = /^claude-opus-(\d+)-(\d+)/.exec(model);
+  if (opus) {
+    const major = Number(opus[1]);
+    const minor = Number(opus[2]);
+    if (major > 4 || (major === 4 && minor >= 7)) return false;
+  }
+  return true;
+}
+
 export class ClaudeLlm extends BaseLlm {
   static readonly supportedModels: Array<string | RegExp> = [/^claude-/];
 
@@ -157,7 +181,13 @@ export class ClaudeLlm extends BaseLlm {
     const params: MessageCreateParamsStreaming = {
       model: llmRequest.model ?? this.model,
       max_tokens: this.maxTokens,
-      temperature: this.temperature,
+      // Sampling params are REMOVED on Opus 4.7+ / Fable 5 (sending `temperature`
+      // 400s). Send it only where the model still accepts it (Sonnet, Haiku,
+      // Opus ≤4.6) — keeps the Sonnet conversational agent's sampling identical
+      // while the Opus memory agent (sm-1) runs clean. See modelAcceptsTemperature.
+      ...(modelAcceptsTemperature(llmRequest.model ?? this.model)
+        ? { temperature: this.temperature }
+        : {}),
       stream: true,
       messages,
       ...(systemWithCache ? { system: systemWithCache } : {}),

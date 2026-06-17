@@ -34,7 +34,12 @@ import { illustrateSpec, illustrateBody } from './illustrate.js';
 import { handoffSpec, handoffBody } from './handoff.js';
 import { handoffSubmitSpec, handoffSubmitBody } from './handoff_submit.js';
 import { showOptionsSpec, showOptionsBody } from './show_options.js';
-import type { ToolHandlerDeps } from './deps.js';
+import { memoryStoreSpec, memoryStoreBody } from './memory_store.js';
+import { memoryEditSpec, memoryEditBody } from './memory_edit.js';
+import { memoryRetireSpec, memoryRetireBody } from './memory_retire.js';
+import { memoryListActiveSpec, memoryListActiveBody } from './memory_list_active.js';
+import { memoryShowHistorySpec, memoryShowHistoryBody } from './memory_show_history.js';
+import { assertStaffTokenPresent, type ToolHandlerDeps } from './deps.js';
 import type { ToolDescriptions } from './description-loader.js';
 
 export {
@@ -53,7 +58,7 @@ export {
   type ToolInvokedSink,
 } from './_handler-runtime.js';
 
-export type { ToolHandlerDeps } from './deps.js';
+export { assertStaffTokenPresent, type ToolHandlerDeps } from './deps.js';
 
 export interface RegisterToolsOptions {
   /** Pool — borrow-and-release happens inside the handler deps. */
@@ -334,6 +339,128 @@ export function registerAllTools(
     showOptionsSpec.inputSchema,
     showOptionsSpec.outputSchema,
     (input) => showOptionsBody(input, baseDeps),
+    runtimeDeps,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sales-memory tools (T3-3 / sm-1, sm-4).
+//
+// Registered SEPARATELY from registerAllTools so the memory surface is opt-in:
+// only a connector boot that wants the staff memory-authoring feature calls
+// registerMemoryTools. The visitor agent NEVER sees these — they are exposed
+// solely to the orchestrator's Opus memory agent, which validates the staff
+// JWT and binds the token before any call reaches here.
+//
+// Unlike the conversational tools, memory tools have no cms/prompts/tools/
+// description.md (they're not visitor-facing content), so descriptions are
+// inline constants here.
+// ---------------------------------------------------------------------------
+
+export interface RegisterMemoryToolsOptions {
+  /** Pool — borrow-and-release happens inside the handler deps. */
+  readonly pool: pg.Pool;
+  /**
+   * Staff-token enforcement gate (sm-4). Injected so the connector boot can
+   * supply a real verifier (orchestrator-bound / future cryptographic check).
+   * When omitted, the mutating tools fall back to the built-in
+   * `assertStaffTokenPresent` presence backstop.
+   */
+  readonly assertStaffToken?: ToolHandlerDeps['assertStaffToken'];
+  /** Session id for envelope correlation. Tests pin; production uses 'connector-host'. */
+  readonly sessionId?: string;
+  /** Test-injectable sink for tool.invoked events. */
+  readonly sink?: HandlerRuntimeDeps['sink'];
+  /** Test-injectable clock. */
+  readonly now?: HandlerRuntimeDeps['now'];
+}
+
+/** Inline descriptions for the memory tools (no description.md — admin-only). */
+const MEMORY_TOOL_DESCRIPTIONS: Record<string, string> = {
+  memory_store:
+    'Create a new sales-memory entry (staff-only). Persists general sales ' +
+    'knowledge the agent loads into every future visitor conversation.',
+  memory_edit:
+    'Edit an existing sales-memory entry (staff-only). Requires expectedVersion ' +
+    'for optimistic concurrency.',
+  memory_retire:
+    'Retire (soft-delete) a sales-memory entry (staff-only). The row stays in ' +
+    'the DB with full version history; it is never shown to visitors again.',
+  memory_list_active:
+    'List all active (non-retired) sales-memory entries. Read-only.',
+  memory_show_history:
+    'Show the full version history for a single sales-memory entry. Read-only.',
+};
+
+/**
+ * Register the five sales-memory tools on an MCP server. Call this IN ADDITION
+ * to registerAllTools on a connector boot that enables staff memory authoring.
+ *
+ * The mutating tools (store/edit/retire) enforce the staff-token gate; the
+ * read-only tools (list_active/show_history) do not require a token.
+ */
+export function registerMemoryTools(
+  server: McpServer,
+  opts: RegisterMemoryToolsOptions,
+): void {
+  const memoryDeps: ToolHandlerDeps = {
+    withClient: buildWithClient(opts.pool),
+    // Memory tools never embed — supply a guard that fails loudly if a future
+    // memory tool tries to use it, rather than a silent no-op.
+    embedQuery: () => {
+      throw new Error('[connector/memory] embedQuery is not available to memory tools.');
+    },
+    ...(opts.assertStaffToken ? { assertStaffToken: opts.assertStaffToken } : {}),
+  };
+  const runtimeDeps: HandlerRuntimeDeps = {
+    sessionId: opts.sessionId ?? 'connector-host',
+    sink: opts.sink,
+    now: opts.now,
+  };
+
+  registerOne(
+    server,
+    memoryStoreSpec.name,
+    MEMORY_TOOL_DESCRIPTIONS.memory_store,
+    memoryStoreSpec.inputSchema,
+    memoryStoreSpec.outputSchema,
+    (input) => memoryStoreBody(input, memoryDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    memoryEditSpec.name,
+    MEMORY_TOOL_DESCRIPTIONS.memory_edit,
+    memoryEditSpec.inputSchema,
+    memoryEditSpec.outputSchema,
+    (input) => memoryEditBody(input, memoryDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    memoryRetireSpec.name,
+    MEMORY_TOOL_DESCRIPTIONS.memory_retire,
+    memoryRetireSpec.inputSchema,
+    memoryRetireSpec.outputSchema,
+    (input) => memoryRetireBody(input, memoryDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    memoryListActiveSpec.name,
+    MEMORY_TOOL_DESCRIPTIONS.memory_list_active,
+    memoryListActiveSpec.inputSchema,
+    memoryListActiveSpec.outputSchema,
+    (input) => memoryListActiveBody(input, memoryDeps),
+    runtimeDeps,
+  );
+  registerOne(
+    server,
+    memoryShowHistorySpec.name,
+    MEMORY_TOOL_DESCRIPTIONS.memory_show_history,
+    memoryShowHistorySpec.inputSchema,
+    memoryShowHistorySpec.outputSchema,
+    (input) => memoryShowHistoryBody(input, memoryDeps),
     runtimeDeps,
   );
 }

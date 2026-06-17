@@ -30,7 +30,7 @@ import {
   createConsentHandler,
   createSessionDeleteHandler,
 } from './consent.js';
-import { createChatHandler } from './chat.js';
+import { createChatHandler, type MemoryAgentProvider } from './chat.js';
 import { createSessionPingHandler } from './session-ping.js';
 import { createSessionHistoryHandler } from './session-history.js';
 import { createHandoffSubmitHandler } from './handoff-submit.js';
@@ -96,6 +96,14 @@ export interface BuildServerDeps {
    * feature disabled; `undefined` = not wired yet (treated as null).
    */
   readonly staffAuthenticator?: StaffAuthenticator | null;
+  /**
+   * Memory-agent provider (T3-3 / sm-1). Factory that builds the Opus memory
+   * agent bound to a validated staff token + name. Passed straight through to
+   * the /chat handler, which only ever invokes it on the staff + memory-mode
+   * path. Absent → memory feature not wired (visitor-only deploys, tests of
+   * the conversational surface).
+   */
+  readonly memoryAgentProvider?: MemoryAgentProvider;
 }
 
 export function buildServer(deps: BuildServerDeps): Express {
@@ -210,6 +218,7 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
       corsAllowedOrigins: deps.corsAllowedOrigins,
       triageClassifier: deps.triageClassifier,
       staffAuthenticator: deps.staffAuthenticator,
+      memoryAgentProvider: deps.memoryAgentProvider,
     }),
   );
 

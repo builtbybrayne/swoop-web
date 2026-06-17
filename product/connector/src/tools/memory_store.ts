@@ -1,14 +1,16 @@
 /**
  * `memory_store` handler — create a new sales-memory entry.
  *
- * Staff-only mutating tool. The enforcement seam rejects the call when
- * `staffToken` is absent. TODO(sm-t2-auth): a separate task wires real
- * token validation against a staff-identity store.
+ * Staff-only mutating tool. The enforcement gate (sm-4) rejects the call when
+ * the staff token is missing/invalid: it calls `deps.assertStaffToken` when
+ * injected (the orchestrator-bound verifier / future cryptographic check) and
+ * falls back to the built-in `assertStaffTokenPresent` presence backstop.
  *
  * Connector-side only. MUST NOT be registered in the orchestrator's
- * TOOL_SPECS — it must never reach the visitor agent.
+ * conversational TOOL_SPECS — it must never reach the visitor agent.
  *
- * SM.t1 (sales-memory store + CRUD, connector side).
+ * SM.t1 (sales-memory store + CRUD, connector side); T3-3 wires the real
+ * staff-token enforcement (replacing the SM.t1 TODO seam).
  */
 
 import {
@@ -19,23 +21,18 @@ import {
 } from '@swoop/common';
 
 import { createMemory } from '../data/sales-memory.js';
-import type { ToolHandlerDeps } from './deps.js';
+import { assertStaffTokenPresent, type ToolHandlerDeps } from './deps.js';
 
 export async function memoryStoreBody(
   input: MemoryStoreInput,
   deps: ToolHandlerDeps,
 ): Promise<MemoryStoreOutput> {
-  // ---------------------------------------------------------------------------
-  // Staff-token enforcement seam.
-  // TODO(sm-t2-auth): replace this presence check with real token validation.
-  // Signature the auth task targets:
-  //   assertStaffToken(input.staffToken) — throws if invalid/absent.
-  // ---------------------------------------------------------------------------
-  if (!input.staffToken || input.staffToken.trim().length === 0) {
-    throw new Error(
-      '[memory_store] Mutation rejected: staffToken is required. ' +
-        'TODO(sm-t2-auth): wire real token validation here.',
-    );
+  // Staff-token enforcement (sm-4). Injected verifier wins; presence backstop
+  // otherwise. Throws → mutation rejected before any DB write.
+  if (deps.assertStaffToken) {
+    await deps.assertStaffToken(input.staffToken);
+  } else {
+    assertStaffTokenPresent(input.staffToken, 'memory_store');
   }
 
   const memory = await deps.withClient((client) =>

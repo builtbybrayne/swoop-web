@@ -20,7 +20,9 @@ import { PACKAGE_ROOT } from '../config/index.js';
 import type { EmbedQueryFn } from '../data/embed-query.js';
 import {
   registerAllTools,
+  registerMemoryTools,
   type ToolDescriptions,
+  type ToolHandlerDeps,
 } from '../tools/index.js';
 
 function readPackageVersion(): string {
@@ -46,10 +48,26 @@ export interface CreateMcpServerDeps {
    * Stamped on every get_pricing response. Defaults to '2026-04-27'.
    */
   readonly capturedAt?: string;
+  /**
+   * Enable the staff sales-memory tools (T3-3 / sm-1). Opt-in: when true the
+   * five memory tools are registered ALONGSIDE the conversational tools so the
+   * orchestrator's Opus memory agent can call them over MCP. Off by default so
+   * a connector that doesn't serve staff memory authoring never advertises the
+   * surface. The visitor agent is unaffected either way — it has its own
+   * orchestrator-side TOOL_SPECS allow-list and never sees these tools.
+   */
+  readonly enableMemoryTools?: boolean;
+  /**
+   * Staff-token enforcement gate for the memory mutating tools (sm-4). Passed
+   * straight to `registerMemoryTools`. When omitted, the mutating tools fall
+   * back to the built-in presence backstop.
+   */
+  readonly assertStaffToken?: ToolHandlerDeps['assertStaffToken'];
 }
 
 /**
- * Build a fresh MCP server with all eleven tools registered.
+ * Build a fresh MCP server with the eleven conversational tools registered,
+ * plus (opt-in) the five staff sales-memory tools when `enableMemoryTools`.
  */
 export function createConnectorMcpServer(deps: CreateMcpServerDeps): McpServer {
   const server = new McpServer({
@@ -63,6 +81,15 @@ export function createConnectorMcpServer(deps: CreateMcpServerDeps): McpServer {
     descriptions: deps.descriptions,
     capturedAt: deps.capturedAt,
   });
+
+  // T3-3 — opt-in staff sales-memory surface (sm-1, sm-4). Registered as a
+  // sibling set; never reaches the visitor agent.
+  if (deps.enableMemoryTools) {
+    registerMemoryTools(server, {
+      pool: deps.pool,
+      ...(deps.assertStaffToken ? { assertStaffToken: deps.assertStaffToken } : {}),
+    });
+  }
 
   return server;
 }

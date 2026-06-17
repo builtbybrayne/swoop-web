@@ -232,3 +232,38 @@ export const MemoryShowHistoryOutputSchema = z
 export type MemoryShowHistoryOutput = z.infer<
   typeof MemoryShowHistoryOutputSchema
 >;
+
+// -----------------------------------------------------------------------------
+// finish_memory — signal the Opus memory agent emits when memory work is done.
+//
+// The orchestrator watches for this tool call in the memory-agent turn stream
+// and flips session.mode back to 'conversation'. The Opus agent is instructed
+// to emit this when the staff member's turn is no longer a memory instruction.
+//
+// No body content needed — the signal itself is the message. The output carries
+// a brief confirmation string the agent may echo in its handback turn.
+//
+// sm-3 (explicit handback). sm-9 (memory agent runs in a separate session and
+// emits this into that session — the orchestrator intercepts via the translated
+// stream before writing to the conversational session).
+// -----------------------------------------------------------------------------
+
+export const FinishMemoryInputSchema = z
+  .object({
+    /**
+     * Optional brief summary of what was done, for the orchestrator's
+     * confirmation to the staff member. Example: "Saved 1 new memory."
+     * If omitted the orchestrator emits a generic "Memory session closed."
+     */
+    summary: z.string().max(200).optional(),
+  })
+  .strict();
+export type FinishMemoryInput = z.infer<typeof FinishMemoryInputSchema>;
+
+export const FinishMemoryOutputSchema = z
+  .object({
+    /** Always 'ok' — the orchestrator sets mode='conversation' before returning. */
+    status: z.literal("ok"),
+  })
+  .strict();
+export type FinishMemoryOutput = z.infer<typeof FinishMemoryOutputSchema>;

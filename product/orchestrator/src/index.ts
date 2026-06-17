@@ -49,6 +49,7 @@ import {
 import { loadConfig } from './config/index.js';
 import { createPromptLoader } from './agent/prompt-loader.js';
 import { buildOrchestratorAgent } from './agent/factory.js';
+import { buildMemoryAgent } from './agent/memory-agent.js';
 import { setupConnector } from './connector/index.js';
 import {
   createSessionStore,
@@ -58,7 +59,9 @@ import {
   startPostgresSessionSweep,
 } from './session/index.js';
 import { buildServer } from './server/index.js';
+import type { MemoryAgentProvider } from './server/chat.js';
 import { buildTriageClassifier } from './functional-agents/triage-classifier.js';
+import { SharedPasswordAuthenticator } from './auth/index.js';
 
 const ORCHESTRATOR_APP_NAME = 'puma-orchestrator';
 const ANONYMOUS_USER_ID = 'anonymous';
@@ -106,6 +109,34 @@ async function main(): Promise<void> {
   });
 
   const { agent } = await buildOrchestratorAgent({ config, promptLoader, tools: connector.tools });
+
+  // staff-auth + T3-3 — staff authenticator and the Opus memory-agent provider.
+  // Both are gated on STAFF_AUTH_ENABLED: with it off, visitor sessions are the
+  // only path and the memory feature is dark (provider stays undefined → /chat
+  // never routes to the memory agent). With it on, staff can authenticate and,
+  // once in memory mode, reach the Opus memory agent.
+  //
+  // The provider is a factory (not a prebuilt agent): the staff token is bound
+  // into the connector memory tools per memory-mode entry (sm-4), and the token
+  // is per-session, so the agent is built fresh each time with the current
+  // turn's validated token + name.
+  let staffAuthenticator: SharedPasswordAuthenticator | null = null;
+  let memoryAgentProvider: MemoryAgentProvider | undefined;
+  if (config.STAFF_AUTH_ENABLED) {
+    staffAuthenticator = new SharedPasswordAuthenticator({
+      password: config.STAFF_AUTH_PASSWORD,
+      jwtSecret: config.STAFF_JWT_SECRET,
+      ttlDays: config.STAFF_JWT_TTL_DAYS,
+    });
+    memoryAgentProvider = ({ staffToken, staffName }) =>
+      buildMemoryAgent({
+        config,
+        promptLoader,
+        connectorClient: connector.client,
+        staffToken,
+        staffName,
+      });
+  }
 
   // Layer-2 functional agent (B.t7). Separate ADK LlmAgent running on a
   // different (cheaper) model — getModelFor(config, 'classifier') resolves
@@ -223,6 +254,8 @@ async function main(): Promise<void> {
     onSessionCreated,
     handoffStore,
     mailerConfig,
+    staffAuthenticator,
+    memoryAgentProvider,
   });
 
   // E.t6 — handoff retention sweeper.
@@ -254,6 +287,13 @@ async function main(): Promise<void> {
     console.log(`[orchestrator] system prompt loaded from ${promptLoader.path} (${initialPrompt.length} chars)`);
     console.log(`[orchestrator] model: ${config.ORCHESTRATOR_MODEL}`);
     console.log(`[orchestrator] triage classifier model: ${triageClassifier.modelId}`);
+    console.log(
+      `[orchestrator] staff auth: ${
+        config.STAFF_AUTH_ENABLED
+          ? `enabled — memory agent model: ${config.MEMORY_AGENT_MODEL}`
+          : 'disabled (set STAFF_AUTH_ENABLED=true to enable staff memory authoring)'
+      }`,
+    );
     console.log(`[orchestrator] connector: ${connector.client.url}`);
     console.log(
       `[orchestrator] connector tools discovered: [${connector.discoveredNames.join(', ')}] ` +
