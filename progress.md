@@ -2,6 +2,10 @@
 
 **Snapshot date**: 2026-06-10, evening (Luke Loom feedback round 2: triaged AND executed same-day — 8 Tier-3 plans merged to `main`, fresh-install verification green. ⚠ The per-chunk sections of this file lag reality from 2026-05-14 onwards; read [planning/reviews/2026-05-27-ingest-and-state-of-play.md](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the 27 May build snapshot, then git log for the late-May/early-June waves: find_tips ninth tool, AntiRepetition, visual sidebar, Puma memory-bug fix.)
 
+## 2026-06-17 — harness loader fails loud on infra errors (worktree `peaceful-hoover-b45bd8`)
+
+`cli.ts` load-failure + `main()` fatal-catch paths now exit non-zero — a completed run still exits 0 so behavioural pass/fail stays non-gating (H.13) — fixing the silent failure that let 021's over-cap `description` disable the whole suite (incl. the visitor-location acceptance gate G.visitor-location-1) under a green CI. main's `9cb7263` already unblocked 021 itself; this stops the class recurring. (Gotcha also recorded: broken Homebrew `node` shadowing nvm Node 20.)
+
 ## 2026-06-16 — Luke location feedback: infer from timezone, default US, SH seasonality anchor (worktree `visitor-location-infer`)
 
 Single-item Luke feedback (16 Jun, verbatim in the plan): *"if assuming users location then let's presume US — eg 'Patagonia's seasons run opposite to Europe's' came up in one thread."* Investigated, planned, executed, merged in one session.
