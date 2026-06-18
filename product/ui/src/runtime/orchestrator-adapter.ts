@@ -38,7 +38,7 @@
 //   - planning/03-exec-chat-surface-t4.md §"Continue triggers bootstrap"
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
-import { emitErrorRaised, emitEvent, messageOf, parseSseFrames } from "@swoop/common";
+import { emitErrorRaised, messageOf, parseSseFrames } from "@swoop/common";
 import { getDevModelOverride } from "./dev-model-store";
 import { readStaffToken } from "../disclosure/use-staff-auth";
 
@@ -100,7 +100,6 @@ export function emitAdapterError(err: unknown): void {
       // Diagnostic — a listener throwing is a bug in a subscriber, not
       // something to re-emit into the event stream (would loop). Dev
       // console.error is the right surface.
-      // eslint-disable-next-line no-console
       console.error("[orchestrator-adapter] error listener threw:", inner);
     }
   }
@@ -316,7 +315,6 @@ export function translatePart(
       // if one does arrive it's a translator bug. Log loudly and drop — the
       // dev-mode ReasoningGuard in `parts/reasoning-guard.tsx` catches any
       // that slip through on the renderer side too (defence in depth).
-      // eslint-disable-next-line no-console
       console.error(
         "[orchestrator-adapter] reasoning part leaked onto the wire — translator bug (see chunk B §2.4 filterReasoning).",
         part,
@@ -388,7 +386,6 @@ export function translatePart(
     default: {
       // Unknown part type — log and ignore. Forward-compat: a new
       // orchestrator part shouldn't crash the client.
-      // eslint-disable-next-line no-console
       console.warn("[orchestrator-adapter] unknown part type, ignoring:", part);
       return;
     }
@@ -597,7 +594,6 @@ export function createOrchestratorTransport<
               try {
                 part = JSON.parse(evt.data) as OrchestratorMessagePart;
               } catch (err) {
-                // eslint-disable-next-line no-console
                 console.error(
                   "[orchestrator-adapter] SSE data was not valid JSON, skipping:",
                   evt.data,
