@@ -65,7 +65,7 @@ export interface HandlerRuntimeDeps {
 export function countOutputRows(value: unknown): number | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const v = value as Record<string, unknown>;
-  for (const key of ['passages', 'stories', 'proofs', 'chunks', 'cards', 'images', 'tips']) {
+  for (const key of ['passages', 'stories', 'proofs', 'chunks', 'cards', 'images', 'tips', 'hotels', 'trips']) {
     const arr = v[key];
     if (Array.isArray(arr)) return arr.length;
   }
