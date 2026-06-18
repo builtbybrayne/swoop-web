@@ -115,6 +115,11 @@ async function main(): Promise<void> {
     backend: config.SESSION_BACKEND,
     idleTtlMs: config.SESSION_TTL_IDLE_HOURS * 3_600_000,
     archiveTtlMs: config.SESSION_TTL_ARCHIVE_DAYS * 86_400_000,
+    // SESSION_BACKEND=postgres needs the URL. The session factory no longer
+    // reads process.env, so hand it the validated value — config/load.ts has
+    // already resolved DATABASE_URL → ORCHESTRATOR_DATABASE_URL. Empty string
+    // for non-postgres backends, which ignore it.
+    databaseUrl: config.ORCHESTRATOR_DATABASE_URL,
   });
 
   const connector = await setupConnector({

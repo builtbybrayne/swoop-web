@@ -90,9 +90,10 @@ export interface CreateSessionStoreOptions {
    */
   archiveTtlMs?: number;
   /**
-   * Connection URL for the postgres backend. Required when backend='postgres'.
-   * Falls back to `ORCHESTRATOR_DATABASE_URL` then `DATABASE_URL` env vars
-   * if not supplied. Fail-fast at construction if URL is absent.
+   * Connection URL for the postgres backend. Required when backend='postgres'
+   * — the orchestrator passes `config.ORCHESTRATOR_DATABASE_URL` (already
+   * resolved from `DATABASE_URL` in `config/load.ts`). This module never reads
+   * `process.env` itself. Fail-fast at construction if absent.
    */
   databaseUrl?: string;
   /**
@@ -152,16 +153,17 @@ function buildBackend(
     case 'adk-native':
       return new AdkNativeSessionStore({ now: opts.now });
     case 'postgres': {
-      // Fail-fast: postgres backend requires a connection URL.
-      const url =
-        opts.databaseUrl ??
-        process.env['ORCHESTRATOR_DATABASE_URL'] ??
-        process.env['DATABASE_URL'];
+      // Fail-fast: postgres backend requires a connection URL. The caller
+      // passes it explicitly — the orchestrator hands in
+      // config.ORCHESTRATOR_DATABASE_URL (already resolved from DATABASE_URL in
+      // config/load.ts). This module never reads process.env, so the
+      // single-source-of-truth invariant documented in config/load.ts holds.
+      const url = opts.databaseUrl;
       if (!url) {
         throw new Error(
           'SESSION_BACKEND=postgres requires a database URL. ' +
-            'Set ORCHESTRATOR_DATABASE_URL (or DATABASE_URL) in .env, ' +
-            'or pass databaseUrl to createSessionStore().',
+            'Pass databaseUrl to createSessionStore() — the orchestrator ' +
+            'supplies config.ORCHESTRATOR_DATABASE_URL (resolved from DATABASE_URL).',
         );
       }
       return new PostgresSessionStore({
