@@ -67,6 +67,10 @@ export const TurnReceivedEventSchema = z.object({
   payload: z.object({
     userMessageLength: z.number().int().nonnegative(),
     userMessageSha256: z.string(),
+    // Visitor IANA timezone (B.t12 clientTime). Optional: absent when the
+    // client didn't send clientTime. Enables hemisphere / region analytics
+    // (Patagonia seasonality framing) without logging any message content.
+    timeZone: z.string().optional(),
   }),
 });
 

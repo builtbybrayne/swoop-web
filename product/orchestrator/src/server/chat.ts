@@ -323,6 +323,7 @@ export function createChatHandler(
       payload: {
         userMessageLength: message.length,
         userMessageSha256: createHash('sha256').update(message).digest('hex'),
+        timeZone: clientTime?.timeZone,
       },
     });
 
