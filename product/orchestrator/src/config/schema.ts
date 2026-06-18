@@ -199,11 +199,12 @@ export const configSchema = z
     SESSION_BACKEND: SessionBackend.default('in-memory'),
     SESSION_TTL_IDLE_HOURS: z.coerce.number().int().positive().default(24),
     SESSION_TTL_ARCHIVE_DAYS: z.coerce.number().int().positive().default(7),
-    // Connection URL for postgres session backend (B.t13). Required when
-    // SESSION_BACKEND=postgres. Falls back to DATABASE_URL if absent so
-    // operators can share the connector's DB URL without duplication.
-    // Empty string = not set; the cross-field refine below enforces presence
-    // when postgres is selected.
+    // Connection URL for the postgres session backend (B.t13) and
+    // EVENT_SINK=postgres. Falls back to DATABASE_URL when unset — load.ts
+    // promotes it before parse (mirroring PRIMARY_MODEL) so a single-store
+    // deployment (C.18) can share the connector's DATABASE_URL without
+    // duplicating it. Empty = neither set; the refines below then fail fast
+    // for a postgres selection.
     ORCHESTRATOR_DATABASE_URL: z.string().trim().default(''),
 
     // --- Observability sink (F-c) ---------------------------------------
@@ -355,8 +356,9 @@ export const configSchema = z
     {
       path: ['ORCHESTRATOR_DATABASE_URL'],
       message:
-        'SESSION_BACKEND=postgres requires ORCHESTRATOR_DATABASE_URL. ' +
-        'Set it in .env (e.g. postgresql://al:pick-a-password@localhost:5432/puma_dev).',
+        'SESSION_BACKEND=postgres requires ORCHESTRATOR_DATABASE_URL (or ' +
+        'DATABASE_URL as a fallback). Set one in .env ' +
+        '(e.g. postgresql://al:pick-a-password@localhost:5432/puma_dev).',
     },
   )
   // EVENT_SINK=postgres writes to the event_log table and therefore needs a
@@ -367,8 +369,9 @@ export const configSchema = z
     {
       path: ['ORCHESTRATOR_DATABASE_URL'],
       message:
-        'EVENT_SINK=postgres requires ORCHESTRATOR_DATABASE_URL (it may share the connector DATABASE_URL). ' +
-        'Set it in .env or choose EVENT_SINK=stdout|cloud-logging.',
+        'EVENT_SINK=postgres requires ORCHESTRATOR_DATABASE_URL (or ' +
+        'DATABASE_URL as a fallback). Set one in .env or choose ' +
+        'EVENT_SINK=stdout|cloud-logging.',
     },
   )
   // Warm-pool TTL must be strictly shorter than the idle-session TTL.

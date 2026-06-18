@@ -40,6 +40,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     envForParse.ORCHESTRATOR_MODEL = envForParse.PRIMARY_MODEL;
   }
 
+  // ORCHESTRATOR_DATABASE_URL falls back to DATABASE_URL so a single-store
+  // deployment (C.18) can share the connector's URL without duplicating it.
+  // Promote BEFORE parse so the cross-field refines (SESSION_BACKEND=postgres /
+  // EVENT_SINK=postgres) and every downstream reader see one resolved value
+  // instead of the refine rejecting boot. Mirrors the PRIMARY_MODEL promotion.
+  if (
+    (envForParse.ORCHESTRATOR_DATABASE_URL === undefined ||
+      envForParse.ORCHESTRATOR_DATABASE_URL === '') &&
+    envForParse.DATABASE_URL !== undefined &&
+    envForParse.DATABASE_URL !== ''
+  ) {
+    envForParse.ORCHESTRATOR_DATABASE_URL = envForParse.DATABASE_URL;
+  }
+
   const parsed = configSchema.safeParse(envForParse);
   if (!parsed.success) {
     const issues = parsed.error.issues
