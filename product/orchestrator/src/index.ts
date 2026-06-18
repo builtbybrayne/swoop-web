@@ -228,7 +228,19 @@ async function main(): Promise<void> {
     enabled: config.modelPickerEnabled,
     allowlist: config.MODEL_PICKER_ALLOWLIST,
     buildAgentFor: (modelId) =>
-      buildOrchestratorAgent({ config, promptLoader, tools: connector.tools, modelId }),
+      buildOrchestratorAgent({
+        config,
+        promptLoader,
+        tools: connector.tools,
+        modelId,
+        // Match the primary build path above so picker turns load the per-turn
+        // sales-memory block too. Without these, every dev model-picker turn
+        // ran against a different agent shape than production (memory block
+        // absent) — a post-merge gap: M-PICK added buildAgentFor (2026-06-16),
+        // sales-memory T3-4 added these two params to the primary call only.
+        connectorClient: connector.client,
+        memoryLoadedHeader: memoryPrompts.loadedHeader,
+      }),
     // Per-model runners reuse the default runner's sessionService so a session
     // bootstrapped under the default is found whichever model the turn routes
     // to. Artifact/memory services are ADK internals Puma doesn't use for state.
