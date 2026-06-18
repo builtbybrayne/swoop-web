@@ -285,6 +285,19 @@ export const SampleEventSessionReplayFailed: Event = {
 };
 
 /**
+ * staff-auth — marks a staff / in-house session for analytics exclusion.
+ */
+export const SampleEventSessionStaffIdentified: Event = {
+  eventType: "session.staff_identified",
+  eventVersion: 1,
+  timestamp: "2026-06-18T09:00:00.000Z",
+  sessionId: "sess_puma_demo_staff_001",
+  turnIndex: null,
+  actor: "system",
+  payload: {},
+};
+
+/**
  * Back-compat alias. Existing consumers import `SampleEvent`; new tests use
  * the named fixtures above.
  */

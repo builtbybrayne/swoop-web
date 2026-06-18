@@ -535,6 +535,19 @@ export const ToolInvokedEventSchema = z.object({
 export type ToolInvokedEvent = z.infer<typeof ToolInvokedEventSchema>;
 
 // -----------------------------------------------------------------------------
+// staff-auth — marks a staff / in-house session so analytics can exclude its
+// traces from visitor studies. Emitted once per session when a staff token is
+// cryptographically verified at bootstrap. PII-clean (empty payload); the
+// sessionId in the envelope is the join key for excluding the session's events.
+// -----------------------------------------------------------------------------
+
+export const SessionStaffIdentifiedEventSchema = z.object({
+  eventType: z.literal("session.staff_identified"),
+  ...EventEnvelopeBase,
+  payload: z.object({}),
+});
+
+// -----------------------------------------------------------------------------
 // Event — discriminated union on eventType.
 // -----------------------------------------------------------------------------
 
@@ -578,8 +591,12 @@ export const EventSchema = z.discriminatedUnion("eventType", [
   UiSessionRehydrateAppliedEventSchema,
   UiSessionRehydrateExpiredEventSchema,
   UiSessionRehydrateFailedEventSchema,
+  // staff-auth — staff/in-house session marker (analytics exclusion)
+  SessionStaffIdentifiedEventSchema,
 ]);
 export type Event = z.infer<typeof EventSchema>;
+
+export type SessionStaffIdentifiedEvent = z.infer<typeof SessionStaffIdentifiedEventSchema>;
 
 // Per-type convenience inferreds.
 export type ConversationStartedEvent = z.infer<typeof ConversationStartedEventSchema>;

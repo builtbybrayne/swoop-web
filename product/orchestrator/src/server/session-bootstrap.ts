@@ -122,6 +122,19 @@ export function createSessionBootstrapHandler(
               staff: true,
               mode: 'conversation' as const,
             }));
+            // Mark this as a staff / in-house session so analytics can exclude
+            // its traces from visitor studies. Every other event for this
+            // session joins to this marker on sessionId (in the envelope).
+            // PII-clean: no staff name in the payload.
+            emitEvent({
+              eventType: 'session.staff_identified',
+              eventVersion: 1,
+              timestamp: new Date().toISOString(),
+              sessionId: state.sessionId,
+              turnIndex: null,
+              actor: 'system',
+              payload: {},
+            });
           }
         } catch {
           // verify() should never throw (see interface contract), but if it

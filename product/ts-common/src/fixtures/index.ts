@@ -44,6 +44,7 @@ export {
   SampleEventUiSessionRehydrateApplied,
   SampleEventUiSessionRehydrateExpired,
   SampleEventUiSessionRehydrateFailed,
+  SampleEventSessionStaffIdentified,
 } from "./event.sample.js";
 
 // -----------------------------------------------------------------------------
