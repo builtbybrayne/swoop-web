@@ -10,7 +10,7 @@ The 16/06 sales-memory design is **built + verified** on the `sales-knowledge-fe
 
 **Next, in order:**
 1. **T3-5 voice (Alastair, G.7)** — now plain markdown, **no code change** (prompts relocated to CMS, commit `5ec30a9`): edit (a) `product/cms/prompts/memory/mode-wrapper.md` (keep the structural signals: confirm-before-save / content-hygiene / `finish_memory` handback); (b) `product/cms/prompts/memory/loaded-header.md` (keep: authoritative / state-as-fact / dated-for-staleness). The memory tool descriptions live alongside in `product/cms/prompts/memory/tools/`.
-2. **`20_field-notes.md` voice pass (Alastair)** — the static seasonal stopgap (DRAFT, `3ea28ee`) needs Alastair's voice before going live.
+2. ~~**`20_field-notes.md` voice pass**~~ — ✅ **accepted & live** (Alastair, 2026-06-18). DRAFT banner removed from the file; it loads into the system prompt as accepted sales knowledge. Do not re-flag as draft.
 3. **`luke-` harness run** — confirm the seasonal-knowledge behaviour against Luke's 16/06 feedback (`npm run -w @swoop/harness eval -- --filter luke- --judge sonnet`; export ANTHROPIC_API_KEY from orchestrator/.env; stack on :8080). For the memory-loaded behaviour, seed the active set first.
 4. **Apply (when ready)** — merge `sales-knowledge-feedback` → main per the worktree policy (HITL; "apply" = commit + merge); fresh-install verify at the merge tip.
 
