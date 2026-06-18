@@ -49,6 +49,32 @@ export const SESSION_STORAGE_KEY = "swoop.session.id";
 export const SESSION_HEADER = "x-swoop-session-id";
 
 // ---------------------------------------------------------------------------
+// Consent-triggered greeting flag (consent-greeting-prewarm, PW-1).
+//
+// `useGreeting` drives the one warm-hello turn through assistant-ui's runtime
+// (`runtime.thread.append`). assistant-ui carries per-turn metadata as
+// `runConfig` → AI SDK `requestMetadata`, NOT as the transport's `body`. This
+// hand-rolled transport only spreads `body` into the POST, so a `runConfig`
+// custom field would never reach `{ ...extraBody }` here. Rather than fight
+// that gap, we use a one-shot module flag the transport reads-and-clears — the
+// same module-scoped pattern `getDevModelOverride()` / `readStaffToken()`
+// already use inside `sendMessages`. The hook arms it immediately before the
+// `append`; the very next `/chat` POST consumes it exactly once.
+let pendingGreetingTurn = false;
+
+/** Arm the next outbound `/chat` request to carry `greeting: true`. One-shot. */
+export function armGreetingTurn(): void {
+  pendingGreetingTurn = true;
+}
+
+/** Read-and-clear the pending-greeting flag. Returns true at most once per arm. */
+function consumePendingGreetingTurn(): boolean {
+  if (!pendingGreetingTurn) return false;
+  pendingGreetingTurn = false;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Error emitter (D.t5)
 // ---------------------------------------------------------------------------
 // assistant-ui's thread state surfaces errored messages, but the specifics of
@@ -479,6 +505,12 @@ export function createOrchestratorTransport<
       // value here is never trusted as a client flag.
       const staffToken = readStaffToken();
 
+      // consent-greeting-prewarm (PW-1) — consume the one-shot greeting flag.
+      // When armed (by `useGreeting` just before its `append`), this single
+      // request carries `greeting: true` and the suppressed `GREETING_USER_MARKER`
+      // as `message`; the orchestrator runs the cms greeting prompt instead.
+      const isGreetingTurn = consumePendingGreetingTurn();
+
       const body = JSON.stringify({
         ...(extraBody ?? {}),
         sessionId,
@@ -486,6 +518,7 @@ export function createOrchestratorTransport<
         clientTime,
         ...(modelOverride ? { model: modelOverride } : {}),
         ...(staffToken ? { staffToken } : {}),
+        ...(isGreetingTurn ? { greeting: true } : {}),
       });
 
       let response: Response;

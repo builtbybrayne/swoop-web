@@ -28,6 +28,7 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useMessage,
 } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -52,7 +53,12 @@ import {
   useStaffAuth,
 } from "./disclosure";
 import { ErrorBanner, useRuntimeErrors } from "./errors";
-import { usePreflight, useRehydrate } from "./session";
+import {
+  isGreetingMarkerText,
+  useGreeting,
+  usePreflight,
+  useRehydrate,
+} from "./session";
 
 /**
  * Per-message renderer. Branches on role via `MessagePrimitive.If` so visitor
@@ -96,7 +102,31 @@ import { usePreflight, useRehydrate } from "./session";
  * the right tradeoff for now (the rest of the codebase consumes the
  * `MessagePrimitive.*` namespace consistently).
  */
+/**
+ * True when the message in context is the synthetic user message that drives a
+ * consent-triggered greeting turn — i.e. a `user` message whose entire text is
+ * the `GREETING_USER_MARKER` (consent-greeting-prewarm, PW-4). `useGreeting`
+ * appends exactly this to kick the warm-hello turn natively; the visitor must
+ * never see its bubble. Covers BOTH the live path (assistant-ui's optimistic
+ * user message) and the rehydrate path (were the marker ever to surface in a
+ * replayed projection) — defence in depth, since the orchestrator skips the
+ * synthetic user append server-side so it normally won't be in history at all.
+ */
+function useIsSuppressedGreetingMarker(): boolean {
+  return useMessage((m) => {
+    if (m.role !== "user") return false;
+    const text = m.content
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("");
+    return isGreetingMarkerText(text);
+  });
+}
+
 function MessageView() {
+  // Render nothing for the suppressed greeting marker — no bubble, no row.
+  const isGreetingMarker = useIsSuppressedGreetingMarker();
+  if (isGreetingMarker) return null;
+
   return (
     <>
       <MessagePrimitive.If user>
@@ -380,7 +410,7 @@ export default function App() {
   const [rehydrateNotification, setRehydrateNotification] = useState<
     string | undefined
   >(undefined);
-  useRehydrate({
+  const { status: rehydrateStatus } = useRehydrate({
     enabled: hasConsented,
     sessionId:
       consent.status.state === "granted" ? consent.status.sessionId : null,
@@ -402,6 +432,21 @@ export default function App() {
       runtime.thread.composer.setText("");
       resetSidebar();
     },
+  });
+
+  // consent-greeting-prewarm — fire ONE warm-hello turn when consent is granted
+  // on a FRESH session. Gated on `hasConsented` + the granted session id, and
+  // driven only when `useRehydrate` confirms an empty session (rehydrateStatus
+  // === "empty") — so we never hello into an existing conversation. The hook's
+  // own one-shot ref guard handles strict-mode double-invoke. No race
+  // protection (PW-6): a first message sent before the hello returns just runs
+  // alongside it.
+  useGreeting({
+    enabled: hasConsented,
+    sessionId:
+      consent.status.state === "granted" ? consent.status.sessionId : null,
+    runtime,
+    rehydrateStatus,
   });
 
   // Pre-consent visitors can still open the privacy modal from the opening

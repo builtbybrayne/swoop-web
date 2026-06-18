@@ -121,6 +121,15 @@ export interface BuildServerDeps {
    * the conversational surface).
    */
   readonly memoryAgentProvider?: MemoryAgentProvider;
+  /**
+   * Dedicated thinking-off greeting runner + cms greeting prompt
+   * (consent-greeting-prewarm, PW-5). Built once at boot in src/index.ts (the
+   * runner shares the default runner's sessionService) and threaded straight
+   * through to the /chat handler's greeting branch. Both absent → the greeting
+   * flag is ignored and the surface behaves exactly as before.
+   */
+  readonly greetingRunner?: Runner;
+  readonly greetingPrompt?: string;
 }
 
 export function buildServer(deps: BuildServerDeps): Express {
@@ -237,6 +246,8 @@ export function registerRoutes(app: Express, deps: BuildServerDeps): void {
       getRunner: deps.getRunner,
       staffAuthenticator: deps.staffAuthenticator,
       memoryAgentProvider: deps.memoryAgentProvider,
+      greetingRunner: deps.greetingRunner,
+      greetingPrompt: deps.greetingPrompt,
     }),
   );
 

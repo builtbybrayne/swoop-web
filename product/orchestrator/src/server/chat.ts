@@ -107,6 +107,25 @@ export interface ChatDeps {
    * per memory-mode entry with the current turn's validated token.
    */
   readonly memoryAgentProvider?: MemoryAgentProvider;
+  /**
+   * Dedicated thinking-OFF runner for the consent-triggered greeting pre-warm
+   * (consent-greeting-prewarm, PW-5). Built ONCE at boot in src/index.ts and
+   * SHARES the default runner's `sessionService`, so the greeting warms the
+   * visitor's real ADK session (same `sessionId`) — the loaded skill + hello
+   * land in the same event log a later reload replays. Required (alongside
+   * `greetingPrompt`) for the greeting branch to fire; absent → the greeting
+   * flag is ignored and the turn runs as a normal visitor turn. The greeting
+   * NEVER routes through the conversational/memory runners.
+   */
+  readonly greetingRunner?: Runner;
+  /**
+   * The cms greeting instruction (`cms/prompts/greeting/00_greeting.md`),
+   * loaded once at boot (content-as-data — never inline, PW-3). Run as the
+   * user content of the greeting turn IN PLACE OF the request `message` (which
+   * carries only the suppressed `GREETING_USER_MARKER`). Required alongside
+   * `greetingRunner` for the greeting branch.
+   */
+  readonly greetingPrompt?: string;
 }
 
 /**
@@ -142,7 +161,7 @@ export function createChatHandler(
       sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    const { sessionId, message, clientTime, model, staffToken } = parsed.data;
+    const { sessionId, message, clientTime, model, staffToken, greeting } = parsed.data;
     if (message.trim().length === 0) {
       sendError(res, 400, 'message_empty', 'message cannot be empty.');
       return;
@@ -160,6 +179,31 @@ export function createChatHandler(
         'consent_required',
         'tier-1 conversation consent is required before chat turns are accepted.',
       );
+      return;
+    }
+
+    // Consent-triggered greeting pre-warm (consent-greeting-prewarm, PW-1).
+    // When the UI fires the one internal warm-hello turn (`greeting: true`) AND
+    // both greeting deps are wired, route to the dedicated greeting path and
+    // return BEFORE any of the normal-turn pipeline runs. The greeting must
+    // still pass the consent gate above (it only fires post-consent), but it
+    // records NO synthetic user turn, skips triage + the dateline, never
+    // touches staff/memory routing, and runs the cms greeting prompt on the
+    // thinking-off runner.
+    //
+    // HARD INVARIANT: when `greeting` is absent/false (every real visitor turn),
+    // execution falls straight through and the path below is byte-identical to
+    // today. The greeting is purely additive — a sibling early-return.
+    if (greeting === true && deps.greetingRunner && deps.greetingPrompt) {
+      await handleGreetingTurn({
+        deps,
+        res,
+        userId,
+        sessionId,
+        greetingRunner: deps.greetingRunner,
+        greetingPrompt: deps.greetingPrompt,
+        now,
+      });
       return;
     }
 
@@ -645,6 +689,129 @@ function runAgentTurn(params: {
     newMessage,
     abortSignal: params.abortSignal,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Consent-triggered greeting pre-warm (consent-greeting-prewarm, PW-1/PW-5).
+//
+// A self-contained SSE turn that warms the visitor's real ADK session the
+// moment consent is granted. It deliberately does the LEAST possible around the
+// stream:
+//   - NO appendUserMessage — the greeting records no synthetic user turn, so
+//     "no prior user turns" stays a clean fresh-session predicate (§3.2) and
+//     the suppressed marker never reaches history.
+//   - NO triage classifier, NO dateline, NO staff/memory routing — none apply
+//     to an agent-initiated hello; skipping them keeps it on the fast path.
+//   - The cms greeting prompt is the user content (NOT the request message,
+//     which is only the `GREETING_USER_MARKER`).
+//   - It runs on the dedicated THINKING-OFF runner (PW-5), which shares the
+//     default runner's sessionService — so the agent's hello + any silent
+//     `load_skill` land in the SAME session event log and replay on reload.
+//
+// The agent's visible parts ARE persisted to session history (that is the
+// warm-up the next turn / a reload reuses). Reasoning is filtered off the wire
+// and persisted via `onFiltered`, exactly as the normal turn does.
+//
+// It reuses the same heartbeat + abort + translator + SSE-`done` mechanics as
+// the main handler. Per-turn observability events (turn.received /
+// turn.completed) are intentionally omitted — there is no visitor turn here.
+// ---------------------------------------------------------------------------
+
+async function handleGreetingTurn(params: {
+  deps: ChatDeps;
+  res: Response;
+  userId: string;
+  sessionId: string;
+  greetingRunner: Runner;
+  greetingPrompt: string;
+  now: () => Date;
+}): Promise<void> {
+  const { deps, res, userId, sessionId, greetingRunner, greetingPrompt, now } = params;
+
+  // Open the SSE stream — same posture as the main handler.
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  const stopHeartbeat = startHeartbeat(res);
+
+  const abortController = new AbortController();
+  let closed = false;
+  const onClientClose = (): void => {
+    if (closed) return;
+    closed = true;
+    abortController.abort();
+  };
+  res.on('close', onClientClose);
+
+  // History turn-index for the agent's parts: start at the current
+  // conversationHistory length. No user message was appended, so the hello is
+  // the next entry.
+  let turnIndex =
+    (await deps.sessionStore.get(sessionId))?.conversationHistory.length ?? 0;
+
+  const onFiltered = (part: MessagePart): void => {
+    if (part.type !== 'reasoning') return;
+    const reasoning = part as ReasoningPart;
+    void appendToHistory(deps.sessionStore, sessionId, {
+      turnIndex: turnIndex++,
+      role: 'agent',
+      blockType: 'reasoning',
+      text: reasoning.text,
+      timestamp: now().toISOString(),
+    });
+  };
+
+  try {
+    const adkStream = greetingRunner.runAsync({
+      userId,
+      sessionId,
+      newMessage: { role: 'user', parts: [{ text: greetingPrompt }] },
+      abortSignal: abortController.signal,
+    });
+
+    for await (const part of translateAdkStream(adkStream, {
+      onFiltered,
+      now,
+      suppressNonPartialText: true,
+    })) {
+      if (closed) break;
+      writeSsePart(res, part);
+      // Persist visible parts so the hello + skill-load replay on a later
+      // reload (B.t11). Best-effort — the SSE wire is the source of truth.
+      void persistPart(deps.sessionStore, sessionId, part, turnIndex++, now());
+    }
+
+    if (!closed) {
+      res.write('event: done\n');
+      res.write('data: {}\n\n');
+    }
+  } catch (err) {
+    const detail = messageOf(err);
+    if (!closed) {
+      writeSseError(res, 'internal_error', detail);
+    }
+    emitErrorRaised({
+      sessionId,
+      actor: 'system',
+      errorType: 'greeting_turn_failed',
+      chunk: 'B',
+      sanitisedContext: detail,
+      now,
+    });
+  } finally {
+    stopHeartbeat();
+    res.off('close', onClientClose);
+    if (!res.writableEnded) {
+      res.end();
+    }
+    if (abortController.signal.aborted) {
+      console.log(`[orchestrator] /chat greeting turn cancelled (session=${sessionId}).`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

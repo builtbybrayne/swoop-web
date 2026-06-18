@@ -14,6 +14,7 @@ import {
   CHAT_MESSAGE_MAX,
   ChatRequestSchema,
   ClientTimeSchema,
+  GREETING_USER_MARKER,
   SessionBootstrapRequestSchema,
 } from "../routes.js";
 
@@ -169,6 +170,57 @@ describe("ChatRequestSchema", () => {
     if (result.success) {
       expect(result.data.staffToken).toBeUndefined();
     }
+  });
+
+  // consent-greeting-prewarm — greeting is optional; must round-trip + be bool.
+  it("accepts and round-trips a body with greeting:true (consent-greeting-prewarm)", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: GREETING_USER_MARKER,
+      greeting: true,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.greeting).toBe(true);
+    }
+  });
+
+  it("accepts a body without greeting (backward-compat — normal turn)", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: "hi",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.greeting).toBeUndefined();
+    }
+  });
+
+  it("rejects a non-boolean greeting", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: "hi",
+      greeting: "yes",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("GREETING_USER_MARKER", () => {
+  it("is a non-empty string (passes the /chat empty-message gate)", () => {
+    expect(typeof GREETING_USER_MARKER).toBe("string");
+    expect(GREETING_USER_MARKER.length).toBeGreaterThan(0);
+    // Trimmed length is also non-zero so message.trim().length === 0 never fires.
+    expect(GREETING_USER_MARKER.trim().length).toBeGreaterThan(0);
+  });
+
+  it("is accepted as a valid ChatRequest message", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: GREETING_USER_MARKER,
+      greeting: true,
+    });
+    expect(result.success).toBe(true);
   });
 });
 

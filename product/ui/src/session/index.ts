@@ -40,3 +40,7 @@ export type {
   UseRehydrateOptions,
   UseRehydrateResult,
 } from "./use-rehydrate";
+
+// consent-greeting-prewarm — consent-triggered warm-hello trigger.
+export { useGreeting, isGreetingMarkerText } from "./use-greeting";
+export type { UseGreetingOptions } from "./use-greeting";

@@ -54,6 +54,10 @@ import { buildOrchestratorAgent } from './agent/factory.js';
 import { createRunnerRegistry } from './agent/runner-registry.js';
 import { buildMemoryAgent } from './agent/memory-agent.js';
 import { loadMemoryPrompts } from './agent/memory-prompt-loader.js';
+import {
+  loadGreetingPrompt,
+  resolveGreetingPromptPath,
+} from './agent/greeting-prompt-loader.js';
 import { setupConnector } from './connector/index.js';
 import {
   createSessionStore,
@@ -96,6 +100,12 @@ async function main(): Promise<void> {
   // registrations.
   const toolDescriptions = loadAllToolDescriptions(config.toolsPromptDirAbsolutePath);
   const memoryPrompts = loadMemoryPrompts(config.memoryPromptDirAbsolutePath);
+
+  // Consent-triggered greeting pre-warm (consent-greeting-prewarm, PW-3).
+  // Load the warm-hello instruction at boot, fail-fast on missing/empty
+  // (mirrors memoryPrompts above). Threaded into the greeting runner + /chat
+  // handler below.
+  const greetingPrompt = loadGreetingPrompt(config);
 
   // Session store created BEFORE setupConnector so it can be threaded into
   // the anti-repetition bracketing on every tool dispatch
@@ -232,6 +242,41 @@ async function main(): Promise<void> {
       }),
   });
 
+  // Consent-triggered greeting pre-warm (consent-greeting-prewarm, PW-5).
+  // A dedicated orchestrator agent + runner for the one warm-hello turn fired on
+  // consent. It INHERITS the deploy's global ORCHESTRATOR_THINKING_ENABLED and
+  // overrides ONLY ORCHESTRATOR_EFFORT to the lowest value ('low').
+  //
+  // Why inherit thinking + drop only effort (Alastair, 2026-06-18, superseding
+  // the original thinking-OFF design): effort is a per-request param, NOT part
+  // of the cached system prefix, whereas the thinking config IS baked into the
+  // cached prefix (the RL.3 silent-working belt is only injected when thinking
+  // is off). Keeping thinking aligned with the conversation means the greeting
+  // warms the SAME prompt-cache prefix turn 1 hits — forcing thinking off would
+  // have warmed a different prefix and wasted the cache win. Lowest effort still
+  // keeps the hello fast ("there's nothing to think about").
+  //
+  // The agent is otherwise identical to the conversational one (same prompt,
+  // tools, skills, sales-memory header). The runner SHARES the default runner's
+  // sessionService (same as the M-PICK sibling runners above), so the greeting
+  // warms the visitor's REAL ADK session — the hello + any load_skill land in
+  // the same event log that /session/:id/history replays. Built AFTER `runner`
+  // so its sessionService exists. Only the greeting turn routes here.
+  const { agent: greetingAgent } = await buildOrchestratorAgent({
+    config: { ...config, ORCHESTRATOR_EFFORT: 'low' },
+    promptLoader,
+    tools: connector.tools,
+    connectorClient: connector.client,
+    memoryLoadedHeader: memoryPrompts.loadedHeader,
+  });
+  const greetingRunner = new Runner({
+    agent: greetingAgent,
+    appName: ORCHESTRATOR_APP_NAME,
+    sessionService: runner.sessionService,
+    artifactService: new InMemoryArtifactService(),
+    memoryService: new InMemoryMemoryService(),
+  });
+
   // F-c — register the durable event sink (planning/03-exec-observability-c.md).
   // Reuse the postgres session pool when present; otherwise provision a small
   // dedicated pool for EVENT_SINK=postgres (the config refine guarantees the URL).
@@ -318,6 +363,8 @@ async function main(): Promise<void> {
     mailerConfig,
     staffAuthenticator,
     memoryAgentProvider,
+    greetingRunner,
+    greetingPrompt,
   });
 
   // E.t6 — handoff retention sweeper.
@@ -367,6 +414,10 @@ async function main(): Promise<void> {
         `(${connector.tools.length} exposed to model)`,
     );
     console.log(`[orchestrator] agent: ${agent.name} (tools: ${agent.tools.length})`);
+    console.log(
+      `[orchestrator] greeting pre-warm: ENABLED (low-effort runner, honours thinking flag, shared session) — ` +
+        `prompt ${resolveGreetingPromptPath(config)} (${greetingPrompt.length} chars)`,
+    );
     console.log(`[orchestrator] session backend: ${config.SESSION_BACKEND}`);
     console.log(
       `[orchestrator] event sink: ${config.EVENT_SINK}` +

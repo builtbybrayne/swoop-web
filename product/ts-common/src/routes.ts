@@ -49,11 +49,40 @@ export const ClientTimeSchema = z
   .strict();
 export type ClientTime = z.infer<typeof ClientTimeSchema>;
 
+/**
+ * Fixed sentinel the UI sends as the `message` of a consent-triggered greeting
+ * turn (consent-greeting-prewarm, PW-1/PW-4). The orchestrator's greeting
+ * branch ignores this text — it runs the cms greeting prompt as the user
+ * content instead — but the marker still has to satisfy two constraints:
+ *
+ *   1. NON-EMPTY, so it passes `/chat`'s empty-`message` gate (chat.ts) and
+ *      `ChatRequestSchema.message`'s `.min(1)` below. assistant-ui needs a
+ *      user message to drive a turn, so we can't send nothing.
+ *   2. RECOGNISABLE, so `MessageView` can suppress the synthetic user bubble
+ *      it produces (live + on rehydrate) — the visitor never sees it.
+ *
+ * The leading zero-width space keeps it visually empty in any surface that
+ * does render it, and makes an accidental collision with a real visitor
+ * utterance astronomically unlikely.
+ */
+export const GREETING_USER_MARKER = "​__swoop_greeting__";
+
 export const ChatRequestSchema = z
   .object({
     sessionId: z.string().min(1),
     message: z.string().min(1).max(CHAT_MESSAGE_MAX),
     clientTime: ClientTimeSchema.optional(),
+    /**
+     * Consent-triggered greeting pre-warm (consent-greeting-prewarm, PW-1).
+     * When `true`, the UI is firing the one internal "warm hello" turn the
+     * moment consent is granted on a fresh session — NOT a real visitor
+     * message. The orchestrator's greeting branch then skips the synthetic
+     * user append + triage + dateline and runs the cms greeting prompt on a
+     * dedicated thinking-off runner. Optional + `.strict()`-safe so existing
+     * clients that never send it round-trip unchanged; a normal turn omits it
+     * and is byte-identical to today.
+     */
+    greeting: z.boolean().optional(),
     /**
      * Optional model override for the conversational orchestrator (dev/test
      * only). The orchestrator ignores it unless `NODE_ENV !== 'production'`
