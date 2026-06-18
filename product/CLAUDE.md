@@ -17,7 +17,7 @@ Packages are declared in `product/package.json` under `workspaces`:
 | Package | Role | Chunk |
 |---|---|---|
 | `ts-common/` | Shared types, schemas, small pure utilities consumed across packages. | A.t2 |
-| `orchestrator/` | Agent runtime: prompt loop, tool calls, state. Cloud Run service. | B |
+| `orchestrator/` | Agent runtime: prompt loop, tool calls, state. Long-lived Node service (single-VM). | B |
 | `connector/` | Data-access layer. Wraps Swoop APIs / scraping adapters. | C |
 | `ui/` | Embedded chat surface (web component or iframe host). | D |
 | `cms/` | Content-as-data: authored library/trip data, sales copy, prompt fragments. Read at runtime; never inlined. | G |
@@ -63,7 +63,7 @@ Post-launch, the harness grows weekly from real conversations — see the operat
 
 ## Runtime target
 
-Cloud Run only. Firebase Functions are out of scope for Puma; the Firebase Emulator suite is not used. Don't add Firebase runtime config to any package.
+Google Cloud single-VM (Compute Engine). The orchestrator and connector run as long-lived Node processes alongside Postgres on one VM. The earlier "Cloud Run + Cloud SQL" split is not the committed shape; managed services are a deferred scale-up option, not a launch assumption (see [../planning/01-top-level.md](../planning/01-top-level.md), deployment shape). Firebase Functions are out of scope for Puma; the Firebase Emulator suite is not used. Don't add Firebase runtime config to any package.
 
 ## Proof of concept — reference only
 
