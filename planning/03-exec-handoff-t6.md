@@ -20,7 +20,7 @@
 - `product/orchestrator/src/config/schema.ts` — **edit** — three new env vars + cross-field refine (mirroring the `HANDOFF_EMAIL_*` pattern).
 - `product/orchestrator/.env.example` — **edit** — document the new env vars.
 - `product/ts-common/src/events.ts` — **edit** — three new event kinds: `handoff.retention.sweep.started`, `.completed`, `.failed`.
-- `product/docs/ops/handoff-retention-sweep.md` — new operator runbook (matches the shape of `etl-rerun.md` / `embedding-rerun.md`).
+- `handover/ops/handoff-retention-sweep.md` — new operator runbook (matches the shape of `etl-rerun.md` / `embedding-rerun.md`).
 - `product/cms/legal/compliance-bundle/05-retention-policy.md` — **edit** — flip the "Gap counsel should know about" section to reflect interim sweeper landed; revise "Enforcement?" column from "(planned)" to "in-process sweeper (FS interim) / Cloud Run Job (post-Postgres)".
 
 **Estimate**: ~3 h focused work — sweeper module + tests + boot wiring + runbook + bundle update. Postgres swap (the `PostgresHandoffStore.sweep` implementation + the migration column) is a separate later task scoped here but landed alongside E.t2 proper.
@@ -49,7 +49,7 @@ When this task is done:
 - Each sweep emits `handoff.retention.sweep.started` → `…completed` (or `…failed`) events with per-verdict deletion counts.
 - The compliance bundle's retention-policy section can flip its "no automatic enforcement" caveat to "interim sweeper enforces FS-side; Cloud Run Job enforces post-Postgres".
 - The sweeper interface (`HandoffStore.sweep(now)`) survives the Cloud SQL Postgres swap unchanged. The `PostgresHandoffStore` author drops in a SQL `DELETE` implementation against the migration-added `scheduled_deletion_at` column.
-- An operator runbook at `product/docs/ops/handoff-retention-sweep.md` documents enable/disable, expected event shape, and "when things go wrong" steps.
+- An operator runbook at `handover/ops/handoff-retention-sweep.md` documents enable/disable, expected event shape, and "when things go wrong" steps.
 
 Not outcomes:
 - The Cloud Run Job scheduling itself (post-IAM, lands with E.t2 proper).
@@ -328,7 +328,7 @@ Event kinds are exported through the existing `EventEnvelopeSchema` discriminate
 
 ### 2.9 Operator runbook
 
-New file: `product/docs/ops/handoff-retention-sweep.md`. Matches the shape of `etl-rerun.md` / `embedding-rerun.md`:
+New file: `handover/ops/handoff-retention-sweep.md`. Matches the shape of `etl-rerun.md` / `embedding-rerun.md`:
 
 Sections (mirroring the established runbook template):
 - **Why this exists** — GDPR Art. 5(1)(e) storage limitation; EU AI Act Art. 50 retention documentation; reference to compliance bundle §05.
@@ -379,7 +379,7 @@ The "12-month outer bound uses 360 days" note from §2.2 above gets a short foot
 6. **Add env vars + cross-field refine** in `orchestrator/src/config/schema.ts`. Mirror the `HANDOFF_EMAIL_*` pattern.
 7. **Wire the interval** in the orchestrator boot path. Use `setInterval` + `setTimeout` for initial delay + `process.on('SIGTERM')` for graceful shutdown.
 8. **Write unit tests** — see §"Verification" for the test plan.
-9. **Author the operator runbook** `product/docs/ops/handoff-retention-sweep.md`.
+9. **Author the operator runbook** `handover/ops/handoff-retention-sweep.md`.
 10. **Update the compliance bundle** `05-retention-policy.md` per §2.10.
 11. **Re-export from `@swoop/connector`** (`sweepHandoffs`, `RetentionPolicy`, `DEFAULT_RETENTION_POLICY`).
 12. **Update `.env.example`** with the three new vars.
@@ -585,8 +585,8 @@ Executed against `867af2d` (HITL-ratified Tier 3 plans merge to main, 2026-05-12
 
 **Docs**
 
-- `product/docs/ops/handoff-retention-sweep.md` — new operator runbook. Why-this-exists, cadence + ownership, confirm-it's-running, manual trigger (incl. §5b smoke recipe), disable/inspect/recover, Art. 17 separation, when-things-go-wrong taxonomy mapping `parse_failed` / `delete_failed` / `sweep_failed` to operator actions, where-the-rules-came-from.
-- `product/docs/ops/README.md` — index updated to include the new runbook.
+- `handover/ops/handoff-retention-sweep.md` — new operator runbook. Why-this-exists, cadence + ownership, confirm-it's-running, manual trigger (incl. §5b smoke recipe), disable/inspect/recover, Art. 17 separation, when-things-go-wrong taxonomy mapping `parse_failed` / `delete_failed` / `sweep_failed` to operator actions, where-the-rules-came-from.
+- `handover/ops/README.md` — index updated to include the new runbook.
 - `product/cms/legal/compliance-bundle/05-retention-policy.md` — retention-windows table "Enforced?" column flipped from "Scheduled job (planned, post-Postgres swap)" to "In-process sweeper (interim FS) / scheduled Cloud Run Job (post-Postgres)" for the four handoff rows. "Enforcement — current state" section rewritten to reflect interim sweeper landed. Counsel-review footnote added per §5a (hard-delete posture; reversible without interface change). 360-day-vs-calendar-month footnote added per §2.2.
 
 ### Deviations from plan + justifications

@@ -63,7 +63,7 @@ GCP-native + trivial, riding the existing seam, deferring analysis: **Cloud Logg
 | A1 | Pluggable `EVENT_SINK` (stdout/postgres/cloud-logging) + severity mapping + `event_log` migration 020 + both-process wiring | [F-c plan](../03-exec-observability-c.md) | **Authored; in execution (worktree `analytics-review`), holds at commit** |
 | A2 | Retire dead `tool.failed` slot (F.sink-5) | F-c | bundled into F-c |
 | A3 | Fix stale "observability not wired" comments | F-c | bundled into F-c |
-| A4 | `product/docs/ops/observability.md` runbook (also discharges F.t4 spot-check) | F-c | bundled into F-c |
+| A4 | `handover/ops/observability.md` runbook (also discharges F.t4 spot-check) | F-c | bundled into F-c |
 | A5 | GCP flip: Ops Agent + Logging Writer + `EVENT_SINK=cloud-logging` + `severity>=ERROR` alert policy + Error Reporting | F-c §1.5 | **gated on "AI Pat Chat" IAM** (Thomas) |
 | B1 | `POST /events` UI→server transport (collect `ui.*` incl. malformed/silent) | F-c §4 (Phase 2) | deferred |
 | B2 | `event_log` retention sweep | F-c §4 | fast-follow |

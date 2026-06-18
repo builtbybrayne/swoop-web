@@ -16,7 +16,7 @@
 - A runnable CLI: `npm run -w @swoop/ingestion etl:sql -- --dump <path>` (name TBC).
 - Idempotent re-run behaviour (`INSERT … ON CONFLICT DO UPDATE` per row, `content_hash` updated).
 - Domain tables populated end-to-end: `country` / `area` / `location` / `activity` / `tag` / `image` / `page` / `contentblock` / `chunk` / `faqitem` / `trip` / `tour` / `tour_item` / `hotel` / `hotel_room` / `hotel_pricing` / `vessel` / `cabintype` / `cabin` / `customerreview` / `customerreview_trip`. Plus `blog_post` / `blog_chunk` if the blog-ingest stream is run alongside (left to its own task).
-- A small operator README at `product/ingestion/README.md` (or `docs/ops/etl-sql.md`) explaining how to re-run.
+- A small operator README at `product/ingestion/README.md` (or `handover/ops/etl-sql.md`) explaining how to re-run.
 - New decision log entries for whichever calls were taken at execution time (notably tooling pick — see §"Open questions" below).
 **Estimate**: ~1.5–2 days of focused work.
 

@@ -4,7 +4,7 @@ This document is the brand-extension contract between the Puma build (Al / Cowor
 
 Read this once, skim the selector table when you're writing overrides, and come back to the embed instructions when it's time to wire the iframe into the Swoop site.
 
-> Code paths shown as `src/...` below are inside the `@swoop/ui` package — i.e. `product/ui/src/...` from the repo root. (This handover doc itself lives in `product/handover/`.)
+> Code paths shown as `src/...` below are inside the `@swoop/ui` package — i.e. `product/ui/src/...` from the repo root. (This handover doc itself lives in `handover/`.)
 
 ---
 

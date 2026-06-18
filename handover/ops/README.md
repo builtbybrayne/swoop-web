@@ -31,7 +31,7 @@ If you're new here, read [`troubleshooting.md`](troubleshooting.md) first to ori
 - **Failure modes from real experience**. The "When things go wrong" sections cover failure modes that have actually been observed (or that are obvious-and-cheap to document — Postgres connection refused). New failures get appended when they happen.
 - **Cross-link, don't repeat**. The ETL runbook references the migrations runbook for any schema-touching step; troubleshooting references the per-pipeline runbooks for deeper recovery. One source of truth per concept.
 
-These are **living documents**. Iterate them as the system iterates. The runbooks live in `cms/`, not `planning/`, precisely because they're owned by the operations side eventually — Swoop's team can edit them post-handover.
+These are **living documents**. Iterate them as the system iterates. They live in `handover/ops/`, owned by the operations side, so Swoop's team can edit them post-handover.
 
 ---
 

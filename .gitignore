@@ -57,7 +57,7 @@ graphify-out/
 # understand-anything (Egonex-AI/Understand-Anything) — code knowledge graph + dashboard.
 # Built locally under product/.understand-anything/ via `/understand`, viewed with
 # `/understand-dashboard`. Same posture as graphify-out above: large, derived and
-# regenerable, so NOT committed. See product/handover/README.md for how to (re)generate,
+# regenerable, so NOT committed. See handover/README.md for how to (re)generate,
 # the recommended scan scope, and how to consult it.
 product/.understand-anything/
 .understand-anything/

@@ -79,7 +79,7 @@ Context for these rules: during the 10–11 Jun work the assistant pushed to ori
 4. **AntiRepetition durability** (H3): exhaustion fallback (relax oldest excludes instead of returning empty) / seen-set cap / session-reset affordance — Q9's "return empty" was ratified when sessions were ephemeral; B.t13 changed the calculus.
 5. **Baseline discipline**: timestamped dump before any future data-touching op; check Mini Time Machine for the 21-May recovery (item §3 last bullet).
 6. **Blog corpus**: never loaded — blog-date provenance and blog-sourced inspire/inform content sit idle until a blog ingest+load actually runs (chip raised during the wave).
-7. Mini cosmetics: duplicated `DATABASE_URL` line in `orchestrator/.env`; `npm run dev` (debugging) vs `npm run demo` (serving Luke) posture per [docs/ops/demo-server.md](../../product/docs/ops/demo-server.md).
+7. Mini cosmetics: duplicated `DATABASE_URL` line in `orchestrator/.env`; `npm run dev` (debugging) vs `npm run demo` (serving Luke) posture per [handover/ops/demo-server.md](../../handover/ops/demo-server.md).
 
 ## 8. Reading list for the fresh session
 

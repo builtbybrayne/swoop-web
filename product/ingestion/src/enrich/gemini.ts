@@ -263,7 +263,7 @@ function resolvePositiveIntFromEnv(name: string, fallback: number): number {
  * each batch as it comes back. Caller is responsible for breaking on cost
  * cap (caller checks ledger between batches).
  *
- * Tunable via env (operator-facing — see `docs/ops/embedding-rerun.md`):
+ * Tunable via env (operator-facing — see `/handover/ops/embedding-rerun.md`):
  *   - `GEMINI_CONCURRENCY`  — max in-flight batches (default 4)
  *   - `GEMINI_BATCH_SIZE`   — documents per batch (default 100)
  *

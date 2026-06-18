@@ -131,7 +131,7 @@ widgets/                 — inspiration, item-detail, lead-capture, search-resu
 ```
 cms/errors/en.json                              — UI error copy (D.t5)
 cms/legal/compliance-bundle/{01..09}*.md       — compliance bundle (5 ✅ filled / 1 🟡 partial / 4 🔴 blocked / 1 empty screenshots dir)
-docs/ops/evalset-growth.md                       — H.t7 operator runbook
+handover/ops/evalset-growth.md                       — H.t7 operator runbook
 cms/prompts/system/00_why.md                    — STILL PLACEHOLDER (5 lines, "PLACEHOLDER — chunk G.t1 overwrites")
 cms/prompts/system/10_style-avoid.md            — substantive (Al-authored)
 cms/prompts/skills/.gitkeep                     — EMPTY (G.t3 not yet run)

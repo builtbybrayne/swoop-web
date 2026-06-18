@@ -23,7 +23,7 @@ Also rule in/out while there: sessionStorage is per-tab — a link re-opened in 
 
 ## Part B — Harden the demo (the fix for the reload class + restart frequency)
 
-1. **Serve a built UI**: `vite build` + static serve (`vite preview` or a tiny static server) on :5173 (keep the port so [funnel.sh](../product/scripts/funnel.sh) and the `/api/*` proxy contract stay put — `vite preview` honours the same proxy config; verify, else front with Caddy/nginx-lite). No HMR socket → no dev-reload class. Add `npm run demo` (build + serve UI, run orchestrator + connector **non-watch** `npm start`) as the Mini's single entry point, documented in a short runbook `product/docs/ops/demo-server.md` (boot order, funnel up/down, where logs land, the sessionStorage-per-tab caveat for demo drivers).
+1. **Serve a built UI**: `vite build` + static serve (`vite preview` or a tiny static server) on :5173 (keep the port so [funnel.sh](../product/scripts/funnel.sh) and the `/api/*` proxy contract stay put — `vite preview` honours the same proxy config; verify, else front with Caddy/nginx-lite). No HMR socket → no dev-reload class. Add `npm run demo` (build + serve UI, run orchestrator + connector **non-watch** `npm start`) as the Mini's single entry point, documented in a short runbook `handover/ops/demo-server.md` (boot order, funnel up/down, where logs land, the sessionStorage-per-tab caveat for demo drivers).
 2. **Supervise, don't watch**: orchestrator + connector via launchd plists (or `pm2` if simpler on the Mini — executor picks, documents) — restart-on-crash *without* file-watch restarts, logs to files. `--kill-others-on-fail` disappears from the demo path (dev.sh stays for laptop dev).
 3. **Re-test** the Part A reproduction: idle + reload now resumes the conversation (rehydrate works when the session survives); file-touch no longer restarts anything.
 
@@ -87,7 +87,7 @@ macOS-native, no new global dependency, user-level (`~/Library/LaunchAgents/`, n
 
 ### Deferred to operator (on the Mini, at merge)
 
-- `setup-demo-services.sh install` + a cold boot following [the runbook](../product/docs/ops/demo-server.md).
+- `setup-demo-services.sh install` + a cold boot following [the runbook](../handover/ops/demo-server.md).
 - The plan's Part B scripted checks: `kill -9` orchestrator → launchd restarts it; browser reload mid-conversation resumes; 30-min idle Funnel session → no spontaneous reload.
 - Re-test of the Part A reproduction (§B.3) — Part A evidence gathering itself remains open.
 

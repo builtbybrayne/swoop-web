@@ -1,6 +1,6 @@
 # Swoop handover
 
-Handover documents for the Swoop team taking ownership of Puma. Companion to the operator runbooks in [`../docs/ops/`](../docs/ops/README.md) (day-task recipes).
+Handover documents for the Swoop team taking ownership of Puma. Companion to the operator runbooks in [`ops/`](ops/README.md) (day-task recipes).
 
 ## Developer handover
 
@@ -15,13 +15,21 @@ Handover documents for the Swoop team taking ownership of Puma. Companion to the
 Two code knowledge-graphs cover `product/` — both **regenerated locally and gitignored** (large, derived, not committed):
 
 - **understand-anything** — an interactive graph (~990 nodes; 10 layers = the workspaces; import / call / tested-by edges; a 15-step guided tour). The best first stop for onboarding or an architecture overview. Browse it with `/understand-dashboard`; (re)build with `/understand` (incremental after the first run). When regenerating, set `.understand-anything/.understandignore` to exclude `graphify-out/`, `project_management_references/` (a symlink to the planning tree), `harness/runs/`, `.omc/`, and `.understand-anything/` itself — otherwise the scan tries to ingest tens of thousands of generated cache files.
-- **graphify** — query-oriented (`graph:query` / `graph:rebuild`); see [`../CLAUDE.md`](../CLAUDE.md) "graphify". Good for "what relates to X" and path-between-symbols questions.
+- **graphify** — query-oriented (`graph:query` / `graph:rebuild`); see [`../product/CLAUDE.md`](../product/CLAUDE.md) "graphify". Good for "what relates to X" and path-between-symbols questions.
 
 Neither is in git; a built understand-anything graph lives on the build machine (first generated 2026-06-17). Regenerate from a clone before consulting.
 
 ## Sales handover
 
-*Planned, not yet written.* A separate doc for the sales team — how the agent qualifies leads, what lands in their inbox, how to read a handoff verdict. Tracked for later; this folder is its home.
+Docs for the Swoop sales team, written for them rather than for developers.
+
+| Doc | Read it to… |
+|---|---|
+| [`sales-memory.md`](sales-memory.md) | **Teach the agent what you know** — log in, then tell the agent facts (seasonality, prices, availability) it should carry into every visitor conversation. |
+
+Its sibling lives in [`../docs/`](../docs/sales-team-prompt-workflow-sales.md): **Shaping how the agent behaves** — how to feed back tone and behaviour changes via the shared Google Doc.
+
+*Still planned:* a lead-handling guide — how the agent qualifies leads, what lands in the sales inbox, how to read a handoff verdict. This folder is its home.
 
 ## Conventions
 

@@ -101,7 +101,7 @@ No app change. One-time, all console/CLI:
 5. Create a Cloud Monitoring **alert policy**: log-based condition `severity>=ERROR` (optionally filtered to `jsonPayload.eventType`), notification channel = dev-team email / Slack.
 6. Error Reporting auto-aggregates the ERROR entries — no extra setup.
 
-A `product/docs/ops/observability.md` runbook captures these steps + the common Log Explorer / `event_log` queries (this also discharges the still-missing **F.t4 spot-check runbook**).
+A `handover/ops/observability.md` runbook captures these steps + the common Log Explorer / `event_log` queries (this also discharges the still-missing **F.t4 spot-check runbook**).
 
 ---
 
@@ -122,7 +122,7 @@ A `product/docs/ops/observability.md` runbook captures these steps + the common 
 | `product/orchestrator/src/config/schema.ts` + `.env.example` | add `EVENT_SINK` + the `postgres`-requires-`ORCHESTRATOR_DATABASE_URL` refine. |
 | `product/orchestrator/src/index.ts` | provision pool if needed + `setEventSink(...)`. Boot-log line. Fix the stale "Not here yet: Observability backbone (chunk F)" header comment. |
 | `product/orchestrator/src/server/chat.ts` | fix the stale "What is intentionally missing: Observability events (chunk F)" header comment (it is wired). |
-| `product/docs/ops/observability.md` *(new)* | the GCP flip steps + Log Explorer / `event_log` query cookbook + the happy-path event sequence (discharges F.t4). |
+| `handover/ops/observability.md` *(new)* | the GCP flip steps + Log Explorer / `event_log` query cookbook + the happy-path event sequence (discharges F.t4). |
 | `migrate.test.ts` (connector) | bump expected migration count to 020. |
 
 ---

@@ -99,7 +99,7 @@ Boot state verified: connector 9 tools; orchestrator "8 exposed to model", `agen
 | F2 | lookup visibility: `inform_chunk.canonical_url` + `source_title` derived for FAQ chunks via `faqset_id → contentblock → page` + re-compose | ✅ **landed `55fd6a0` + `980a4d6`**; ops O0→O3 executed (baseline dump → migration 018 → ETL → £0 re-compose). Coverage **18 → 890/924**; lookup widget rendered on FAQ content for the first time, titled anchors live. Full log: [03-exec-crosscut-goofy-noether-lookup-url-fix.md](../03-exec-crosscut-goofy-noether-lookup-url-fix.md) |
 | F3 | `inspiration.tsx` rules-of-hooks violation (hooks after conditional returns → React "static flag" console flood) | ✅ **landed `01a2d5e`** — hooks hoisted; console verified clean |
 | F4 | `find_inspiring/description.md` over-promised "a region tag" (null on all 665) | ✅ **landed `01a2d5e`** |
-| F5 | Mini refresh: `git pull` + `npm install` + rebuild + restart per [docs/ops/demo-server.md](../../product/docs/ops/demo-server.md) | ⚠ **open — needs Alastair at the machine** (Mini refuses SSH, port 22; and the fixes need pushing by Alastair first — agent never pushes). Until then the demo runs pre-patch code |
+| F5 | Mini refresh: `git pull` + `npm install` + rebuild + restart per [handover/ops/demo-server.md](../../handover/ops/demo-server.md) | ⚠ **open — needs Alastair at the machine** (Mini refuses SSH, port 22; and the fixes need pushing by Alastair first — agent never pushes). Until then the demo runs pre-patch code |
 
 ## 6a. F6 — NEW finding: customer_story persona summaries are stubs (needs its own go)
 

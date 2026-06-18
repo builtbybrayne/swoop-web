@@ -790,7 +790,7 @@ Concrete consequences observed during smoke:
 | [product/connector/src/server/__tests__/mcp.test.ts](../product/connector/src/server/__tests__/mcp.test.ts) | Update test fixture builders that synthesise a Config to use `GEMINI_API_KEY` not `VOYAGE_API_KEY`. |
 | [product/connector/src/server/app.ts](../product/connector/src/server/app.ts) + [server/mcp.ts](../product/connector/src/server/mcp.ts) | Sweep any inline Voyage references. Boot wiring already takes the `Config` and an injected `embedQuery` function via `buildEmbedQuery(config)` — no public-surface changes, just constant renames if they appear. |
 | `@swoop/connector` unit tests covering the embedder | Update to match the new shape: mock the Gemini single-content embed endpoint, assert 3072-element output. Mirror the existing Voyage test's structure (status-200 ok path, 400 throw path, 200-but-wrong-dim throw path, cache hit, missing-key throw). |
-| Plain-text documentation references | `docs/ops/embedding-rerun.md` already covers the ingestion-side swap (C.t9); add one sentence noting that the query-side embedder shares the model — operators don't need a separate `GEMINI_QUERY_*` env. |
+| Plain-text documentation references | `handover/ops/embedding-rerun.md` already covers the ingestion-side swap (C.t9); add one sentence noting that the query-side embedder shares the model — operators don't need a separate `GEMINI_QUERY_*` env. |
 
 ### What does NOT change
 

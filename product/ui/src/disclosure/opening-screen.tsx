@@ -18,9 +18,9 @@ const COPY = {
   intro:
     "This is an AI assistant. It helps you explore trip ideas by chatting with you and suggesting options from our library.",
   body:
-    "To answer your questions, we process the messages you send. If you continue, we'll keep a record of this chat — any saved data is always anonymised before we do any internal analyses to check the assistant is working well. Nothing you type is used to train third-party AI models.",
+    "To answer your questions, we process the messages you send. If you continue, we'll keep a record of this chat for a brief period of time. Any saved data is always anonymised before we do any internal analyses to check the assistant is working well. Nothing you type is used to train third-party AI models.",
   bodyContinued:
-    "If you'd prefer not to start the conversation, you can decline — no data is recorded.",
+    "If you'd prefer not to start the conversation, you can decline and no data will be recorded.",
   privacyLinkLabel: "Read how we handle your data",
   continueLabel: "Continue",
   declineLabel: "No thanks",
@@ -28,7 +28,7 @@ const COPY = {
   errorPrefix: "Couldn't start the conversation:",
   declinedHeading: "No problem",
   declinedBody:
-    "Nothing has been recorded. You can close this window — or reload the page if you change your mind.",
+    "Nothing has been recorded. You can close this window. Or reload the page if you change your mind.",
 } as const;
 
 interface OpeningScreenProps {

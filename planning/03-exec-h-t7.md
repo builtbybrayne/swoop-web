@@ -8,7 +8,7 @@
 - F-a — `emitEvent` + structured stdout JSON event stream landing in Cloud Logging.
 - E.t1 — handoff records persisted (the canonical place visitor PII lives today).
 **Produces**:
-- `product/docs/ops/evalset-growth.md` — operator-facing runbook for the post-launch weekly ritual.
+- `handover/ops/evalset-growth.md` — operator-facing runbook for the post-launch weekly ritual.
 - One-line addition to `product/CLAUDE.md`'s "where things live" pointers (so engineers stumble onto the runbook from inside `product/`).
 **Estimate**: ~half a morning. Pure docs.
 
@@ -45,9 +45,9 @@ The runbook is **operator-facing**. Audience: Swoop's in-house team post-handove
 
 ## File path + naming
 
-`product/docs/ops/evalset-growth.md`. Verbatim from Tier 2 §2.7. Don't invent variants.
+`handover/ops/evalset-growth.md`. Verbatim from Tier 2 §2.7. Don't invent variants.
 
-The directory `product/docs/ops/` does not yet exist; this task creates it. F.t4's spot-check runbook (`product/docs/ops/spot-check-conversation.md`) will land alongside later. No `README.md` in `docs/ops/` for now — two files don't justify one, and `cms/README.md`'s authoring rules already explain the wider `cms/` posture.
+The directory `handover/ops/` does not yet exist; this task creates it. F.t4's spot-check runbook (`handover/ops/spot-check-conversation.md`) will land alongside later. No `README.md` in `handover/ops/` for now — two files don't justify one, and `cms/README.md`'s authoring rules already explain the wider `cms/` posture.
 
 The file is markdown; treated as content (not loaded by any package); reviewed by Al on edits like any other CMS content.
 
@@ -177,7 +177,7 @@ The runbook surfaces these as a final section so each weekly read keeps them vis
 
 H.t7 is done when:
 
-1. `product/docs/ops/evalset-growth.md` exists, follows the section order in §"Runbook structure", and is operator-readable end-to-end without consulting another doc except the explicit links to `product/harness/scenarios/README.md` and `planning/02-impl-validation.md`.
+1. `handover/ops/evalset-growth.md` exists, follows the section order in §"Runbook structure", and is operator-readable end-to-end without consulting another doc except the explicit links to `product/harness/scenarios/README.md` and `planning/02-impl-validation.md`.
 2. The PII section names every field on the handoff payload that carries identity (`contact.name`, `contact.email`, `contact.phone`, `reason.text`, `session.sessionId`) and prescribes the action for each.
 3. The grep smoke test in §"PII sanitisation" runs cleanly against the existing scaffold scenarios (`product/harness/scenarios/000-*.yaml` through `019-*.yaml`) — the runbook can claim "this passes today, keep it passing".
 4. `product/CLAUDE.md` has a one-line pointer to the runbook so engineers landing in `product/` find it without climbing planning docs.

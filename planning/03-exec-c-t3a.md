@@ -407,7 +407,7 @@ These are flagged so the executing agent doesn't lose time on them. Numbered for
 - **C.t3** (transform): C.t3a's input contract is the populated domain tables. If C.t3 changes a column shape mid-flight, C.t3a's `content_hash` rule may need a version bump.
 - **C.t4** (tool implementations): C.t4 reads from the five derived tables this task populates. The contract is the C.t2 schema; C.t3a is the population; C.t4 is the consumption.
 - **C.t6** (image annotation pipeline): C.t6 fills `image.description` for the ~6.3K rows lacking it; C.t3a then embeds those rows via a follow-up `--mode=embed --source=image` run. C.t6 must run before that follow-up; the order is documented in the C.t6 plan.
-- **C.t8** (runbooks): the Cloud Run Job invocation pattern, the cost-cap env var, the rate-limit tuning notes, and the prompt-iteration loop all become C.t8 documentation. C.t3a leaves stub notes in `product/docs/ops/`; C.t8 fleshes them out.
+- **C.t8** (runbooks): the Cloud Run Job invocation pattern, the cost-cap env var, the rate-limit tuning notes, and the prompt-iteration loop all become C.t8 documentation. C.t3a leaves stub notes in `handover/ops/`; C.t8 fleshes them out.
 - **G.t0/G.t1/G.t5** (content): the content team can iterate on classifier prompts at `cms/prompts/etl/<classifier>/prompt.md` without code changes — same pattern as `cms/prompts/system/`. Frontmatter version bump triggers re-classification on next run. This is content-as-data (theme 2) applied to ETL prompts.
 
 ---

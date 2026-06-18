@@ -1,7 +1,7 @@
 // product/ui/src/__tests__/brand-extension-surface.test.tsx
 //
 // Locks in the `data-swoop-part` contract documented in
-// product/handover/ui-integration.md. Swoop's in-house team uses these
+// handover/ui-integration.md. Swoop's in-house team uses these
 // attributes as the selector surface for brand overrides; removing one
 // silently breaks their stylesheet. Each assertion here mirrors a row in
 // that doc's selector table.

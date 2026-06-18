@@ -112,7 +112,7 @@ Where it lands: Tier 2 chunk F (observability & analytics).
 
 ### Observability — Cloud Logging + Error Reporting provisioning — Thomas (raised 2026-06-16)
 
-Puma's event stream is now wired to a pluggable sink (`EVENT_SINK`; F-c). The dev/demo path (`postgres` → `event_log`) works today; the **production** path is **Cloud Logging + Cloud Error Reporting** (chosen 2026-06-16 — GCP-native, captures real app interest GA can't, and gives the dev team fast error alerting). To turn it on in the "AI Pat Chat" project, Swoop devops need to provision the following — **full paste-ready how-to in [product/docs/ops/observability.md](product/docs/ops/observability.md) §"Cloud Logging mode — the GCP flip"**:
+Puma's event stream is now wired to a pluggable sink (`EVENT_SINK`; F-c). The dev/demo path (`postgres` → `event_log`) works today; the **production** path is **Cloud Logging + Cloud Error Reporting** (chosen 2026-06-16 — GCP-native, captures real app interest GA can't, and gives the dev team fast error alerting). To turn it on in the "AI Pat Chat" project, Swoop devops need to provision the following — **full paste-ready how-to in [handover/ops/observability.md](handover/ops/observability.md) §"Cloud Logging mode — the GCP flip"**:
 
 1. Enable the **Cloud Logging** + **Error Reporting** APIs.
 2. Grant the runtime service account (orchestrator + connector, GCE VM or Cloud Run) `roles/logging.logWriter`.
@@ -123,7 +123,7 @@ Puma's event stream is now wired to a pluggable sink (`EVENT_SINK`; F-c). The de
 
 Why it matters: until this lands, production events are ephemeral (stdout) and there is **no error alerting**. Gated on the same "AI Pat Chat" IAM as the rest of M4. **No new processor** — Cloud Logging is already in the compliance processor list ([06-processors.md](product/cms/legal/compliance-bundle/06-processors.md)); **add Error Reporting** to that list for completeness (it is a Google Cloud sub-service under the existing GCP DPA, so no new DPA). NB: the reliable error surface is the step-5 alert policy; Cloud Error Reporting's *grouped view* additionally needs the sink to format ERROR events as `ReportedErrorEvent` — a small follow-up, not yet shipped.
 
-Where it lands: Tier 2 chunk F. The provisioning steps now live in [product/handover/productionisation.md](product/handover/productionisation.md) §2/§6 (the dev handover folder); this entry stays as the tracked Swoop-side ask.
+Where it lands: Tier 2 chunk F. The provisioning steps now live in [handover/productionisation.md](handover/productionisation.md) §2/§6 (the dev handover folder); this entry stays as the tracked Swoop-side ask.
 
 ### Media library location + access — Thomas / Richard / Martin (Friday hackathon scope)
 
