@@ -10,12 +10,12 @@ For Swoop-wide background (people, commercial fence, positioning) load the `swoo
 
 Releases are named after Patagonian / Antarctic animals. No version numbers — when we talk about "V1" we'll always discover a year later that the real V1 was the ChatGPT PoC and we're actually on V3. Names don't have that problem.
 
-| Release | Name | Status | Scope |
-|---|---|---|---|
-| First shipped | **Puma** | In planning | Patagonia-only conversational discovery, qualified-lead handoff, EU AI Act Art. 50 + GDPR compliant. The 30 Mar quoted 16-day engagement. |
-| Next | TBD (candidate: Condor / Guanaco) | Not scoped | Antarctica follow-on + whatever Puma's real-world signal points to. |
+| Release | Name | Scope |
+|---|---|---|
+| First | **Puma** | Patagonia-only conversational discovery, qualified-lead handoff, EU AI Act Art. 50 + GDPR compliant. The 30 Mar quoted 16-day engagement. |
+| Next | TBD (candidate: Condor / Guanaco) | Antarctica follow-on + whatever Puma's real-world signal points to. |
 
-**Active release = Puma.** Anywhere the codebase or planning docs talk about "the current release", they mean Puma until stated otherwise.
+**Active release = Puma.** Anywhere the codebase or planning docs talk about "the current release", they mean Puma until stated otherwise. (Per-release build *status* is deliberately not recorded here — it goes stale instantly; determine it from the sources in **Determining current state** below.)
 
 ---
 
@@ -107,7 +107,7 @@ To find every open review-driven item: `grep "code-review fixes" planning/03-exe
 | Quoting notes (scope deferrals, time calibration, Julie's production bar) | [planning/00-project-proposal-notes.md](planning/00-project-proposal-notes.md) |
 | Meeting capture (20/21 Apr) | `planning/archive/meetings/` |
 | Research pack (UI, eval harness, agent architecture) | `planning/archive/research/` |
-| Swoop data ontology (first-pass, transient) | `data-ontology.md` + `planning/02-impl-retrieval-and-data-source-exploration.md`. Retires when Monday 2026-04-27 SQL dump is modelled. |
+| Swoop data ontology (first-pass, superseded) | `data-ontology.md` + `planning/02-impl-retrieval-and-data-source-exploration.md` — pre-dump source material, superseded once the 2026-04-27 SQL dump was modelled into the live connector schema. Kept for provenance, not canonical. |
 
 ---
 
@@ -134,9 +134,13 @@ To find every open review-driven item: `grep "code-review fixes" planning/03-exe
 
 ---
 
-## Current state
+## Determining current state
 
-- Planning reset performed 2026-04-22. New Tier 1 top-level plan at `planning/01-top-level.md`. Prior docs archived.
-- Next step: produce Tier 2 implementation plans per roadmap chunk (A–H in the Tier 1 plan). Start with A (foundations) because it roots the dependency graph. Content chunk G can run in parallel.
-- Friday 24 Apr data-access hackathon superseded: Swoop engineering committed to a full SQL dump on Monday 2026-04-27. That reshapes Tier 2 chunk C §2.1 — ingest the dump, map against the first-pass ontology, then decide steady-state extraction. See `data-ontology.md` and `planning/02-impl-retrieval-and-data-source-exploration.md`.
-- Awaiting from Swoop: GCP "AI Pat Chat" IAM, Patagonia sales-thinking doc from Luke + Lane, Claude account clarification, sales inbox + SMTP, legal review.
+This file does not record where the project is — any such snapshot is stale the moment it's written. **To work out current state, read the sources, in this order:**
+
+1. **[progress.md](progress.md)** (newest entries first) + **[next-steps.md](next-steps.md)** — most recent build state and prioritised resume guide.
+2. **The newest file in [planning/reviews/](planning/reviews/)** — its "Recommended next moves" section is the in-flight ledger.
+3. **`git log` for the delta** since those were written — for *what changed* only, never for time / effort / cost (see **Project time & cost** above).
+4. **[questions.md](questions.md)** — the live list of what's blocked on Swoop (IAM, legal, SMTP, sales-thinking doc, etc.). Blockers are tracked and closed there, not enumerated here.
+
+Orientation files lag fast-moving work. When a review + `git log` disagree with an orientation summary, **trust the review and the code, then refresh the orientation file** — the "verify against code/git, don't trust a stale doc" discipline the reviews repeatedly relearn.
