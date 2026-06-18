@@ -12,6 +12,20 @@
 // in Node.js-only crypto / jwt deps.
 // -----------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Shared JWT constants — single source of truth for signer (orchestrator) and
+// verifier (connector). Changing a value here changes both sides atomically.
+// ---------------------------------------------------------------------------
+
+/** JWT `iss` claim. Identifies tokens as Puma staff tokens at verify time. */
+export const STAFF_JWT_ISSUER = 'puma-staff' as const;
+
+/** JWT `aud` claim. Narrows the token to the orchestrator audience. */
+export const STAFF_JWT_AUDIENCE = 'puma-orchestrator' as const;
+
+/** JWT algorithm. HS256 HMAC-SHA256 with an explicit allow-list at verify time. */
+export const STAFF_JWT_ALG = 'HS256' as const;
+
 /**
  * Credentials supplied by the staff member to authenticate. Shape depends on
  * the implementation:

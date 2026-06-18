@@ -20,12 +20,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify, errors as joseErrors } from 'jose';
 import type { StaffAuthenticator, StaffCredentials, StaffAuthResult, StaffVerifyResult } from '@swoop/common';
-
-/** JWT issuer claim — identifies Puma tokens at verify time. */
-const ISSUER = 'puma-staff';
-
-/** JWT audience claim — narrows the token to the orchestrator. */
-const AUDIENCE = 'puma-orchestrator';
+import { STAFF_JWT_ISSUER, STAFF_JWT_AUDIENCE, STAFF_JWT_ALG } from '@swoop/common';
 
 export interface SharedPasswordAuthenticatorOptions {
   /** The shared staff password. Must match STAFF_AUTH_PASSWORD in config. */
@@ -79,9 +74,9 @@ export class SharedPasswordAuthenticator implements StaffAuthenticator {
       // `sub` is the staff member's name; version = 1 for future migration.
       version: 1,
     })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuer(ISSUER)
-      .setAudience(AUDIENCE)
+      .setProtectedHeader({ alg: STAFF_JWT_ALG })
+      .setIssuer(STAFF_JWT_ISSUER)
+      .setAudience(STAFF_JWT_AUDIENCE)
       .setIssuedAt(issuedAt)
       .setExpirationTime(expiresAt)
       .sign(this.secretKey);
@@ -96,9 +91,9 @@ export class SharedPasswordAuthenticator implements StaffAuthenticator {
   async verify(token: string): Promise<StaffVerifyResult> {
     try {
       const { payload } = await jwtVerify(token, this.secretKey, {
-        issuer: ISSUER,
-        audience: AUDIENCE,
-        algorithms: ['HS256'],
+        issuer: STAFF_JWT_ISSUER,
+        audience: STAFF_JWT_AUDIENCE,
+        algorithms: [STAFF_JWT_ALG],
       });
 
       const name = typeof payload['name'] === 'string' ? payload['name'] : 'Staff';

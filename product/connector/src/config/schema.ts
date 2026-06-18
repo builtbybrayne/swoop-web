@@ -147,6 +147,29 @@ export const configSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'PRICES_CAPTURED_AT must be ISO date YYYY-MM-DD')
       .default('2026-04-27'),
 
+    // --- Staff JWT secret (sm-t2-auth hardening) ---------------------------
+    //
+    // When set, the connector performs full cryptographic JWT verification on
+    // incoming staff tokens (asserting issuer, audience, algorithm, and
+    // signature) rather than the presence-only backstop. Must be ≥ 32 chars
+    // and MUST match the STAFF_JWT_SECRET used by the orchestrator's signer —
+    // a mismatch means every mutation is rejected with a signature failure.
+    //
+    // Optional: omit in development to fall back to the presence backstop.
+    // Required in production alongside the orchestrator's secret.
+    STAFF_JWT_SECRET: z
+      .string()
+      .min(32, 'STAFF_JWT_SECRET must be at least 32 characters when provided.')
+      .optional(),
+
+    // --- HTTP bind host (sm-t2-auth hardening) -----------------------------
+    //
+    // Address the connector HTTP server binds to. Defaults to '127.0.0.1'
+    // (loopback only) so the connector is not reachable from outside the host
+    // without an explicit override. Set to '0.0.0.0' only in environments
+    // where the connector must be reachable across the network.
+    CONNECTOR_HOST: z.string().trim().min(1).default('127.0.0.1'),
+
     // --- Environment selector ----------------------------------------------
     NODE_ENV: z
       .enum(['development', 'test', 'production'])

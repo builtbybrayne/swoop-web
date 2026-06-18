@@ -30,6 +30,7 @@ import { resolveEventSink } from '../data/event-log-sink.js';
 import { buildEmbedQuery } from '../data/embed-query.js';
 import { loadAllToolDescriptions, ALL_TOOL_NAMES } from '../tools/index.js';
 import { loadMemoryToolDescriptions } from '../tools/memory-description-loader.js';
+import { buildStaffTokenVerifier } from '../auth/verify-staff-token.js';
 import { buildApp } from './app.js';
 
 async function main(): Promise<void> {
@@ -51,11 +52,22 @@ async function main(): Promise<void> {
   const memoryDescriptions = loadMemoryToolDescriptions(config.memoryPromptDirAbsolutePath);
   const embedQuery = buildEmbedQuery(config);
 
-  const app = buildApp({ pool, embedQuery, descriptions, memoryDescriptions, capturedAt: config.PRICES_CAPTURED_AT });
+  // sm-t2-auth: when STAFF_JWT_SECRET is configured, build the cryptographic
+  // verifier and inject it into the app so all mutating memory tools perform
+  // full JWT verification (issuer + audience + algorithms + signature + expiry).
+  // When absent, tools fall back to the presence-only assertStaffTokenPresent
+  // backstop — dev without a secret still works.
+  const assertStaffToken = config.STAFF_JWT_SECRET
+    ? buildStaffTokenVerifier(config.STAFF_JWT_SECRET)
+    : undefined;
 
-  const server = app.listen(config.CONNECTOR_PORT, () => {
-    console.log(`[connector] ready on http://localhost:${config.CONNECTOR_PORT}`);
-    console.log(`[connector] MCP endpoint: http://localhost:${config.CONNECTOR_PORT}/mcp`);
+  const app = buildApp({ pool, embedQuery, descriptions, memoryDescriptions, capturedAt: config.PRICES_CAPTURED_AT, assertStaffToken });
+
+  // sm-t2-auth: bind to config.CONNECTOR_HOST (default '127.0.0.1') so the
+  // connector is loopback-only unless the operator explicitly sets CONNECTOR_HOST.
+  const server = app.listen(config.CONNECTOR_PORT, config.CONNECTOR_HOST, () => {
+    console.log(`[connector] ready on http://${config.CONNECTOR_HOST}:${config.CONNECTOR_PORT}`);
+    console.log(`[connector] MCP endpoint: http://${config.CONNECTOR_HOST}:${config.CONNECTOR_PORT}/mcp`);
     console.log(`[connector] health: /healthz (liveness) + /readyz (readiness)`);
     console.log(
       `[connector] pool: max=${config.PG_POOL_MAX} idle=${config.PG_POOL_IDLE_MS}ms ` +

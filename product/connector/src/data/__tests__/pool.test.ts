@@ -27,6 +27,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
   const base: Config = Object.freeze({
     DATABASE_URL: VALID_URL,
     CONNECTOR_PORT: 3002,
+    CONNECTOR_HOST: '127.0.0.1',
     PG_POOL_MAX: 10,
     PG_POOL_IDLE_MS: 30_000,
     PG_STATEMENT_TIMEOUT_MS: 10_000,

@@ -44,6 +44,13 @@ export interface BuildAppDeps {
    */
   readonly capturedAt?: string;
   /**
+   * Cryptographic staff-token verifier (sm-t2-auth). When present, injected
+   * into the MCP server's memory-tool deps bag so all mutating tools perform
+   * full JWT verification instead of the presence-only backstop. When absent,
+   * mutation tools fall back to `assertStaffTokenPresent`.
+   */
+  readonly assertStaffToken?: (token: string | undefined) => Promise<void>;
+  /**
    * Optional readiness override — tests substitute a deterministic handler
    * to exercise the 200 / 503 branches without touching pg. Production
    * leaves this undefined and gets the real DB-probe handler.
@@ -94,6 +101,7 @@ export function buildApp(deps: BuildAppDeps): Express {
           enableMemoryTools: true,
           memoryDescriptions: deps.memoryDescriptions,
         } : {}),
+        ...(deps.assertStaffToken ? { assertStaffToken: deps.assertStaffToken } : {}),
       });
       await server.connect(transport);
     }
