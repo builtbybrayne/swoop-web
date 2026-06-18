@@ -54,7 +54,7 @@ Puma processes personal data under **explicit consent** (GDPR Art. 6(1)(a), two-
 
 **SLA**: GDPR-standard 1 month.
 
-**Backup window caveat**: erased records may persist in Cloud SQL automated backups for up to 7 days (default backup retention). Standard practice; counsel to confirm acceptability per [05-retention-policy.md](05-retention-policy.md).
+**Backup window caveat**: erased records may persist in backups for whatever window ops has configured (shape-dependent — see [05-retention-policy.md](05-retention-policy.md) Backups section). Standard practice; counsel to confirm acceptability.
 
 ### Right to restriction of processing (Art. 18)
 
@@ -96,8 +96,6 @@ Puma processes personal data under **explicit consent** (GDPR Art. 6(1)(a), two-
 - **Tier-1 withdrawal during conversation**: dedicated UI control closes the chat + deletes session state on the spot. (Confirm UI prominence with counsel — see [04-consent-flow.md](04-consent-flow.md).)
 - **Tier-1 withdrawal post-conversation**: same as Art. 17 erasure — emails the privacy contact, recipient deletes session state if still held (most session state is short-TTL and already deleted by retention enforcement).
 - **Tier-2 withdrawal (post-handoff)**: same as Art. 17 erasure — handoff record deleted via the deletion runbook.
-
-**Marketing opt-in withdrawal**: separate from Art. 17. Visitors can withdraw the marketing opt-in via Swoop's existing marketing-unsubscribe pathway (which already handles GDPR Art. 21 + e-Privacy compliance for Swoop's marketing operations).
 
 ### Right to lodge a complaint (Art. 77)
 

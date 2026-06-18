@@ -1,10 +1,8 @@
 # 04 — Consent Flow
 
-> **Status: 🔴 BLOCKED / PLACEHOLDER**
+> **Status: 🟡 COPY DEFERS TO PACK** — structural walkthrough is complete. Reviewable copy now lives in the legal review pack (`planning/swoop-legal-review-pack.md` §4). Screenshots remain pending (blocked on E.t5 for final copy → capture).
 >
-> **Blocked on**: E.t5 (legal copy authoring) — real copy required for non-misleading screenshots. Once E.t5 lands, screenshots can be captured against the real copy.
->
-> **What lands here when E.t5 closes**: screenshot files in `screenshots/`, inline-referenced from each step below; copy excerpts replaced with the real copy from §03.
+> **What lands here when E.t5 closes**: screenshot files in `screenshots/`, inline-referenced from each step below.
 
 ---
 
@@ -87,7 +85,7 @@ The textual walkthrough below is **fillable now** — it describes the flow, mec
 **`submitHandoff()`**:
 - Writes durable record to handoff store (`FsHandoffStore` today; `PostgresHandoffStore` post-IAM).
 - If email enabled: sends verdict-aware email via SMTP.
-- Emits `handoff.submitted` structured event to Cloud Logging.
+- Emits `handoff.submitted` structured event to the event stream.
 
 ### Step 6 — Confirmation + return to conversation
 

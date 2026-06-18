@@ -1,8 +1,6 @@
 # 02 — Data Flow
 
-> **Status: ✅ FILLED** — production-ready for counsel review.
->
-> Reflects the system as shipped on 2026-04-28, including E.t2/t3/t4 (durable handoff store, mailer, end-to-end consent flow). Notes inline where future state (Cloud SQL Postgres swap, SMTP provider activation) differs.
+> **Status: ✅ FILLED** — updated 2026-06-18 (v0.8): single-VM infrastructure, Google Gemini API as fourth processor, wired session retention, marketing opt-in removed.
 
 ---
 
@@ -15,24 +13,25 @@ flowchart TD
     T1 -->|Continue| UI[Chat widget<br/>@swoop/ui — React, assistant-ui]
     T1 -.->|No thanks| END1[Chat closes<br/>no session state written]
 
-    UI -->|HTTPS POST chat turn<br/>session id + message| ORCH[Orchestrator<br/>@swoop/orchestrator<br/>Cloud Run, europe-west2 planned]
-    ORCH -->|conversation history + system prompt| ANTHROPIC[Anthropic API<br/>Claude Sonnet 4.5 + Haiku 4.5<br/>region TBC]
+    UI -->|HTTPS POST chat turn<br/>session id + message| ORCH[Orchestrator<br/>@swoop/orchestrator<br/>single GCP VM — Compute Engine<br/>europe-west2 working default]
+    ORCH -->|conversation history + system prompt| ANTHROPIC[Anthropic API<br/>Claude — Sonnet-class conversation<br/>+ Haiku-class triage<br/>region TBC]
     ANTHROPIC -->|streamed response + tool calls| ORCH
 
     ORCH -->|in-process call| CONN[Connector<br/>@swoop/connector<br/>retrieval + handoff side-effects]
-    CONN -->|SQL queries<br/>read-only| PGR[(Postgres — retrieval store<br/>Cloud SQL, planned post-IAM)]
+    CONN -->|SQL queries<br/>read-only| PGR[(Postgres — retrieval store<br/>on the VM)]
+    CONN -->|embeds visitor query text| GEMINI[Google Gemini API<br/>gemini-embedding-001<br/>public Generative Language API<br/>no EU region pinning]
 
     ORCH -->|server-sent events| UI
-    UI -->|when agent triggers| LCW[Lead-capture widget<br/>tier-2 consent + marketing opt-in]
+    UI -->|when agent triggers| LCW[Lead-capture widget<br/>tier-2 submission-as-consent]
     LCW -->|Submit| HSUBMIT[POST /handoff/submit<br/>orchestrator route]
     HSUBMIT -->|enrich payload from session state| SUBMIT[submitHandoff<br/>connector orchestration]
 
-    SUBMIT --> STORE[(Handoff store<br/>FsHandoffStore today —<br/>Cloud SQL Postgres post-IAM)]
+    SUBMIT --> STORE[(Handoff store<br/>FsHandoffStore today —<br/>Postgres on the VM post-IAM)]
     SUBMIT -->|verdict-aware<br/>off by default today| MAILER[Mailer<br/>nodemailer + SMTP<br/>provider TBC]
     MAILER -->|email| INBOX[Sales inbox<br/>address TBC]
 
-    ORCH -.->|structured events<br/>30-day default retention| GCL[(Google Cloud Logging)]
-    SUBMIT -.->|handoff.submitted event| GCL
+    ORCH -.->|structured events<br/>to event stream| EVTLOG[(Event stream<br/>Postgres sink today;<br/>Google Cloud Logging<br/>if managed path adopted)]
+    SUBMIT -.->|handoff.submitted event| EVTLOG
 
     classDef visitor fill:#e1f5ff,stroke:#0066cc
     classDef puma fill:#f0f7e8,stroke:#4a7c2c
@@ -42,8 +41,8 @@ flowchart TD
 
     class V,W visitor
     class T1,UI,LCW,ORCH,CONN,SUBMIT,HSUBMIT puma
-    class ANTHROPIC,MAILER,INBOX thirdParty
-    class STORE,PGR,GCL store
+    class ANTHROPIC,GEMINI,MAILER,INBOX thirdParty
+    class STORE,PGR,EVTLOG store
     class END1 closed
 ```
 
@@ -56,7 +55,7 @@ Each edge labelled `(N)` below corresponds to a numbered step of the visitor jou
 ### (1) Visitor → Marketing site → Chat widget
 
 - **Data crossing**: page request, standard web telemetry (IP, user-agent, referrer) handled by Swoop's existing marketing-site infrastructure — out of Puma's scope.
-- **Persisted?**: standard Cloud Run / Swoop-marketing logs. No Puma-specific persistence at this stage.
+- **Persisted?**: standard Swoop-marketing-site server logs. No Puma-specific persistence at this stage.
 - **Processor**: Swoop's website hosting; not a Puma processor.
 
 ### (2) First visit → Tier-1 disclosure + consent
@@ -70,7 +69,7 @@ Each edge labelled `(N)` below corresponds to a numbered step of the visitor jou
 
 - **Data crossing**: free-form visitor message text (may contain PII at visitor's discretion) + session id.
 - **Transport**: HTTPS POST to orchestrator's `/chat` endpoint.
-- **Persisted?**: in-memory session state during conversation. Persisted to Cloud SQL Postgres post-M4 (decision **B.22**); ADK in-built in-memory store today.
+- **Persisted?**: sessions are durable in Postgres (`SESSION_BACKEND=postgres`) with a wired deletion sweep (`startPostgresSessionSweep`) enforcing the TTL.
 - **Retention**: 24h idle → archive; 7d archive → delete (decision **E.8**).
 
 ### (4) Orchestrator → Anthropic API
@@ -80,11 +79,12 @@ Each edge labelled `(N)` below corresponds to a numbered step of the visitor jou
 - **Persisted by Anthropic?**: per Anthropic's published API terms, message content is not retained for training by default and is deleted within 30 days of API processing. **Confirm with counsel that the API terms vintage matches Swoop's commercial agreement.** Region: TBC (Anthropic API may route US-side; counsel may want EU-region routing if available — flag for follow-up).
 - **Processor**: **Anthropic, PBC** — see [06-processors.md](06-processors.md).
 
-### (5) Orchestrator → Connector → Retrieval store
+### (5) Orchestrator → Connector → Retrieval store + Google Gemini API
 
 - **Data crossing**: agent tool calls (search queries, trip detail lookups). Visitor PII is generally NOT in tool-call arguments — the agent rephrases queries — but cannot be guaranteed for free-form retrieval queries.
-- **Persisted?**: read-only against the retrieval store; queries themselves are not persisted (logged briefly via Cloud Logging).
-- **Processor**: Google Cloud (hosting Cloud SQL).
+- **Gemini embedding call**: the connector embeds the visitor's search text via Google's `gemini-embedding-001` model, calling the public Generative Language API (`generativelanguage.googleapis.com`). Visitor-derived query text therefore reaches Google at runtime on the conversation path — a **model-provider** role, distinct from Google Cloud hosting. The public Gemini API has no EU region pinning; moving to Vertex AI is the region-pinnable alternative (see **D-3.1.10** and [06-processors.md](06-processors.md)).
+- **Persisted?**: read-only against the retrieval store; queries themselves are not persisted by Puma.
+- **Processor**: Google Cloud (VM hosting the retrieval store) + **Google Gemini API** (embedding the query text).
 
 ### (6) Orchestrator → Visitor (streamed response)
 
@@ -95,12 +95,12 @@ Each edge labelled `(N)` below corresponds to a numbered step of the visitor jou
 ### (7) Agent triggers handoff → Lead-capture widget
 
 - **Data crossing**: tool-call arguments from agent (verdict, reason code, motivation anchor) → widget. No new visitor PII at this point.
-- **Visitor action**: types name + email + ticks tier-2 consent + optionally ticks marketing opt-in + clicks Send.
+- **Visitor action**: types name + email (required) + optional phone + note, reads the inline consent notice, clicks Send (the act of submitting is the tier-2 consent — no tickbox, no marketing opt-in).
 - **Tier-2 consent timestamp**: captured client-side at the moment of click (decision **E.15**). Not server-stamped, to encode the visitor's *intent*.
 
 ### (8) Lead-capture widget → POST /handoff/submit
 
-- **Data crossing**: visitor name, email, preferred contact method, tier-2 consent flags + timestamp, marketing opt-in, agent-args bundle, session id.
+- **Data crossing**: visitor name, email, preferred contact method, tier-2 consent flag + timestamp, agent-args bundle, session id.
 - **Transport**: HTTPS POST.
 - **Schema**: `HandoffSubmitRequestSchema` (`.strict()` — extra fields rejected).
 - **Decision reference**: **E.13** (HTTP route over MCP-tool routing) + **E.14** (server-side enrichment).
@@ -113,9 +113,9 @@ Each edge labelled `(N)` below corresponds to a numbered step of the visitor jou
 ### (10) submitHandoff → Handoff store
 
 - **Today (interim)**: `FsHandoffStore` writes JSON file to `<connector-package-root>/var/handoffs/<handoffId>.json`. Atomic tmp-file-rename. Filename safety regex. Schema-validated round-trip on read.
-- **Future (post-IAM)**: `PostgresHandoffStore` writes to `handoff` table in same Cloud SQL Postgres instance as retrieval (decisions **E.10**, **C.18**, **C.23**). Same `HandoffStore` interface; one config flip at boot.
+- **Future (post-IAM)**: `PostgresHandoffStore` writes to `handoff` table in the same Postgres instance on the VM as retrieval (decisions **E.10**, **C.18**, **C.23**). Same `HandoffStore` interface; one config flip at boot.
 - **Persisted fields**: full payload (verdict, reason, profile, wishlist, motivation, contact, both consent records, session metadata, conversation reference).
-- **Retention**: 12mo or until CRM ingestion (qualified/referred_out, decision **E.6**) / 90 days (disqualified, decision **E.7**).
+- **Retention**: 360 days outer bound or until CRM ingestion (qualified/referred_out, decision **E.6**) / 90 days (disqualified/inconclusive, decision **E.7**).
 
 ### (11) submitHandoff → Mailer (verdict-aware)
 
@@ -132,11 +132,11 @@ Each edge labelled `(N)` below corresponds to a numbered step of the visitor jou
 - **Processor**: SMTP provider TBC (Postmark / SES / Mailgun / Swoop's existing). See [06-processors.md](06-processors.md).
 - **Recipient**: Swoop sales staff (Swoop-internal, not a Puma processor).
 
-### (Out-of-band) Cloud Logging
+### (Out-of-band) Event stream / logging
 
 - **Data crossing**: structured events emitted by orchestrator + connector via the F-a / F-b event schema (e.g. `handoff.submitted`). Event payloads are minimised — no message bodies, no email content, just IDs + verdicts + timestamps.
-- **Persisted?**: 30-day default retention in Cloud Logging. Longer retention via BigQuery export (chunk F).
-- **Processor**: Google Cloud Logging — see [06-processors.md](06-processors.md).
+- **Persisted?**: today's durable sink is Postgres on the VM. If the managed-services path is adopted, Google Cloud Logging (with its own configurable retention policy) may become the sink. Retention per deployment log policy.
+- **Processor**: Google Cloud (if Cloud Logging sink is adopted) — see [06-processors.md](06-processors.md).
 
 ---
 
@@ -151,7 +151,7 @@ For counsel cross-reference if any architectural choice is queried.
 | Server-side payload enrichment | E.14 | as above |
 | Tier-2 consent timestamp client-side | E.15 | as above |
 | `FsHandoffStore` interim | E.12 | as above |
-| Cloud SQL Postgres swap target | E.10 | as above |
+| Postgres store swap target (single-VM) | E.10 | as above |
 | Single-store posture | C.18 | as above |
 | Firestore dropped | C.23 | as above |
 | Connector ownership of side-effects | E.11 | as above |
@@ -172,10 +172,11 @@ For counsel cross-reference if any architectural choice is queried.
 
 ## Boundary statement
 
-**Personal data leaves Puma's processing boundary at three points and only three points:**
+**Personal data leaves Puma's processing boundary at four points and only four points:**
 
-1. To **Anthropic** (model calls, transient).
-2. To **Google Cloud** (hosting, persistence, logging).
-3. To **the SMTP provider** (handoff email transport — TBC pending Julie).
+1. To **Anthropic** (conversation model calls, transient).
+2. To **Google — Gemini API** (visitor query text embedded for retrieval, at runtime — model-provider role).
+3. To **Google Cloud** (hosting, persistence, logging — the VM, Postgres, and any Cloud Logging sink). Note: Google appears in two distinct processor roles (Gemini API and Cloud hosting); they are governed by different terms (see [06-processors.md](06-processors.md) and [07-dpas.md](07-dpas.md)).
+4. To **the SMTP provider** (handoff email transport — TBC).
 
 The sales inbox is operated by Swoop and is a Swoop-internal endpoint, not an external processor.

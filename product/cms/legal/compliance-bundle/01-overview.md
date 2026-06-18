@@ -1,6 +1,6 @@
 # 01 — Overview
 
-> **Status: ✅ FILLED** — production-ready for counsel review.
+> **Status: ✅ FILLED** — updated 2026-06-18 to reflect v0.8 canonical facts (four processors, single-VM infrastructure, wired session retention, marketing opt-in removed).
 
 ---
 
@@ -26,7 +26,10 @@ Categorised by when in the visitor's journey the data enters the system.
 
 - **Visitor messages**: free-form text. May contain personal data at the visitor's discretion (names, locations, family details, financial information, health information if travel-relevant). Stored in session state for the duration of the conversation. Visible to Anthropic's API in the model-call payloads.
 - **Session metadata**: session id (UUID), conversation start timestamp, turn count, entry URL. Not personal data in itself but linked to the visitor's data.
+- **Browser IANA timezone**: sent each turn. The agent infers coarse region/hemisphere from the timezone to frame seasonal advice — reasoning over data already held, held as a hint, no new collection and no assertion of the visitor's location back to them.
 - **Tier-1 consent record**: timestamp + version id of the disclosure copy the visitor accepted.
+
+Note: visitor query text is also sent to Google's Gemini API at runtime for retrieval embedding (see Processors below and [06-processors.md](06-processors.md)).
 
 ### From handoff submission (tier-2 consent applies)
 
@@ -34,7 +37,6 @@ Categorised by when in the visitor's journey the data enters the system.
 - **Email address**.
 - **Preferred contact method** (if offered by the form).
 - **Tier-2 consent record**: timestamp + version id of the consent copy.
-- **Optional marketing opt-in record**: explicit opt-in only; unticked by default.
 
 ### Derived
 
@@ -46,7 +48,7 @@ Categorised by when in the visitor's journey the data enters the system.
 ### Not collected
 
 - **No third-party analytics in the chat surface**. No GA, no FB pixel, no fingerprinting.
-- **No IP address persistence** beyond what Cloud Run logs by default (30-day Cloud Logging retention).
+- **No Puma IP persistence**. Puma's own event stream stores IDs, verdicts and timestamps only — no message text, no contact details. Host/ingress request logs may capture IP addresses transiently for security, retained per the deployment's log policy (D-3.1.3).
 - **No demographic profiling** beyond what the visitor volunteers in conversation.
 - **No payment data**. Booking happens off-Puma (sales specialists handle commercials).
 
@@ -57,7 +59,7 @@ Categorised by when in the visitor's journey the data enters the system.
 **GDPR Art. 6(1)(a) — Explicit consent.** Two-tier:
 
 - **Tier 1**: presented before any visitor message can be sent. Pairs the EU AI Act Art. 50 AI-disclosure with the GDPR conversation-data consent. Without tier 1, no session state is written. The chat closes cleanly if the visitor declines.
-- **Tier 2**: presented inside the lead-capture widget at handoff. Required tickbox for "I consent to Swoop contacting me about this enquiry and storing my contact details for that purpose." A separate, optional, unticked-by-default tickbox covers marketing opt-in.
+- **Tier 2**: at handoff, submission-as-consent — clicking *Send* after a clear inline notice is the affirmative act. No tickbox. No marketing consent collected.
 
 **Legitimate interest considered and rejected.** A chatbot freely receives PII in user messages; legitimate-interest processing requires a balancing assessment that becomes thin when the basis can be explicit consent instead. We chose explicit-consent-up-front for cleanliness and audit posture.
 
@@ -89,7 +91,7 @@ Puma's primary visitor base is Anglophone (UK / US / Australia / Canada), with E
 - Swoop's CRM and downstream lead lifecycle (separate compliance surface; Swoop's existing posture).
 - Swoop's website beyond the chat widget (existing privacy policy applies).
 - Swoop's general data protection posture, vendor relationships outside Puma, or DPO-level governance.
-- Swoop's email marketing (Puma's optional tier-2 marketing opt-in feeds Swoop's existing marketing infrastructure; that infrastructure has its own compliance posture).
+- Swoop's email marketing. Puma does not collect marketing consent; that surface stays with Swoop's existing compliance posture.
 
 Counsel reviewing this bundle is reviewing Puma. Other surfaces stay with Swoop's existing review processes.
 
@@ -98,11 +100,12 @@ Counsel reviewing this bundle is reviewing Puma. Other surfaces stay with Swoop'
 ## Architecture summary (high-level, for context)
 
 - **Frontend**: React + Vite chat widget, embedded as iframe on Swoop's marketing site. Open-source `assistant-ui` for the chat primitive.
-- **Backend**: Node.js orchestrator running on Google Cloud Run; in-process connector for retrieval + handoff side-effects.
-- **Model**: Anthropic Claude (Sonnet for the conversational agent, Haiku for fast triage classification).
-- **Storage**: Cloud SQL Postgres (planned, post-IAM) for retrieval data + handoff records + sessions. Today's interim is file-backed JSON for handoff records (see [05-retention-policy.md](05-retention-policy.md)).
-- **Email**: nodemailer + SMTP provider (TBC pending Julie).
-- **Telemetry**: Cloud Logging (Google Cloud), 30-day default retention.
-- **Hosting region**: planned `europe-west2` (London) — confirm with Thomas (Swoop ops).
+- **Backend**: Node.js orchestrator and connector on a **single Google Cloud VM (Compute Engine)** in Swoop's GCP project. Cloud Run is not the committed shape — managed services are a scale-up option only.
+- **Model**: Anthropic Claude (Sonnet-class for the conversational agent, Haiku-class for fast triage classification).
+- **Embeddings**: Google Gemini API (`gemini-embedding-001`, public Generative Language API) — embeds visitor query text at runtime for retrieval. Visitor-derived text reaches Google on the conversation path (model-provider role; see [06-processors.md](06-processors.md)).
+- **Storage**: Postgres database on the same VM as the orchestrator and connector. Today's interim is file-backed JSON for handoff records (see [05-retention-policy.md](05-retention-policy.md)).
+- **Email**: nodemailer + SMTP provider (TBC).
+- **Telemetry**: event stream; Postgres is today's durable sink. Google Cloud Logging only if the managed-services path is adopted — not asserted as present at launch.
+- **Hosting region**: working default `europe-west2` (London) — TBC with Thomas (Swoop ops).
 
 See [02-data-flow.md](02-data-flow.md) for the full diagram.
