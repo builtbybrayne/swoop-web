@@ -71,3 +71,11 @@ Add a `GeminiLlm` (or ADK-native provider) `BaseLlm` shim; `inferProvider(modelI
 ---
 
 *Back-link: grew out of the 2026-06-16 Luke-feedback session (model-experimentation redirect on the "responses too long" item — see the feedback-doc reply). The in-the-wild conversion A/B that this unblocks is tracked as a production-first item in [questions.md](../questions.md) / [inbox.md](../inbox.md).*
+
+---
+
+## 2026-06-19 addendum — demo-build visibility gap (DEMO-DEV) + thinking sibling (TT)
+
+M-PICK-3 assumed `import.meta.env.DEV` cleanly splits "dev" from "production". It missed a third mode: **`npm run demo` serves a *production* `vite build`**, which dead-code-strips the picker — so it never reached the demo server (Luke's access). Closed by **DEMO-DEV-1..2** ([decisions.md](decisions.md)): the UI gate moved from `import.meta.env.DEV` to `isDevToolsEnabled()` (dev OR `VITE_SHOW_DEV_TOOLS`), and `demo.sh` builds with the flag. The orchestrator gate (M-PICK-2/3: `!isProduction` + allow-list) is unchanged — still the real security boundary.
+
+A sibling dev control, the **test-mode thinking toggle** ([03-exec-crosscut-test-mode-thinking-toggle.md](03-exec-crosscut-test-mode-thinking-toggle.md), TT-1..6), now reuses this plan's runner-registry — its cache key widened from `modelId` to `(model, thinking)`.

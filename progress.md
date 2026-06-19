@@ -2,6 +2,15 @@
 
 **Snapshot date**: 2026-06-10, evening (Luke Loom feedback round 2: triaged AND executed same-day — 8 Tier-3 plans merged to `main`, fresh-install verification green. ⚠ The per-chunk sections of this file lag reality from 2026-05-14 onwards; read [planning/reviews/2026-05-27-ingest-and-state-of-play.md](planning/reviews/2026-05-27-ingest-and-state-of-play.md) for the 27 May build snapshot, then git log for the late-May/early-June waves: find_tips ninth tool, AntiRepetition, visual sidebar, Puma memory-bug fix.)
 
+## 2026-06-19 — Demo-mode dev affordances + test-mode thinking toggle (worktree `blissful-heyrovsky`, merged to `main`)
+
+Cowork session off Alastair's report that `npm run demo` showed none of the non-production extras. Two pieces, both on `main`:
+
+- **Dev affordances in demo builds** (`092c1af`; decisions DEMO-DEV-1..2) — root cause: `demo.sh` serves a *production* `vite build`, so `import.meta.env.DEV` compiles to `false` and every DEV-gated affordance (model picker, Show/Hide-dev toggle, widget tool-traces) is dead-code-stripped. Fix: a DRY `isDevToolsEnabled()` (`MODE !== 'production' || VITE_SHOW_DEV_TOOLS === 'true'`, [ui/src/runtime/dev-tools.ts](product/ui/src/runtime/dev-tools.ts)); `demo.sh` builds with `VITE_SHOW_DEV_TOOLS=true`. See [discoveries.md](discoveries.md) 2026-06-19.
+- **Test-mode thinking toggle** (`484543e` plan + `a571970` feat; decisions TT-1..6) — a dev/test "Thinking" checkbox beside the model picker that flips native thinking per session (same effect as `ORCHESTRATOR_THINKING_ENABLED`). Thinking is a per-runner property (belt + request shape), so it rides the M-PICK runner-registry with the cache key widened to `(model, thinking)`; gated `!isProduction`, no allow-list. Plan: [03-exec-crosscut-test-mode-thinking-toggle.md](planning/03-exec-crosscut-test-mode-thinking-toggle.md).
+
+**Verified**: typecheck clean across all 6 workspaces; ts-common 275 / orchestrator 387 (+21 skipped) / ui 248 green at each merge tip (rebased onto `main`, fast-forwarded — no merge commits). **Operator-pending**: the standing real-Anthropic acceptance smoke — one thinking-ON and one thinking-OFF `/chat` turn (needs `ANTHROPIC_API_KEY`; mocked-LLM tests can't catch a model-specific 400); and `MODEL_PICKER_ALLOWLIST` in the demo orchestrator `.env` for the picker dropdown to populate (the thinking checkbox needs nothing further).
+
 ## 2026-06-16 — Analytics F-c: durable event sink + Swoop dev-handover docs (worktree `analytics-review`, merged to `main`)
 
 Forked analytics session (sibling to the Luke-feedback workstreams). Two threads, both on `main`:

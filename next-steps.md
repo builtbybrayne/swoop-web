@@ -4,6 +4,14 @@ Prioritised resume guide. Read [progress.md](progress.md) first for state, [disc
 
 ---
 
+## Status (2026-06-19 — demo dev affordances + thinking toggle landed on `main`)
+
+Two dev/test-tooling pieces merged to `main` this session (detail in [progress.md](progress.md) 2026-06-19): (1) **dev affordances now show in `npm run demo`** — they were dead-code-stripped because demo is a production `vite build`; gated now through `isDevToolsEnabled()` with `demo.sh` setting `VITE_SHOW_DEV_TOOLS=true` (decisions DEMO-DEV-1..2). (2) **test-mode thinking toggle** — a dev checkbox flipping native thinking per session via `(model, thinking)` runner variants (decisions TT-1..6, [plan](planning/03-exec-crosscut-test-mode-thinking-toggle.md)).
+
+**Operator-pending (both — needs an API key on the orchestrator):** run the standing real-Anthropic acceptance smoke — one thinking-ON and one thinking-OFF `/chat` turn (mocked-LLM tests can't catch a model-specific 400). For the model-picker dropdown specifically, also set `MODEL_PICKER_ALLOWLIST` in the demo orchestrator `.env`; the thinking checkbox needs nothing further.
+
+---
+
 ## Status (2026-06-17 — Sales-memory mechanism BUILT (T3-1…T3-4), verified; voice pass + harness remain)
 
 The 16/06 sales-memory design is **built + verified** on the `sales-knowledge-feedback` worktree branch (commits `e8faaa4` `3c54710` `a7a29ed` `ed8e87a`; **not** merged to main — HITL). Detail in [progress.md](progress.md) 2026-06-17. The mechanism is complete: store+CRUD, staff auth, two-agent routing to the Opus memory agent (transcript-seeded, token-bound, `finish_memory` + hard user-exit), and per-turn authoritative+timestamped loading into every conversation. Live Opus-4.8 smoke PASS; full suite green (orchestrator 310 / connector 232 / ts-common 243).

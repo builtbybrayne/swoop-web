@@ -8,6 +8,27 @@ Running record of Tier 2 / Tier 3 decisions for the Swoop Web Discovery project 
 
 ---
 
+## DEMO-DEV-1..2 — Dev/test affordances available in demo (production) builds
+
+**Decided**: 2026-06-19 (HITL — Alastair reported `npm run demo` showed none of the non-production extras; *"a DRY function … shows all of these goodies if EITHER we're in dev mode OR an enabling env variable is set"*)
+**Owner**: `blissful-heyrovsky` worktree — committed `092c1af`. No T3 plan (small; design agreed inline).
+**Problem**: `npm run demo` serves a *production* `vite build`, so `import.meta.env.DEV` compiles to `false` and every DEV-gated affordance (model picker, Show/Hide-dev toggle, widget tool-traces) is dead-code-stripped — including the model picker the demo server (Luke's access) was built for. **M-PICK-3's "Vite strips it from prod builds" was too coarse**: it conflated "real production" with "demo build".
+
+- **DEMO-DEV-1** — Single DRY gate `isDevToolsEnabled()` ([ui/src/runtime/dev-tools.ts](../product/ui/src/runtime/dev-tools.ts)) = `MODE !== 'production'` **OR** `VITE_SHOW_DEV_TOOLS === 'true'`. Bare `import.meta.env.<KEY>` reads (not an alias) so Vite statically inlines them; keyed on `MODE` (a string `vi.stubEnv` can drive) not the boolean `DEV` (can't be stubbed cleanly) — same reason as reasoning-guard.ts. Only *visible* affordances route through it; genuine dev-only guards (reasoning-leak throw, preflight/rehydrate logging) stay on `import.meta.env.DEV`. *Swap cost: low — one helper; call sites revert to `import.meta.env.DEV`.*
+- **DEMO-DEV-2** — `scripts/demo.sh` builds the UI with `VITE_SHOW_DEV_TOOLS=true` (a build-time `VITE_` flag — a served static build can't read runtime env; demo.sh rebuilds every run, so baking it in is free). Trade-off: a shared helper isn't DCE'd, so inert dev code could ship in a real prod bundle — safe because the orchestrator is the real gate (404s `/models`, ignores `model`/`thinkingEnabled` overrides in production), and esbuild folds `isDevToolsEnabled()`→`return false` in a flagless prod build anyway (verified by build-fold contrast). *Swap cost: low — drop the flag from demo.sh.*
+
+## TT-1..6 — Test-mode thinking toggle for the conversational orchestrator
+
+**Decided**: 2026-06-19 (HITL — Alastair: *"How hard would it be to add a checkbox in non-production mode that also dynamically toggled thinking?… Quick T3 plan, then execute."*)
+**Owner**: `blissful-heyrovsky` worktree — [planning/03-exec-crosscut-test-mode-thinking-toggle.md](03-exec-crosscut-test-mode-thinking-toggle.md); committed `a571970`. Sibling to M-PICK; reuses its runner-registry + the DEMO-DEV-1 UI gate.
+
+- **TT-1** — Thinking is a **per-runner property, not a per-request param**: it changes the `ClaudeLlm` request shape AND the RL.3 belt in the cached system prefix. So it rides the M-PICK runner-registry, whose cache key widens from `modelId` to **`(model, thinking)`**; `buildAgentFor(modelId, thinkingEnabled)`. *Swap cost: low — additive key dimension; collapses back to model-only.*
+- **TT-2** — Override rides optional `thinkingEnabled?: boolean` on `ChatRequestSchema` (the `model` precedent; `.strict()` kept). *Swap cost: trivial.*
+- **TT-3** — Gated `!isProduction`, **no allow-list** (thinking on/off is cheap + valid on every family, unlike Opus cost). New derived `config.thinkingPickerEnabled = !isProduction`. *Swap cost: trivial.*
+- **TT-4** — Dev-only both ends: UI checkbox gated on `isDevToolsEnabled()`; orchestrator ignores `thinkingEnabled` when `isProduction`. *Swap cost: n/a.*
+- **TT-5** — Toggle forces a **new session** (reuses the model-picker fresh-chat handler), since thinking changes the cached prefix. *Swap cost: n/a (UI behaviour).*
+- **TT-6** — `ORCHESTRATOR_EFFORT` stays server-side config (RL.4); the checkbox is on/off only. *Swap cost: n/a.*
+
 ## RL.1–RL.8 — Native Anthropic thinking wired (the producer half of B.13)
 
 **Decided**: 2026-06-17 (HITL — Alastair ratified the T3 plan: *"I'm inclined to enable native thinking… gate it on an env variable too… Go ahead with T3 write-up… proceed to execute."*)
