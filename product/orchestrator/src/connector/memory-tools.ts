@@ -177,15 +177,19 @@ function buildOneTool(
     description: toolDescriptions[spec.name] ?? spec.name,
     parameters,
     execute: async (rawInput: unknown) => {
-      // Auto-inject token + name into mutating tools so the agent never has
-      // to know about them (and cannot accidentally omit them). Read-only
-      // tools (list_active, show_history) don't have these fields in their
-      // input schemas; merging them in is harmless — Zod strict() parsing
-      // on the connector side will strip unrecognised fields.
-      const augmented =
+      // Auto-inject token + name ONLY into tools whose input schema actually
+      // carries these fields (the mutating tools). The read-only tools
+      // (memory_list_active, memory_show_history) use z.object({}).strict(),
+      // which REJECTS unknown keys — .strict() does NOT strip them (that wrong
+      // assumption was the bug: injecting unconditionally made every read-tool
+      // call fail orchestrator-side input validation, observed live 2026-06-19).
+      // `omitMask` (above) already records which of these fields this tool has.
+      const augmented: Record<string, unknown> =
         rawInput && typeof rawInput === 'object'
-          ? { ...rawInput as Record<string, unknown>, staffToken, author: staffName }
-          : { staffToken, author: staffName };
+          ? { ...(rawInput as Record<string, unknown>) }
+          : {};
+      if (omitMask.staffToken) augmented.staffToken = staffToken;
+      if (omitMask.author) augmented.author = staffName;
 
       // Input validation (orchestrator-side, before network).
       const parsedInput = spec.inputSchema.safeParse(augmented);

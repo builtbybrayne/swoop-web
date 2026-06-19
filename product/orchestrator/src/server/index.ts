@@ -136,6 +136,14 @@ export function buildServer(deps: BuildServerDeps): Express {
   const app = express();
   app.disable('x-powered-by');
 
+  // Behind the demo's vite-preview proxy + Tailscale Funnel (and any prod
+  // reverse proxy / front end), requests arrive with X-Forwarded-For. Trust the
+  // local proxy hop so express-rate-limit can read the real client IP — without
+  // this it throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on the rate-limited
+  // /staff/auth route. 'loopback' covers the demo (proxy on localhost); widen to
+  // a hop count or 'true' for a prod front end that isn't on localhost.
+  app.set('trust proxy', 'loopback');
+
   // Security headers (Sec-2). Registered BEFORE all other middleware so every
   // response — including CORS preflights and error replies — carries them.
   // The surface is iframe-embedded by Swoop's host page, so:

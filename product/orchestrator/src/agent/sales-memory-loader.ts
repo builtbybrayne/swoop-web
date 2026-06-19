@@ -166,6 +166,24 @@ function parseMemoryListActiveResult(
     );
   }
 
+  // The connector returns an error envelope { ok: false, code, detail } when the
+  // tool itself failed (e.g. the sales_memory table is missing, or a DB error).
+  // Surface that real cause instead of validating the envelope against the
+  // success schema and emitting a confusing "Unrecognized key 'ok'" message.
+  if (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    'ok' in candidate &&
+    (candidate as { ok: unknown }).ok === false
+  ) {
+    const env = candidate as { code?: unknown; detail?: unknown };
+    const detail = typeof env.detail === 'string' ? env.detail : undefined;
+    const code = typeof env.code === 'string' ? env.code : undefined;
+    throw new Error(
+      `[sales-memory-loader] memory_list_active failed on the connector: ${detail ?? code ?? 'unknown error'}`,
+    );
+  }
+
   const result = MemoryListActiveOutputSchema.safeParse(candidate);
   if (!result.success) {
     const issues = result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');

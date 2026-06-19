@@ -288,6 +288,22 @@ describe('loadSalesMemoryBlock (via connector stub)', () => {
     await expect(loadSalesMemoryBlock(stub, TEST_HEADER)).rejects.toThrow(/schema validation/i);
   });
 
+  it('surfaces the connector error envelope { ok:false, code, detail } as the real cause', async () => {
+    const stub = {
+      callTool: vi.fn(async () => ({
+        structuredContent: { ok: false, code: 'tool_error', detail: 'relation "sales_memory" does not exist' },
+      })),
+      connect: vi.fn(),
+      listTools: vi.fn(),
+      close: vi.fn(),
+      url: 'http://fake-connector',
+    } as unknown as ConnectorClient;
+
+    await expect(loadSalesMemoryBlock(stub, TEST_HEADER)).rejects.toThrow(
+      /failed on the connector: relation "sales_memory" does not exist/,
+    );
+  });
+
   it('BYTE-IDENTICAL: two calls with the same connector state return the same string', async () => {
     const memories = [MEMORY_A, MEMORY_B];
     const stub1 = makeConnectorStub(memories);

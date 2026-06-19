@@ -104,17 +104,53 @@ function normalise(message: string): string {
 }
 
 /**
- * Does this STAFF message explicitly ask to manage memories?
+ * Flexible memory-management intent patterns — broaden the exact-phrase list.
  *
- * Returns true only on an explicit imperative phrase. The caller has already
- * established `session.staff === true`; this never runs for visitor sessions.
+ * Entry is ALREADY gated on an authenticated staff session (chat.ts), and every
+ * write is confirm-before-save with full attribution + undo. So we err toward
+ * triggering: a missed memory request frustrates staff far more than a cheap
+ * false entry (which the memory agent resolves by answering + calling
+ * finish_memory). These catch natural formulations the fixed list misses
+ * ("to remember: …", "note: …", "forget that fact") while NOT firing on
+ * first-person incidental use ("I'll remember to pack warm").
+ *
+ * For bulletproof "any formulation" coverage, a small LLM intent classifier on
+ * staff turns is the next step; this regex tier handles the common shapes today.
+ */
+const MEMORY_INTENT_PATTERNS: readonly RegExp[] = [
+  // Imperative "remember" — at the start, after sentence punctuation, or after
+  // to/please/now/also/and/so. Excludes first-person "I'll remember".
+  /(?:^|[.!?:,]\s+|\b(?:to|please|now|also|and|so)\s+)remember\b/,
+  // note/save/store/record/jot/log … that/this/the following (same clause).
+  /\b(?:note|save|store|record|jot|log)\b[^.?!]*\b(?:that|this|the following)\b/,
+  // "note:", "save:", "store:", "record:" openers.
+  /\b(?:note|save|store|record)\s*:/,
+  // forget/retire/remove … that/this/memory/note/fact.
+  /\b(?:forget|retire|delete|remove|drop)\b[^.?!]*\b(?:that|this|memor(?:y|ies)|note|fact)\b/,
+  // update/edit/change … memory/note/fact.
+  /\b(?:update|edit|change|correct|revise)\b[^.?!]*\b(?:memor(?:y|ies)|note|fact)\b/,
+  // "the agent should/needs to know/remember …".
+  /\bagent (?:should|needs? to|must|ought to) (?:know|remember)\b/,
+];
+
+/**
+ * Does this STAFF message ask to manage memories?
+ *
+ * Matches the explicit phrase list OR the flexible intent patterns above. The
+ * caller has ALREADY established `session.staff === true` (chat.ts) — this never
+ * runs for visitor sessions, so the sacred invariant (visitors are NEVER routed
+ * to the memory agent) holds no matter how permissive this is. Permissiveness is
+ * deliberate (sm-3 relaxed for staff, 2026-06-19): a signed-in staff member who
+ * clearly wants to save something should land in memory mode whatever the
+ * wording, with confirm-before-save as the safety net.
  *
  * @param message  The raw staff message text (not the dateline-wrapped envelope).
  */
 export function isExplicitMemoryRequest(message: string): boolean {
   const normalised = normalise(message);
   if (normalised.length === 0) return false;
-  return MEMORY_TRIGGER_PHRASES.some((phrase) => normalised.includes(phrase));
+  if (MEMORY_TRIGGER_PHRASES.some((phrase) => normalised.includes(phrase))) return true;
+  return MEMORY_INTENT_PATTERNS.some((pattern) => pattern.test(normalised));
 }
 
 /**

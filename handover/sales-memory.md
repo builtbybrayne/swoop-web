@@ -29,11 +29,13 @@ One catch: this only works on the agent's **direct page**, not the version embed
 
 ## Telling the agent to remember something
 
-Once you're logged in, say it in the chat, the way you'd tell a colleague:
+Once you're logged in, just say it in the chat. Most natural phrasings work — start the line with **"Remember…"**, **"To remember:…"**, **"Note:…"**, or **"Save this:…"** and it will pick it up:
 
 > "Remember that the refugios on the W trek are usually fully booked by August for the January season."
 
-The agent shows you exactly what it's about to save and asks you to confirm. **Nothing is saved until you say yes**, so check the wording first. It loads word-for-word into every conversation.
+If it ever replies like a normal visitor answer instead of offering to save, you didn't land on a trigger — just restart the line with "Remember" and it will.
+
+The agent shows you exactly what it's about to save and asks you to confirm. **Nothing is saved until you say yes**, so check the wording first. It loads word-for-word into every conversation. It saves what you ask — it won't argue about whether it's a good idea. That's your call, and anything can be edited or removed later.
 
 You can also:
 

@@ -27,6 +27,12 @@ describe('isExplicitMemoryRequest', () => {
       'show me your memories',
       'go into memory mode',
       'Let us enter memory mode now',
+      // Broadened intent detection (sm-3 relaxed for staff, 2026-06-19) — natural
+      // formulations the fixed phrase list missed.
+      'To remember: refugios peak season is January and they book up fast.',
+      'Remember the refugios book out months ahead.',
+      'Note: tours carry no listed prices anywhere.',
+      'jot this down: October is shoulder season',
     ];
     for (const msg of positives) {
       it(`matches: "${msg}"`, () => {
@@ -45,6 +51,9 @@ describe('isExplicitMemoryRequest', () => {
       'That sounds memorable!',
       'The memory of that sunset stays with me.',
       'Tell me about the refugios.',
+      // Staff testing the visitor flow must not be yanked into memory mode.
+      'Then tell me about kayaking.',
+      'Can I book January refugios last-minute?',
       '',
       '   ',
     ];

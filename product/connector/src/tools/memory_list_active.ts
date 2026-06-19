@@ -4,7 +4,7 @@
  * Read-only; no staff token required.
  * Returns active rows with content + updated_at + updated_by, ordered by
  * created_at DESC (newest first), then by id for deterministic tiebreak.
- * Single indexed query (index: sales_memory_status_created_at_idx, migration 020).
+ * Single indexed query (index: sales_memory_status_created_at_idx, migration 021).
  *
  * This is the query a later loading task will call to hydrate memories into
  * every visitor conversation. Connector-side only — MUST NOT be registered
