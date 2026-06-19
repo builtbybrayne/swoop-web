@@ -14,11 +14,11 @@
 //      `<WidgetMalformedPlaceholder />`.
 //
 //   3. Dev vs prod behaviour for the malformed placeholder:
-//        - Production (`!import.meta.env.DEV`) → returns `null`. The
+//        - Dev tools off (`!isDevToolsEnabled()`, real production) → returns `null`. The
 //          visitor sees nothing; the agent's prose continues uninterrupted.
 //          A structured `console.warn` still fires inside `safeParse` so
 //          Cloud Run stdout captures the drift for post-launch diagnosis.
-//        - Development / test (`import.meta.env.DEV === true`) → renders a
+//        - Dev tools on (`isDevToolsEnabled()`: dev/test or demo) → renders a
 //          rich diagnostic card naming the widget + tool, listing the Zod
 //          issues, previewing the raw value, with a copy-to-clipboard
 //          button. The existing `data-testid="widget-malformed"` is
@@ -45,6 +45,7 @@ import type {
   ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { emitUiEvent } from "../runtime/emit-ui-event";
+import { isDevToolsEnabled } from "../runtime/dev-tools";
 
 /**
  * Identification + diagnostic context every widget passes through the shell.
@@ -197,7 +198,7 @@ export function WidgetMalformedPlaceholder(props: {
     lifecycleFailure: Boolean(props.lifecycleFailure),
   });
 
-  if (!import.meta.env.DEV) {
+  if (!isDevToolsEnabled()) {
     return null;
   }
   return <DevMalformedDebug {...props} />;
@@ -360,7 +361,7 @@ function truncateForPreview(value: unknown): string | null {
  * `<widget>:silent:<reason-slug>` still fires so post-launch analytics can
  * count silent renders by widget × tool × reason.
  *
- * Dev / test (`import.meta.env.DEV === true`): a quiet inline indicator
+ * Dev tools on (`isDevToolsEnabled()`): a quiet inline indicator
  * — slate-toned dotted border, "DEV" badge, "<widget> (<tool>) rendered
  * silently — <reason>" + optional hint preview. `data-testid="widget-silent"`.
  */
@@ -378,7 +379,7 @@ export function WidgetSilentPlaceholder(props: {
     reason: props.reason,
   });
 
-  if (!import.meta.env.DEV) {
+  if (!isDevToolsEnabled()) {
     return null;
   }
   return <DevSilentIndicator {...props} />;
@@ -802,7 +803,7 @@ function DevTraceJsonField({
  * The returned component renders the original widget unchanged, then
  * appends `<DevToolCallTrace>` below it. In production this HOC is a
  * pass-through (no wrapper component, no extra render work) — the wrapping
- * only happens when `import.meta.env.DEV` is truthy at module-load time.
+ * only happens when `isDevToolsEnabled()` is truthy at module-load time.
  *
  * Intended for use by `parts/index.ts` when assembling the
  * `tools.by_name` + `tools.Fallback` registry, so every tool call gets the
@@ -816,7 +817,7 @@ export function wrapWithDevTrace(
   toolName: string,
   Inner: ComponentType<ToolCallMessagePartProps>,
 ): ComponentType<ToolCallMessagePartProps> {
-  if (!import.meta.env.DEV) {
+  if (!isDevToolsEnabled()) {
     // Prod: no wrapper. Caller registers the original component verbatim.
     return Inner;
   }

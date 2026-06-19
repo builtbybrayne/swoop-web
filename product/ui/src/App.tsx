@@ -34,6 +34,7 @@ import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createOrchestratorTransport } from "./runtime/orchestrator-adapter";
 import { DevModelPicker } from "./runtime/model-picker";
+import { isDevToolsEnabled } from "./runtime/dev-tools";
 import { emitUiEvent } from "./runtime/emit-ui-event";
 // Registers the `data-fyi` renderer + reasoning-guard (D.t2). Importing here
 // is what gives assistant-ui the component map below; the module itself has
@@ -201,7 +202,7 @@ function detectUaCategory(): "desktop" | "mobile" | "tablet" | "unknown" {
  * Dev-only affordance: persist a "hide dev cards" preference in localStorage
  * and reflect it as a class on `<body>` (consumed by `body.swoop-hide-dev
  * [data-swoop-dev="true"] { display: none; }` in styles/index.css). The dev
- * cards themselves only render under `import.meta.env.DEV`, so prod builds
+ * cards themselves only render when `isDevToolsEnabled()` is true, so real prod builds
  * never see the class and the toggle button is omitted from the header.
  */
 const DEV_AFFORDANCE_KEY = "swoop-hide-dev";
@@ -270,7 +271,7 @@ function ThreadSurface({
       >
         <ChromeBadge />
         <div className="flex items-center gap-3">
-          {import.meta.env.DEV ? (
+          {isDevToolsEnabled() ? (
             <>
               <DevModelPicker onModelChange={onFreshChat} />
               <button

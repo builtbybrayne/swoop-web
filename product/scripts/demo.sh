@@ -97,9 +97,15 @@ done
 # ----------------------------------------------------------------------------
 
 step "Building UI (vite build)"
-npm run build -w @swoop/ui
+# VITE_SHOW_DEV_TOOLS=true keeps the dev/test affordances (model picker,
+# Show/Hide-dev, widget tool-traces) in this PRODUCTION build — they're gated
+# behind isDevToolsEnabled() (ui/src/runtime/dev-tools.ts), which a plain
+# production `vite build` would otherwise dead-code-strip. The orchestrator
+# still 404s /models under NODE_ENV=production, so also set MODEL_PICKER_ALLOWLIST
+# in orchestrator/.env to populate the picker's dropdown.
+VITE_SHOW_DEV_TOOLS=true npm run build -w @swoop/ui
 
-ok "UI built → ui/dist/"
+ok "UI built (with dev tools) → ui/dist/"
 
 # ----------------------------------------------------------------------------
 # 2. Start backend services (unless --ui-only)

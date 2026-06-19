@@ -13,15 +13,18 @@
 // free avoids an import cycle. The catalogue fetch (which needs the
 // orchestrator URL) lives in `model-picker.tsx` instead.
 //
-// HARD dev gate lives here: every read returns `undefined` in a production
-// build (`!import.meta.env.DEV`), so the transport never attaches a model and
-// the picker component (also DEV-gated) never mounts. The orchestrator ALSO
+// HARD gate lives here: every read returns `undefined` unless the dev tools are
+// enabled (`isDevToolsEnabled()`: a dev/test build, or a demo build with
+// VITE_SHOW_DEV_TOOLS=true), so the transport never attaches a model and the
+// picker component (also gated) never mounts. The orchestrator ALSO
 // ignores the field and 404s `/models` in production (M-PICK-2/3) — belt and
 // braces, no single point of failure.
 //
 // See planning/03-exec-crosscut-test-mode-model-picker.md.
 
 import { useSyncExternalStore } from "react";
+
+import { isDevToolsEnabled } from "./dev-tools";
 
 /** Tab-scoped storage key for the picked model id. */
 const DEV_MODEL_STORAGE_KEY = "swoop.dev.model";
@@ -48,7 +51,7 @@ let snapshot: string | undefined = readStored();
  * covered by one check.
  */
 export function getDevModelOverride(): string | undefined {
-  if (!import.meta.env.DEV) return undefined;
+  if (!isDevToolsEnabled()) return undefined;
   return snapshot;
 }
 
@@ -58,7 +61,7 @@ export function getDevModelOverride(): string | undefined {
  * session swap. No-op in production.
  */
 export function setDevModelOverride(id: string | undefined): void {
-  if (!import.meta.env.DEV) return;
+  if (!isDevToolsEnabled()) return;
   snapshot = id;
   try {
     if (id === undefined) {

@@ -1,7 +1,7 @@
 // product/ui/src/runtime/model-picker.tsx
 //
 // Dev/test-only navbar dropdown to flip the conversational orchestrator's
-// model at runtime (M-PICK). Mounts only under `import.meta.env.DEV`; fetches
+// model at runtime (M-PICK). Mounts only when `isDevToolsEnabled()` is true; fetches
 // the allow-list from the orchestrator's dev `GET /models` and renders nothing
 // when the picker is disabled (empty allow-list / production / route missing).
 //
@@ -18,6 +18,7 @@ import {
   setDevModelOverride,
   useDevModelOverride,
 } from "./dev-model-store";
+import { isDevToolsEnabled } from "./dev-tools";
 
 /** One labelled model the orchestrator's dev `GET /models` offers. */
 export interface DevModelOption {
@@ -40,7 +41,7 @@ export interface DevModelsResponse {
 export async function fetchDevModels(
   signal?: AbortSignal,
 ): Promise<DevModelsResponse | null> {
-  if (!import.meta.env.DEV) return null;
+  if (!isDevToolsEnabled()) return null;
   try {
     const res = await fetch(`${getOrchestratorUrl()}/models`, {
       method: "GET",
@@ -75,7 +76,7 @@ export function DevModelPicker({ onModelChange }: DevModelPickerProps) {
   // Fetch the allow-list once on mount. Aborts on unmount; `null` (disabled /
   // error) leaves `catalog` null → the component renders nothing.
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!isDevToolsEnabled()) return;
     const ac = new AbortController();
     void fetchDevModels(ac.signal).then((res) => {
       if (!ac.signal.aborted) setCatalog(res);
@@ -94,7 +95,7 @@ export function DevModelPicker({ onModelChange }: DevModelPickerProps) {
     if (!known) setDevModelOverride(undefined);
   }, [catalog, override]);
 
-  if (!import.meta.env.DEV || catalog === null) return null;
+  if (!isDevToolsEnabled() || catalog === null) return null;
 
   const selected = override ?? catalog.default.id;
   // Default first, then the allow-listed alternatives (excluding the default
