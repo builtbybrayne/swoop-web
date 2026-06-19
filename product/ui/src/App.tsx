@@ -35,6 +35,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createOrchestratorTransport } from "./runtime/orchestrator-adapter";
 import { DevModelPicker } from "./runtime/model-picker";
 import { isDevToolsEnabled } from "./runtime/dev-tools";
+import {
+  setDevThinkingOverride,
+  useDevThinkingOverride,
+} from "./runtime/dev-thinking-store";
 import { emitUiEvent } from "./runtime/emit-ui-event";
 // Registers the `data-fyi` renderer + reasoning-guard (D.t2). Importing here
 // is what gives assistant-ui the component map below; the module itself has
@@ -230,6 +234,39 @@ function useDevAffordanceToggle(): { hidden: boolean; toggle: () => void } {
   return { hidden, toggle };
 }
 
+/**
+ * Dev/test-only checkbox to flip native thinking per session (TT). Mirrors the
+ * model picker: it only renders inside the parent's `isDevToolsEnabled()` block,
+ * and a change re-mints the session (`onThinkingChange` = the fresh-chat handler)
+ * because thinking changes the cached system prefix (the RL.3 belt), so a
+ * mid-conversation flip would mix prefixes. The box shows the override if set,
+ * else assumes the standard default (thinking ON); the orchestrator stays
+ * authoritative (it ignores the field outside non-production).
+ */
+function DevThinkingToggle({ onThinkingChange }: { onThinkingChange: () => void }) {
+  const override = useDevThinkingOverride();
+  const checked = override ?? true;
+  return (
+    <label
+      data-testid="dev-thinking-toggle"
+      data-swoop-part="dev-thinking-toggle"
+      className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700"
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        aria-label="Native thinking (dev/test only)"
+        onChange={(e) => {
+          setDevThinkingOverride(e.target.checked);
+          onThinkingChange();
+        }}
+        className="h-3.5 w-3.5 cursor-pointer"
+      />
+      <span className="text-slate-400">Thinking</span>
+    </label>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="mx-auto mt-12 max-w-2xl px-4 text-center text-slate-500">
@@ -274,6 +311,7 @@ function ThreadSurface({
           {isDevToolsEnabled() ? (
             <>
               <DevModelPicker onModelChange={onFreshChat} />
+              <DevThinkingToggle onThinkingChange={onFreshChat} />
               <button
                 type="button"
                 onClick={() => devHidden.toggle()}

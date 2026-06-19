@@ -108,6 +108,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // both gate on this (M-PICK-2/3).
     modelPickerEnabled:
       data.MODEL_PICKER_ALLOWLIST.length > 0 && data.NODE_ENV !== 'production',
+    // Dev/test thinking toggle: honoured whenever not production (no allow-list —
+    // thinking on/off is cheap + valid on every family). TT-3.
+    thinkingPickerEnabled: data.NODE_ENV !== 'production',
   });
 
   return config;

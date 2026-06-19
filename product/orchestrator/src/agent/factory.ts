@@ -63,6 +63,15 @@ export interface BuildAgentParams {
    */
   readonly modelId?: string;
   /**
+   * Optional native-thinking override (TT-1). Defaults to
+   * `config.ORCHESTRATOR_THINKING_ENABLED`. The dev/test thinking toggle passes
+   * an explicit value when building a per-`(model, thinking)` runner variant;
+   * threaded into BOTH the ClaudeLlm request shape AND the RL.3 belt so the
+   * cached system prefix and the request agree. See
+   * planning/03-exec-crosscut-test-mode-thinking-toggle.md.
+   */
+  readonly thinkingEnabled?: boolean;
+  /**
    * Connector MCP client — used per-turn to read the active sales-memory set
    * (T3-4 / sm-6). When omitted (e.g. unit tests that don't need memory
    * loading), the memory block is silently skipped and the instruction is
@@ -124,19 +133,24 @@ export async function buildOrchestratorAgent({
   promptLoader,
   tools = [],
   modelId,
+  thinkingEnabled,
   connectorClient,
   memoryLoadedHeader,
 }: BuildAgentParams): Promise<BuildAgentResult> {
+  // TT-1: the dev/test thinking toggle passes an explicit override; otherwise
+  // the deploy's ORCHESTRATOR_THINKING_ENABLED default applies. Resolve once and
+  // thread into BOTH the request shape (ClaudeLlm) and the RL.3 belt below.
+  const resolvedThinking = thinkingEnabled ?? config.ORCHESTRATOR_THINKING_ENABLED;
   const model = new ClaudeLlm({
     model: modelId ?? config.ORCHESTRATOR_MODEL,
     apiKey: config.ANTHROPIC_API_KEY,
     // RL.5: thread the config max-tokens/temperature through (they previously
     // defaulted inside ClaudeLlm and were never wired) + RL.2/RL.4 native
-    // thinking. The dev model picker passes `modelId`; thinking config applies
-    // to whichever model is selected (buildThinkingFragment branches per family).
+    // thinking. The dev model picker passes `modelId`; thinking applies per the
+    // resolved override (buildThinkingFragment branches per family).
     maxTokens: config.ORCHESTRATOR_MAX_TOKENS,
     temperature: config.ORCHESTRATOR_TEMPERATURE,
-    thinkingEnabled: config.ORCHESTRATOR_THINKING_ENABLED,
+    thinkingEnabled: resolvedThinking,
     effort: config.ORCHESTRATOR_EFFORT,
   });
 
@@ -171,10 +185,15 @@ export async function buildOrchestratorAgent({
       `bodies=${config.PRELOAD_SKILL_BODIES ? 'PRELOADED' : 'on-demand via load_skill'}`,
   );
 
-  // RL.3: the silent-working belt is injected ONLY when thinking is off.
-  const thinkingFallback = buildThinkingFallbackInjection(config);
+  // RL.3: the silent-working belt is injected ONLY when thinking is off. Uses
+  // the RESOLVED thinking value (TT-1) so a thinking-toggle variant gets the
+  // belt that matches its request shape, not the deploy default.
+  const thinkingFallback = buildThinkingFallbackInjection({
+    ORCHESTRATOR_THINKING_ENABLED: resolvedThinking,
+    systemPromptDirAbsolutePath: config.systemPromptDirAbsolutePath,
+  });
   console.log(
-    config.ORCHESTRATOR_THINKING_ENABLED
+    resolvedThinking
       ? `[orchestrator] thinking: ENABLED (adaptive, effort=${config.ORCHESTRATOR_EFFORT ?? 'high (default)'}) — reasoning isolated in the thinking channel; no belt`
       : '[orchestrator] thinking: DISABLED — silent-working belt injected (prompt-only leak mitigation)',
   );

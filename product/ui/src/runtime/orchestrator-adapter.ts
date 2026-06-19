@@ -40,6 +40,7 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import { emitErrorRaised, messageOf, parseSseFrames } from "@swoop/common";
 import { getDevModelOverride } from "./dev-model-store";
+import { getDevThinkingOverride } from "./dev-thinking-store";
 import { readStaffToken } from "../disclosure/use-staff-auth";
 
 /** Key used to persist the session id in tab-scoped storage. */
@@ -500,6 +501,10 @@ export function createOrchestratorTransport<
       // also ignores the field outside dev + allow-list (M-PICK-2/3) — the
       // client gate is convenience, not the security boundary.
       const modelOverride = getDevModelOverride();
+      // TT — dev/test-only native-thinking override. Same gating story as the
+      // model override: `undefined` unless the dev toggle set it; the
+      // orchestrator ignores it outside non-production (TT-3/TT-4).
+      const thinkingOverride = getDevThinkingOverride();
       // staff-auth — attach the staff JWT if one is stored. The orchestrator
       // validates it server-side and sets session.staff + session.mode; the
       // value here is never trusted as a client flag.
@@ -517,6 +522,7 @@ export function createOrchestratorTransport<
         message: latestUserMessage,
         clientTime,
         ...(modelOverride ? { model: modelOverride } : {}),
+        ...(thinkingOverride !== undefined ? { thinkingEnabled: thinkingOverride } : {}),
         ...(staffToken ? { staffToken } : {}),
         ...(isGreetingTurn ? { greeting: true } : {}),
       });

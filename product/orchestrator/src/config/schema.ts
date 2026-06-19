@@ -477,5 +477,12 @@ export type Config = Readonly<
      * See planning/03-exec-crosscut-test-mode-model-picker.md (M-PICK-2/3).
      */
     readonly modelPickerEnabled: boolean;
+    /**
+     * True iff the dev/test thinking toggle is honoured: simply `!isProduction`
+     * (no allow-list — thinking on/off is cheap and valid on every family).
+     * When false, the orchestrator ignores any per-request `thinkingEnabled`.
+     * See planning/03-exec-crosscut-test-mode-thinking-toggle.md (TT-3/TT-4).
+     */
+    readonly thinkingPickerEnabled: boolean;
   }
 >;

@@ -204,6 +204,48 @@ describe("ChatRequestSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  // test-mode thinking toggle (TT-2) — thinkingEnabled is optional + boolean.
+  it("accepts and round-trips thinkingEnabled:false (thinking toggle)", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: "hi",
+      thinkingEnabled: false,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.thinkingEnabled).toBe(false);
+    }
+  });
+
+  it("accepts thinkingEnabled:true", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: "hi",
+      thinkingEnabled: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a body without thinkingEnabled (backward-compat)", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: "hi",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.thinkingEnabled).toBeUndefined();
+    }
+  });
+
+  it("rejects a non-boolean thinkingEnabled", () => {
+    const result = ChatRequestSchema.safeParse({
+      sessionId: "abc",
+      message: "hi",
+      thinkingEnabled: "yes",
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("GREETING_USER_MARKER", () => {

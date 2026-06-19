@@ -82,7 +82,7 @@ export interface ChatDeps {
    * created at bootstrap is found regardless of which model the turn routes to.
    * See planning/03-exec-crosscut-test-mode-model-picker.md.
    */
-  readonly getRunner?: (modelId?: string) => Promise<Runner>;
+  readonly getRunner?: (modelId?: string, thinkingEnabled?: boolean) => Promise<Runner>;
   /**
    * Staff authenticator (staff-auth task). When present and the request
    * carries a `staffToken`, the token is re-validated each turn. On success,
@@ -161,7 +161,8 @@ export function createChatHandler(
       sendError(res, 400, 'invalid_request', detail);
       return;
     }
-    const { sessionId, message, clientTime, model, staffToken, greeting } = parsed.data;
+    const { sessionId, message, clientTime, model, thinkingEnabled, staffToken, greeting } =
+      parsed.data;
     if (message.trim().length === 0) {
       sendError(res, 400, 'message_empty', 'message cannot be empty.');
       return;
@@ -479,7 +480,9 @@ export function createChatHandler(
         // (optional, allow-listed, non-production) model override. Falls back to
         // the default runner for unknown/disallowed/prod ids and when getRunner
         // is absent (unit tests). All runners share one sessionService.
-        const turnRunner = deps.getRunner ? await deps.getRunner(model) : deps.runner;
+        const turnRunner = deps.getRunner
+          ? await deps.getRunner(model, thinkingEnabled)
+          : deps.runner;
         adkStream = runAgentTurn({
           runner: turnRunner,
           userId,

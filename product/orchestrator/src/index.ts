@@ -230,14 +230,17 @@ async function main(): Promise<void> {
   const runnerRegistry = createRunnerRegistry({
     defaultRunner: runner,
     defaultModelId: config.ORCHESTRATOR_MODEL,
-    enabled: config.modelPickerEnabled,
+    defaultThinking: config.ORCHESTRATOR_THINKING_ENABLED,
+    modelOverridesEnabled: config.modelPickerEnabled,
+    thinkingOverridesEnabled: config.thinkingPickerEnabled,
     allowlist: config.MODEL_PICKER_ALLOWLIST,
-    buildAgentFor: (modelId) =>
+    buildAgentFor: (modelId, thinkingEnabled) =>
       buildOrchestratorAgent({
         config,
         promptLoader,
         tools: connector.tools,
         modelId,
+        thinkingEnabled,
         // Match the primary build path above so picker turns load the per-turn
         // sales-memory block too. Without these, every dev model-picker turn
         // ran against a different agent shape than production (memory block

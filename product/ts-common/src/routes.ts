@@ -92,6 +92,14 @@ export const ChatRequestSchema = z
      */
     model: z.string().min(1).max(128).optional(),
     /**
+     * Optional native-thinking override for the conversational orchestrator
+     * (dev/test only — TT-2). The orchestrator ignores it unless
+     * `NODE_ENV !== 'production'`; when honoured it selects a runner variant with
+     * thinking forced on/off (same effect as `ORCHESTRATOR_THINKING_ENABLED` for
+     * this session). See planning/03-exec-crosscut-test-mode-thinking-toggle.md.
+     */
+    thinkingEnabled: z.boolean().optional(),
+    /**
      * Staff JWT forwarded by the UI on every request when the staff member
      * has authenticated (staff-auth task). Optional so existing sessions
      * without the field round-trip cleanly — absent token → visitor session,
